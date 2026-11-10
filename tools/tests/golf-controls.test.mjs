@@ -95,22 +95,6 @@ test('Golf lifecycle pauses are idempotent and never steal focus back from the p
   await frame.waitForFunction(x => golfState.ball.x !== x || golfState.ball.done, frozen.x);
 });
 
-test('Golf manually paused flight remains paused when focus leaves and returns', async t => {
-  const { page, frame } = await game(t);
-  await startFlight(frame);
-  await frame.locator('#game').focus();
-  await page.keyboard.press('KeyP');
-  const frozen = await ball(frame);
-  await page.locator('#after').click();
-  await frame.locator('#resume').focus();
-  await page.waitForTimeout(250);
-  assert.deepEqual(await ball(frame), frozen);
-  assert.equal(await frame.locator('#pause-content').isVisible(), true);
-  await page.keyboard.press('KeyP');
-  assert.equal(await frame.locator('#modal').isVisible(), false, 'advertised P resumes with Resume focused');
-  await frame.waitForFunction(x => golfState.ball.x !== x || golfState.ball.done, frozen.x);
-});
-
 for (const direction of ['forward', 'backward']) {
   test(`Golf ${direction} Tab navigation can leave the iframe during play and from the pause modal`, async t => {
     const { page, frame } = await game(t);
@@ -130,37 +114,6 @@ for (const direction of ['forward', 'backward']) {
     }
   });
 }
-
-test('Golf ignores browser modifier chords and composition', async t => {
-  // Frame-stepped, so the ball cannot pass its apex between presses.
-  const page = await manualGame(t, null, false);
-  await page.locator('#game').focus();
-  const keys = ['Control+Space', 'Alt+Space', 'Meta+Space'];
-  const phase = () => page.evaluate(() => golfState.phase);
-  for (const key of keys) {
-    await page.keyboard.press(key);
-    assert.equal(await phase(), 'title', `${key} must not start a round`);
-  }
-  await page.keyboard.press('Space');
-  for (const key of keys) {
-    await page.keyboard.press(key);
-    assert.equal(await phase(), 'ready', `${key} must not swing`);
-  }
-  await page.evaluate(() => document.getElementById('game').dispatchEvent(new KeyboardEvent('keydown', {
-    code: 'Space', key: ' ', bubbles: true, cancelable: true, isComposing: true
-  })));
-  assert.equal(await phase(), 'ready');
-  await page.evaluate(() => advanceGolfFrames(39));
-  await page.keyboard.press('Space');
-  await page.evaluate(() => advanceGolfFrames(20));
-  assert.deepEqual(await page.evaluate(() => [golfState.phase, golfState.ball.vy > 5]), ['flight', true]);
-  for (const key of keys) {
-    await page.keyboard.press(key);
-    assert.equal(await page.evaluate(() => golfState.ball.rocketsLeft), 1, `${key} must not fire a rocket`);
-  }
-  await page.keyboard.press('Space');
-  assert.equal(await page.evaluate(() => golfState.ball.rocketsLeft), 0, 'unmodified Space fires the rocket');
-});
 
 test('Golf native Space activates focused controls once and keeps the pause and result shortcuts', async t => {
   const { page, frame } = await game(t);

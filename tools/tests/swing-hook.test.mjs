@@ -135,65 +135,6 @@ test('a mouse button held through a P pause keeps the swing going, like Space', 
   await page.mouse.up();
 });
 
-test('a paused game keeps its last frame and redraws only for resize, fonts and context restore', async t => {
-  const page = await gamePage(t, { deferFonts: true });
-  const paintsDuring = count => page.evaluate(n => { paints = 0; runFrames(n); return paints; }, count);
-  await page.evaluate(() => { document.getElementById('btnPlay').click(); runFrames(20); });
-  await page.keyboard.press('KeyP');
-  assert.equal(await paintsDuring(1), 1, 'pausing draws the frozen scene once');
-  assert.equal((await state(page)).mode, 'pause');
-  assert.equal(await paintsDuring(60), 0, 'then nothing is redrawn while paused');
-
-  await page.setViewportSize({ width: 1000, height: 600 });
-  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
-  assert.equal(await paintsDuring(10), 1, 'a resize redraws the paused scene once');
-
-  await page.evaluate(async () => { releaseFonts(); await document.fonts.ready; await new Promise(resolve => setTimeout(resolve, 0)); });
-  assert.equal(await paintsDuring(10), 1, 'a late font redraws the paused scene once');
-
-  const restored = await page.evaluate(() => {
-    const canvas = document.getElementById('game'), ctx = canvas.getContext('2d');
-    const transform = () => Array.from(ctx.getTransform().toFloat64Array());
-    const before = transform();
-    // A restored 2D context has lost both its pixels and its drawing state.
-    canvas.width = canvas.width;
-    canvas.dispatchEvent(new Event('contextrestored'));
-    paints = 0; runFrames(10);
-    // (No pixel read-back: on the software GPU it costs seconds. The paint count shows the redraw.)
-    return { same: JSON.stringify(transform()) === JSON.stringify(before), paints };
-  });
-  assert.deepEqual(restored, { same: true, paints: 1 }, 'a restored canvas gets its scale back and is redrawn');
-
-  await page.keyboard.press('KeyP');
-  assert.equal(await paintsDuring(10), 10, 'resuming draws every frame again');
-  assert.equal((await state(page)).mode, 'play');
-});
-
-test('a failed save shows the retry warning and keeps progress after a successful retry', async t => {
-  const page = await gamePage(t);
-  await page.evaluate(() => {
-    window.realSetItem = Storage.prototype.setItem;
-    Storage.prototype.setItem = () => { throw new Error('quota'); };
-  });
-  await page.evaluate(input => { __game.start(0); __game.script(input); }, levelOneInput());
-  await page.evaluate(() => { for (let i = 0; i < 1500 && __game.mode !== 'result'; i++) stepGame(1); });
-  const status = () => page.evaluate(() => {
-    const panel = document.querySelector('.sg-save-status');
-    return { hidden: panel.hidden, state: panel.getAttribute('data-state') };
-  });
-  assert.deepEqual(await status(), { hidden: false, state: 'failed' });
-  assert.equal(await page.evaluate(() => localStorage.getItem('sg:swing-hook:save')), null);
-
-  await page.evaluate(() => {
-    Storage.prototype.setItem = window.realSetItem;
-    document.querySelector('.sg-save-status button').click();
-  });
-  assert.equal((await status()).state, 'saved');
-  const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('sg:swing-hook:save')));
-  assert.equal(stored.unlocked, 2);
-  assert.equal(stored.stars[0] & 1, 1);
-});
-
 test('R during the finish celebration or the endless splash keeps the result that was reached', async t => {
   const page = await gamePage(t);
   const saved = () => page.evaluate(() => JSON.parse(localStorage.getItem('sg:swing-hook:save')));

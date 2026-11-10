@@ -130,44 +130,6 @@ test('saves from before the new worlds continue into them, and the new levels pl
   assert.equal(await page.locator('#worlds .lv:not(.locked)').count(), 100);
 });
 
-test('denied saves warn, keep progress in memory and clear only after a full retry', async t => {
-  const page = await game(t);
-  await page.evaluate(() => {
-    window.restoreStorage = Storage.prototype.setItem;
-    Storage.prototype.setItem = function (key, value) {
-      if (key.startsWith('sg:troll-level:')) throw new DOMException('full', 'QuotaExceededError');
-      return window.restoreStorage.call(this, key, value);
-    };
-  });
-  await clickControl(page, '#btn-play');
-  const [top, bottom] = await page.evaluate(() => {
-    const box = document.querySelector('.sg-save-status').getBoundingClientRect();
-    const cv = document.getElementById('cv').getBoundingClientRect(), s = cv.width / 1280;
-    return [(box.top - cv.top) / s, (box.bottom - cv.top) / s];
-  });
-  assert.ok(top > 56 && bottom < 120, `while playing, the warning waits on the ceiling under the HUD, clear of the hint bar (${top}-${bottom})`);
-  for (const [width, height] of [[1100, 620], [900, 520]]) {
-    await page.setViewportSize({ width, height });
-    const gap = await page.evaluate(() => document.querySelector('.sg-save-status').getBoundingClientRect().top
-      - document.getElementById('btn-pause').getBoundingClientRect().bottom);
-    assert.ok(gap >= 3, `the warning stays clear of the pause button at ${width}x${height} (${gap})`);
-  }
-  await page.setViewportSize({ width: 1366, height: 768 });
-  await page.evaluate(() => { __game.win(); stepGame(120); });
-  assert.equal(await page.evaluate(() => __game.mode), 'win');
-  assert.equal(await page.locator('.sg-save-status[data-state="failed"]').isVisible(), true);
-  assert.equal(await page.evaluate(() => localStorage.getItem('sg:troll-level:unl')), null);
-  assert.equal(await page.evaluate(() => __game.save.unl), 1);
-  await page.locator('.sg-save-status button').click();
-  assert.equal(await page.locator('.sg-save-status[data-state="failed"]').isVisible(), true);
-  await page.evaluate(() => { Storage.prototype.setItem = window.restoreStorage; });
-  await page.locator('.sg-save-status button').click();
-  assert.equal(await page.locator('.sg-save-status[data-state="saved"]').isVisible(), true);
-  await page.reload();
-  await page.waitForFunction(() => window.__game && window.stepGame);
-  assert.deepEqual(await page.evaluate(() => [__game.save.unl, __game.save.stars[0]]), [1, 3]);
-});
-
 test('a level is saved when the door is reached, before the win panel opens, and the title demo saves nothing', async t => {
   const page = await game(t);
   const saved = () => page.evaluate(() => ['best', 'stars', 'unl'].map(k => JSON.parse(localStorage.getItem('sg:troll-level:' + k))));

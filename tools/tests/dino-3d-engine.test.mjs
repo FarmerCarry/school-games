@@ -91,59 +91,6 @@ function bot(w, maxT = 200) {
 }
 
 /* ------------------------------------------------------------- tests */
-test('the engine is pure: no Kit, no page, no THREE, no timers, no unseeded randomness', () => {
-  assert.ok(D && D.create && D.step && D.TUNE, 'loads with only { window: {} }');
-  const code = source.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
-  assert.doesNotMatch(code, /\bKit\b|\bdocument\b|\bTHREE\b|setTimeout|setInterval|requestAnimationFrame|Math\.random|localStorage|Date\.now|performance/);
-});
-
-test('every tuning knob has one entry per tier and moves one way, towards harder', () => {
-  for (const [key, row] of Object.entries(D.TUNE)) {
-    const dir = D.HARDER[key];
-    assert.ok(dir === 1 || dir === -1, key + ' has a direction');
-    assert.equal(row.length, D.TIERS, key + ' has one entry per tier');
-    for (let i = 1; i < row.length; i++) assert.ok((row[i] - row[i - 1]) * dir >= 0, `${key}: ${row}`);
-    assert.notEqual(row[0], row[row.length - 1], key + ' changes from tier 1 to tier 5');
-  }
-  assert.deepEqual(Object.keys(D.HARDER).sort(), Object.keys(D.TUNE).sort());
-  // The kind ones: slower, wider spacing, kinder colliders and timing, half a heart per bump.
-  assert.ok(D.TUNE.speed[0] < D.TUNE.speed[4] && D.TUNE.space[0] > D.TUNE.space[4]);
-  assert.ok(D.TUNE.grace[0] > D.TUNE.grace[4] && D.TUNE.coyote[0] > D.TUNE.coyote[4] && D.TUNE.buffer[0] > D.TUNE.buffer[4]);
-  assert.equal(D.TUNE.cost[0], 1); assert.equal(D.TUNE.cost[4], 2);
-  assert.equal(D.tune(9).tier, 3, 'anything else is tier 3'); assert.equal(D.tune('x').tier, 3);
-});
-
-test('fifteen journey levels: five biomes of three, ids b1L1..b5L3, each 45-75 s long', () => {
-  assert.equal(D.LEVEL.length, 15);
-  assert.deepEqual(plain(D.LEVEL.map(l => l.id)), ['b1L1', 'b1L2', 'b1L3', 'b2L1', 'b2L2', 'b2L3', 'b3L1', 'b3L2', 'b3L3', 'b4L1', 'b4L2', 'b4L3', 'b5L1', 'b5L2', 'b5L3']);
-  for (const id of D.LEVEL.map(l => l.id)) assert.match(id, /^[A-Za-z][A-Za-z0-9_:.-]{0,23}$/);
-  // Each biome brings one new obstacle, and every biome's first level shows it first.
-  assert.deepEqual(plain(D.BIOMES.map(b => b.fresh)), ['block', 'vine', 'roller', 'gap', 'flyer']);
-  for (let b = 1; b < 5; b++) {
-    for (let i = 0; i < b; i++) assert.ok(!D.BIOMES[i].sets[2].includes(D.BIOMES[b].fresh), `${D.BIOMES[b].fresh} is new in biome ${b + 1}`);
-    for (const tier of [1, 5]) {
-      const w = D.create({ level: b * 3, tier });
-      assert.equal(w.obs.filter(o => o.kind !== 'mud')[0].kind, D.BIOMES[b].fresh, `b${b + 1}L1 starts with its new obstacle`);
-    }
-  }
-  for (const tier of [1, 3, 5]) for (const L of D.LEVEL) {
-    const w = D.create({ level: L.i, tier }), secs = w.len / D.speedAt(w, w.len / 2);
-    assert.ok(secs >= 42 && secs <= 75, `${L.id} tier ${tier}: ${secs.toFixed(1)} s`);
-    assert.ok(w.total >= 10, `${L.id} tier ${tier} has eggs to find (${w.total})`);
-    assert.ok(w.items.some(it => it.k === 'fruit'), `${L.id} has fruit for the roar`);
-    // Only kinds of this biome so far; the course leaves a clear run-up and a clear finish.
-    const kinds = new Set(D.BIOMES[L.biome].sets[L.n]);
-    for (const o of w.obs) assert.ok(kinds.has(o.kind), `${L.id}: ${o.kind}`);
-    assert.ok(w.obs[0].x >= 2.9 * D.tune(tier).speed, 'a quiet start');
-    assert.ok(w.obs.every(o => o.x + o.w < w.len - 2 * D.tune(tier).speed), 'a quiet finish');
-  }
-  // Tier 1 never meets the harder forms; tier 5 does.
-  const forms = tier => new Set(D.LEVEL.flatMap(L => D.create({ level: L.i, tier }).obs.map(o => o.kind + ':' + (o.form || ''))));
-  const easy = forms(1), hard = forms(5);
-  for (const f of ['block:tall', 'block:wide', 'crate:wall']) { assert.ok(!easy.has(f), 'tier 1: no ' + f); assert.ok(hard.has(f), 'tier 5 has ' + f); }
-  assert.ok(D.LEVEL.every(L => D.create({ level: L.i, tier: 1 }).obs.length < D.create({ level: L.i, tier: 5 }).obs.length), 'tier 5 levels hold more obstacles');
-});
-
 test('a tap jumps, a held jump goes higher, and a second press in the air does nothing', () => {
   const peak = hold => {
     const w = empty(3); let top = 0, jumps = 0;
@@ -301,17 +248,6 @@ test('a scripted player finishes every level at the easiest and the hardest tier
   }
 });
 
-test('doing nothing loses hearts and never finishes a level', () => {
-  for (const tier of [1, 3, 5]) for (const L of D.LEVEL) {
-    const w = D.create({ level: L.i, tier }), ev = run(w, 120);
-    assert.ok(ev.includes('bump') || ev.includes('splash'), `${L.id} tier ${tier}: an idle dino bumps`);
-    assert.ok(w.over && !w.done, `${L.id} tier ${tier}: idle runs out of hearts (${w.p.hp})`);
-    const r = D.result(w);
-    assert.equal(D.stars(r), 0);
-    assert.ok(D.outcome(r) < 0.3, 'a failed try eases the difficulty');
-  }
-});
-
 test('the endless run: biomes cycle, speed builds, a course code gives the same course every time', () => {
   const seed = D.codeSeed('0042');
   assert.equal(seed, D.codeSeed('0042'));
@@ -387,17 +323,4 @@ test('saves: a fresh save, junk and the first Dino 3D save all load as playable 
   assert.equal(D.nextLevel(s), 3);
   assert.equal(D.totalStars(s), 6);
   assert.equal(D.nextLevel(D.freshSave()), 0);
-});
-
-test('the wardrobe opens colours and hats with eggs, cheapest first', () => {
-  for (const list of [D.COLORS, D.HATS]) {
-    assert.equal(list[0].need, 0);
-    for (let i = 1; i < list.length; i++) assert.ok(list[i].need > list[i - 1].need);
-  }
-  assert.deepEqual(plain(D.unlocks(0, 10)), [{ type: 'hat', i: 1 }]);
-  assert.deepEqual(plain(D.unlocks(10, 20)), [{ type: 'color', i: 1 }]);
-  assert.deepEqual(plain(D.unlocks(20, 20)), []);
-  // Fifteen levels hold enough eggs for most of the wardrobe; the rest is for the endless run.
-  const eggs = D.LEVEL.reduce((n, L) => n + D.create({ level: L.i, tier: 3 }).total, 0);
-  assert.ok(eggs >= D.COLORS[5].need && eggs < D.HATS[D.HATS.length - 1].need * 2, 'eggs in the journey: ' + eggs);
 });

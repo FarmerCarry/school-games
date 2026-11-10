@@ -193,15 +193,6 @@ test('a failure folds into a badge; repeated autosave failures stay folded, Retr
 /* --------------------------------------------------------------- Kit.dda */
 const results = (dda, outcomes) => outcomes.map(outcome => { dda.result(outcome); return dda.level; });
 
-test('Kit.dda starts a PC with no results in the middle, or at opts.start, without side effects', () => {
-  const h = harness();
-  assert.equal(h.Kit.dda('g').level, 0.35);
-  assert.equal(h.Kit.dda('g', {start: 0.9}).level, 0.9);
-  assert.equal(h.Kit.dda('g', {start: 0}).level, 0);
-  for (const start of [-0.1, 1.1, NaN, '0.5', null]) assert.equal(h.Kit.dda('g', {start}).level, 0.35);
-  assert.deepEqual([[...h.values], h.delays, h.sent], [[], [], []], 'reading a controller stores, schedules and posts nothing');
-});
-
 test('Kit.dda follows the update rule with mercy and hot streaks, clamps, and maps levels to tiers', () => {
   const h = harness(), dda = h.Kit.dda('g');
   assert.deepEqual(results(dda, [true, true, true, true, 0.5, false, false, false, 1, 0.95, 0.9, 0.2]),

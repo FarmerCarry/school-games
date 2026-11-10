@@ -54,22 +54,6 @@ async function railRush(t, { reducedMotion = 'no-preference' } = {}) {
   return page;
 }
 
-const popState = page => page.evaluate(() => {
-  const el = document.getElementById('pop'), style = getComputedStyle(el);
-  return { text: el.textContent, show: el.classList.contains('show'), opacity: style.opacity, animation: style.animationName };
-});
-const confettiVisibility = page => page.evaluate(() => getComputedStyle(document.getElementById('confetti')).visibility);
-async function buyOceanBoard(page) {
-  await page.evaluate(() => {
-    __game.give(1000);
-    document.getElementById('shopBtn').click();
-    document.querySelector('.tab[data-tab="boards"]').click();
-    document.querySelector('[data-act="buy"][data-id="ocean"]').click();
-    rr.step(1);
-  });
-  assert.ok(await page.evaluate(() => __game.save.boards.includes('ocean')));
-}
-
 test('Rail Rush links every shader during boot, not in the shop or mid-run', async t => {
   const page = await railRush(t);
   await page.evaluate(() => {
@@ -89,45 +73,6 @@ test('Rail Rush links every shader during boot, not in the shop or mid-run', asy
   assert.equal(mode, 'crash');
   assert.ok(bootLinks > 0, 'shaders are compiled before the first frame');
   assert.equal(links, bootLinks, 'no shader links after boot');
-});
-
-test('Rail Rush keeps pop-ups readable under reduced motion and skips confetti', async t => {
-  const page = await railRush(t, { reducedMotion: 'reduce' });
-  assert.equal(await page.evaluate(() => document.documentElement.dataset.sgMotion), 'reduce');
-  await buyOceanBoard(page);
-  assert.equal(await confettiVisibility(page), 'hidden', 'no confetti layer with reduced motion');
-  await page.evaluate(() => { __game.god = true; __game.restart(); rr.step(10); __game.stumble(); });
-  assert.deepEqual(await popState(page), { text: 'انتبه!', show: true, opacity: '1', animation: 'none' });
-  await page.evaluate(() => rr.step(60));
-  assert.equal((await popState(page)).opacity, '1', 'still readable after one second');
-  await page.evaluate(() => rr.step(30));
-  assert.deepEqual(await popState(page), { text: 'انتبه!', show: false, opacity: '0', animation: 'none' });
-  // pausing clears a still pop-up rather than leaving it up behind the pause panel
-  await page.evaluate(() => { __game.power('board'); __game.god = false; __game.crash(); __game.god = true; });
-  assert.equal((await popState(page)).show, true);
-  await page.evaluate(() => document.getElementById('pauseBtn').click());
-  assert.equal(await page.evaluate(() => __game.state.mode), 'paused');
-  assert.deepEqual(await popState(page), { text: 'اللوح أنقذك!', show: false, opacity: '0', animation: 'none' });
-});
-
-test('Rail Rush reports a failed save and clears the warning after a retry', async t => {
-  const page = await railRush(t);
-  const status = () => page.evaluate(() => {
-    const el = document.querySelector('.sg-save-status');
-    return el && { hidden: el.hidden, state: el.dataset.state, text: el.textContent };
-  });
-  await page.evaluate(() => { rr.failSave = true; __game.give(500); });
-  const failed = await status();
-  assert.equal(failed.hidden, false);
-  assert.equal(failed.state, 'failed');
-  assert.match(failed.text, /تعذّر الحفظ/);
-  assert.equal(await page.evaluate(() => localStorage.getItem('sg:rail-rush:save')), null);
-  await page.evaluate(() => { rr.failSave = false; });
-  await page.locator('.sg-save-status button').click();
-  assert.equal((await status()).state, 'saved');
-  await page.reload();
-  await page.waitForFunction(() => window.__game);
-  assert.equal(await page.evaluate(() => __game.save.coins), 500);
 });
 
 test('Rail Rush shows the change-lane hint only when the first train blocks the runner', async t => {

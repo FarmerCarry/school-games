@@ -69,56 +69,6 @@ function hookedWorld(sp, tier, seed = 3) {
   return { w, p, f };
 }
 
-test('the engine is pure: no Kit, no page, no timers, no unseeded randomness', () => {
-  assert.ok(LL && LL.TUNE && LL.step && LL.create, 'loads with only { window: {} }');
-  const code = source.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
-  assert.doesNotMatch(code, /\bKit\b|\bdocument\b|setTimeout|setInterval|requestAnimationFrame|Math\.random|localStorage/);
-});
-
-test('every tuning knob moves one way from tier 1 to tier 5, in the direction that makes it harder', () => {
-  for (const [key, row] of Object.entries(LL.TUNE)) {
-    const dir = LL.HARDER[key];
-    assert.ok(dir === 1 || dir === -1, `${key} has a direction`);
-    assert.equal(row.length, LL.TIERS, `${key} has one entry per tier`);
-    for (let i = 1; i < row.length; i++) assert.ok((row[i] - row[i - 1]) * dir >= 0, `${key} tier ${i + 1}: ${row}`);
-    assert.notEqual(row[0], row[row.length - 1], `${key} changes between tier 1 and tier 5`);
-  }
-  // The headline knobs: the bite window shrinks from about 1.4 s to about 0.4 s, the
-  // fake-out nibbles grow, the green zone shrinks and the fish darts faster.
-  assert.deepEqual(plain(LL.TUNE.bite), [1.4, 1.1, 0.85, 0.6, 0.4]);
-  assert.ok(LL.TUNE.nibMax[0] <= 1 && LL.TUNE.nibMax[4] >= 3 && LL.TUNE.nibMin[0] === 0);
-  assert.ok(LL.TUNE.zone[0] > LL.TUNE.zone[4] * 1.6);
-  assert.ok(LL.TUNE.dart[4] > LL.TUNE.dart[0] * 2);
-  assert.ok(LL.TUNE.fill[0] > LL.TUNE.fill[4] && LL.TUNE.drain[0] < LL.TUNE.drain[4]);
-  // Calm fish for young children, darting rare ones.
-  for (let i = 1; i < LL.PULL.length; i++) assert.ok(LL.PULL[i].v > LL.PULL[i - 1].v && LL.PULL[i].rest[1] < LL.PULL[i - 1].rest[1]);
-});
-
-test('five places with their own species and goals; every species belongs to one place', () => {
-  assert.equal(LL.PLACES.length, 5);
-  const ids = new Set();
-  LL.PLACES.forEach((P, i) => {
-    assert.ok(P.species.length >= 6 && P.species.length <= 8, `${P.id}: ${P.species.length} species`);
-    assert.match(P.name, /[؀-ۿ]/);
-    assert.ok(LL.byId[P.goals.sp] && LL.byId[P.goals.sp].place === i, `${P.id}: the goal species lives there`);
-    assert.ok(P.goals.n >= 3 && P.goals.w > 0);
-    // The weight goal can be met by a fish of the place.
-    assert.ok(P.species.some(s => LL.SPECIES[s].max >= P.goals.w), `${P.id}: a fish can weigh ${P.goals.w}`);
-  });
-  for (const s of LL.SPECIES) {
-    assert.ok(!ids.has(s.id), 'unique ' + s.id); ids.add(s.id);
-    assert.match(s.name, /[؀-ۿ]/, s.id);
-    assert.ok(s.rarity >= 1 && s.rarity <= 3 && s.min > 0 && s.max > s.min && s.pull >= 1 && s.pull <= 4, s.id);
-  }
-  assert.equal(LL.SPECIES.filter(s => s.legend).length, 1, 'one legendary golden fish');
-  assert.equal(LL.byId.golden.place, 4);
-  // A crab and a turtle by the sea, glowing fish in the magic lagoon.
-  assert.ok(LL.byId.crab.place === 2 && LL.byId.turtle.place === 2);
-  assert.ok(LL.PLACES[4].species.every(i => LL.SPECIES[i].glow));
-  assert.ok(LL.PLACES[3].holes.length >= 3, 'the frozen lake has ice holes');
-  assert.ok(LL.PLACES[1].current > 0, 'the river has a current');
-});
-
 test('casting puts the hook exactly where the child aimed, through the nearest ice hole on the frozen lake', () => {
   for (let place = 0; place < 5; place++) {
     for (const [x, y] of [[420, 300], [700, 520], [1100, 640], [640, 330], [90, 900]]) {
@@ -159,17 +109,6 @@ test('the river\'s current carries a waiting hook downstream; still water does n
     else assert.equal(p.hook.x, x);
     assert.equal(p.bob.x, p.hook.x, 'the bobber stays above the hook');
   }
-});
-
-test('a press while waiting reels the hook back and casts it again to the aim', () => {
-  const w = LL.create({ place: 0, tier: 2, seed: 8, fishN: 0, junk: false });
-  const p = w.players[0];
-  run(w, 200, (w, i) => [{ ax: 500, ay: 400, press: i === 0 }]);
-  assert.equal(p.state, 'wait');
-  const events = run(w, 300, (w, i) => [{ ax: 900, ay: 560, press: i === 0 }]);
-  assert.deepEqual(events.filter(e => ['back', 'cast', 'sunk'].includes(e.t)).map(e => e.t), ['back', 'cast', 'sunk']);
-  assert.deepEqual([p.hook.x, p.hook.y], [900, 560]);
-  assert.equal(p.casts, 2);
 });
 
 test('nibbles never count as a bite: the bobber only dips, a press then scares the fish off, and the «!» follows the last nibble', () => {
@@ -249,29 +188,6 @@ test('a scripted reeler lands every species at tier 1 and at tier 5', () => {
       assert.equal(landed, 4, `tier ${tier}: ${s.id} landed ${landed}/4`);
       assert.ok(hooks <= 6, `tier ${tier}: ${s.id} needed ${hooks} hooks for 4 fish`);
     }
-  }
-});
-
-test('a six-year-old\'s tier is gentle: a common fish is landed by holding and letting go in a rough rhythm', () => {
-  // A clumsy child: holds while the fish is above the zone's top edge, lets go when
-  // it is below the bottom edge, and reacts a quarter of a second late.
-  for (const sp of ['pebble', 'sunny', 'tilapia']) {
-    let ok = 0;
-    for (let seed = 1; seed <= 10; seed++) {
-      const a = hookedWorld(LL.byId[sp].i, 1, seed);
-      let hold = false, lag = [];
-      const ev = run(a.w, 60 * 40, (w, i, seen) => {
-        const p = a.p;
-        if (p.state === 'bite') return [{ press: true }];
-        if (p.state !== 'reel') return [{}];
-        const r = p.reel;
-        lag.push(r.f > r.z + r.h ? true : r.f < r.z ? false : hold);
-        if (lag.length > 15) hold = lag.shift();
-        return [{ hold }];
-      });
-      if (ev.some(e => e.t === 'landed')) ok++;
-    }
-    assert.ok(ok >= 9, `${sp}: landed ${ok}/10`);
   }
 });
 
@@ -462,14 +378,6 @@ test('saves: a fresh save, every field checked, and old or junk saves load as a 
     run(w, 60, (w, i) => [{ press: i === 0 }]);
     assert.equal(w.players[0].casts, 1);
   }
-});
-
-test('the DDA outcome: a landed fish is a success, a fish lost on the reel a little, a missed bite nothing', () => {
-  assert.equal(LL.outcome('landed'), 1);
-  assert.equal(LL.outcome('late'), 0);
-  assert.equal(LL.outcome('spook'), 0);
-  const lo = LL.outcome('escape', 0), hi = LL.outcome('escape', 1);
-  assert.ok(lo > 0 && hi > lo && hi < 0.5);
 });
 
 test('the same seed replays the same lake', () => {

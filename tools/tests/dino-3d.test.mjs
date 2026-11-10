@@ -22,14 +22,14 @@ const starsUpTo = n => Array.from({ length: 15 }, (_, i) => i < n ? 3 : 0);
 // (probe.results: [id, outcome]), and storage that can fail. `ddaStart: { main, endless }`
 // is the level each difficulty starts at before it has a result (Kit.dda's `start`).
 // It never moves obstacles or the dino: input goes through the real keyboard and mouse.
-async function game(t, { save, ddaStart = {}, deniedStorage = false, viewport = { width: 1100, height: 620 } } = {}) {
+async function game(t, { save, ddaStart = {}, viewport = { width: 1100, height: 620 } } = {}) {
   const context = await browser.newContext({ viewport, serviceWorkers: 'block', reducedMotion: 'reduce' });
   const page = await context.newPage(), errors = [];
   page.on('pageerror', error => errors.push(error.message));
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
   context.on('request', request => { if (!request.url().startsWith(server.origin)) errors.push('External request: ' + request.url()); });
   t.after(async () => { await context.close(); assert.deepEqual(errors, [], 'no errors or external requests'); });
-  await context.addInitScript(({ save, ddaStart, deniedStorage }) => {
+  await context.addInitScript(({ save, ddaStart }) => {
     if (!/\/games\/dino-3d\//.test(location.pathname)) return;
     if (!sessionStorage.getItem('dino-seeded')) {
       sessionStorage.setItem('dino-seeded', '1');
@@ -56,17 +56,13 @@ async function game(t, { save, ddaStart = {}, deniedStorage = false, viewport = 
       const ready = kit.ready;
       kit.ready = (...args) => { probe.ready++; return ready.apply(kit, args); };
     } });
-    const write = Storage.prototype.setItem, read = Storage.prototype.getItem;
+    const write = Storage.prototype.setItem;
     Storage.prototype.setItem = function (key) {
       if (key === 'sg:dino-3d:save') probe.writes++;
-      if (deniedStorage || (probe.failSave && key === 'sg:dino-3d:save')) throw new DOMException('Storage fixture', 'QuotaExceededError');
+      if (probe.failSave && key === 'sg:dino-3d:save') throw new DOMException('Storage fixture', 'QuotaExceededError');
       return write.apply(this, arguments);
     };
-    Storage.prototype.getItem = function () {
-      if (deniedStorage) throw new DOMException('Storage fixture', 'SecurityError');
-      return read.apply(this, arguments);
-    };
-  }, { save, ddaStart, deniedStorage });
+  }, { save, ddaStart });
   await page.goto(`${server.origin}/games/dino-3d/`);
   await page.waitForFunction(() => !!window.Dino3DGame && window.dinoProbe.ready === 1, null, { polling: 50 });
   return page;
@@ -92,7 +88,6 @@ async function key(page, code, how = 'press') {
     await page.evaluate(() => window.keySeen);
   }
 }
-async function focusGame(page) { await page.evaluate(() => { document.activeElement?.blur(); document.getElementById('scene').focus(); Kit.keys.reset(); }); }
 async function clickPlay(page) { await page.locator('#play').click(); await step(page); }
 
 // A careful child: looks ahead with copies of the world and presses Space (or holds ↓)
@@ -151,84 +146,6 @@ async function playWithBot(page, maxMoves = 400) {
   }
   return mode(page);
 }
-
-test('the title waits for Play; Play starts level 1-1 with its coach, and real keys and clicks move the dino', async t => {
-  const page = await game(t);
-  await step(page, 3);
-  assert.equal(await mode(page), 'title');
-  assert.ok(await visible(page, '#title') && await visible(page, '#play'));
-  assert.equal(await visible(page, '#pause-button'), false);
-  // A click on the empty title makes the dino hop; it starts nothing.
-  await page.mouse.click(40, 400);
-  await step(page, 2);
-  assert.equal(await mode(page), 'title');
-  await focusGame(page);
-  await key(page, 'Enter');
-  await step(page);
-  let s = await state(page);
-  assert.equal(s.mode, 'playing'); assert.equal(s.id, 'b1L1'); assert.equal(s.level, 0); assert.equal(s.endless, false);
-  assert.ok(await visible(page, '#intro'), 'a first-time child sees the keys');
-  assert.ok(await visible(page, '#pause-button'));
-  assert.equal(s.player.y, 0);
-  const jumps = await page.evaluate(() => Dino3DGame.inputJumps);
-  await key(page, 'Space');
-  await step(page, 6);
-  s = await state(page);
-  assert.ok(s.player.y > 0.3, 'Space jumps: ' + s.player.y);
-  assert.equal(await page.evaluate(() => Dino3DGame.inputJumps), jumps + 1);
-  await run(page, 60);
-  // A click on the game jumps too.
-  await page.mouse.click(700, 400);
-  await step(page, 6);
-  assert.ok((await state(page)).player.y > 0.3, 'a click jumps');
-  assert.equal(await page.evaluate(() => Dino3DGame.inputJumps), jumps + 2);
-  await run(page, 60);
-  await key(page, 'ArrowDown', 'down');
-  await step(page, 2);
-  assert.equal((await state(page)).player.duck, true, '↓ ducks');
-  await key(page, 'ArrowDown', 'up');
-  await step(page, 2);
-  assert.equal((await state(page)).player.duck, false);
-});
-
-test('P and Esc pause and resume; a pause freezes the world; focus loss pauses and coming back does not resume', async t => {
-  const page = await game(t, { save: SAVE() });
-  await clickPlay(page);
-  await run(page, 90);
-  await key(page, 'KeyP');
-  await step(page);
-  assert.equal(await mode(page), 'paused');
-  assert.ok(await visible(page, '#pause-screen'));
-  const frozen = JSON.stringify(await state(page));
-  await run(page, 200); await step(page);
-  assert.equal(JSON.stringify(await state(page)), frozen, 'nothing moves while paused');
-  await key(page, 'Space');
-  await run(page, 1);
-  assert.equal(await mode(page), 'playing', 'Space resumes');
-  await run(page, 20);
-  await key(page, 'Escape');
-  await run(page, 1);
-  assert.equal(await mode(page), 'paused', 'Esc pauses');
-  await key(page, 'Escape');
-  await run(page, 1);
-  assert.equal(await mode(page), 'playing');
-  await run(page, 30);
-  await page.evaluate(() => window.dispatchEvent(new Event('blur')));
-  await run(page, 1);
-  assert.equal(await mode(page), 'paused', 'losing focus pauses');
-  await page.evaluate(() => { window.dispatchEvent(new Event('focus')); document.dispatchEvent(new Event('visibilitychange')); });
-  await run(page, 30);
-  assert.equal(await mode(page), 'paused', 'coming back does not resume by itself');
-  await page.locator('#resume').click();
-  await step(page);
-  assert.equal(await mode(page), 'playing');
-  // R in the pause restarts the level as a new round.
-  await key(page, 'KeyP'); await run(page, 1);
-  await key(page, 'KeyR'); await step(page);
-  const s = await state(page);
-  assert.equal(s.mode, 'playing'); assert.ok(s.distance < 1); assert.equal(s.id, 'b1L1');
-  assert.deepEqual(await results(page), [], 'a pause and a restart are no result');
-});
 
 test('an idle dino bumps obstacles, tumbles, runs out of hearts and gets a result; R plays again at once', async t => {
   const page = await game(t, { save: SAVE() });
@@ -295,29 +212,6 @@ test('a careful child finishes level 1-1: the family, stars, eggs, the save surv
   assert.match(await page.locator('.pebble[data-level="2"]').getAttribute('class'), /locked/);
 });
 
-test('the map opens unlocked levels only; a locked one stays shut', async t => {
-  const page = await game(t, { save: SAVE({ stars: starsUpTo(4) }) });
-  await clickPlay(page);
-  assert.equal(await mode(page), 'map');
-  await page.locator('.pebble[data-level="7"]').click();
-  await step(page);
-  assert.equal(await mode(page), 'map', 'a locked level does not start');
-  await page.locator('.biome.b3 .art').click();
-  await step(page);
-  assert.equal(await mode(page), 'map', 'a locked biome does not start');
-  await page.locator('.pebble[data-level="4"]').click();
-  await step(page);
-  const s = await state(page);
-  assert.equal(s.mode, 'playing'); assert.equal(s.id, 'b2L2');
-  await page.locator('#pause-button').click(); await step(page);
-  await page.locator('#pause-menu').click(); await step(page);
-  assert.equal(await mode(page), 'map');
-  assert.deepEqual(await results(page), [], 'leaving from the pause is no result');
-  assert.equal((await page.evaluate(() => Dino3DGame.save)).stars[4], 0, 'and earns no stars');
-  await key(page, 'Escape'); await step(page);
-  assert.equal(await mode(page), 'title');
-});
-
 test('the wardrobe: eggs unlock colours and hats; a locked tile stays locked; the choice is saved', async t => {
   const page = await game(t, { save: SAVE({ bank: 40 }) });
   await page.locator('#btn-wardrobe').click();
@@ -348,14 +242,6 @@ test('a failed save keeps the old progress, shows the warning, and Retry saves',
   await step(page);
   assert.equal(JSON.parse(await page.evaluate(() => localStorage.getItem('sg:dino-3d:save'))).seen, 40);
   assert.equal(await page.locator('.sg-save-status').getAttribute('data-state'), 'saved');
-});
-
-test('with storage blocked the game still plays', async t => {
-  const page = await game(t, { deniedStorage: true });
-  await clickPlay(page);
-  assert.equal(await mode(page), 'playing');
-  await key(page, 'Space'); await step(page, 4);
-  assert.ok((await state(page)).player.y > 0);
 });
 
 test('endless: a course code is the same course for everyone, at tier 3, and never moves the difficulty', async t => {

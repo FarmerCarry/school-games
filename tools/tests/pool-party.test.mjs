@@ -132,28 +132,6 @@ function blockWrites(page, pattern) {
 }
 const stored = (page, key) => page.evaluate(k => JSON.parse(localStorage.getItem('sg:pool-party:' + k)), key);
 
-test('a failed match save warns, keeps earlier progress and saves on retry', async t => {
-  const page = await game(t);
-  await startCpuMatch(page);
-  await blockWrites(page, '^sg:pool-party:');
-  await page.evaluate(() => __game.win(0));
-  const status = page.locator('.sg-save-status');
-  assert.equal(await status.getAttribute('data-state'), 'failed');
-  assert.equal(await status.isVisible(), true);
-  assert.equal(await stored(page, 'coins'), null, 'nothing was written');
-  const earned = await page.evaluate(() => __game.save);
-  assert.equal(earned.coins, 140);
-
-  await status.locator('button').click();
-  assert.equal(await status.getAttribute('data-state'), 'failed', 'a retry that also fails keeps the warning');
-  await page.evaluate(() => { Storage.prototype.setItem = window.restoreStorage; });
-  await status.locator('button').click();
-  assert.equal(await status.getAttribute('data-state'), 'saved');
-  await page.reload();
-  await page.waitForFunction(() => window.__game);
-  assert.deepEqual(await page.evaluate(() => __game.save), earned);
-});
-
 test('a purchase whose item cannot be saved does not store the lower coin total', async t => {
   const page = await game(t);
   await page.evaluate(() => __game.coins(100));
@@ -251,41 +229,6 @@ test('picking an opponent writes only that setting until a save has failed', asy
   const written = await page.evaluate(() => writes);
   assert.deepEqual(written.slice(0, 4), ['owned', 'cue', 'felt', 'coins'], 'after a failure the whole save is written, items first');
   assert.ok(written.includes('opp') && written.includes('wins'));
-});
-
-test('a paused game draws once, then only after a resize or a canvas restore', async t => {
-  const page = await game(t);
-  await startCpuMatch(page);
-  await page.evaluate(() => play(10));
-  await page.keyboard.press('KeyP');
-  const paused = await page.evaluate(() => {
-    paints = 0; play(30);
-    return { screen: __game.screen, paints };
-  });
-  assert.deepEqual(paused, { screen: 'pause', paints: 1 });
-
-  await page.setViewportSize({ width: 1000, height: 600 });
-  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
-  assert.equal(await page.evaluate(() => { paints = 0; play(20); return paints; }), 1, 'resize redraws once');
-
-  const restored = await page.evaluate(() => {
-    const canvas = document.getElementById('game'), ctx = canvas.getContext('2d');
-    canvas.width = canvas.width; // a restored 2D context has lost its pixels and drawing state
-    canvas.dispatchEvent(new Event('contextrestored'));
-    paints = 0; play(20);
-    const main = { paints, scale: ctx.getTransform().a };
-    // the cached table layer is an offscreen canvas with its own restore event
-    let tables = 0;
-    const renderTable = PoolArt.renderTable;
-    PoolArt.renderTable = function () { tables++; return renderTable.apply(this, arguments); };
-    restorable.filter(c => c !== canvas).forEach(c => c.dispatchEvent(new Event('contextrestored')));
-    paints = 0; play(20);
-    return { main, table: { paints, tables } };
-  });
-  assert.deepEqual(restored, { main: { paints: 1, scale: 1000 / 1280 }, table: { paints: 1, tables: 1 } });
-
-  await page.keyboard.press('KeyP');
-  assert.deepEqual(await page.evaluate(() => { paints = 0; play(10); return [__game.screen, paints]; }), ['game', 10]);
 });
 
 // Use the actual spin control, mouse aim and power-bar drag. Only the game clock

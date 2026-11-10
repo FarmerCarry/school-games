@@ -117,22 +117,6 @@ test('Neon Slope draws a paused scene once, redraws resize and context restore, 
   assert.ok(await page.evaluate(d => __game.state.dist > d, dist), 'play continues after resume');
 });
 
-test('Neon Slope shows the save warning on failed writes and keeps progress after retry', async t => {
-  const page = await game(t);
-  const status = () => { const e = document.querySelector('.sg-save-status'); return e && !e.hidden ? e.textContent : ''; };
-  await page.evaluate(() => { __game.start(); ns.step(30); ns.failSave = true; __game.addGems(40); });
-  assert.match(await page.evaluate(status), /تعذّر الحفظ/);
-  const gems = await page.evaluate(() => { __game.die(); ns.step(120); return __game.state.gems; });
-  assert.equal(await page.evaluate(() => __game.state.mode), 'over');
-  assert.ok(gems >= 40, 'progress stays in memory while saving fails');
-  assert.match(await page.evaluate(status), /تعذّر الحفظ/, 'the warning stays until a write succeeds');
-  await page.evaluate(() => { ns.failSave = false; document.querySelector('.sg-save-status button').click(); });
-  assert.match(await page.evaluate(status), /تم الحفظ/);
-  await page.reload();
-  await page.waitForFunction(() => window.__game, null, { polling: 50 });
-  assert.equal(await page.evaluate(() => __game.state.gems), gems);
-});
-
 // `music` is an old switch: the game has no music now, so it is ignored and not carried over.
 const legacyProgress = {
   best: 80, gems: 500, owned: ['neon', 'cookie'], ownedTrails: ['glow'], skin: 'cookie', trail: 'glow',

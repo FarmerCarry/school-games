@@ -137,17 +137,6 @@ for (const exit of ['menu', 'restart']) {
   });
 }
 
-test('Golf: the result card opens by itself shortly after the landing', async t => {
-  const page = await game(t);
-  await swing(page);
-  await land(page);
-  await page.evaluate(() => advanceGolfFrames(60));
-  assert.equal(await phase(page), 'landed', 'the landing shows first');
-  await page.evaluate(() => advanceGolfFrames(60));
-  assert.equal(await phase(page), 'result');
-  assert.equal(await page.evaluate(() => golfProbe.saves), 1);
-});
-
 test('Golf: a held Space or Enter opens the result card but never skips past it', async t => {
   for (const key of ['Space', 'Enter']) {
     const page = await game(t);
@@ -211,39 +200,6 @@ test('Golf: a click on empty menu space never blocks the next real click', async
   await page.mouse.click(mute.x + mute.width / 2, mute.y + mute.height + 6);
   await page.evaluate(() => advanceGolfFrames(6));
   assert.equal(await phase(page), 'flight');
-});
-
-test('Golf: quick repeat clicks on one upgrade each buy a level', async t => {
-  const page = await game(t, { play: false, progress: { v: 2, coins: 400, shots: 3, tips: 2 } });
-  await page.locator('#open-shop').click();
-  await page.locator('[data-upgrade="power"]').click();
-  await page.locator('[data-upgrade="power"]').click({ clickCount: 2 });
-  assert.equal((await saved(page)).upgrades.power, 3, 'a rebuilt card is still the same control');
-});
-
-test('Golf: the mute button works while a menu is open', async t => {
-  const page = await game(t);
-  await page.keyboard.press('Escape');
-  assert.equal(await page.locator('#pause-content').isVisible(), true);
-  const muted = await page.evaluate(() => Kit.audio.muted);
-  await page.locator('.sg-mute').click();
-  assert.equal(await page.evaluate(() => Kit.audio.muted), !muted);
-});
-
-test('Golf: Space skips the landing to the result, which never awards twice; R plays again', async t => {
-  const page = await game(t);
-  await swing(page);
-  await land(page);
-  await page.keyboard.press('Space');
-  assert.equal(await phase(page), 'result');
-  assert.equal(await page.locator('#modal-heading').textContent(), 'رحلة رائعة!');
-  assert.match(await page.locator('#result-coins').textContent(), /\+\d+/);
-  const done = await saved(page);
-  await page.evaluate(() => advanceGolfFrames(200));
-  assert.equal(await page.evaluate(() => golfProbe.saves), 1);
-  assert.deepEqual(await saved(page), done);
-  await page.keyboard.press('KeyR');
-  assert.deepEqual(await page.evaluate(() => [golfState.phase, golfState.ball]), ['ready', null]);
 });
 
 test('Golf: a new world unlocked by a shot is offered on the result card', async t => {

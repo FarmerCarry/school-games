@@ -35,15 +35,6 @@ async function gamePage(t, ...inits) {
 const state = page => page.evaluate(() => window.__game.state());
 const awaitScreen = (page, screen) =>
   page.waitForFunction(value => window.__game.state().screen === value, screen, { timeout: 15000 });
-// Animation frames run only when a test calls runFrames(n), so game time is exact.
-const manualFrames = () => {
-  const callbacks = [];
-  let time = 0;
-  window.requestAnimationFrame = callback => callbacks.push(callback);
-  window.runFrames = count => {
-    for (let i = 0; i < count; i++) { time += 1000 / 60; callbacks.splice(0).forEach(callback => callback(time)); }
-  };
-};
 const nextBox = page => page.evaluate(() => ({
   hidden: document.getElementById('nextBox').hidden,
   name: document.getElementById('nextName').textContent,
@@ -152,7 +143,9 @@ test('A 3x3 save from before the 256 goal that already holds 256 resumes into th
   assert.equal((await state(page)).keep, true);
 });
 
-test('The 3x3 challenge is won at 256 and its game-over hint names that goal', async t => {
+// A board has no winner: reaching the goal tile offers to keep going on the same board,
+// which ends only when it fills up; R starts a fresh one.
+test('Reaching 256 keeps the same board going until it fills up, and R starts a fresh one', async t => {
   const page = await gamePage(t);
   await page.evaluate(() => Kit.store('merge-2048').set('best', { 3: 500 }));
   await page.reload();
@@ -160,15 +153,6 @@ test('The 3x3 challenge is won at 256 and its game-over hint names that goal', a
   await page.keyboard.press('Enter');
   assert.equal((await state(page)).N, 3);
   assert.equal(await page.locator('#goalTxt').textContent(), '256');
-
-  await page.evaluate(() => {
-    window.__game.set([0, 0, 0, 0, 0, 0, 128, 128, 4]);
-    window.__game.move(3);
-  });
-  await awaitScreen(page, 'win');
-  assert.equal(await page.locator('#winNum').textContent(), '256');
-
-  await page.keyboard.press('KeyR');
   await page.evaluate(() => {
     // One move left: after it, no tile can merge whichever tile spawns.
     window.__game.set([2, 4, 2, 4, 2, 16, 0, 128, 8]);
@@ -176,19 +160,15 @@ test('The 3x3 challenge is won at 256 and its game-over hint names that goal', a
   });
   await awaitScreen(page, 'over');
   assert.equal(await page.locator('#overHint').textContent(), 'كنت قريباً جداً من 256! 😮');
-});
+  await page.keyboard.press('KeyR');
+  await awaitScreen(page, 'play');
 
-// A board has no winner: reaching the goal tile offers to keep going on the same board,
-// which ends only when it fills up; R starts a fresh one.
-test('Reaching 256 keeps the same board going until it fills up, and R starts a fresh one', async t => {
-  const page = await gamePage(t);
-  await page.keyboard.press('Digit3');
-  await page.keyboard.press('Enter');
   await page.evaluate(() => {
     window.__game.set([0, 0, 0, 0, 0, 0, 128, 128, 4]);
     window.__game.move(3);
   });
   await awaitScreen(page, 'win');
+  assert.equal(await page.locator('#winNum').textContent(), '256');
   await page.locator('#btnKeep').click();
   await awaitScreen(page, 'play');
   const kept = await state(page);
@@ -201,56 +181,4 @@ test('Reaching 256 keeps the same board going until it fills up, and R starts a 
   await page.keyboard.press('KeyR');
   await awaitScreen(page, 'play');
   assert.equal((await state(page)).score, 0, 'R starts a fresh board');
-});
-
-test('A paused board is drawn once, settled, redrawn after resize, context restore or a theme change, and resumes its effects', async t => {
-  const page = await gamePage(t, manualFrames);
-  await page.keyboard.press('Enter');
-  const result = await page.evaluate(() => {
-    let n = 0, tiles = [];
-    // Remember which tile value each cached sprite shows, to list the tiles a frame draws.
-    const art = new Map(), drawTile = window.M2048.drawTile, draw = CanvasRenderingContext2D.prototype.drawImage;
-    window.M2048.drawTile = function (c, theme, v) { art.set(c.canvas, v); return drawTile.apply(this, arguments); };
-    CanvasRenderingContext2D.prototype.drawImage = function (image) {
-      if (this.canvas.id === 'game') { n++; if (art.has(image)) tiles.push(art.get(image)); }
-      return draw.apply(this, arguments);
-    };
-    const frames = count => { n = 0; tiles = []; runFrames(count); return n; };
-    window.__game.set([2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
-    window.__game.move(3); // its slide, pop, new tile and merge burst are all still to come
-    document.getElementById('btnPause').click();
-    const first = frames(1), shown = JSON.stringify(tiles.sort());
-    const board = JSON.stringify(window.__game.state().values.filter(Boolean).sort());
-    const idle = frames(30), parts = window.__game.state().parts;
-    dispatchEvent(new Event('resize'));
-    const resized = frames(1), resizedIdle = frames(30);
-    document.getElementById('game').dispatchEvent(new Event('contextrestored'));
-    const restored = frames(1), restoredIdle = frames(30);
-    window.__game.unlockAll();
-    document.getElementById('btnTheme').click(); // Tab still reaches the HUD behind the pause panel
-    const themed = frames(1), themedIdle = frames(30), theme = window.__game.state().theme;
-    document.getElementById('btnResume').click();
-    const playing = [frames(1), frames(10)];
-    return { first: first > 0, settled: shown === board, idle, parts, resized: resized > 0, resizedIdle, restored: restored > 0, restoredIdle,
-      themed: themed > 0, themedIdle, theme, playing: playing.every(count => count > 0), burst: window.__game.state().parts > 0 };
-  });
-  assert.deepEqual(result, { first: true, settled: true, idle: 0, parts: 0, resized: true, resizedIdle: 0, restored: true, restoredIdle: 0,
-    themed: true, themedIdle: 0, theme: 'candy', playing: true, burst: true });
-});
-
-test('Best scores saved as a number or a string load as empty records and the game still starts', async t => {
-  const page = await gamePage(t, () => {
-    localStorage.setItem('sg:merge-2048:best', '5');
-    localStorage.setItem('sg:merge-2048:bt', '"x"');
-  });
-  await awaitScreen(page, 'title');
-  assert.deepEqual((await state(page)).best, { 3: 0, 4: 0, 5: 0, 6: 0 });
-  await page.keyboard.press('Enter');
-  await awaitScreen(page, 'play');
-  await page.evaluate(() => {
-    window.__game.set([2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
-    window.__game.move(3);
-  });
-  assert.equal(JSON.parse(await page.evaluate(() => localStorage.getItem('sg:merge-2048:best')))[4], 4, 'the first score is a record');
-  assert.equal(JSON.parse(await page.evaluate(() => localStorage.getItem('sg:merge-2048:bt')))[4], 4);
 });

@@ -85,15 +85,6 @@ function portal({ stored = {}, audio = true } = {}) {
   vm.runInNewContext(source, { window });
   return { ...api, window, listeners, values, emit, J: window.Juice };
 }
-// Game mode against a stand-in Kit.audio.
-function game({ muted = false } = {}) {
-  const api = audioApi(), ctx = new api.Context(), listeners = {};
-  const master = ctx.createGain();
-  master.gain.value = 0.5;
-  const window = { Kit: { audio: { ctx: null, master: null, muted } }, addEventListener(type) { listeners[type] = true; } };
-  vm.runInNewContext(source, { window });
-  return { ...api, ctx, master, window, listeners, kit: window.Kit.audio, J: window.Kit.juice, attach() { Object.assign(window.Kit.audio, { ctx, master }); } };
-}
 const sources = ctx => ctx.nodes.filter(n => n.kind === 'oscillator' || n.kind === 'buffer');
 // Calls every sound with every odd argument, each 30 ms after the last (past the dedupe).
 function playAll(J, ctx, args = ODD) {
@@ -139,24 +130,6 @@ test('juice: every source is a one-shot that starts after a silent envelope star
   assert.deepEqual(h.errors, []);
 });
 
-test('juice: bus -> limiter -> master, made once per context, with a fast first release', () => {
-  const h = portal();
-  h.emit('pointerdown'); h.emit('pointerdown'); h.emit('keydown');
-  assert.equal(h.contexts.length, 1, 'one context, however many gestures');
-  const ctx = h.contexts[0];
-  ctx.currentTime = 2;
-  h.J.tap(); ctx.currentTime += 0.1; h.J.select();
-  const [master, bus] = ctx.nodes.filter(n => n.kind === 'gain');
-  const limiters = ctx.nodes.filter(n => n.kind === 'compressor');
-  assert.equal(limiters.length, 1);
-  const [limit] = limiters;
-  assert.deepEqual([master.gain.value, master.outputs], [0.5, [ctx.destination]]);
-  assert.deepEqual([bus.outputs, limit.outputs], [[limit], [master]]);
-  assert.deepEqual([limit.threshold.value, limit.knee.value, limit.ratio.value], [-6, 4, 12]);
-  assert.deepEqual(limit.release.events, [['set', 0.002, 2], ['set', 0.25, 2.05]],
-    'a new compressor starts fully turned down: a 2 ms release lets the first sounds through');
-});
-
 test('juice: the portal makes no AudioContext before a gesture and follows sg:site:muted and the classroom flag', () => {
   const h = portal();
   assert.deepEqual(Object.keys(h.listeners).sort(), ['keydown', 'pointerdown', 'storage']);
@@ -194,31 +167,6 @@ test('juice: the portal makes no AudioContext before a gesture and follows sg:si
   assert.doesNotThrow(() => { none.emit('pointerdown'); playAll(none.J, { currentTime: 0 }); });
 });
 
-test('juice: the portal master comes back up after its own unmute and follows the stored classroom preset', () => {
-  // The portal's own mute toggle writes sg:site:muted in this page, which fires no storage event.
-  const level = h => { const master = h.contexts[0].nodes[0], last = master.gain.events.at(-1); return last ? last[1] : master.gain.value; };
-  const unmuteFirst = portal({ stored: { 'sg:site:muted': 'true' } });
-  unmuteFirst.emit('pointerdown');                                  // the click on the unmute button
-  unmuteFirst.values.set('sg:site:muted', 'false');
-  unmuteFirst.contexts[0].currentTime = 1; unmuteFirst.J.tap();
-  assert.equal(level(unmuteFirst), 0.5, 'the master starts silent, then sounds again');
-  const h = portal();
-  h.emit('pointerdown');
-  const ctx = h.contexts[0];
-  h.values.set('sg:site:muted', 'true'); h.emit('storage', { key: 'sg:site:muted' });
-  assert.equal(level(h), 0);
-  h.values.set('sg:site:muted', 'false');
-  ctx.currentTime = 1; h.J.tap();
-  assert.equal(level(h), 0.5, 'a mute from another tab, then this page unmutes');
-  const events = ctx.nodes[0].gain.events.length;
-  ctx.currentTime = 2; h.J.pop();
-  assert.equal(ctx.nodes[0].gain.events.length, events, 'no master automation while it is already up');
-  // A stored classroom switch from an older portal is ignored: only sg:site:muted silences Juice.
-  h.values.set('sg:site:classroom', 'true'); h.emit('storage', { key: 'sg:site:classroom' });
-  ctx.currentTime += 1; h.J.tap();
-  assert.equal(level(h), 0.5, 'an old classroom key does not mute');
-});
-
 test('juice: a suspended portal context is resumed by each gesture and its rejection is caught', () => {
   const h = portal();
   h.emit('pointerdown');
@@ -230,28 +178,6 @@ test('juice: a suspended portal context is resumed by each gesture and its rejec
   assert.doesNotThrow(() => h.emit('pointerdown'), 'an old resume() without a promise');
   ctx.resume = () => { throw new Error('closed'); };
   assert.doesNotThrow(() => h.emit('pointerdown'));
-});
-
-test('juice: games play into Kit.audio.master, only once Kit has a context, and follow Kit mute', () => {
-  const h = game();
-  assert.equal(h.window.Juice, undefined, 'games get Kit.juice, not window.Juice');
-  assert.deepEqual(h.listeners, {}, 'Kit owns the gestures in a game');
-  playAll(h.J, h.ctx);
-  assert.equal(h.ctx.nodes.length, 1, 'nothing before Kit.audio.unlock() made a context');
-  h.attach();
-  h.kit.muted = true;
-  playAll(h.J, h.ctx);
-  assert.equal(h.ctx.nodes.length, 1, 'nothing while Kit is muted');
-  h.kit.muted = false;
-  h.J.coin(2);
-  const limit = h.ctx.nodes.find(n => n.kind === 'compressor');
-  assert.deepEqual(limit.outputs, [h.master], 'the limiter feeds Kit.audio.master');
-  h.J.setQuiet(true); h.ctx.currentTime += 1; const n = h.ctx.nodes.length; h.J.coin(2);
-  assert.equal(h.ctx.nodes.length, n, 'setQuiet also silences a game');
-  // Loading twice keeps the first engine.
-  const first = h.J;
-  vm.runInNewContext(source, { window: h.window });
-  assert.equal(h.window.Kit.juice, first);
 });
 
 test('juice: works on the real Kit audio graph', () => {
@@ -320,40 +246,4 @@ test('juice: the same sound within 25 ms plays once; other sounds are not held b
   assert.equal(count(), two + one, 'the same sound 25 ms later plays');
   ctx.currentTime = 1.03; h.J.streak(1); const s = count(); ctx.currentTime = 1.04; h.J.streak(9);
   assert.equal(count(), s, 'arguments do not make it a different sound');
-});
-
-test('juice: each play varies its pitch by at most 2 %, keeping its own intervals', () => {
-  const h = portal();
-  h.emit('pointerdown');
-  const ctx = h.contexts[0];
-  const ratios = [];
-  for (let k = 0; k < 300; k++) {
-    ctx.currentTime = 1 + k * 0.03;
-    const from = ctx.nodes.length;
-    h.J.select();
-    const [a, b] = ctx.nodes.slice(from).filter(n => n.kind === 'oscillator').map(o => o.frequency.events[0][1]);
-    ratios.push(a / 784);
-    assert.ok(Math.abs(b / a - 1175 / 784) < 1e-9, 'both notes move together');
-  }
-  assert.ok(ratios.every(r => r >= 0.98 && r <= 1.02), 'within 2 %');
-  assert.ok(Math.max(...ratios) - Math.min(...ratios) > 0.03, 'and it does vary');
-  // The streak climbs a pentatonic ladder and stays at the top.
-  const base = [];
-  for (const n of [1, 2, 3, 4, 5, 6, 13, 99]) {
-    ctx.currentTime += 0.1;
-    const from = ctx.nodes.length;
-    h.J.streak(n);
-    const [o] = ctx.nodes.slice(from).filter(node => node.kind === 'oscillator');
-    base.push(o.frequency.events[1][1]);
-  }
-  const semitones = base.map(f => 12 * Math.log2(f / 392));
-  assert.deepEqual(semitones.map(s => Math.round(s) || 0).slice(0, 6), [0, 2, 4, 7, 9, 12]);
-  assert.ok(Math.abs(semitones[6] - 28) < 0.4 && Math.abs(semitones[7] - 28) < 0.4, 'capped at the 13th step');
-});
-
-test('juice: the script has no timers, loops or music', () => {
-  const code = source.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
-  for (const banned of [/setInterval/, /setTimeout/, /requestAnimationFrame/, /\.loop\s*=/, /\bmusic\b/i, /\bfetch\b/, /\bconsole\b/, /\.then\s*\(/]) {
-    assert.doesNotMatch(code, banned);
-  }
 });

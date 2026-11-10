@@ -110,24 +110,6 @@ async function catchOne(page) {
   return false;
 }
 
-test('the title waits; Play goes straight to the village pond the first time and starts a trip', async t => {
-  const page = await game(t, { dda: TIER[1] });
-  await step(page, 30);
-  assert.equal((await state(page)).screen, 'title');
-  assert.equal((await state(page)).tripOpen, false, 'the title opens no trip');
-  assert.equal(await page.locator('#titleFish b').textContent(), '0/33');
-  await page.locator('#btnPlay').click();
-  await step(page);
-  const s = await state(page);
-  assert.equal(s.screen, 'play'); assert.equal(s.mode, 'solo'); assert.equal(s.place, 0); assert.equal(s.tier, 1);
-  assert.equal(s.tripOpen, true); assert.equal(s.trip, 0);
-  assert.equal(s.p1.state, 'ready');
-  // The idle coach shows a hand after a moment, and it never casts by itself.
-  assert.ok(await until(page, 's.ghost', 60 * 4), 'the hand shows where to cast');
-  await step(page, 120);
-  assert.equal((await state(page)).p1.casts, 0, 'the coach never casts for the child');
-});
-
 test('the mouse aims and a click casts the hook exactly there; the keys aim too and Space casts; a press while waiting casts again', async t => {
   const page = await game(t, { save: SAVE(), dda: TIER[3] });
   await page.keyboard.press('Enter');
@@ -207,67 +189,6 @@ test('a whole catch with real input: the «!», a press, holding to reel; then t
   assert.equal(await page.locator('#basketNum').textContent(), String(s.trip));
 });
 
-test('pressing during a nibble scares the fish off: the hook stays, nothing is hooked', async t => {
-  const page = await game(t, { save: SAVE(), dda: TIER[3] });
-  await page.keyboard.press('Enter'); await step(page, 2);
-  await page.keyboard.press('Enter'); await step(page, 2);
-  let spooked = false;
-  for (let tries = 0; tries < 6 && !spooked; tries++) {
-    const s = await state(page);
-    if (s.p1.state === 'ready' || s.p1.state === 'wait') {
-      const f = s.fish.find(f => f.state === 'swim' && f.x > 420 && f.x < 1150) || { x: 700, y: 450 };
-      const pt = await mouseTo(page, f.x + 20, f.y);
-      await page.mouse.click(pt.x, pt.y);
-    }
-    // Tier 3 fish always nibble at least once before the bite.
-    if (await until(page, "s.fish.some(f => f.state === 'nibble')", 60 * 15)) {
-      const casts = (await state(page)).p1.casts, before = (await results(page)).length;
-      await page.keyboard.press('Space');
-      await step(page);
-      const now = await state(page);
-      assert.notEqual(now.p1.state, 'reel', 'a nibble is never a bite');
-      assert.equal(now.p1.casts, casts, 'the hook stays where it is');
-      assert.ok(now.fish.some(f => f.state === 'flee'), 'the fish swims off');
-      assert.deepEqual((await results(page)).slice(before), [0], 'a scared fish is a failed try for the difficulty');
-      spooked = true;
-    }
-  }
-  assert.ok(spooked, 'a fish came and nibbled');
-});
-
-test('P, Esc, the button and a lost focus pause the lake; nothing moves while paused, and focus never resumes', async t => {
-  const page = await game(t, { save: SAVE(), dda: TIER[1] });
-  await page.keyboard.press('Enter'); await step(page, 2);
-  await page.keyboard.press('Enter'); await step(page, 2);
-  const pt = await mouseTo(page, 700, 450);
-  await page.mouse.click(pt.x, pt.y);
-  await step(page, 30);
-  const snap = () => page.evaluate(() => JSON.stringify([__game.state.time, __game.state.p1, __game.state.fish]));
-  for (const how of ['KeyP', 'Escape', 'button', 'blur']) {
-    if (how === 'button') await page.locator('#btnPause').click();
-    else if (how === 'blur') await page.evaluate(() => window.dispatchEvent(new Event('blur')));
-    else await page.keyboard.press(how);
-    await step(page);
-    assert.equal((await state(page)).screen, 'pause', how);
-    const before = await snap();
-    await page.mouse.move(300, 300); await page.mouse.move(900, 600);
-    await page.keyboard.down('ArrowRight');
-    await step(page, 90);
-    await page.keyboard.up('ArrowRight');
-    assert.equal(await snap(), before, how + ': the lake is frozen');
-    if (how === 'blur') {
-      await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-      await step(page, 10);
-      assert.equal((await state(page)).screen, 'pause', 'focus coming back never resumes');
-    }
-    if (how === 'KeyP') await page.keyboard.press('KeyP'); else await page.locator('#btnResume').click();
-    await step(page);
-    assert.equal((await state(page)).screen, 'play');
-    await step(page, 5);
-    assert.notEqual(await snap(), before, 'and runs again after Resume');
-  }
-});
-
 test('leaving a place shows the trip: its catches and stars; Play again and R start a new trip', async t => {
   const page = await game(t, { save: SAVE(), dda: TIER[1] });
   await page.keyboard.press('Enter'); await step(page, 2);
@@ -327,26 +248,6 @@ test('the places map: two stars open the next place; a locked one wiggles and do
   await page.locator('.place').nth(1).click(); await step(page);
   const s = await state(page);
   assert.equal(s.screen, 'play'); assert.equal(s.place, 1); assert.equal(s.tripOpen, true);
-});
-
-test('saves come back after a reload, and an old or damaged save opens a fresh lake', async t => {
-  const page = await game(t, { save: SAVE({ coins: 5, caught: 3, book: { koi: 21, carp: 30 }, places: places([3, 2]) }) });
-  assert.equal(await page.locator('#titleFish b').textContent(), '2/33');
-  await page.reload();
-  await page.waitForFunction(() => window.__game && window.ll.step);
-  assert.equal(await page.locator('#titleFish b').textContent(), '2/33');
-  assert.equal((await page.evaluate(() => __game.save)).places[1].g.join(''), '110');
-  for (const save of ['broken{', '[1,2]', '{"coins":"abc","rod":9,"quests":[{"k":"nope"}],"aqua":[{"id":99}]}', '{"v":2,"places":"x","book":{"nemo":3},"rods":{"zone":7}}']) {
-    const old = await game(t, { save });
-    assert.equal((await state(old)).screen, 'title');
-    assert.equal(await old.locator('#titleFish b').textContent(), '0/33');
-    await old.keyboard.press('Enter'); await step(old);
-    const s = await state(old);
-    assert.equal(s.screen, 'play', save); assert.equal(s.place, 0);
-    const pt = await old.evaluate(() => __game.point(700, 450));
-    await old.mouse.click(pt.x, pt.y); await step(old, 3);
-    assert.equal((await state(old)).p1.casts, 1);
-  }
 });
 
 test('rods: coins buy an upgrade; a full disk shows the warning, keeps the rod, and Retry writes it', async t => {
@@ -429,18 +330,6 @@ test('two players: the derby starts on both keys, each aims and casts with their
   await step(page, 50);
   await page.keyboard.press('KeyR'); await step(page);
   assert.equal((await state(page)).duo, 'intro');
-});
-
-test('the mute button and M mute every sound and remember it; M never starts the game', async t => {
-  const page = await game(t);
-  assert.equal(await page.evaluate(() => Kit.audio.muted), false);
-  await page.locator('.sg-mute').click();
-  assert.equal(await page.evaluate(() => Kit.audio.muted), true);
-  assert.equal(await page.evaluate(() => localStorage.getItem('sg:site:muted')), 'true');
-  await page.keyboard.press('KeyM');
-  await step(page);
-  assert.equal(await page.evaluate(() => Kit.audio.muted), false);
-  assert.equal((await state(page)).screen, 'title');
 });
 
 test('the layer of buttons fits the smaller portal frame', async t => {

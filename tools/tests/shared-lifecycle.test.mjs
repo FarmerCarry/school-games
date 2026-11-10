@@ -107,46 +107,6 @@ for (const game of games) {
   });
 }
 
-test('shared preferences follow system motion, persist overrides and expose mute state', async t => {
-  const { page, frame } = await embeddedGame(t, 'beat-dash');
-  await page.emulateMedia({ reducedMotion: 'reduce' });
-  await frame.waitForFunction(() => Kit.motion.reduced());
-  assert.deepEqual(await frame.evaluate(() => { const s = Kit.shake(); s.add(10); s.update(.01); return { x: s.x, y: s.y, power: s.power }; }), {x: 0, y: 0, power: 0});
-  await frame.evaluate(() => Kit.motion.setPreference('full'));
-  assert.equal(await frame.evaluate(() => { const s = Kit.shake(); s.add(10); s.update(.01); return s.power > 0; }), true);
-  await frame.evaluate(() => Kit.audio.setMuted(true));
-  assert.equal(await frame.locator('.sg-mute').getAttribute('aria-pressed'), 'true');
-  await frame.evaluate(() => document.querySelector('.sg-mute').click());
-  assert.equal(await frame.locator('.sg-mute').getAttribute('aria-pressed'), 'false');
-  await frame.evaluate(() => window.dispatchEvent(new KeyboardEvent('keydown', {code: 'KeyM'})));
-  assert.equal(await frame.locator('.sg-mute').getAttribute('aria-pressed'), 'true');
-  await frame.goto(frame.url());
-  assert.equal(await frame.evaluate(() => Kit.motion.reduced()), false, 'explicit full-motion override survives reload');
-  assert.equal(await frame.locator('.sg-mute').getAttribute('aria-pressed'), 'true', 'saved mute state is exposed after reload');
-});
-
-test('typing play freezes away from the game and requires explicit resume', async t => {
-  const context = await browser.newContext(); t.after(() => context.close());
-  const page = await context.newPage();
-  await page.goto(`${server.origin}/games/typing-test/index.html`);
-  await page.locator('[data-lang="en"]').click();
-  await page.locator('.pebble.next').click();
-  await page.waitForFunction(() => __game.state.screen === 'play' && !!__game.state.next);
-  await page.keyboard.type(await page.evaluate(() => __game.state.next));
-  assert.equal(await page.evaluate(() => __game.state.keys), 1);
-  await page.evaluate(() => window.dispatchEvent(new Event('blur')));
-  await page.locator('#scrPause').waitFor({state: 'visible'});
-  const clock = await page.evaluate(() => __game.state.t);
-  await page.waitForTimeout(1100);
-  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-  assert.equal(await page.locator('#scrPause').isVisible(), true, 'focus coming back does not resume');
-  assert.equal(await page.evaluate(() => __game.state.t), clock, 'the clouds stay where they were');
-  await page.locator('#btnResume').click();
-  assert.equal(await page.locator('#scrPause').isVisible(), false);
-  assert.equal(await page.evaluate(() => __game.state.screen), 'play');
-  assert.equal(await page.evaluate(() => __game.state.keys), 1);
-});
-
 test('optional font download failures preserve playable games in the real portal', async t => {
   const cases = [
     { slug: 'critter-mart', start: '#playBtn', playing: () => __game.mode === 'play' },

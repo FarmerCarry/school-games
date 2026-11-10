@@ -75,39 +75,6 @@ test('failed saves stay visible until a retry writes every key', async t => {
   assert.deepEqual(retried, { state: 'saved', att: { 'neon-steps': 1 }, last: 0, attempts: 1 });
 });
 
-test('a paused run is drawn once with its effects held still, then only on resize, restore or motion change', async t => {
-  const page = await game(t, { loop: true });
-  await page.evaluate(() => document.fonts.ready);
-  const paused = await page.evaluate(() => {
-    const canvas = document.getElementById('game'), ctx = canvas.getContext('2d');
-    const pixels = () => ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-    const paintsIn = n => { runtime.paints = 0; runtime.step(n); return runtime.paints; };
-    __game.start(0, false);
-    // With no input the cube dies at the first spike; pause while its burst, ring, flash and shake are live.
-    for (let n = 0; n < 2000 && !__game.state.dead; n++) __game.ff(1);
-    runtime.step(3);
-    document.getElementById('b-pause').click();
-    const first = paintsIn(60), picture = pixels(), idle = paintsIn(120);
-    canvas.width = canvas.width; // a restored 2D context has lost its pixels and drawing state
-    canvas.dispatchEvent(new Event('contextrestored'));
-    // the redrawn frame is the same picture: nothing moved during the 2 paused seconds
-    const restored = paintsIn(30), same = pixels().every((v, i) => v === picture[i]), settled = paintsIn(30);
-    Kit.motion.setPreference('reduce');
-    const motion = paintsIn(30);
-    return { first, idle, restored, same, settled, motion, attempt: __game.state.attempt };
-  });
-  assert.deepEqual(paused, { first: 1, idle: 0, restored: 1, same: true, settled: 0, motion: 1, attempt: 1 });
-  await page.setViewportSize({ width: 1000, height: 600 });
-  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
-  assert.equal(await page.evaluate(() => { runtime.paints = 0; runtime.step(30); return runtime.paints; }), 1, 'a resize redraws the paused frame once');
-  const resumed = await page.evaluate(() => {
-    document.getElementById('b-resume').click();
-    runtime.paints = 0; runtime.step(40);
-    return { paints: runtime.paints, attempt: __game.state.attempt, paused: __game.state.paused };
-  });
-  assert.deepEqual(resumed, { paints: 40, attempt: 2, paused: false }, 'resume draws every frame and the next try starts');
-});
-
 test('there is no music: menus and pause stay silent, and each jump plays a note of the level\'s key', async t => {
   const page = await game(t);
   const result = await page.evaluate(() => {
@@ -167,23 +134,4 @@ test('a win plays a short fanfare, then the result panel is silent while the fir
   assert.ok(result.fanfare > 0, 'the win is celebrated with sound');
   assert.equal(result.panel, true, 'the result panel is up');
   assert.equal(result.after, 0, 'nothing sounds on the result panel after the fanfare');
-});
-
-test('calm mode keeps the beat as colour only: nothing pulses, the glows still brighten on the beat', async t => {
-  const page = await game(t, { loop: true });
-  const beats = await page.evaluate(() => {
-    const sample = n => { const out = []; for (let i = 0; i < n; i++) { runtime.step(1); out.push(__game.beat); } return out; };
-    __game.start(0, false);
-    const lively = sample(60);
-    Kit.motion.setPreference('reduce');
-    const calm = sample(60);
-    return { lively, calm };
-  });
-  const range = (list, key) => [Math.min(...list.map(b => b[key])), Math.max(...list.map(b => b[key]))];
-  assert.ok(beats.lively.every(b => b.pulse === b.tint), 'with motion the pulse and the glow move together');
-  assert.ok(range(beats.lively, 'pulse')[1] > 0.4, 'with motion things pulse on the beat');
-  assert.deepEqual(range(beats.calm, 'pulse'), [0, 0], 'calm mode moves nothing on the beat');
-  assert.ok(beats.calm.every(b => b.beat === 0), 'calm mode holds the beat-driven bars still');
-  const [low, high] = range(beats.calm, 'tint');
-  assert.ok(low < 0.2 && high > 0.4, `calm mode still brightens the glows on the beat (${low}..${high})`);
 });

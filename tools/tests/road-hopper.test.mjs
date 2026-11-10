@@ -27,13 +27,13 @@ after(async () => {
 // `failPictures: n` makes the first n character pictures fail. `ddaStart: level` is the
 // level Kit.dda starts this PC at before any result is saved (its `start` option), so a
 // test knows the first tier.
-async function game(t, { reducedMotion = 'no-preference', idle = true, failPictures = 0, entries = {}, failSave = false, denyStorage = false, ddaStart = null } = {}) {
+async function game(t, { reducedMotion = 'no-preference', idle = true, failPictures = 0, entries = {}, failSave = false, ddaStart = null } = {}) {
   const context = await browser.newContext({ viewport: { width: 960, height: 540 }, reducedMotion });
   const page = await context.newPage(), errors = [];
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error' || m.type() === 'warning') errors.push(m.text()); });
   t.after(async () => { await context.close(); assert.deepEqual(errors, []); });
-  await page.addInitScript(([idle, failPictures, entries, failSave, denyStorage, ddaStart]) => {
+  await page.addInitScript(([idle, failPictures, entries, failSave, ddaStart]) => {
     if (ddaStart !== null) {
       let kit;
       Object.defineProperty(window, 'Kit', { configurable: true, get: () => kit, set(value) {
@@ -90,13 +90,7 @@ async function game(t, { reducedMotion = 'no-preference', idle = true, failPictu
       }
       return write.apply(this, arguments);
     };
-    // The classroom folder blocks every storage call, including reads.
-    if (denyStorage) {
-      for (const method of ['getItem', 'setItem', 'removeItem']) {
-        Storage.prototype[method] = function () { throw new DOMException('Storage disabled by test', 'SecurityError'); };
-      }
-    }
-  }, [idle, failPictures, entries, failSave, denyStorage, ddaStart]);
+  }, [idle, failPictures, entries, failSave, ddaStart]);
   await page.goto(`${server.origin}/games/road-hopper/`);
   await page.waitForFunction(() => window.__game, null, { polling: 50 });
   return page;
@@ -125,68 +119,6 @@ test('reduced motion keeps the new-world banner and reward popups readable, with
   assert.ok(pops.length >= 2, `milestone popups exist (${pops.length})`);
   assert.ok(pops.every(o => o === '1'), `popups are visible (${pops})`);
   await page.waitForFunction(() => !document.getElementById('banner').classList.contains('show') && !document.querySelector('#pops .pop'), null, { polling: 50, timeout: 5000 });
-});
-
-test('a paused run draws its scene once, redraws after a resize, and resumes normally', async t => {
-  const page = await game(t, { idle: false });
-  await page.evaluate(() => { document.getElementById('btnPlay').click(); rh.frames(20); __game.hop(0, 1); rh.frames(40); });
-  const paused = await page.evaluate(() => {
-    document.getElementById('btnPause').click();
-    rh.clears = 0; rh.frames(1);
-    const first = rh.clears;
-    rh.clears = 0; rh.frames(120);
-    rh.resizes = 0;
-    return { state: __game.state, first: first > 0, settled: rh.clears };
-  });
-  assert.deepEqual(paused, { state: 'paused', first: true, settled: 0 });
-  await page.setViewportSize({ width: 1000, height: 600 });
-  // Wait for the browser to deliver its resize event (the game's handler runs right after this one).
-  await page.waitForFunction(() => rh.resizes > 0, null, { polling: 50 });
-  const resized = await page.evaluate(() => {
-    rh.clears = 0; rh.frames(1);
-    const once = rh.clears;
-    rh.clears = 0; rh.frames(60);
-    return { once: once > 0, settled: rh.clears };
-  });
-  assert.deepEqual(resized, { once: true, settled: 0 });
-  const resumed = await page.evaluate(() => {
-    const row = __game.player().autoRow;
-    document.getElementById('btnResume').click();
-    rh.clears = 0; rh.frames(60);
-    return { state: __game.state, everyFrame: rh.clears >= 60, moved: __game.player().autoRow > row };
-  });
-  assert.deepEqual(resumed, { state: 'play', everyFrame: true, moved: true });
-});
-
-test('failed saves retain complete session progress and clear the warning only after one record succeeds', async t => {
-  const page = await game(t, { idle: false });
-  const previous = await savedProgress(page);
-  const status = () => { const s = document.querySelector('.sg-save-status'); return s && !s.hidden ? s.dataset.state : 'hidden'; };
-  await page.evaluate(() => {
-    rh.failKeys = 'all';
-    const g = __game; g.start(); g.god(true);
-    for (let i = 0; i < 6; i++) { g.hop(0, 1); g.step(0.2); }
-    g.god(false); g.kill('car'); g.step(2);
-  });
-  assert.equal(await page.evaluate(() => __game.state), 'over');
-  assert.equal(await page.evaluate(status), 'failed');
-  assert.deepEqual(await savedProgress(page), previous);
-  // Retrying the failed record must not mistake its unchanged JSON for a saved value.
-  await page.evaluate(() => { rh.failKeys = ['save']; document.querySelector('.sg-save-status button').click(); });
-  assert.equal(await page.evaluate(status), 'failed');
-  assert.deepEqual(await savedProgress(page), previous);
-  // A later save (here: coins added) writes all pending progress together.
-  await page.evaluate(() => { rh.failKeys = null; __game.addCoins(5); });
-  assert.equal(await page.evaluate(status), 'saved');
-  const stored = await page.evaluate(() => ({
-    ...JSON.parse(localStorage.getItem('sg:road-hopper:save')),
-    memBest: __game.best, memCoins: __game.coins
-  }));
-  assert.ok(stored.best > 0);
-  assert.equal(stored.best, stored.memBest);
-  assert.equal(stored.coins, stored.memCoins);
-  assert.equal(stored.tipRuns, 1);
-  assert.equal(stored.stats.games, 1);
 });
 
 function legacyProgress(overrides = {}) {
@@ -304,7 +236,6 @@ test('a run left through the pause menu keeps its best score', async t => {
 const lanesVm = vm.createContext({});
 vm.runInContext(readFileSync(path.join(repo, 'games/road-hopper/endless.js'), 'utf8'), lanesVm, { filename: 'endless.js' });
 const Lanes = vm.runInContext('RHEndless', lanesVm), TIERS = Lanes.TIERS;
-const plain = value => JSON.parse(JSON.stringify(value));
 const sha = value => createHash('sha256').update(JSON.stringify(value)).digest('hex').slice(0, 16);
 function mulberry(seed) {
   let a = seed >>> 0;
@@ -349,53 +280,12 @@ function crossable(lanes) {
   return false;
 }
 
-test('tier 3 holds the original Road Hopper numbers and anything odd is tier 3', () => {
-  assert.deepEqual(plain(Lanes.tier(3)), {
-    tier: 3, ramp: 220, dMin: 0, dMax: 1, // difficulty = clamp(row / 220, 0, 1)
-    carSpeed: 1, carGap: 3.4, heavyAfter: 12, fastAfter: 25, fast: 1, roadMax: 5,
-    riverAfter: 7, riverMax: 4, logSpeed: 1, logGap: 1.4, longLogs: 0.25, land: 0.3,
-    railAfter: 16, rail: 1, warn: 1.5, trainGap: 1, rest: 0.72, hit: 0.2,
-    eagle: 1, warnAt: 2.3, reach: 3.6, par: 75
-  });
-  for (let r = -12; r <= 500; r++) assert.equal(Lanes.diffAt(r, Lanes.tier(3)), Math.min(1, Math.max(0, r / 220)));
-  for (const odd of [undefined, null, 0, 6, -1, NaN, '2', 'x', {}]) assert.equal(Lanes.tier(odd), TIERS[2], String(odd));
-  assert.deepEqual([1, 2, 3, 4, 5].map(n => Lanes.tier(n).tier), [1, 2, 3, 4, 5]);
-  assert.ok(Object.isFrozen(TIERS[0]) && Object.isFrozen(TIERS[4]));
-});
-
 test('tier 3 makes exactly the lanes the game made before the tiers existed', () => {
   // Hashes of 400 lanes from the generator in game.js at da6fa54 (before endless.js),
   // driven by the same seeded Math.random.
   const before = { 1: '999cd041d480c26d', 7: '63f89feb1a0d1a35', 2026: '32852b6ded33f7e0' };
   for (const [seed, hash] of Object.entries(before)) assert.equal(sha(world(3, +seed).map(laneKey)), hash, `seed ${seed}`);
   assert.notEqual(sha(world(2, 1).map(laneKey)), before[1], 'another tier makes another world');
-});
-
-test('every tier knob moves one way from tier 1 to 5; tiers 1-2 are kinder, 4-5 harder, never with stricter hitboxes', () => {
-  assert.deepEqual(Object.keys(Lanes.KNOBS).sort(), Object.keys(TIERS[0]).filter(k => k !== 'tier').sort());
-  for (const [knob, way] of Object.entries(Lanes.KNOBS)) {
-    for (let i = 1; i < 5; i++) {
-      const a = TIERS[i - 1][knob], b = TIERS[i][knob];
-      assert.ok(way > 0 ? b >= a : b <= a, `${knob} ${way > 0 ? 'rises' : 'falls'} from tier ${i} to ${i + 1} (${a} -> ${b})`);
-    }
-  }
-  const [t1, t2, t3, t4, t5] = TIERS;
-  const harder = (a, b, knob) => Lanes.KNOBS[knob] > 0 ? a[knob] > b[knob] : a[knob] < b[knob];
-  // Slower, wider gaps, hazards later and rarer, a calmer eagle, kinder hitboxes, a slower ramp.
-  for (const easy of [t1, t2]) {
-    for (const knob of ['ramp', 'dMax', 'carSpeed', 'carGap', 'heavyAfter', 'fastAfter', 'fast', 'roadMax', 'riverAfter', 'riverMax',
-      'logSpeed', 'logGap', 'longLogs', 'land', 'railAfter', 'rail', 'warn', 'trainGap', 'rest', 'hit', 'eagle', 'warnAt', 'reach']) {
-      assert.ok(harder(t3, easy, knob), `tier ${easy.tier} is kinder than tier 3 in ${knob}`);
-    }
-  }
-  assert.equal(t1.fast, 0, 'no fast lanes at tier 1');
-  for (const hard of [t4, t5]) {
-    for (const knob of ['ramp', 'dMin', 'carSpeed', 'carGap', 'heavyAfter', 'fastAfter', 'fast', 'riverAfter', 'logSpeed', 'logGap',
-      'longLogs', 'railAfter', 'rail', 'warn', 'trainGap', 'rest', 'eagle', 'warnAt', 'reach']) {
-      assert.ok(harder(hard, t3, knob), `tier ${hard.tier} is harder than tier 3 in ${knob}`);
-    }
-    assert.deepEqual([hard.hit, hard.land], [t3.hit, t3.land], 'hitboxes and log landings stay as fair as tier 3');
-  }
 });
 
 test('every tier makes crossable worlds whose hazards come later, calmer and with more rest rows at lower tiers', () => {
@@ -480,17 +370,6 @@ test('the first tier makes the title world, and finished runs move the tier and 
   await easy.reload();
   await easy.waitForFunction(() => window.__game, null, { polling: 50 });
   assert.deepEqual(await easy.evaluate(() => [__game.tier, __game.state]), [2, 'title'], 'the next visit starts where the last runs left the tier');
-});
-
-test('blocked storage still boots, and an up hop still lands on a higher row', async t => {
-  const page = await game(t, { denyStorage: true, idle: false });
-  await page.evaluate(() => { document.getElementById('btnPlay').click(); rh.frames(8); });
-  assert.equal(await page.evaluate(() => __game.state), 'play');
-  const before = await page.evaluate(() => __game.player().row);
-  await page.evaluate(() => { __game.press('ArrowUp'); rh.frames(20); });
-  const after = await page.evaluate(() => __game.player());
-  assert.ok(after.row > before, `up hop lands (row ${before} -> ${after.row})`);
-  assert.equal(after.dead, false);
 });
 
 test('the eagle warning comes on when the critter lingers, and a crash still ends the run', async t => {

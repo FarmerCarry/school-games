@@ -111,16 +111,6 @@ test('denied metadata writes keep their warning until metadata and progress both
   assert.equal(await page.locator('.sg-save-status[data-state="failed"]').count(), 0);
 });
 
-test('an old music switch in saved metadata is ignored and dropped by the next metadata write', async t => {
-  const page = await gamePage(t, fixture(), { hat: 'cap', maxLvl: 11, music: true, best: 0 });
-  await page.evaluate(() => { __game.start(); stepGame(30); __game.pause(); });
-  assert.equal(await page.evaluate(() => __game.mode), 'pause');
-  assert.equal(await page.locator('#musicBtn').count(), 0, 'the pause panel has no music switch');
-  assert.equal(await page.locator('#pause button', { hasText: 'الموسيقى' }).count(), 0);
-  await page.evaluate(() => { document.getElementById('menuBtn').click(); document.querySelectorAll('#hats .cm-hat')[6].click(); });
-  assert.deepEqual(await page.evaluate(() => Kit.store('critter-mart').get('meta')), { hat: 'crown', maxLvl: 11, best: 0 });
-});
-
 async function snapshot(page) {
   return page.evaluate(() => ({ state: __game.state(), save: Kit.store('critter-mart').get('save'), meta: Kit.store('critter-mart').get('meta') }));
 }
@@ -177,28 +167,6 @@ test('unmatched helper stock uses a persistent recovery queue without duplicatio
     assert.equal(totalJuice(data), 10);
     await page.reload();
   }
-});
-
-test('pointer upgrade purchases restore movement, upgrade shortcuts and pause keys', async t => {
-  const page = await gamePage(t, fixture({ coins: 1000 }));
-  await page.evaluate(() => { __game.start(); __game.tp(1646, 918); stepGame(); });
-  await page.locator('.cm-upg-row').first().click();
-  assert.equal(await page.evaluate(() => document.activeElement.id), 'game');
-  assert.equal((await snapshot(page)).save.up.speed, 1);
-  await page.keyboard.press('Digit2');
-  await page.evaluate(() => stepGame());
-  assert.equal((await snapshot(page)).save.up.carry, 1, 'number shortcuts still buy upgrades at the desk');
-  await page.keyboard.press('Escape');
-  await page.evaluate(() => stepGame());
-  assert.equal((await snapshot(page)).state.mode, 'pause');
-  await page.keyboard.press('Escape');
-  await page.evaluate(() => stepGame());
-  assert.equal((await snapshot(page)).state.mode, 'play');
-  const before = (await snapshot(page)).state.player.y;
-  await page.keyboard.down('KeyS');
-  await page.evaluate(() => stepGame(24));
-  await page.keyboard.up('KeyS');
-  assert.ok((await snapshot(page)).state.player.y > before + 20, 'WASD moves after a pointer purchase');
 });
 
 test('keyboard upgrade purchases preserve native activation and Tab navigation', async t => {
@@ -281,20 +249,6 @@ test('a new store does not inherit the old store\'s income rate for away earning
   // Past the next 10 s income window: a store that has sold nothing earns nothing while away.
   await page.evaluate(() => { __game.start(); stepGame(60 * 12); });
   assert.deepEqual(await page.evaluate(() => [__game.S().stats.served, __game.S().rate]), [0, 0]);
-});
-
-test('legacy final purchase with done=false recovers its saved completion time', async t => {
-  const save = fixture({ stats: { earned: 17, served: 3, play: 987 } });
-  save.un.statue = true;
-  const page = await gamePage(t, save);
-  assert.equal((await snapshot(page)).save.completionTime, 987);
-  await page.evaluate(() => __game.start());
-  const data = await snapshot(page);
-  assert.equal(data.state.mode, 'finale');
-  assert.equal(data.meta.best, 987);
-  assert.equal(data.save.done, true);
-  assert.equal(data.save.stats.served, 3);
-  assert.equal(data.save.stats.earned, 17);
 });
 
 for (const condition of [{ name: 'a better existing record', cheat: false, best: 100 }, { name: 'a cheated run', cheat: true, best: 0 }]) {

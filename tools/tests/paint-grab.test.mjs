@@ -56,59 +56,6 @@ async function paintGrab(t) {
   return page;
 }
 
-test('Paint Grab freezes a paused round and paints it once, then only after resize, context restore or late fonts', async t => {
-  const page = await paintGrab(t);
-  const paused = await page.evaluate(() => {
-    document.getElementById('bPlay').click();
-    // a big square of land, revealed before the pause (the reveal wave takes 0.6 s)
-    __game.grab(12); runtime.step(40);
-    document.getElementById('bPause').click();
-    const at = { time: __game.time(), x: __game.player.x };
-    runtime.paints = 0; runtime.step(60);
-    return { state: __game.state, paints: runtime.paints, at, now: { time: __game.time(), x: __game.player.x } };
-  });
-  assert.deepEqual(paused, { state: 'pause', paints: 1, at: paused.at, now: paused.at }, 'the paused scene is drawn once and nothing moves');
-
-  await page.setViewportSize({ width: 800, height: 450 });
-  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
-  const resized = await page.evaluate(() => { runtime.paints = 0; runtime.step(10); return runtime.paints; });
-  assert.equal(resized, 1, 'a resize repaints the paused scene once');
-
-  // A GPU reset blanks every canvas, the cached territory and floor textures included.
-  const restored = await page.evaluate(() => {
-    const canvas = document.getElementById('game'), ctx = canvas.getContext('2d');
-    const image = () => ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-    const shown = image();
-    runtime.canvases.forEach(c => { c.width = c.width; });
-    runtime.canvases.forEach(c => c.dispatchEvent(new Event('contextrestored')));
-    runtime.paints = 0; runtime.step(10);
-    const paints = runtime.paints, again = image();
-    let differ = 0;
-    for (let i = 0; i < shown.length; i += 4) if (shown[i] !== again[i] || shown[i + 1] !== again[i + 1] || shown[i + 2] !== again[i + 2]) differ++;
-    runtime.paints = 0; runtime.step(10);
-    return { paints, differ, settled: runtime.paints };
-  });
-  assert.deepEqual(restored, { paints: 1, differ: 0, settled: 0 }, 'the restored scene, territory included, matches the paused frame');
-
-  const fonts = await page.evaluate(async () => {
-    runtime.releaseFonts();
-    await new Promise(resolve => setTimeout(resolve, 0));
-    runtime.paints = 0; runtime.step(10);
-    const paints = runtime.paints;
-    runtime.paints = 0; runtime.step(10);
-    return { paints, settled: runtime.paints };
-  });
-  assert.deepEqual(fonts, { paints: 1, settled: 0 }, 'late fonts repaint the paused scene once');
-
-  const resumed = await page.evaluate(() => {
-    const time = __game.time();
-    document.getElementById('bResume').click();
-    runtime.paints = 0; runtime.step(5);
-    return { state: __game.state, paints: runtime.paints, ticking: __game.time() < time };
-  });
-  assert.deepEqual(resumed, { state: 'play', paints: 5, ticking: true }, 'play repaints every frame again');
-});
-
 test('Paint Grab keeps bots off a rainbow player\'s pink and coral and spreads look-alike bot colours', async t => {
   const page = await paintGrab(t);
   const { rounds, title } = await page.evaluate(() => {

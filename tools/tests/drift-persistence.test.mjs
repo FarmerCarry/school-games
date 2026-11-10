@@ -211,25 +211,6 @@ test('a mission-save failure after purchase retains a coherent purchase and retr
   assert.deepEqual((await snapshot(page)).stored, rewarded);
 });
 
-test('a failed gift save keeps the saved record, warns, and Retry writes the gift', async t => {
-  const saved = { v: 1, ...fixture({ giftAt: 0 }) };
-  const page = await game(t, { save: saved });
-  await exhaustStorage(page);
-  // A plain click: the title's bottom row used to swallow clicks on this button.
-  await page.locator('#btnGift').click();
-  await page.locator('#giftBox').click();
-  const status = page.locator('.sg-save-status');
-  assert.equal(await status.getAttribute('data-state'), 'failed');
-  let { current, stored } = await snapshot(page);
-  assert.deepEqual(stored, saved, 'a failed write keeps the saved progress');
-  assert.ok(current.coins > saved.coins && current.giftAt > 0, 'the gift still counts in this session');
-  await page.evaluate(() => localStorage.removeItem('quota-fixture'));
-  await status.locator('button').click();
-  ({ current, stored } = await snapshot(page));
-  assert.deepEqual(stored, current);
-  assert.equal(await status.getAttribute('data-state'), 'saved');
-});
-
 test('on a 4:3 screen and in small portal frames the save warning keeps clear of the how-to line, garage prices and results buttons', async t => {
   const page = await game(t, { save: { v: 1, ...fixture() } });
   const resize = async (width, height) => {

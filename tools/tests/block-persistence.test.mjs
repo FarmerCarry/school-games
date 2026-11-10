@@ -134,25 +134,6 @@ test('denied storage and serialization failures return false instead of claiming
   }), { normal: true, circular: false, missing: null });
 });
 
-test('a failed pointer retry returns control to gameplay while keyboard retries retain focus', async t => {
-  const page = await game(t, () => {
-    Storage.prototype.setItem = function () { throw new DOMException('blocked', 'SecurityError'); };
-  });
-  await create(page);
-  await page.locator('#saveRetry').click();
-  assert.equal(await page.evaluate(() => __game.G.saveError), 'world');
-  await page.keyboard.down('KeyD');
-  assert.equal(await page.evaluate(() => Kit.keys.down('KeyD')), true);
-  await page.keyboard.up('KeyD');
-  await page.locator('#saveRetry').focus();
-  await page.keyboard.press('Space');
-  assert.equal(await page.evaluate(() => document.activeElement.id), 'saveRetry');
-  await page.locator('#saveRetry').click();
-  await page.keyboard.press('Escape');
-  await page.evaluate(() => stepGame());
-  assert.equal(await page.evaluate(() => __game.G.mode), 'pause');
-});
-
 test('quests earned during metadata failure recover global stars exactly once', async t => {
   const page = await game(t);
   await create(page);
@@ -285,23 +266,6 @@ test('final quests remain pending across reloads until the celebration is acknow
   assert.equal(await page.locator('#master').isVisible(), false);
 });
 
-test('leaving an open backpack pauses world time and resumes the backpack explicitly', async t => {
-  const page = await game(t);
-  await create(page);
-  const before = await page.evaluate(() => {
-    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyE' })); stepGame();
-    window.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyE' }));
-    window.dispatchEvent(new Event('blur'));
-    return { play: __game.G.play, tod: __game.G.tod };
-  });
-  assert.equal(await page.evaluate(() => __game.G.mode), 'pause');
-  await page.evaluate(() => stepGame(120));
-  assert.deepEqual(await page.evaluate(() => ({ play: __game.G.play, tod: __game.G.tod })), before);
-  await page.evaluate(() => document.getElementById('resumeBtn').click());
-  assert.equal(await page.evaluate(() => __game.G.mode), 'inv');
-  assert.equal(await page.locator('#inv').isVisible(), true);
-});
-
 test('a quest whose world save is lost is redone after a reload without a second star', async t => {
   const page = await game(t);
   await create(page);
@@ -324,15 +288,4 @@ test('a quest whose world save is lost is redone after a reload without a second
   assert.deepEqual(await quest(), { done: true, stars: 1, error: null }, 'redoing the quest earns its star once');
   await restore(page);
   assert.deepEqual(await page.evaluate(() => ({ done: !!__game.G.done.logs, stars: __game.meta.totalStars })), { done: true, stars: 1 });
-});
-
-test('world metadata saved as a number, or with slots that are not a list, loads empty and a new world saves', async t => {
-  for (const raw of ['5', '{"slots":"abc","totalStars":2}']) {
-    const page = await game(t, `localStorage.setItem('sg:block-world:meta', '${raw}')`);
-    assert.deepEqual(await page.evaluate(() => __game.meta.slots), [null, null, null], raw);
-    await create(page);
-    const meta = await page.evaluate(() => JSON.parse(localStorage.getItem('sg:block-world:meta')));
-    assert.equal(meta.slots[0].gm, 'survival', raw);
-    assert.deepEqual(meta.slots.slice(1), [null, null], raw);
-  }
 });

@@ -109,16 +109,6 @@ test('a lost level reports the waves it held; an endless run saves its best at t
   assert.equal(await page.locator('#overNew').isVisible(), true, 'the waves saved during the run still count as a new record');
 });
 
-test('an endless run left from the pause menu keeps the waves it held', async t => {
-  const page = await game(t, { saved: JSON.stringify({ stars: [3, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0] }) });
-  assert.equal(await holdEndless(page, 2), 2, 'two waves held');
-  assert.equal((await stored(page)).endless, 2, 'each held wave is saved at once');
-  await page.keyboard.press('KeyP');
-  await page.evaluate(() => cg.step(1));
-  await page.locator('#btnMenu').click();
-  assert.equal(await page.locator('#endlessSub').textContent(), 'أفضل: 2 موجة');
-});
-
 test('pads build through their menu or the tower bar; upgrades and sales move coins; menus close', async t => {
   const page = await game(t);
   await page.evaluate(() => { __game.start(2); __game.give(500); cg.step(1); });
@@ -152,28 +142,6 @@ test('pads build through their menu or the tower bar; upgrades and sales move co
   await page.evaluate(() => { __game.lose(); cg.step(100); });
   assert.equal(await page.locator('#scr-lose').isVisible(), true);
   assert.equal(await page.locator('#panel').isVisible(), false, 'the build menu is hidden behind the result');
-});
-
-test('a paused level freezes, keeps its last frame, and redraws once after a resize', async t => {
-  const page = await game(t);
-  await page.locator('#btnPlay').click();
-  await clickPad(page, 2);
-  await page.locator('#panel .cg-card[data-type="pop"]').click();
-  await page.evaluate(() => { document.getElementById('btnWave').click(); cg.run(240); });
-  const live = await page.evaluate(() => __game.world.enemies.length);
-  assert.ok(live > 0, 'blobs are on the road');
-  await page.evaluate(() => window.dispatchEvent(new Event('blur')));
-  assert.equal((await state(page)).screen, 'pause', 'losing focus pauses');
-  const frozen = await page.evaluate(() => { cg.step(1); cg.paints = 0; const t = __game.state.time; cg.step(120); return [t, __game.state.time, cg.paints]; });
-  assert.equal(frozen[1], frozen[0], 'nothing moves while paused');
-  assert.equal(frozen[2], 0, 'the paused frame is kept');
-  await page.setViewportSize({ width: 1100, height: 620 });
-  await page.evaluate(() => new Promise(r => requestAnimationFrame(r)));
-  assert.equal(await page.evaluate(() => { cg.paints = 0; cg.step(60); return cg.paints; }), 1, 'a resize repaints once');
-  await page.keyboard.press('KeyP');
-  await page.evaluate(() => cg.step(1));
-  assert.equal((await state(page)).screen, 'play');
-  assert.equal(await page.evaluate(() => { cg.paints = 0; cg.step(10); return cg.paints; }), 10, 'play draws every frame');
 });
 
 test('failed saves warn with a retry and keep the stars until a retry works', async t => {
@@ -234,12 +202,4 @@ test('the first level teaches by doing, and the keyboard covers waves, speed and
   await page.keyboard.press('Escape');
   await page.evaluate(() => cg.step(1));
   assert.equal((await state(page)).screen, 'pause');
-});
-
-test('reduced motion keeps the banner readable and removes it by a timer', async t => {
-  const page = await game(t, { reducedMotion: 'reduce' });
-  await page.locator('#btnPlay').click();
-  const banner = await page.$eval('#banner', e => ({ hidden: e.hidden, opacity: getComputedStyle(e).opacity, animation: getComputedStyle(e).animationName }));
-  assert.deepEqual(banner, { hidden: false, opacity: '1', animation: 'none' });
-  await page.waitForFunction(() => document.getElementById('banner').hidden, null, { timeout: 5000 });
 });

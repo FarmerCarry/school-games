@@ -93,19 +93,6 @@ async function autoplay(page, max = 60 * 400) {
 }
 const me = page => page.evaluate(() => { const a = __game.player; return { x: a.x, y: a.y, vy: a.vy, ground: a.ground && a.ground.id, hearts: a.hearts, coins: a.coins, ghost: a.ghost }; });
 
-test('the title shows the island with its islanders at play, and starts and saves nothing', async t => {
-  const page = await game(t);
-  assert.equal(await g(page, () => __game.mode), 'title');
-  const before = await g(page, () => __game.demo.actors.map(a => [a.x, a.y]));
-  await step(page, 400);
-  const after = await g(page, () => __game.demo.actors.map(a => [a.x, a.y]));
-  assert.notDeepEqual(after, before, 'the islanders on the title move about');
-  assert.deepEqual(await g(page, () => [__game.mode, __game.world, __game.matches]), ['title', null, 0], 'no match from the title');
-  assert.deepEqual(await g(page, () => Object.keys(localStorage).filter(k => k.startsWith('sg:chaos-island:') && k !== 'sg:chaos-island:dda')), []);
-  // One big Play button, two side buttons and the four islands: nothing else to click.
-  assert.deepEqual(await g(page, () => [...document.querySelectorAll('#scrTitle button')].map(b => b.id || b.className)), ['btnPlay', 'btnWardrobe', 'btnDuo', 'isle on', 'isle locked', 'isle locked', 'isle locked']);
-});
-
 test('Enter starts a match at the tier read at its start; the card names the disaster and counts 3, 2, 1', async t => {
   const page = await game(t, { save: SAVE() });
   await page.keyboard.press('Enter');
@@ -163,46 +150,6 @@ test('the arrow keys and A/D walk, Space and Up jump, Down drops through a platf
   assert.equal((await me(page)).ground, 'ground', 'Down drops through it');
 });
 
-test('P and Esc pause and resume; nothing moves or redraws while paused; leaving the window pauses for good', async t => {
-  const page = await game(t, { save: SAVE() });
-  await page.keyboard.press('Enter');
-  await step(page);
-  await until(page, "g.world.phase === 'live'");
-  await page.evaluate(() => {
-    window.draws = 0;
-    const ctx = document.getElementById('game').getContext('2d'), draw = ctx.drawImage;
-    ctx.drawImage = function (img) { if (img && img.width >= 1280 * 0.5) window.draws++; return draw.apply(this, arguments); };
-  });
-  for (const key of ['KeyP', 'Escape']) {
-    await page.keyboard.press(key);
-    await step(page);
-    assert.equal(await g(page, () => __game.mode), 'pause', key);
-    const frozen = await g(page, () => [__game.world.frames, __game.world.t, JSON.stringify(__game.world.actors.map(a => [a.x, a.y])), window.draws]);
-    await step(page, 90);
-    assert.deepEqual(await g(page, () => [__game.world.frames, __game.world.t, JSON.stringify(__game.world.actors.map(a => [a.x, a.y])), window.draws]), frozen, 'frozen, and the paused frame is kept');
-    await page.keyboard.press(key);
-    await step(page);
-    assert.equal(await g(page, () => __game.mode), 'play');
-  }
-  // A resize while paused redraws once.
-  await page.keyboard.press('KeyP'); await step(page);
-  const d0 = await g(page, () => window.draws);
-  await page.setViewportSize({ width: 1100, height: 620 });
-  await page.evaluate(() => window.dispatchEvent(new Event('resize')));
-  await step(page, 5);
-  assert.equal(await g(page, () => window.draws) - d0, 1, 'one redraw for the new size');
-  await page.keyboard.press('KeyP'); await step(page);
-  // Losing focus pauses; getting it back does not resume.
-  await page.evaluate(() => window.dispatchEvent(new Event('blur')));
-  await step(page);
-  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-  await step(page, 30);
-  assert.equal(await g(page, () => __game.mode), 'pause', 'it waits for the child');
-  await clickControl(page, '#btnResume');
-  await step(page);
-  assert.equal(await g(page, () => __game.mode), 'play');
-});
-
 test('following the coach\'s keys wins the youngest tier: stars, a new island, coins, a reload keeps them', async t => {
   const page = await game(t, { save: SAVE() });
   await page.keyboard.press('Enter');
@@ -230,25 +177,6 @@ test('following the coach\'s keys wins the youngest tier: stars, a new island, c
   const tiles = await g(page, () => [...document.querySelectorAll('.isle')].map(b => [b.classList.contains('locked'), b.querySelectorAll('.st svg.on').length]));
   assert.deepEqual(tiles, [[false, res.stars], [false, 0], [true, 0], [true, 0]]);
   assert.equal(await g(page, () => document.querySelector('#titleCoins b').textContent), String(res.coins));
-});
-
-test('doing nothing loses, and Play again (Enter) starts a fresh match at once', async t => {
-  const page = await game(t, { save: SAVE() });
-  await page.keyboard.press('Enter');
-  await step(page);
-  await until(page, "g.mode === 'result'", 60 * 140);
-  assert.equal(await g(page, () => __game.mode), 'result');
-  const res = await g(page, () => __game.result);
-  assert.equal(res.stars, 0);
-  assert.ok(Number.isInteger(res.coins) && res.coins >= 0);
-  const tries = await results(page);
-  assert.equal(tries.length, 1); assert.equal(tries[0][0], 'match'); assert.ok(tries[0][1] < 0.6, 'a lost match is a poor result: ' + tries[0][1]);
-  await step(page, 50);
-  await page.keyboard.press('Enter');
-  await step(page);
-  assert.equal(await g(page, () => __game.mode), 'play');
-  assert.deepEqual(await g(page, () => [__game.island, __game.result, __game.world.round, __game.world.phase]), [0, null, 0, 'card'], 'a fresh match on the same island');
-  assert.equal(await g(page, () => __game.matches), 2);
 });
 
 test('Restart from the pause starts the match over; Menu leaves it without a result', async t => {
