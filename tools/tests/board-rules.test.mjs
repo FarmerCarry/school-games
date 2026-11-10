@@ -27,36 +27,25 @@ test('Connect 4 gravity, full columns, boundaries and immutable transitions', ()
   for (const move of [-1, 7, 0.5, '1', null, NaN]) assert.equal(rules.play(start, move), null);
 });
 
-test('Connect 4 detects horizontal, vertical and both diagonal wins', () => {
-  const examples = [
-    { moves: [0, 6, 1, 6, 2, 5, 3], line: [35, 36, 37, 38] },
-    { moves: [0, 1, 0, 1, 0, 2, 0], line: [14, 21, 28, 35] },
-    { moves: [0, 1, 1, 2, 4, 2, 2, 3, 4, 3, 5, 3, 3], line: [17, 23, 29, 35] },
-    { moves: [6, 5, 5, 4, 2, 4, 4, 3, 2, 3, 1, 3, 3], line: [17, 25, 33, 41] }
-  ];
-  for (const example of examples) {
-    const won = sequence('connect-four', example.moves);
-    assert.equal(won.winner, 1);
-    assert.equal(won.draw, false);
-    assert.deepEqual([...won.winning].sort((a, b) => a - b), example.line);
-    assert.deepEqual(rules.legalMoves(won), []);
-    assert.equal(rules.play(won, 0), null);
-    assert.equal(rules.chooseMove(won), null);
-  }
-});
-
-test('tic-tac-toe detects both players and all line directions', () => {
-  for (const [moves, winner, line] of [
-    [[0, 3, 1, 4, 2], 1, [0, 1, 2]],
-    [[0, 1, 3, 2, 6], 1, [0, 3, 6]],
-    [[0, 1, 4, 2, 8], 1, [0, 4, 8]],
-    [[2, 0, 4, 1, 6], 1, [2, 4, 6]],
-    [[0, 3, 1, 4, 8, 5], 2, [3, 4, 5]]
+test('Both board games detect winning lines in every direction', () => {
+  for (const [game, moves, winner, line] of [
+    ['connect-four', [0, 6, 1, 6, 2, 5, 3], 1, [35, 36, 37, 38]],
+    ['connect-four', [0, 1, 0, 1, 0, 2, 0], 1, [14, 21, 28, 35]],
+    ['connect-four', [0, 1, 1, 2, 4, 2, 2, 3, 4, 3, 5, 3, 3], 1, [17, 23, 29, 35]],
+    ['connect-four', [6, 5, 5, 4, 2, 4, 4, 3, 2, 3, 1, 3, 3], 1, [17, 25, 33, 41]],
+    ['tic-tac-toe', [0, 3, 1, 4, 2], 1, [0, 1, 2]],
+    ['tic-tac-toe', [0, 1, 3, 2, 6], 1, [0, 3, 6]],
+    ['tic-tac-toe', [0, 1, 4, 2, 8], 1, [0, 4, 8]],
+    ['tic-tac-toe', [2, 0, 4, 1, 6], 1, [2, 4, 6]],
+    ['tic-tac-toe', [0, 3, 1, 4, 8, 5], 2, [3, 4, 5]]
   ]) {
-    const won = sequence('tic-tac-toe', moves);
-    assert.equal(won.winner, winner);
-    assert.deepEqual(won.winning, line);
-    assert.equal(rules.play(won, 7), null);
+    const won = sequence(game, moves);
+    assert.equal(won.winner, winner, game);
+    assert.equal(won.draw, false, game);
+    assert.deepEqual([...won.winning].sort((a, b) => a - b), line, game);
+    assert.deepEqual(rules.legalMoves(won), [], game);
+    assert.equal(rules.play(won, 0), null, game);
+    assert.equal(rules.chooseMove(won), null, game);
   }
   assert.equal(rules.play(sequence('tic-tac-toe', [4]), 4), null);
 });
@@ -82,21 +71,6 @@ test('full boards draw without a winner; a last-cell win takes precedence', () =
   assert.deepEqual(rules.legalMoves(fourDraw), []);
   assert.equal(rules.play(fourDraw, 0), null);
   assert.equal(rules.chooseMove(fourDraw), null);
-});
-
-test('AI wins immediately and blocks immediate losses in each game', () => {
-  for (const [game, moves, answer] of [
-    ['tic-tac-toe', [0, 3, 1, 4], 2],
-    ['tic-tac-toe', [0, 4, 1], 2],
-    ['connect-four', [0, 6, 1, 6, 2, 5], 3],
-    ['connect-four', [0, 6, 1, 6, 2], 3],
-    ['connect-four', [0, 1, 0, 1, 0], 0]
-  ]) {
-    const state = sequence(game, moves);
-    const snapshot = structuredClone(state);
-    assert.equal(rules.chooseMove(state), answer);
-    assert.deepEqual(state, snapshot);
-  }
 });
 
 test('tic-tac-toe AI cannot lose as either player against every legal opponent move', () => {

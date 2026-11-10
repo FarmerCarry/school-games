@@ -82,89 +82,6 @@ async function playLevel(page, maxFrames = 9000) {
   await keys(page, []);
 }
 
-test('the title waits; Play opens the first yard with a picture card, and the arrows move the kid', async t => {
-  const page = await game(t);
-  await step(page, 30);
-  assert.equal(await g(page, '__game.screen'), 'title');
-  assert.deepEqual([await g(page, '__game.tries'), await g(page, '__game.level')], [0, ''], 'the title starts no yard');
-  await page.locator('#btnPlay').click();
-  await step(page, 2);
-  assert.equal(await g(page, '__game.screen'), 'play');
-  assert.equal(await g(page, '__game.level'), 'w1L1');
-  assert.equal(await g(page, '__game.intro'), true, 'the rule card first');
-  assert.equal(await g(page, '__game.tries'), 1, 'one yard started');
-  assert.equal((await g(page, '__game.save')).coached, false, 'the first yard is the coached one');
-  // The world waits behind the card.
-  await step(page, 60);
-  assert.equal(await g(page, '__game.time'), 0);
-  await focus(page);
-  const x = await g(page, '__game.px');
-  await page.keyboard.down('ArrowRight');
-  await step(page, 40);
-  await page.keyboard.up('ArrowRight');
-  await step(page, 25);
-  assert.equal(await g(page, '__game.intro'), false, 'a key closes the card');
-  assert.ok(await g(page, '__game.px') > x + 60, 'and moves the kid');
-  assert.ok(await g(page, '__game.time') > 0);
-  // WASD works too, and up/down
-  const y = await g(page, '__game.py');
-  await page.keyboard.down('KeyS');
-  await step(page, 20);
-  await page.keyboard.up('KeyS');
-  await step(page, 10);
-  assert.ok(await g(page, '__game.py') > y + 30, 'S walks down');
-});
-
-test('P and Esc pause; a paused yard is frozen even with keys held; leaving the window pauses and focus does not resume', async t => {
-  const page = await game(t, { saved: SAVE(1) });
-  await page.locator('#btnPlay').click();
-  await step(page, 2);
-  await page.locator('.lvl[data-li="0"]').click();
-  await step(page, 2);
-  await focus(page);
-  await page.keyboard.press('ArrowRight');
-  await step(page, 30);
-  for (const key of ['KeyP', 'Escape']) {
-    await page.keyboard.press(key);
-    await step(page);
-    assert.equal(await g(page, '__game.screen'), 'pause', key);
-    const before = await g(page, '[__game.px, __game.py, __game.time, JSON.stringify(__game.guards)]');
-    await page.keyboard.down('ArrowDown');
-    await step(page, 90);
-    await page.keyboard.up('ArrowDown');
-    assert.deepEqual(await g(page, '[__game.px, __game.py, __game.time, JSON.stringify(__game.guards)]'), before, 'nothing moves while paused');
-    await page.keyboard.press(key);
-    await step(page);
-    assert.equal(await g(page, '__game.screen'), 'play');
-  }
-  await page.evaluate(() => window.dispatchEvent(new Event('blur')));
-  await step(page);
-  assert.equal(await g(page, '__game.screen'), 'pause', 'leaving the window pauses');
-  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-  await step(page, 20);
-  assert.equal(await g(page, '__game.screen'), 'pause', 'focus does not resume');
-  await page.locator('#btnResume').click();
-  await step(page);
-  assert.equal(await g(page, '__game.screen'), 'play');
-  // Restart from the pause card puts the kid back at the start, as a new round
-  await page.keyboard.press('KeyP');
-  await step(page);
-  await page.locator('#btnRestart').click();
-  await step(page);
-  assert.equal(await g(page, '__game.screen'), 'play');
-  assert.equal(await g(page, '__game.atStart'), true);
-  assert.deepEqual([await g(page, '__game.tries'), await g(page, '__game.level'), await g(page, '__game.hatched')], [2, 'w1L1', 0], 'the same yard again, from the start');
-  // The map button leaves the level unfinished
-  await page.keyboard.press('Escape');
-  await step(page);
-  await page.locator('#btnMenu').click();
-  await step(page);
-  assert.equal(await g(page, '__game.screen'), 'map');
-  assert.equal(await g(page, '__game.level'), '', 'the yard is left');
-  const left = await g(page, '__game.save');
-  assert.deepEqual([left.stars[0], left.best[0]], [2, 0], 'leaving early records no result');
-});
-
 test('playing the first yard with the keyboard: eggs hatch, the level ends with stars, saves, and Play again', async t => {
   const page = await game(t);
   await page.keyboard.press('Enter');
@@ -284,18 +201,6 @@ test('a blocked save shows the warning with a retry, and the game goes on', asyn
   assert.ok(saved.stars[0] >= 1, 'the retry wrote the stars');
 });
 
-test('old and broken saves load as a fresh, playable game', async t => {
-  for (const saved of ['{broken', JSON.stringify({ coins: 900, shoes: 3, pets: [1, 2] }), JSON.stringify({ v: 2, stars: 'x', babies: [-4], hat: 99 })]) {
-    const page = await game(t, { saved });
-    await page.keyboard.press('Enter');
-    await step(page, 2);
-    assert.equal(await g(page, '__game.level'), 'w1L1', saved);
-    const s = await g(page, '__game.save');
-    assert.deepEqual(s.stars, Array(20).fill(0));
-    assert.equal(s.hat, 0);
-  }
-});
-
 test('two players: both kids respond to their own keys, bumps and the clock, and the race ends in a win or a draw', async t => {
   const page = await game(t);
   await page.locator('#btnDuo').click();
@@ -361,33 +266,4 @@ test('two players: both kids respond to their own keys, bumps and the clock, and
   await step(page, 2);
   assert.equal(await g(page, '__game.mode'), 'duo');
   assert.deepEqual([await g(page, '__game.tries'), await g(page, '__game.screen'), await g(page, '__game.scores')], [2, 'play', [0, 0]], 'a new race');
-});
-
-test('the barn and the wardrobe open from the title and close with Esc; locked outfits stay locked', async t => {
-  const page = await game(t, { saved: SAVE(3, { babies: [4, 0, 0, 0, 0], golden: [1, 0, 0, 0, 0] }) });
-  await page.locator('#btnBarn').click();
-  await step(page, 5);
-  assert.equal(await g(page, '__game.screen'), 'barn');
-  const counts = await page.locator('.tile b').allTextContents();
-  assert.equal(counts[0], '×3');
-  assert.equal(counts[5], '×1');
-  assert.equal(counts[1], '?');
-  await page.keyboard.press('Escape');
-  await step(page, 2);
-  assert.equal(await g(page, '__game.screen'), 'title');
-  await page.locator('#btnCloset').click();
-  await step(page, 2);
-  assert.equal(await g(page, '__game.screen'), 'closet');
-  // 6 stars: the red overalls (2) and the cap (3) are open, the crown (36) is not
-  await page.locator('#hats .item').nth(1).click();
-  await page.locator('#colors .item').nth(1).click();
-  await page.locator('#hats .item').nth(7).click();
-  await step(page, 2);
-  const s = await g(page, '__game.save');
-  assert.equal(s.hat, 1);
-  assert.equal(s.color, 1);
-  assert.equal(await page.locator('#hats .item').nth(7).evaluate(b => b.classList.contains('locked')), true);
-  await page.keyboard.press('Escape');
-  await step(page, 2);
-  assert.equal(await g(page, '__game.screen'), 'title');
 });

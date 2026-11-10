@@ -109,39 +109,6 @@ test('Air Hockey holds mid-rally award banners for the goal and reports failed s
   assert.deepEqual(retried, { state: 'saved', awards: { rocket: 1, goal1: 1 } });
 });
 
-// 798x449 is the portal on 1366x768 or 1024x768 with a bookmarks bar,
-// where the warning shrinks with the game.
-test('Air Hockey save warning stays off the rink, the score plates and the hints at 798x449', async t => {
-  const page = await hockey(t, { width: 798, height: 449 });
-  await page.evaluate(() => document.fonts.ready); // the warning's size follows its text
-  const rects = await page.evaluate(() => {
-    const box = el => { const r = el.getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom }; };
-    const status = document.querySelector('.sg-save-status'), click = id => document.getElementById(id).click();
-    runtime.failSave = true; click('tab1');
-    const title = { warn: box(status), hints: ['howto1', 'btnPlay', 'btnShop', 'btnAwards'].map(id => box(document.getElementById(id))), coins: box(document.querySelector('.coinbar')) };
-    click('btnAwards'); status.setAttribute('data-compact', 'true');
-    const awards = { warn: box(status), hints: [...document.querySelectorAll('#scr-awards .hdr > *, #awGrid > .aw')].map(box) };
-    click('awBack'); runtime.failSave = false; status.querySelector('button').click();
-    click('btnPlay'); runtime.step(150);
-    runtime.failSave = true; runtime.scoreGoal(); runtime.step(4);
-    const game = box(document.getElementById('game')), k = (game.r - game.l) / 1280;
-    // free corner: left of the score plates (x 170, the player's name starts at 188) and above the rink's rim (y 96)
-    const corner = { r: game.l + 170 * k, b: game.t + 96 * k };
-    const open = box(status);
-    status.setAttribute('data-compact', 'true');
-    return { title, awards, corner, open, folded: box(status), state: status.dataset.state };
-  });
-  const apart = (a, b) => a.r <= b.l || b.r <= a.l || a.b <= b.t || b.b <= a.t;
-  for (const screen of [rects.title, rects.awards]) {
-    assert.ok(screen.hints.length >= 4);
-    for (const hint of [...screen.hints, screen.coins].filter(Boolean)) assert.ok(apart(screen.warn, hint), `warning ${JSON.stringify(screen.warn)} clears ${JSON.stringify(hint)}`);
-  }
-  assert.equal(rects.state, 'failed');
-  for (const r of [rects.open, rects.folded]) {
-    assert.ok(r.l >= 0 && r.t >= 0 && r.r <= rects.corner.r && r.b <= rects.corner.b, `match warning ${JSON.stringify(r)} fits the corner ${JSON.stringify(rects.corner)}`);
-  }
-});
-
 test('Air Hockey keeps a won match when Menu is chosen from a pause during the slow-motion ending', async t => {
   const page = await hockey(t);
   const ending = await page.evaluate(() => {

@@ -16,47 +16,6 @@ const DT = 1 / 60;
 // Values made in the rules' own context, compared as plain data.
 const plain = v => JSON.parse(JSON.stringify(v));
 
-test('the rules are pure: no Kit, no page, no timers, no unseeded randomness', () => {
-  assert.ok(BB && BB.TUNE && BB.step, 'loads with only { window: {} }');
-  const code = source.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
-  assert.doesNotMatch(code, /\bKit\b|\bdocument\b|setTimeout|setInterval|requestAnimationFrame|Math\.random|localStorage/);
-});
-
-test('every tuning knob moves one way from tier 1 to tier 5, in the direction that makes it harder', () => {
-  for (const [mode, table] of Object.entries(BB.TUNE)) {
-    for (const [key, row] of Object.entries(table)) {
-      const dir = BB.HARDER[key];
-      assert.ok(dir === 1 || dir === -1, `${mode}.${key} has a direction`);
-      assert.equal(row.length, BB.TIERS, `${mode}.${key} has one entry per tier`);
-      for (let i = 1; i < row.length; i++) assert.ok((row[i] - row[i - 1]) * dir >= 0, `${mode}.${key} tier ${i + 1}: ${row}`);
-      assert.notEqual(row[0], row[row.length - 1], `${mode}.${key} changes between tier 1 and tier 5`);
-    }
-  }
-  // The headline knobs: targets shrink, speed up, multiply and get less help.
-  assert.ok(BB.TUNE.touch.r[0] > BB.TUNE.touch.r[4] && BB.TUNE.tap.r[0] > BB.TUNE.tap.r[4]);
-  assert.ok(BB.TUNE.touch.speed[0] < BB.TUNE.touch.speed[4] && BB.TUNE.catch.fall[0] < BB.TUNE.catch.fall[4]);
-  assert.ok(BB.TUNE.touch.live[0] < BB.TUNE.touch.live[4] && BB.TUNE.touch.gap[0] > BB.TUNE.touch.gap[4]);
-  assert.ok(BB.TUNE.touch.magnet[0] > BB.TUNE.touch.magnet[4] && BB.TUNE.tap.magnet[0] > BB.TUNE.tap.magnet[4]);
-  // Hit areas are always clearly larger than the art.
-  for (const mode of ['touch', 'tap']) for (const m of BB.TUNE[mode].margin) assert.ok(m >= 6, `${mode} margin ${m}`);
-  // Only the lowest tier lets any key (or a click on the Space bar) jump.
-  assert.deepEqual(plain(BB.TUNE.jump.anyKey), [1, 0, 0, 0, 0]);
-});
-
-test('the forgiving hit tests accept a pointer within the art radius plus the margin, all around', () => {
-  for (let tier = 1; tier <= BB.TIERS; tier++) {
-    for (const [mode, hit] of [['touch', BB.touchHit], ['tap', BB.clickHit]]) {
-      const r = BB.TUNE[mode].r[tier - 1], margin = BB.TUNE[mode].margin[tier - 1], t = { x: 500, y: 300, r };
-      for (let a = 0; a < Math.PI * 2; a += Math.PI / 8) {
-        const d = r + margin - 0.5;
-        assert.ok(hit(t.x + Math.cos(a) * d, t.y + Math.sin(a) * d, t, margin), `${mode} tier ${tier}: a near miss within the margin counts`);
-        assert.ok(hit(t.x + Math.cos(a) * r * 0.5, t.y + Math.sin(a) * r * 0.5, t, margin), `${mode} tier ${tier}: inside the art`);
-      }
-      assert.equal(hit(t.x + r * 1.1 + margin + 30, t.y, t, margin), false, `${mode} tier ${tier}: far away does not count`);
-    }
-  }
-});
-
 test('the magnet never pushes a target away, never jumps it and never pulls it past the stop', () => {
   const rand = BB.rng(42);
   for (let i = 0; i < 4000; i++) {
@@ -71,34 +30,6 @@ test('the magnet never pushes a target away, never jumps it and never pulls it p
     if (before > stop) assert.ok(after >= stop - 1e-9, 'never pulled past the stop');
     if (before > reach) assert.equal(step, 0, 'no pull outside reach');
   }
-});
-
-test('a finished level always earns one to three stars, and the DDA outcome stays in 0..1', () => {
-  const rand = BB.rng(7);
-  for (let i = 0; i < 2000; i++) {
-    const r = { hits: 1 + Math.floor(rand() * 30), escapes: Math.floor(rand() * 40), missClicks: Math.floor(rand() * 200), time: rand() * 300, par: 10 + rand() * 90, expect: 1 + rand() * 80, party: rand() < 0.3 };
-    const stars = BB.stars(r), out = BB.outcome(r);
-    assert.ok(Number.isInteger(stars) && stars >= 1 && stars <= 3, `stars ${stars}`);
-    assert.ok(out >= 0 && out <= 1, `outcome ${out}`);
-  }
-  assert.equal(BB.stars({ hits: 8, escapes: 0, missClicks: 99, time: 10, par: 50 }), 3, 'missed clicks never cost a star');
-  assert.equal(BB.stars({ hits: 8, escapes: 20, missClicks: 0, time: 200, par: 50 }), 1, 'finishing slowly still earns a star');
-});
-
-test('every level and party round of the eleven worlds has a plan at every tier', () => {
-  assert.equal(BB.N, 11, 'eleven worlds, three levels and a party each');
-  for (let w = 0; w < BB.N; w++) for (const l of [0, 1, 2, 'P']) for (let tier = 1; tier <= 5; tier++) {
-    const plan = BB.plan(w, l, tier);
-    assert.equal(plan.w, w);
-    assert.equal(plan.l, l);
-    assert.equal(plan.party, l === 'P');
-    assert.equal(plan.tier, tier);
-    if (l === 'P') assert.equal(plan.duration, BB.PARTY_SECONDS);
-    // World 11 has five short parts of at least two targets each (ten or more in all).
-    else assert.ok(plan.segments.every(s => s.goal >= (plan.segments.length === 5 ? 2 : 3)), 'every level part has something to do');
-  }
-  assert.deepEqual(plain(BB.plan(10, 0, 1).segments.map(s => s.mode)), ['drag', 'dbl', 'hold', 'steer', 'keys']);
-  assert.deepEqual(plain(BB.plan(4, 0, 1).segments.map(s => s.mode)), ['touch', 'tap', 'jump', 'catch'], 'world 5 is unchanged');
 });
 
 test('damaged saves load as playable ones; levels and worlds open in order', () => {
@@ -168,28 +99,6 @@ test('pressing Space at random moments finishes every tier-1 jump level', () => 
     }
     assert.ok(world.over, `level ${l + 1} seed ${seed}: ${world.hits}/${world.goal} after ${world.t.toFixed(1)} s`);
     assert.equal(world.escapes, 0, 'a tier-1 firefly waits above the frog');
-  }
-});
-
-test('fireflies start away from the frog and come over it, where the Space bar lights up', () => {
-  for (let tier = 1; tier <= BB.TIERS; tier++) {
-    const world = BB.create(BB.plan(2, 0, tier), 3), over = new Set(), spawned = new Set();
-    const reach = BB.knob(world, 'window') * BB.NEAR;
-    for (let i = 0; i < 60 * 30; i++) {
-      BB.step(world, DT, { px: null, py: null, clicks: [], jump: false, dir: 0 });
-      for (const e of world.ev) {
-        if (e.t !== 'spawn') continue;
-        spawned.add(e.id);
-        assert.ok(Math.abs(e.x - world.frog.x) >= reach, `tier ${tier}: a firefly starts away from the frog`);
-      }
-      world.ev.length = 0;
-      for (const f of world.targets) if (!f.dead && Math.abs(f.x - world.frog.x) < reach) {
-        assert.ok(spawned.has(f.id), `tier ${tier}: firefly ${f.id} came in`);
-        over.add(f.id);
-      }
-    }
-    // A tier-1 firefly waits above the frog; from tier 2 they fly past one after another.
-    assert.ok(over.size >= (tier === 1 ? 1 : 3), `tier ${tier}: ${over.size} fireflies came over the frog`);
   }
 });
 

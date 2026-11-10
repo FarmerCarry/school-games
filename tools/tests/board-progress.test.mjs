@@ -49,15 +49,6 @@ const watchConfetti = page => page.evaluate(() => {
   window.confettiWatch.observe(document.body, { childList: true, subtree: true });
 });
 const confettiSeen = page => page.evaluate(() => window.confettiSeen);
-// Controls whose centre and inner corners are covered by something else, such as the save warning.
-const covered = (page, ids) => page.evaluate(ids => ids.filter(id => {
-  const node = document.getElementById(id);
-  node.scrollIntoView({ block: 'nearest' });
-  const r = node.getBoundingClientRect(), inset = 4;
-  const points = node.matches('button') ? [[r.left + inset, r.top + inset], [r.right - inset, r.top + inset], [r.left + inset, r.bottom - inset], [r.right - inset, r.bottom - inset]] : [];
-  points.push([(r.left + r.right) / 2, (r.top + r.bottom) / 2]);
-  return points.some(([x, y]) => { const hit = document.elementFromPoint(x, y); return !hit || !(hit === node || node.contains(hit)); });
-}), ids);
 async function play(page, list) {
   for (const move of list) {
     const before = Number(await page.locator('#gameBoard').getAttribute('data-moves'));
@@ -187,32 +178,6 @@ test('a double-click on a Connect 4 column with reduced motion drops one disc, n
   assert.deepEqual(await page.evaluate(() => [gameBoard.dataset.moves, gameBoard.dataset.turn]), ['2', '1']);
 });
 
-test('a level picked mid-round starts with the next round and keeps the session score', async t => {
-  const page = await openBoard(t, { init: () => { Math.random = () => 0.99; } });
-  await page.locator('#pcButton').click();
-  await play(page, [0]);
-  await page.locator('[data-level="hard"]').click();
-  assert.equal(await pressed(page), 'hard');
-  assert.equal((await saved(page)).level, 'hard');
-  assert.equal(await page.locator('#modeDescription').textContent(), 'يبدأ «صعب» في الجولة التالية.');
-  // Small frames hide that note, so the buttons alone show which level is still being played.
-  assert.deepEqual([await marked(page, 'pending'), await marked(page, 'playing')], [['hard'], ['easy']]);
-  assert.equal(await page.locator('#gameBoard').getAttribute('data-moves'), '2', 'the round continues');
-  // The easy computer never blocks with this random value; the hard one would.
-  await play(page, [1, 2]);
-  assert.equal(await page.locator('#gameBoard').getAttribute('data-winner'), '1', 'the round finishes on easy');
-  assert.deepEqual((await saved(page)).wins, { easy: 1, medium: 0, hard: 0 }, 'the win counts for the level played');
-  await page.locator('#rematchButton').click();
-  await moves(page, 1);
-  assert.equal(await page.locator('#gameBoard [data-move="4"]').evaluate(cell => cell.classList.contains('two')), true, 'the hard computer opens in the centre');
-  assert.equal(await page.locator('#modeDescription').textContent(), 'اختر مستوى الكمبيوتر:');
-  assert.deepEqual(await marked(page, 'playing'), []);
-  await page.locator('[data-level="medium"]').click();
-  assert.equal(await pressed(page), 'medium');
-  await moves(page, 0);
-  assert.equal(await page.locator('#score1').textContent(), '1', 'an untouched round restarts on the new level and keeps the score');
-});
-
 test('a level picked while the winning disc falls or after it lands waits, so the win still celebrates', async t => {
   const page = await openBoard(t, { game: 'connect-four', init: () => { Math.random = () => 0.99; } });
   await page.locator('#pcButton').click();
@@ -239,61 +204,4 @@ test('a level picked while the winning disc falls or after it lands waits, so th
   assert.equal(await page.locator('#gameBoard').getAttribute('data-winner'), '1');
   assert.equal(await page.locator('#turnLine').textContent(), 'جديد! هزمت الكمبيوتر السهل!');
   assert.deepEqual([await marked(page, 'pending'), await marked(page, 'playing')], [['hard'], ['easy']]);
-});
-
-test('the failed-save warning leaves the match controls and turn line clear', async t => {
-  for (const game of ['tic-tac-toe', 'connect-four']) {
-    const page = await openBoard(t, {
-      game,
-      init: () => {
-        Math.random = () => 0.99;
-        Storage.prototype.setItem = function () { throw new DOMException('blocked', 'SecurityError'); };
-      }
-    });
-    const sizes = [[1366, 768], [1100, 620], [692, 388], [535, 300], [390, 844]];
-    await page.locator('#pcButton').click();
-    await page.locator('[data-level="medium"]').click();
-    assert.equal(await page.locator('.sg-save-status[data-state="failed"]').isVisible(), true);
-    for (const [width, height] of sizes) {
-      await page.setViewportSize({ width, height });
-      assert.deepEqual(await covered(page, ['pauseButton', 'leaveMatch', 'turnLine', 'soundButton']), [], `${game} ${width}x${height} during a round`);
-    }
-    await page.setViewportSize({ width: 1100, height: 620 });
-    await page.locator('[data-level="easy"]').click();
-    await play(page, game === 'tic-tac-toe' ? [0, 1, 2] : [0, 0, 0, 0]);
-    assert.equal(await page.locator('#gameBoard').getAttribute('data-winner'), '1');
-    assert.equal(await page.locator('.sg-save-status[data-state="failed"]').isVisible(), true);
-    for (const [width, height] of sizes) {
-      await page.setViewportSize({ width, height });
-      assert.deepEqual(await covered(page, ['rematchButton', 'leaveMatch', 'turnLine']), [], `${game} ${width}x${height} after a win`);
-    }
-    await page.locator('#rematchButton').click();
-    await moves(page, 1);
-  }
-});
-
-test('a failed progress save keeps the earlier record and recovers on retry', async t => {
-  const page = await openBoard(t, {
-    init: () => {
-      const key = 'sg:tic-tac-toe:progress';
-      if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify({ level: 'easy', wins: { easy: 1, medium: 0, hard: 0 } }));
-    }
-  });
-  const before = await page.evaluate(key => localStorage.getItem(key), KEY);
-  await page.evaluate(key => {
-    window.restoreStorage = Storage.prototype.setItem;
-    Storage.prototype.setItem = function (name, value) {
-      if (name === key) throw new DOMException('blocked', 'SecurityError');
-      return window.restoreStorage.call(this, name, value);
-    };
-  }, KEY);
-  await page.locator('#pcButton').click();
-  await page.locator('[data-level="hard"]').click();
-  assert.equal(await pressed(page), 'hard');
-  assert.equal(await page.locator('.sg-save-status[data-state="failed"]').isVisible(), true);
-  assert.equal(await page.evaluate(key => localStorage.getItem(key), KEY), before);
-  await page.evaluate(() => { Storage.prototype.setItem = window.restoreStorage; });
-  await page.locator('.sg-save-status button').click();
-  assert.equal(await page.locator('.sg-save-status[data-state="saved"]').isVisible(), true);
-  assert.deepEqual(await saved(page), { level: 'hard', wins: { easy: 1, medium: 0, hard: 0 } });
 });

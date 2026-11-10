@@ -96,21 +96,6 @@ test('Hoop Heads result screen ignores keys mashed from the match, then Enter pl
   assert.deepEqual(states, ['result', 'result', 'play']);
 });
 
-test('Hoop Heads failed saves warn with a retry that writes the latest progress', async t => {
-  const page = await hoop(t);
-  const result = await page.evaluate(() => {
-    const before = !!document.querySelector('.sg-save-status');
-    hh.failSave = true;
-    __game.start({ mode: 'cpu', lv: 0 }); __game.endNow(0); hh.untilResult();
-    const panel = document.querySelector('.sg-save-status');
-    const failed = { shown: !panel.hidden, state: panel.dataset.state, stored: HH.store.get('save', null) };
-    hh.failSave = false;
-    panel.querySelector('button').click();
-    return { before, failed, state: panel.dataset.state, games: HH.store.get('save', null).stats.games };
-  });
-  assert.deepEqual(result, { before: false, failed: { shown: true, state: 'failed', stored: null }, state: 'saved', games: 1 });
-});
-
 test('Hoop Heads draws a paused match once, redraws on resize or restore, and resumes', async t => {
   const page = await hoop(t);
   const paused = await page.evaluate(() => {

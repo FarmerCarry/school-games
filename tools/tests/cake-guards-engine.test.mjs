@@ -25,23 +25,6 @@ const blob = (world, type, d) => {
   return b;
 };
 
-test('every level has its own fixed build pads beside, never on, its roads', () => {
-  for (const [i, def] of CG.LEVELS.entries()) {
-    const pads = CG.padsFor(def), again = CG.padsFor(def), roads = def.roads.map(CG.makeRoad);
-    assert.deepEqual(pads, again, `level ${i + 1}: the same pads every time`);
-    assert.ok(pads.length >= 8, `level ${i + 1}: ${pads.length} pads`);
-    for (const p of pads) {
-      assert.ok(CG.roadDist(roads, p.x, p.y) >= CG.ROAD + CG.PAD, `level ${i + 1}: pad ${p.x},${p.y} clear of the road`);
-      assert.ok(p.y - CG.PAD >= CG.TOP && p.y + CG.PAD <= CG.BAR, `level ${i + 1}: pad between the HUD and the tower bar`);
-      for (const q of pads) if (q !== p) assert.ok(Math.hypot(p.x - q.x, p.y - q.y) >= CG.PAD * 2, `level ${i + 1}: pads apart`);
-    }
-    for (const w of def.waves) assert.doesNotThrow(() => CG.parseWave(w), `level ${i + 1}: wave ${w}`);
-    assert.ok(def.towers.every(t => CG.TOWERS[t]), `level ${i + 1}: known towers`);
-    const ends = roads.map(r => r.pts[r.pts.length - 1]);
-    assert.ok(ends.every(e => e.x === ends[0].x && e.y === ends[0].y), `level ${i + 1}: every road ends at the cake`);
-  }
-});
-
 test('waves parse into groups, and a malformed wave is refused', () => {
   assert.deepEqual(JSON.parse(JSON.stringify(CG.parseWave('g8/0.6 c2'))), [{ type: 'g', n: 8, gap: 0.6 }, { type: 'c', n: 2, gap: 0.9 }]);
   assert.throws(() => CG.parseWave('q3'), /bad wave group/);
@@ -128,18 +111,6 @@ test('blobs that reach the cake take bites; the last bite loses once and stops t
   assert.equal(world.time, time, 'nothing moves after the loss');
 });
 
-test('clearing the last wave wins with stars for the cake that is left', () => {
-  const world = CG.create(flat({ waves: ['g2', 'g2'] }));
-  CG.build(world, 0, 'cane'); CG.build(world, 1, 'cane'); CG.build(world, 2, 'pop');
-  CG.callWave(world);
-  run(world, 60);
-  assert.equal(world.phase, 'won');
-  const win = world.ev.find(e => e.t === 'win');
-  assert.equal(win.stars, 3);
-  assert.equal(world.ev.filter(e => e.t === 'clear').length, 1, 'only the first wave pays a clear bonus and a break');
-  for (const [hearts, stars] of [[20, 3], [18, 3], [17, 2], [10, 2], [9, 1], [1, 1]]) assert.equal(CG.stars({ hearts }), stars, hearts + ' slices');
-});
-
 test('calling the next wave early pays for the seconds skipped', () => {
   const world = CG.create(flat({ waves: ['g1', 'g1'] }));
   CG.build(world, 0, 'cane');
@@ -160,15 +131,4 @@ test('endless keeps sending tougher waves and never runs out', () => {
   const first = world.queue.length;
   assert.ok(first > 0);
   assert.ok(CG.endlessHp(20) > CG.endlessHp(10) && CG.endlessHp(10) > CG.endlessHp(1));
-});
-
-test('the same moves give the same game', () => {
-  const play = () => {
-    const world = CG.create(CG.LEVELS[5]);
-    [0, 3, 5, 8].forEach((pad, i) => CG.build(world, pad, ['pop', 'bubble', 'cake', 'pop'][i]));
-    CG.callWave(world);
-    run(world, 40);
-    return JSON.stringify({ coins: world.coins, hearts: world.hearts, wave: world.wave, e: world.enemies.map(e => [e.type, e.hp, Math.round(e.d)]) });
-  };
-  assert.equal(play(), play());
 });

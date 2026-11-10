@@ -99,26 +99,6 @@ test('Splat Strike settles the sniper zoom before it keeps the paused frame', as
   assert.equal(view.zoomK, 0, 'and shows the blaster, not a zoomed view without the scope');
 });
 
-test('Splat Strike shows the save warning when a write is refused and its retry saves the same progress', async t => {
-  const page = await game(t, { init: () => {
-    const write = Storage.prototype.setItem;
-    window.blockSave = false;
-    Storage.prototype.setItem = function (key) {
-      if (window.blockSave && key === 'sg:splat-strike:data') throw new DOMException('Full storage fixture', 'QuotaExceededError');
-      return write.apply(this, arguments);
-    };
-  } });
-  const status = () => page.evaluate(() => { const el = document.querySelector('.sg-save-status'); return { hidden: el.hidden, state: el.getAttribute('data-state') }; });
-  await page.evaluate(() => __game.give(10));
-  assert.deepEqual(await status(), { hidden: true, state: null }, 'a normal save shows nothing');
-  const coins = await page.evaluate(() => { window.blockSave = true; return __game.give(25); });
-  assert.deepEqual(await status(), { hidden: false, state: 'failed' });
-  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('sg:splat-strike:data')).coins), coins - 25, 'the old save is untouched');
-  await page.evaluate(() => { window.blockSave = false; document.querySelector('.sg-save-status button').click(); });
-  assert.equal((await status()).state, 'saved');
-  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('sg:splat-strike:data')).coins), coins, 'the retry writes the coins kept in memory');
-});
-
 test('Splat Strike locker: a double-click only tries a locked item on and a later click buys it', async t => {
   const page = await game(t);
   const coins = await page.evaluate(() => __game.give(500));

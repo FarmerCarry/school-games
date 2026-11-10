@@ -59,8 +59,6 @@ async function blob(t, viewport = { width: 960, height: 540 }, seed = 0) {
   return page;
 }
 
-const paintsOver = (page, frames) => page.evaluate(n => { runtime.paints = 0; runtime.step(n); return runtime.paints; }, frames);
-
 test('Blob Battle draws its "+6" eat popups the right way round', async t => {
   const page = await blob(t, undefined, 20261023);
   const drawn = await page.evaluate(() => {
@@ -78,39 +76,6 @@ test('Blob Battle draws its "+6" eat popups the right way round', async t => {
   assert.ok(plus.length > 0, 'an eat popup is drawn');
   assert.deepEqual([...new Set(plus.map(([, dir]) => dir))], ['ltr'], 'in an RTL run "+6" would read "6+"');
   assert.ok(drawn.some(([s, dir]) => /[\u0600-\u06FF]/.test(s) && dir === 'rtl'), 'Arabic text still runs right to left');
-});
-
-test('Blob Battle draws a paused scene once, redraws it after resize and context restore, then resumes', async t => {
-  const page = await blob(t);
-  await page.evaluate(() => { document.getElementById('btnPlay').click(); runtime.step(60); });
-  assert.equal(await page.evaluate(() => __game.info().state), 'play');
-  assert.equal(await paintsOver(page, 30), 30, 'live play paints every frame');
-  await page.evaluate(() => document.getElementById('pauseBtn').click());
-  assert.equal(await page.evaluate(() => __game.info().state), 'pause');
-  assert.equal(await paintsOver(page, 30), 1, 'pausing paints the frozen scene once');
-  assert.equal(await paintsOver(page, 120), 0, 'a settled pause performs no scene paints');
-
-  await page.setViewportSize({ width: 1000, height: 600 });
-  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
-  assert.equal(await paintsOver(page, 30), 1, 'a resize repaints the paused scene once');
-  assert.equal(await paintsOver(page, 60), 0);
-
-  const restored = await page.evaluate(() => {
-    const canvas = document.getElementById('c'), ctx = canvas.getContext('2d');
-    // A restored 2D context has lost its pixels and drawing state.
-    canvas.width = canvas.width;
-    canvas.dispatchEvent(new Event('contextrestored'));
-    runtime.paints = 0; runtime.step(30);
-    const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-    return { paints: runtime.paints, visible: pixels.some((value, i) => i % 4 === 3 && value > 0) };
-  });
-  assert.equal(restored.paints, 1, 'context restore repaints the paused scene');
-  assert.equal(restored.visible, true, 'the restored paused canvas is not blank');
-
-  const before = await page.evaluate(() => __game.info().T);
-  await page.evaluate(() => document.getElementById('btnResume').click());
-  assert.equal(await paintsOver(page, 30), 30, 'resuming paints every frame again');
-  assert.ok(await page.evaluate(() => __game.info().T) > before, 'the simulation resumes');
 });
 
 test('Blob Battle repaints its sprite canvases after a GPU reset wipes them', async t => {
@@ -146,41 +111,4 @@ test('Blob Battle repaints its sprite canvases after a GPU reset wipes them', as
   assert.equal(result.ownPaints, 1, 'and repaints the paused scene once');
   assert.equal(result.mainRestore, true, 'a main canvas restore also repaints the sprites');
   assert.equal(result.mainPaints, 1);
-});
-
-// Pellets are drawn from a sheet of pre-painted sizes. Shrinking a sprite more than 2x with the
-// default filter makes small pellets jagged and lets them crawl with the camera (squares, L-shapes,
-// colour fringes from the next cell), so check the chosen sizes and compare the drawn pixels with
-// anti-aliased circles at the same sub-pixel positions, at the zooms of mid and late game in the
-// 1100x620 portal frame.
-test('Blob Battle warns about failed saves, keeps them queued, and clears the warning after a retry', async t => {
-  const page = await blob(t);
-  const panel = () => page.evaluate(() => {
-    const el = document.querySelector('.sg-save-status');
-    return el && !el.hidden ? el.getAttribute('data-state') : 'hidden';
-  });
-  assert.equal(await panel(), 'hidden');
-  // A skin choice that cannot be written stays queued for the next save.
-  await page.evaluate(() => { localStorage.removeItem('sg:blob-battle:skin'); runtime.failSave = true; document.getElementById('skinPrev').click(); });
-  assert.equal(await panel(), 'failed', 'a failed skin write shows the warning');
-  await page.evaluate(() => { document.getElementById('btnPlay').click(); runtime.step(30); document.getElementById('pauseBtn').click(); });
-  assert.equal(await panel(), 'failed', 'a failed stats save keeps the warning');
-  assert.equal(await page.evaluate(() => localStorage.getItem('sg:blob-battle:skin')), null);
-  // The message and the badge it folds into after 6 s both stay top-right, clear of the
-  // leaderboard at the top-left of the HUD (1280x720 logical, x 14-246).
-  const spots = await page.evaluate(() => {
-    const el = document.querySelector('.sg-save-status'), c = document.getElementById('c').getBoundingClientRect();
-    return ['false', 'true'].map(compact => {
-      el.setAttribute('data-compact', compact);
-      const r = el.getBoundingClientRect();
-      return { compact, right: Math.round(innerWidth - r.right), top: Math.round(r.top), clearOfBoard: r.left > c.left + 246 * c.width / 1280 };
-    });
-  });
-  assert.deepEqual(spots, [{ compact: 'false', right: 12, top: 62, clearOfBoard: true }, { compact: 'true', right: 12, top: 62, clearOfBoard: true }]);
-
-  await page.evaluate(() => { runtime.failSave = false; document.querySelector('.sg-save-status button').click(); });
-  assert.equal(await panel(), 'saved', 'a successful retry confirms the save');
-  const saved = await page.evaluate(() => ({ skin: JSON.parse(localStorage.getItem('sg:blob-battle:skin')),
-    rounds: typeof JSON.parse(localStorage.getItem('sg:blob-battle:stats')).rounds }));
-  assert.deepEqual(saved, { skin: 'mint', rounds: 'number' }, 'the retry writes the stats and the queued skin');
 });

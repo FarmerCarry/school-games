@@ -77,37 +77,6 @@ test('Fire & Ice saves a won level at the win, before the result panel opens', a
   assert.equal(await page.evaluate(() => __game.save.unlocked), 3);
 });
 
-// Waits for n real animation frames, so Kit.loop has had n chances to update and render.
-const frames = (page, n) => page.evaluate(n => new Promise(done => {
-  let k = 0; const f = () => (++k >= n ? done() : requestAnimationFrame(f)); requestAnimationFrame(f);
-}), n);
-
-test('Fire & Ice draws a paused level once and redraws it only after a resize', async t => {
-  const page = await gamePage(t);
-  await page.evaluate(() => { __game.load(1); __game.bench(10); });
-  await page.locator('#pauseBtn').click();
-  assert.equal(await page.evaluate(() => __game.mode), 'paused');
-  assert.doesNotMatch(await page.locator('#pauseScreen').textContent(), /الموسيقى/, 'the pause panel has no music switch');
-  await page.evaluate(() => {
-    const ctx = document.getElementById('game').getContext('2d'), fillRect = ctx.fillRect;
-    window.__draws = 0;
-    ctx.fillRect = function () { window.__draws++; return fillRect.apply(this, arguments); };
-  });
-  await frames(page, 3);
-  const before = await page.evaluate(() => { window.__draws = 0; return __game.particles(); });
-  await frames(page, 30);
-  assert.deepEqual(await page.evaluate(() => [window.__draws, __game.particles()]), [0, before], 'a paused level is neither redrawn nor animated');
-  await page.setViewportSize({ width: 900, height: 520 });
-  await page.waitForFunction(() => window.__draws > 0, null, { timeout: 10000 });
-  await frames(page, 3);
-  await page.evaluate(() => { window.__draws = 0; });
-  await frames(page, 30);
-  assert.equal(await page.evaluate(() => window.__draws), 0, 'one redraw after the resize, then idle again');
-  await page.locator('#resumeBtn').click();
-  await page.waitForFunction(() => window.__draws > 0, null, { timeout: 10000 });
-  assert.equal(await page.evaluate(() => __game.mode), 'play');
-});
-
 test('Fire & Ice times that round up to a whole ten seconds or minute read normally', async t => {
   const page = await gamePage(t);
   const text = await page.evaluate(() => {

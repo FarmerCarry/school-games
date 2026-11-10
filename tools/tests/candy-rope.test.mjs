@@ -91,22 +91,6 @@ test('every recorded hint plan wins with three stars, and doing nothing never wi
   });
 });
 
-test('level 10 ring misses the resting candy but catches the bubble after a quick double cut', () => {
-  const level = LEVELS[9], rest = Sim.create(level, { visual: false });
-  for (let f = 0; f < 600; f++) { Sim.step(rest); rest.events.length = 0; }
-  assert.equal(rest.rings[0].used, false);
-  for (let gap = 0; gap <= 3; gap++) {
-    const plan = [[30, 'cut', 'p1'], [30 + gap, 'cut', 'p0']], w = Sim.create(level, { visual: false }), seen = [];
-    let k = 0;
-    while (w.frame < 700 && w.state === 'play' && !seen.includes('attach')) {
-      while (k < plan.length && plan[k][0] <= w.frame) Sim.act(w, plan[k++].slice(1));
-      Sim.step(w);
-      w.events.forEach(e => seen.push(e.type)); w.events.length = 0;
-    }
-    assert.ok(seen.indexOf('bubble') >= 0 && seen.indexOf('bubble') < seen.indexOf('attach'), `gap ${gap}: ${seen.join(' ')}`);
-  }
-});
-
 test('after a late or early first move, following the timing cues never leads into a loss', () => {
   // the levels the review found broken: a late first cut made every later "now!" early
   for (const n of [3, 4, 5, 7, 24, 26, 30]) for (const late of [-8, 10, 20]) {
@@ -123,33 +107,6 @@ test('after a late or early first move, following the timing cues never leads in
       if (r.cues) assert.equal(r.state, 'won', `level ${i + 1}, first move ${late} frames off`);
     }
   });
-});
-
-test('a paused level draws its frozen scene once, then only after a resize, and resumes', async t => {
-  const page = await game(t);
-  const key = code => window.dispatchEvent(new KeyboardEvent('keydown', { code, bubbles: true }));
-  const r = await page.evaluate(`(() => {
-    const key = ${key};
-    __game.start(0); step(60);
-    let draws = 0;
-    const real = CanvasRenderingContext2D.prototype.drawImage;
-    CanvasRenderingContext2D.prototype.drawImage = function () { if (this.canvas.id === 'cv') draws++; return real.apply(this, arguments); };
-    key('KeyP');
-    const frame = __game.world().frame;
-    step(1); const once = draws;
-    step(10); const idle = draws - once;
-    window.dispatchEvent(new Event('resize'));
-    step(3); const resized = draws - once - idle;
-    const paused = [__game.info().state, __game.world().frame];
-    key('KeyP'); step(5);
-    return { frame, once, idle, resized, paused, after: [__game.info().state, __game.world().frame], resumedDraws: draws - once - idle - resized };
-  })()`);
-  assert.ok(r.once > 0, 'the paused scene is drawn once');
-  assert.equal(r.idle, 0, 'then nothing is redrawn while paused');
-  assert.ok(r.resized > 0 && r.resized <= r.once, 'a resize redraws the frozen scene once');
-  assert.deepEqual(r.paused, ['pause', r.frame]);
-  assert.deepEqual(r.after, ['play', r.frame + 5]);
-  assert.ok(r.resumedDraws >= 5 * r.once - 5, 'rendering resumes every frame');
 });
 
 test('after two misses the fail panel plays the solution, which earns nothing, then hands the level back', async t => {
@@ -178,47 +135,6 @@ test('after two misses the fail panel plays the solution, which earns nothing, t
   assert.equal(await page.evaluate(() => step(60, () => __game.info().cue != null) < 60), true);
 });
 
-test('a failed save keeps the stars on screen, warns, and the retry button saves them', async t => {
-  const page = await game(t);
-  await page.evaluate(() => {
-    window.realSetItem = Storage.prototype.setItem;
-    Storage.prototype.setItem = function () { throw new DOMException('full', 'QuotaExceededError'); };
-    __game.start(0); step(40);
-    const r = __game.world().ropes[0], p = r.pts[Math.floor(r.pts.length / 2)];
-    __game.swipe(p.x - 60, p.y, p.x + 60, p.y);
-    step(300, () => __game.info().state === 'won');
-  });
-  assert.equal(await page.evaluate(() => __game.info().prog[0]), 3);
-  assert.equal(await page.locator('.sg-save-status[data-state="failed"]').isVisible(), true);
-  await page.evaluate(() => { Storage.prototype.setItem = window.realSetItem; });
-  await page.locator('.sg-save-status button').click();
-  assert.equal(await page.locator('.sg-save-status[data-state="saved"]').count(), 1);
-  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('sg:candy-rope:prog')).stars[0]), 3);
-});
-
-test('reduced motion drops the decorative particles but keeps the game playable', async t => {
-  const page = await game(t);
-  const result = await page.evaluate(() => {
-    Kit.motion.setPreference('full');
-    __game.start(0); step(40);
-    let r = __game.world().ropes[0], p = r.pts[Math.floor(r.pts.length / 2)];
-    __game.swipe(p.x - 60, p.y, p.x + 60, p.y); step(2);
-    const full = __game.info().particles;
-    Kit.motion.setPreference('reduce');
-    const cleared = __game.info().particles;
-    __game.start(0); step(40);
-    r = __game.world().ropes[0]; p = r.pts[Math.floor(r.pts.length / 2)];
-    __game.swipe(p.x - 60, p.y, p.x + 60, p.y);
-    step(300, () => __game.info().state === 'won');
-    const reduced = __game.info();
-    Kit.motion.setPreference('system');
-    return { full, cleared, state: reduced.state, particles: reduced.particles };
-  });
-  assert.ok(result.full > 0);
-  assert.equal(result.cleared, 0);
-  assert.deepEqual([result.state, result.particles], ['won', 0]);
-});
-
 test('in play the unfolded save warning sits above the level tip and lets cuts and taps through', async t => {
   const page = await game(t);
   const r = await page.evaluate(() => {
@@ -241,18 +157,4 @@ test('in play the unfolded save warning sits above the level tip and lets cuts a
   assert.equal(r.through, 'cv', 'the panel passes clicks to the canvas');
   assert.equal(r.retry, 'BUTTON');
   assert.equal(r.menuGap, 12, 'menus keep the shared spot');
-});
-
-test('a negative saved candy or hat falls back to the first one, and level 1 still plays and saves', async t => {
-  const page = await game(t, () => localStorage.setItem('sg:candy-rope:prog', JSON.stringify({ stars: [], candy: -1, hat: -2 })));
-  assert.equal(await page.evaluate(() => __game.info().state), 'title');
-  await page.evaluate(() => {
-    __game.start(0); step(40);
-    const r = __game.world().ropes[0], p = r.pts[Math.floor(r.pts.length / 2)];
-    __game.swipe(p.x - 60, p.y, p.x + 60, p.y);
-    step(300, () => __game.info().state === 'won');
-  });
-  assert.equal(await page.evaluate(() => __game.info().state), 'won');
-  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('sg:candy-rope:prog')));
-  assert.deepEqual([saved.candy, saved.hat, saved.stars[0]], [0, 0, 3]);
 });

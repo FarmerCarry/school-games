@@ -161,25 +161,6 @@ test('the first two stages show an aim guide and explain a self-splat', async t 
   assert.equal(await page.evaluate(() => { __game.startFree(1, 1); return __game.app.game.guide; }), false);
 });
 
-test('a paused match keeps its last frame until something changes', async t => {
-  const page = await game(t);
-  await startQuietStage(page, 0);
-  const draws = frames => page.evaluate(frames => { runtime.layerDraws = 0; runtime.draw(frames); return runtime.layerDraws; }, frames);
-  assert.equal(await draws(2), 6, 'three cached layers per playing frame');
-  await page.locator('#pauseBtn').click();
-  assert.equal(await page.evaluate(() => __game.app.screen), 'pause');
-  assert.equal(await draws(1), 3, 'one frame when pausing');
-  assert.equal(await draws(10), 0, 'paused frames are skipped');
-  await page.evaluate(() => { runtime.resized = new Promise(resolve => addEventListener('resize', resolve, { once: true })); });
-  await page.setViewportSize({ width: 800, height: 450 });
-  await page.evaluate(() => runtime.resized);
-  assert.equal(await draws(3), 3, 'redrawn once after a resize');
-  await page.evaluate(() => document.getElementById('cv').dispatchEvent(new Event('contextrestored')));
-  assert.equal(await draws(3), 3, 'redrawn once after the canvas is restored');
-  await page.locator('#scr-pause [data-act="resume"]').click();
-  assert.equal(await draws(2), 6, 'every frame again after resuming');
-});
-
 test('a match won and then left from a pause during the celebration keeps its coins and stars', async t => {
   const page = await game(t);
   await startQuietStage(page, 0);

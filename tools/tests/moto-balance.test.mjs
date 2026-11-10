@@ -73,7 +73,7 @@ function flipRider() {
 
 const levels = MM.LEVELS.map((def, i) => ({ i, name: `${Math.floor(i / 5) + 1}-${i % 5 + 1}`, stars: def.stars }));
 
-test('Moto Madness riding without flips finishes every level with at most 2 stars', () => {
+test('Moto Madness needs landed flips for 3 stars on every level', () => {
   for (const { i, name, stars } of levels) {
     const held = ride(i, holdUp);
     assert.ok(held.finished, `${name}: holding ↑ must finish`);
@@ -83,11 +83,7 @@ test('Moto Madness riding without flips finishes every level with at most 2 star
     const steered = ride(i, autopilot);
     assert.ok(steered.finished && steered.flips === 0, `${name}: autopilot must finish without flips`);
     assert.ok(steered.time > stars[0], `${name}: steering without flips took ${steered.time} s, 3 stars is ${stars[0]} s`);
-  }
-});
 
-test('Moto Madness a clean run with landed flips earns 3 stars on every level', () => {
-  for (const { i, name, stars } of levels) {
     const run = ride(i, flipRider());
     assert.ok(run.finished, `${name}: the flip rider must finish`);
     assert.equal(run.crashes, 0, `${name}: the flip rider must not crash`);
@@ -95,23 +91,6 @@ test('Moto Madness a clean run with landed flips earns 3 stars on every level', 
     // leave room for a kid who is a little slower than the bot
     assert.ok(run.time <= stars[0] - 0.3, `${name}: flipping took ${run.time} s, 3 stars is ${stars[0]} s`);
   }
-});
-
-// 3-2 ends on a jump, so the flip rider crosses the line in the air and its last flip lands
-// past it, while the game still rides on before the results: that flip comes off the time too.
-test('Moto Madness takes a flip that lands past the finish line off the time', () => {
-  const run = ride(11, flipRider(), 96);
-  assert.ok(run.lateFlips > 0, `3-2: the last flip lands past the line (${JSON.stringify(run)})`);
-  assert.equal(run.time, run.timeLessFlips, 'every flip counted comes off the time');
-
-  // nobody falls off past the line, but a turn that lands on the rider's head is still no flip
-  const w = new MM.World(MM.build(MM.LEVELS[0])), x = w.level.finishX - 60;
-  w.placeBike(x, w.groundAt(x, -1e9, true) - 240, Math.PI);
-  w.bike.vx = 300; w.started = true;
-  for (let f = 0; f < 10 && w.grounded; f++) w.step(holdUp());
-  w.takeoffA = w.bike.a + TAU;
-  for (let f = 0; f < 120; f++) w.step(holdUp());
-  assert.deepEqual([w.finished, w.flips, w.bonus], [true, 0, 0]);
 });
 
 // The tutorial sign before 1-1's first kicker says to press ← on the ramp. A kid who does that

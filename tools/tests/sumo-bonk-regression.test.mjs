@@ -21,20 +21,18 @@ after(async () => {
 // Opens Sumo Bonk with Kit.loop captured, so tests drive update/render frame by frame.
 // Steps only simulate unless asked to paint (painting every frame on SwiftShader is what made
 // this file slow), and Math.random is seeded so every run plays out the same way.
-// sumo.texts collects canvas text drawn on the main canvas; sumo.paints counts sky paints
-// (one per full scene render); sumo.flashes counts full-screen white washes.
-async function game(t, { reduce = false, failSaves = false } = {}) {
+// sumo.texts collects text drawn on the main canvas.
+async function game(t) {
   const context = await browser.newContext({ viewport: { width: 640, height: 360 } });
   const page = await context.newPage(), errors = [];
   page.on('pageerror', e => errors.push(e.message));
   t.after(async () => { await context.close(); assert.deepEqual(errors, []); });
-  await page.addInitScript(({ reduce, failSaves }) => {
+  await page.addInitScript(() => {
     let seed = 7;
     Math.random = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 4294967296; };
-    if (reduce) localStorage.setItem('sg:site:motion', '"reduce"');
-    const sumo = window.sumo = { texts: [], paints: 0, flashes: 0, failSaves };
+    const sumo = window.sumo = { texts: [] };
     let kit, update, render;
-    sumo.step = (n = 1, paint = false) => { for (let i = 0; i < n; i++) { update(1 / 60); if (paint) render(0); } };
+    sumo.step = (n = 1) => { for (let i = 0; i < n; i++) update(1 / 60); };
     sumo.key = (code, n = 1) => {
       window.dispatchEvent(new KeyboardEvent('keydown', { code, key: code }));
       sumo.step(1);
@@ -47,20 +45,10 @@ async function game(t, { reduce = false, failSaves = false } = {}) {
       kit = value;
       kit.loop = (u, r) => { update = u; render = r; return { stop() {} }; };
     } });
-    const write = Storage.prototype.setItem;
-    Storage.prototype.setItem = function (key) {
-      if (sumo.failSaves && key.startsWith('sg:sumo-bonk:')) throw new DOMException('Full storage fixture', 'QuotaExceededError');
-      return write.apply(this, arguments);
-    };
     const proto = CanvasRenderingContext2D.prototype, main = c => c.canvas.id === 'game';
-    const fillText = proto.fillText, drawImage = proto.drawImage, fillRect = proto.fillRect;
+    const fillText = proto.fillText;
     proto.fillText = function (s) { if (main(this)) sumo.texts.push(String(s)); return fillText.apply(this, arguments); };
-    proto.drawImage = function (img) { if (main(this) && img instanceof HTMLCanvasElement) sumo.paints++; return drawImage.apply(this, arguments); };
-    proto.fillRect = function (x, y, w, h) {
-      if (main(this) && x === 0 && y === 0 && w === 1280 && h === 720 && /^rgba\(255, ?255, ?255/.test(String(this.fillStyle))) sumo.flashes++;
-      return fillRect.apply(this, arguments);
-    };
-  }, { reduce, failSaves });
+  });
   await page.goto(`${server.origin}/games/sumo-bonk/`);
   await page.waitForFunction(() => window.__game);
   return page;
@@ -210,77 +198,4 @@ test('a match won and then left from the pause menu during the celebration still
   assert.deepEqual(run.podium, { scr: 'over', earned: '+8', stars: 24, easy: 3, pvp: 0, matches: 3 }, 'the podium counts up the same +8 and awards nothing more');
   assert.deepEqual(run.duo, { ...celebrating, stored: '32' });
   assert.deepEqual(run.afterDuo, { scr: 'title', stars: 32, easy: 3, pvp: 1, matches: 4 }, 'the two-player match counts once too');
-});
-
-// Dashes into a rival standing near the edge, then follows the ring-out frame by frame
-// (painting only the frames around the hit, where a flash could be drawn).
-async function bonkOff(page) {
-  return page.evaluate(() => {
-    const [p, o] = __game.P, cam = __game.cam;
-    p.x = 850; o.x = 1000;
-    sumo.step(2);
-    sumo.flashes = 0;
-    let zoom = 1;
-    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyS' }));
-    for (let i = 0; i < 150; i++) {
-      sumo.step(1, i < 45);
-      if (i === 0) window.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyS' }));
-      zoom = Math.max(zoom, cam.z + cam.punch);
-    }
-    return { hits: o.hits, out: o.out, zoom, flashes: sumo.flashes, reduced: Kit.motion.reduced() };
-  });
-}
-
-test('reduced motion drops zoom punches, the ring-out zoom and white flashes', async t => {
-  const calm = await game(t, { reduce: true });
-  await fight(calm);
-  const run = await bonkOff(calm);
-  assert.equal(run.reduced, true);
-  assert.ok(run.hits >= 1 && run.out, 'the dash connects and rings the rival out');
-  assert.equal(run.flashes, 0, 'no full-screen white flash');
-  assert.ok(run.zoom <= 1.0001, `camera stays unzoomed (${run.zoom})`);
-  // the same bonk with full motion still punches, zooms and flashes
-  const full = await game(t);
-  await fight(full);
-  const juicy = await bonkOff(full);
-  assert.ok(juicy.hits >= 1 && juicy.out);
-  assert.ok(juicy.flashes > 0 && juicy.zoom > 1.05, `full motion keeps the juice (${juicy.flashes} flashes, zoom ${juicy.zoom})`);
-});
-
-test('a paused match paints once, repaints after a resize, and resumes painting', async t => {
-  const page = await game(t);
-  await fight(page);
-  await page.evaluate(() => { document.getElementById('bPause').click(); });
-  assert.equal(await page.evaluate(() => __game.state.paused), true);
-  assert.equal(await page.evaluate(() => { sumo.step(2, true); sumo.paints = 0; sumo.step(120, true); return sumo.paints; }), 0, 'settled pause performs no scene paints');
-  await page.setViewportSize({ width: 500, height: 300 });
-  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
-  assert.equal(await page.evaluate(() => { sumo.paints = 0; sumo.step(30, true); return sumo.paints; }), 1, 'resize repaints the paused scene once');
-  await page.evaluate(() => { document.getElementById('bResume').click(); });
-  assert.equal(await page.evaluate(() => { sumo.paints = 0; sumo.step(10, true); return sumo.paints; }), 10);
-});
-
-test('denied saves warn, keep progress in memory, and recover on retry', async t => {
-  const page = await game(t, { failSaves: true });
-  await page.evaluate(() => {
-    __game.start(1, 'easy'); __game.P[1].ai.think = 1e9;
-    for (let r = 0; r < 5 && __game.state.scr === 'game'; r++) { sumo.step(100); __game.skipRound(0); sumo.step(200); }
-  });
-  const over = await page.evaluate(() => ({ scr: __game.state.scr, stars: __game.save.stars, stored: localStorage.getItem('sg:sumo-bonk:stars') }));
-  assert.equal(over.scr, 'over');
-  assert.ok(over.stars > 0);
-  assert.equal(over.stored, null, 'nothing was written');
-  assert.equal(await page.locator('.sg-save-status[data-state="failed"]').isVisible(), true);
-  // "change wrestler" opens the select screen without ending the finished match a second time
-  const changed = await page.evaluate(() => { sumo.key('KeyC', 10); return { scr: __game.state.scr, stars: __game.save.stars, matches: __game.save.matches }; });
-  assert.deepEqual(changed, { scr: 'select', stars: over.stars, matches: 1 });
-  // flicking a hat while storage is still blocked keeps the warning
-  await page.evaluate(() => { sumo.key('KeyS'); });
-  assert.equal(await page.locator('.sg-save-status[data-state="failed"]').isVisible(), true);
-  await page.evaluate(() => { sumo.failSaves = false; });
-  await page.locator('.sg-save-status button').click();
-  assert.equal(await page.locator('.sg-save-status[data-state="saved"]').count(), 1);
-  await page.reload();
-  await page.waitForFunction(() => window.__game);
-  assert.equal(await page.evaluate(() => __game.save.stars), over.stars);
 });

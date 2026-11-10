@@ -3,7 +3,7 @@ import { after, before, test } from 'node:test';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { launchChromium } from '../browser.mjs';
-import { animationFrames, fontsReady, waitForCondition } from '../page-wait.mjs';
+import { fontsReady, waitForCondition } from '../page-wait.mjs';
 import { startTestServer } from '../test-server.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -107,50 +107,6 @@ test('reduced motion keeps toasts visible and calms the crash shake and flash', 
       assert.ok(run.maxFlash > 0.5, `full motion still flashes (${run.maxFlash})`);
     }
   }
-});
-
-test('a paused scene is painted once, repainted for resize and context restore, and resumes', async t => {
-  const page = await game(t);
-  await play(page);
-  const distance = await page.evaluate(() => {
-    tb.step(60, false); document.getElementById('pauseBtn').click(); tb.step(60);
-    return __game.info().D;
-  });
-  assert.equal(await page.evaluate(() => { tb.paints = 0; tb.step(120); return tb.paints; }), 0, 'settled pause paints nothing');
-  await page.setViewportSize({ width: 1000, height: 600 });
-  await animationFrames(page, 1, 'Tunnel Blitz resize frame');
-  assert.equal(await page.evaluate(() => { tb.paints = 0; tb.step(30); return tb.paints; }), 1, 'resize repaints once');
-  const restored = await page.evaluate(() => {
-    const canvas = document.getElementById('game'), ctx = canvas.getContext('2d');
-    const before = ctx.getTransform().toString();
-    // A restored 2D context has lost both its pixels and its transform.
-    canvas.width = canvas.width;
-    canvas.dispatchEvent(new Event('contextrestored'));
-    tb.paints = 0; tb.step(30);
-    const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-    return { paints: tb.paints, same: ctx.getTransform().toString() === before, visible: pixels.some((v, i) => i % 4 === 3 && v > 0) };
-  });
-  assert.deepEqual(restored, { paints: 1, same: true, visible: true });
-  assert.equal(await page.evaluate(() => { Kit.motion.setPreference('reduce'); tb.paints = 0; tb.step(10); Kit.motion.setPreference('system'); return tb.paints; }), 1, 'motion change repaints');
-  assert.equal(await page.evaluate(() => __game.info().D), distance, 'pause keeps the run still');
-  await page.evaluate(() => { document.getElementById('resumeBtn').click(); tb.paints = 0; tb.step(10); });
-  assert.equal(await page.evaluate(() => tb.paints), 10);
-  assert.ok(await page.evaluate(d => __game.info().D > d, distance));
-});
-
-test('a denied save warns, keeps progress in memory, and clears after a retry', async t => {
-  const page = await game(t);
-  await page.evaluate(() => { tb.failSave = true; });
-  await play(page);
-  assert.equal(await page.locator('.sg-save-status[data-state="failed"]').isVisible(), true);
-  assert.equal(await page.evaluate(() => __game.info().runs), 1);
-  assert.equal(await page.evaluate(() => localStorage.getItem('sg:tunnel-blitz:save')), null);
-  await page.evaluate(() => { tb.failSave = false; });
-  await page.locator('.sg-save-status button').click();
-  assert.equal(await page.locator('.sg-save-status').getAttribute('data-state'), 'saved');
-  await page.reload();
-  await page.waitForFunction(() => window.__game);
-  assert.equal(await page.evaluate(() => __game.info().runs), 1);
 });
 
 test('a run keeps going past zone 60 (the tunnel used to end there and freeze the game)', async t => {

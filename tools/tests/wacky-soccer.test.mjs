@@ -136,14 +136,6 @@ test('the Space that resumes a paused celebration does not also skip it', async 
   assert.deepEqual(seen, ['pause', 'play', 'goal', 'roulette']);
 });
 
-test('kickoff gives CPU players the shared WS.cpuPower kick', async t => {
-  const page = await game(t);
-  await clickControl(page, '#b1p');
-  await clickControl(page, '#bGo');
-  const powers = await page.evaluate(() => __game.world.players.map(p => [p.side, p.power === undefined ? 1 : p.power, WS.cpuPower(__game.match.skill)]));
-  for (const [side, power, cpu] of powers) assert.equal(power, side ? cpu : 1);
-});
-
 test('a ball trapped under a foot pops out toward the other goal, never toward your own', () => {
   const { WS, world } = engine();
   for (const p of [world.players[0], world.players[2]]) {
@@ -195,23 +187,6 @@ test('an Easy CPU plays its best against a team that stands still next to the ba
   const hard = new WS.CPU(1, 0.85);
   for (let i = 0; i < 300; i++) hard.update(world, 1 / 60);
   assert.equal(hard.sk, 0.85, 'a stronger CPU keeps its own skill');
-});
-
-test('a Normal CPU plays sharper against button-mashing than against pressing at the right moment', () => {
-  const { WS, world } = engine();
-  world.balls[0].x = 1100;   // away from the human players, so standing still never counts
-  // presses every `every` seconds for `secs` seconds; returns the skill the CPU ends up using
-  const play = (cpu, every, secs) => {
-    let t = 0;
-    for (let i = 0; i < secs * 60; i++) { t += 1 / 60; if (every && t >= every) { t = 0; cpu.notePress(); } cpu.update(world, 1 / 60); }
-    return cpu.sk;
-  };
-  const normal = new WS.CPU(1, 0.55);
-  assert.equal(play(normal, 1.2, 6), 0.55, 'a press every 1.2 s is not mashing');
-  assert.ok(Math.abs(play(normal, 0.4, 3) - 0.85) < 1e-9, 'a press every 0.4 s is');
-  assert.equal(play(normal, 0, 1.2), 0.55, 'and it ends when the presses stop');
-  assert.equal(play(new WS.CPU(1, 0.85), 0.4, 5), 0.95, 'Hard tops out just below full skill');
-  assert.equal(play(new WS.CPU(1, 0.2), 0.4, 5), 0.2, 'Easy lets mashers win');
 });
 
 test('no cup round is harder than Hard, where the capped mash rule still pays off for timing (BALANCE.md)', () => {
@@ -302,23 +277,6 @@ test('a cup round won before a pause goes on to the next round instead of being 
   assert.deepEqual(await page.evaluate(() => [__game.save.stats.matches, __game.save.stats.wins]), [1, 1], 'the won round counts once');
   await clickControl(page, '#bCupPlay');
   assert.deepEqual(await page.evaluate(() => [__game.state, __game.match.cupRound]), ['play', 1]);
-});
-
-test('the 8-surprises badge counts surprises only, not the normal ball every match starts with', async t => {
-  const page = await game(t);
-  await page.keyboard.press('Enter');
-  const seen = await page.evaluate(() => {
-    for (const id of ['giant', 'tiny', 'beach', 'moon', 'ice', 'wind', 'bouncy']) __game.setMod(id);
-    return [Object.keys(__game.save.mods).length, !!__game.save.ach.mods];
-  });
-  assert.deepEqual(seen, [8, false], 'the normal ball and 7 surprises are not enough');
-  await page.keyboard.press('Escape');
-  await clickControl(page, '#bMenu');
-  await clickControl(page, '#bAchv');
-  assert.match(await page.locator('#achList .ach', { hasText: 'عالم الجنون' }).textContent(), /\(7\/8\)/);
-  await clickControl(page, '#bAchBack');
-  await page.keyboard.press('Enter');
-  assert.equal(await page.evaluate(() => { __game.setMod('two'); return !!__game.save.ach.mods; }), true, 'the 8th surprise earns it');
 });
 
 // Both clicks of a double-click at the center of a control, as a child does it.

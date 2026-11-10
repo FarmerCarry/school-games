@@ -47,7 +47,6 @@ async function afterScheduledResult(page, label) {
   await waitForGameClock(page, 0.55, label);
 }
 
-
 test('Repeated Undo clears the newly scheduled result when the winning move is undone too', async t => {
   const page = await gamePage(t);
   await page.evaluate(() => {
@@ -87,8 +86,11 @@ for (const exit of ['menu', 'reload']) {
     await awaitScreen(page, 'win');
     assert.deepEqual((await state(page)).values, winning.values);
     await page.locator('#btnKeep').click();
-    if (exit === 'menu') await page.evaluate(() => window.__game.menu());
-    else await page.reload();
+    if (exit === 'menu') {
+      await page.evaluate(() => { window.__game.move(0); window.__game.undo(); });
+      await afterScheduledResult(page, 'undo after acknowledgement does not schedule another win');
+      await page.evaluate(() => window.__game.menu());
+    } else await page.reload();
     await page.keyboard.press('Enter');
     await afterScheduledResult(page, 'acknowledged win stays dismissed after ' + exit);
     const acknowledged = await state(page);
@@ -97,32 +99,6 @@ for (const exit of ['menu', 'reload']) {
     assert.equal(acknowledged.keep, true);
   });
 }
-
-test('Undo after acknowledgement never presents the same victory again', async t => {
-  const page = await gamePage(t);
-  await page.evaluate(() => {
-    window.__game.nearWin();
-    window.__game.move(3);
-    window.__game.move(0);
-  });
-  await awaitScreen(page, 'win');
-  await page.locator('#btnKeep').click();
-  await page.evaluate(() => window.__game.undo());
-  await afterScheduledResult(page, 'undo after acknowledgement does not schedule another win');
-  assert.equal((await state(page)).screen, 'play');
-  assert.equal((await state(page)).max, 2048);
-  await page.evaluate(() => {
-    window.__game.undo();
-    window.__game.move(3);
-  });
-  await page.reload();
-  await page.keyboard.press('Enter');
-  await afterScheduledResult(page, 'reloaded acknowledged win stays dismissed');
-  const acknowledged = await state(page);
-  assert.equal(acknowledged.screen, 'play');
-  assert.equal(acknowledged.max, 2048);
-  assert.equal(acknowledged.keep, true);
-});
 
 for (const key of ['Space']) {
   test(`${key} activates the focused size and pause-menu buttons without a gameplay shortcut`, async t => {

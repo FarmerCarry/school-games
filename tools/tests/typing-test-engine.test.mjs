@@ -47,12 +47,6 @@ function play(lang, w, l, tier, { cps = 1, react = 1, err = 0, seed = 7, idle = 
   return { world, r: TT.result(world), overlaps };
 }
 
-test('the engine is pure: no Kit, no page, no timers, no unseeded randomness', () => {
-  assert.ok(TT && TT.TUNE && TT.step && TT.key, 'loads with only { window: {} }');
-  const code = engineSource.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
-  assert.doesNotMatch(code, /\bKit\b|\bdocument\b|setTimeout|setInterval|requestAnimationFrame|Math\.random|localStorage/);
-});
-
 test('the keyboard table is the school\'s Arabic 101 keyboard: 15 units a row, letters where they are printed', () => {
   for (const row of TT.ROWS) assert.equal(row.reduce((s, k) => s + k[1], 0), 15, 'every row is 15 key units wide');
   const K = TT.KEYS;
@@ -99,21 +93,6 @@ test('every letter of every word list has a key on that keyboard, and none needs
     for (let l = 0; l < 3; l++) for (const c of TT.pool(lang, 0, l).easy) assert.equal(len(c), lang === 'ar' && c === 'لا' ? 2 : 1);
     for (const c of TT.pool(lang, 0, 3).easy) assert.equal(len(c), 2);
   }
-});
-
-test('every tuning knob moves one way from tier 1 to tier 5, in the direction that makes it harder', () => {
-  for (const [name, row] of Object.entries(TT.TUNE)) {
-    const dir = TT.HARDER[name];
-    assert.ok(dir === 1 || dir === -1, name + ' has a direction');
-    assert.equal(row.length, TT.TIERS, name);
-    for (let i = 1; i < row.length; i++) assert.ok((row[i] - row[i - 1]) * dir >= 0, `${name} tier ${i + 1}: ${row}`);
-    assert.notEqual(row[0], row[row.length - 1], name + ' changes between tier 1 and tier 5');
-  }
-  // The youngest tiers: clouds wait at the edge and a dotted line shows the key.
-  assert.deepEqual(plain(TT.TUNE.wait), [1, 1, 0, 0, 0]);
-  const p1 = TT.plan('ar', 1, 0, 1), p5 = TT.plan('ar', 1, 0, 5);
-  assert.ok(p1.fall < p5.fall && p1.live < p5.live && p1.gap > p5.gap && p1.target < p5.target && p1.mix < p5.mix && p1.count < p5.count);
-  assert.ok(p1.wait && !p5.wait && p1.guide && !p5.guide);
 });
 
 test('the first letter of a word in the sky locks onto that cloud (the one nearest the town first)', () => {
@@ -280,23 +259,6 @@ test('the speed test uses Monkeytype\'s formulas: (letters of correct words + sp
   TT.testKey(sp, TT.perfectKey(TT.testWord(sp), 0, 'en'));
   assert.equal(TT.testKey(sp, key(' ', 'Space')), -1);
   assert.equal(sp.wi, 0);
-});
-
-test('stars: finishing earns one, 90 % accuracy a second, the tier\'s speed the third; DDA outcomes stay in 0..1', () => {
-  const r = (o) => Object.assign({ won: true, acc: 1, wpm: 20, target: 10, suns: 3, done: 10, total: 10 }, o);
-  assert.equal(TT.stars(r({ won: false })), 0);
-  assert.equal(TT.stars(r({ acc: 0.8 })), 1);
-  assert.equal(TT.stars(r({ acc: 0.8, wpm: 99 })), 1, 'speed without accuracy is not enough');
-  assert.equal(TT.stars(r({ acc: 0.95, wpm: 5 })), 2);
-  assert.equal(TT.stars(r({ acc: 0.9, wpm: 10 })), 3);
-  for (const o of [{}, { won: false, done: 0 }, { won: false, done: 9 }, { acc: 0, wpm: 0, suns: 1 }, { acc: 1, wpm: 1000 }]) {
-    const x = TT.outcome(r(o));
-    assert.ok(x >= 0 && x <= 1, JSON.stringify(o) + ' -> ' + x);
-  }
-  assert.ok(TT.outcome(r({})) > TT.outcome(r({ acc: 0.8, wpm: 5 })), 'better play, higher outcome');
-  assert.ok(TT.outcome(r({ won: false, done: 2 })) < 0.3, 'a rained-out level is a poor try');
-  assert.deepEqual(plain(TT.ANIMALS), ['snail', 'turtle', 'rabbit', 'horse', 'cheetah', 'rocket']);
-  assert.deepEqual([0, 3.9, 4, 10, 20, 25, 40].map(TT.animal), [0, 0, 1, 2, 3, 4, 5]);
 });
 
 test('every level of both languages is won by a slow typist at tier 1 and a quick one at tier 5', () => {

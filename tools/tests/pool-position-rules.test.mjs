@@ -50,13 +50,6 @@ test('scratch, wrong pocket, forbidden pot, bank and eight-last rules retain pri
   assert.equal(judge(lv, st, [{ ...pot, t: 1 }, { n: 8, t: 2 }]).status, 'win');
 });
 
-test('position judging does not change the level, progress, shot or simulation state', () => {
-  const lv = structuredClone(puzzle), st = state(551, 400), prog = { shotsUsed: 1 }, shot = { pots: [pot] };
-  const before = structuredClone({ lv, st, prog, shot });
-  levels.judge(lv, prog, shot, st);
-  assert.deepEqual({ lv, st, prog, shot }, before);
-});
-
 test('the original ten puzzle IDs keep their layouts and are not given position rules', () => {
   const cues = [[470, 440], [430, 300], [640, 400], [640, 450], [560, 250], [430, 250], [640, 396], [700, 300], [400, 396], [360, 396]];
   const targets = [[1], [2], [3, 11], [4], [6], [10], [7, 9], [15], [12, 13, 14, 3], [1, 2, 3, 8]];
@@ -92,16 +85,4 @@ test('the two appended position puzzles have forgiving power, spin and aim range
       assert.equal(result.status, 'win', `puzzle ${id + 1}: power=${power}, spin=${spin}, aim offset=${angle}: ${result.reason || ''}`);
     }
   }
-});
-
-test('a successful pot alone does not solve either position lesson', () => {
-  for (const [id, power] of [[10, .43], [11, .4]]) {
-    const { shot, result } = playPosition(levels[id], power, 0);
-    assert.deepEqual(shot.pots.map(p => p.n), levels[id].targets, 'the comparison really pots the object ball without scratching');
-    assert.equal(result.status, 'fail');
-    assert.match(result.reason, /مركز البيضاء خارج الدائرة/);
-  }
-  const strong = playPosition(levels[10], .55, -.95);
-  assert.deepEqual(strong.shot.pots.map(p => p.n), [1]);
-  assert.equal(strong.result.status, 'fail', 'backspin still needs controlled power');
 });

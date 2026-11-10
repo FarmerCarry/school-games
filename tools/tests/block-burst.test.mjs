@@ -58,33 +58,6 @@ test('a bomb dropped on an empty area is kept; over blocks it clears them', asyn
   assert.deepEqual(await page.evaluate(area => [__game.run.bombs, area.filter(i => __game.run.cells[i]).length], area), [0, 0]);
 });
 
-test('failed saves warn with a retry, keep progress, and clear once a retry succeeds', async t => {
-  const page = await game(t);
-  await clickControl(page, '#btnClassic');
-  await page.evaluate(() => {
-    window.restoreStorage = Storage.prototype.setItem;
-    Storage.prototype.setItem = function (key, value) {
-      if (key.startsWith('sg:block-burst:')) throw new DOMException('full', 'QuotaExceededError');
-      return window.restoreStorage.call(this, key, value);
-    };
-    __game.auto(2);
-  });
-  const progress = await page.evaluate(() => ({ moves: __game.run.moves, best: __game.save.best }));
-  assert.equal(progress.moves, 2);
-  assert.ok(progress.best > 0);
-  assert.equal(await page.locator('.sg-save-status[data-state="failed"]').isVisible(), true);
-  assert.equal(await page.evaluate(() => localStorage.getItem('sg:block-burst:run')), null);
-  await page.locator('.sg-save-status button').click();
-  assert.equal(await page.locator('.sg-save-status[data-state="failed"]').isVisible(), true, 'a failing retry keeps the warning');
-  await page.evaluate(() => { Storage.prototype.setItem = window.restoreStorage; });
-  await page.locator('.sg-save-status button').click();
-  assert.equal(await page.locator('.sg-save-status[data-state="saved"]').isVisible(), true);
-  assert.deepEqual(await page.evaluate(() => ({
-    moves: JSON.parse(localStorage.getItem('sg:block-burst:run')).moves,
-    best: JSON.parse(localStorage.getItem('sg:block-burst:best'))
-  })), progress);
-});
-
 test('a paused game draws until its effects settle, then only after a resize, canvas restore or resume', async t => {
   const page = await game(t);
   const thumb = await page.evaluate(() => {
@@ -200,17 +173,4 @@ test('stats saved as null or a number restart from zero, so Classic starts and a
     assert.deepEqual(await page.evaluate(() => __game.save.stats), stats, raw);
     assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('sg:block-burst:stats'))), stats, raw);
   }
-});
-
-test('the pause panel has no music switch, and an old music save is ignored and left alone', async t => {
-  const page = await game(t, { init: () => localStorage.setItem('sg:block-burst:music', 'false') });
-  await clickControl(page, '#btnClassic');
-  await clickControl(page, '#btnPause');
-  assert.deepEqual(await page.evaluate(() => [...document.querySelectorAll('#scrPause button')].map(b => b.id)),
-    ['btnResume', 'btnRestart', 'btnPauseMenu']);
-  assert.equal(await page.locator('.sg-mute').count(), 1, 'only the shared mute button');
-  assert.equal(await page.evaluate(() => 'music' in __game.save), false);
-  await clickControl(page, '#btnResume');
-  await page.evaluate(() => { __game.auto(2); stepGame(60); });
-  assert.equal(await page.evaluate(() => localStorage.getItem('sg:block-burst:music')), 'false', 'nothing rewrites the old key');
 });

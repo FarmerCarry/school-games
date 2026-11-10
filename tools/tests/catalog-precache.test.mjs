@@ -28,28 +28,20 @@ function ownFiles() {
   return new Set(files);
 }
 
-test('every catalog game is on the committed precache list', () => {
-  const files = ownFiles();
-  const missing = [];
-  for (const game of games) {
-    const rel = `games/${game.slug}/index.html`;
-    if (!files.has(rel)) missing.push(rel);
-    else assert.equal(fs.existsSync(path.join(repo, 'games', game.slug, 'index.html')), true, rel + ' exists');
-  }
-  assert.deepEqual(missing, []);
-});
-
-test('every catalog entry is well-formed, including Lucky Lake', () => {
+test('every catalog entry is well-formed and is in the committed precache', () => {
   assert.equal(catalogSource.includes('<<<<<<<'), false, 'catalog.js has no merge conflict marker');
   assert.equal(catalogSource.includes('>>>>>>>'), false, 'catalog.js has no merge conflict marker');
   assert.ok(Array.isArray(games) && games.length > 0);
   const slugs = games.map(game => String(game.slug));
   assert.equal(new Set(slugs).size, slugs.length, 'duplicate slugs: ' + slugs.filter((slug, index) => slugs.indexOf(slug) !== index).join(', '));
   const problems = [];
+  const files = ownFiles();
   for (const game of games) {
     const where = game && game.slug ? game.slug : '(missing slug)';
     if (!game || typeof game !== 'object') { problems.push(where + ': not an object'); continue; }
     if (typeof game.slug !== 'string' || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(game.slug)) problems.push(where + ': slug');
+    const page = 'games/' + game.slug + '/index.html';
+    if (!files.has(page) || !fs.existsSync(path.join(repo, page))) problems.push(where + ': precache');
     if (typeof game.title !== 'string' || !ARABIC.test(game.title)) problems.push(where + ': Arabic title');
     if (typeof game.blurb !== 'string' || !ARABIC.test(game.blurb)) problems.push(where + ': Arabic blurb');
     if (typeof game.en !== 'string' || !game.en.trim()) problems.push(where + ': English name');

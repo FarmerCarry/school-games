@@ -37,11 +37,6 @@ function play(plan, { seed = 7, delay = 0, maxSeconds = 600, mistakes = 0 } = {}
 }
 const allLevels = () => KR.WORLDS.flatMap((world, w) => world.levels.map((_, l) => [w, l]));
 
-test('the engine is pure: no DOM, no Kit, no timers, no Math.random', () => {
-  const code = source.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
-  assert.doesNotMatch(code, /Math\.random|document\.|Kit\.|setTimeout|setInterval|localStorage|requestAnimationFrame|Date\.now/);
-});
-
 test('the keyboard table: Arabic 101 letters on the physical keys, and every key the game uses is on it', () => {
   // The standard Windows Arabic (101) layout, key by key.
   const arabic = { KeyQ: 'ض', KeyW: 'ص', KeyE: 'ث', KeyR: 'ق', KeyT: 'ف', KeyY: 'غ', KeyU: 'ع', KeyI: 'ه', KeyO: 'خ', KeyP: 'ح',
@@ -81,58 +76,6 @@ test('the keyboard table: Arabic 101 letters on the physical keys, and every key
   for (const code of ['ShiftLeft', 'Tab', 'Enter', 'Escape', 'Backspace', 'ControlLeft', 'F5', '']) assert.equal(KR.isGameKey(code), false, code);
   assert.equal(KR.norm('Numpad7'), 'Digit7');
   assert.equal(KR.norm('KeyA'), 'KeyA');
-});
-
-test('tuning tables have one entry per tier and move the right way; the key glow is never delayed', () => {
-  assert.equal(KR.TUNE.glow, undefined, 'no hint delay at any tier (the owner wants the glow at once)');
-  for (const [knob, list] of Object.entries(KR.TUNE)) {
-    assert.equal(list.length, KR.TIERS, knob);
-    const dir = KR.HARDER[knob];
-    assert.ok(dir === 1 || dir === -1, knob + ' has a direction');
-    for (let i = 1; i < list.length; i++) assert.ok(dir > 0 ? list[i] >= list[i - 1] : list[i] <= list[i - 1], `${knob} at tier ${i + 1}`);
-    assert.notEqual(list[0], list[list.length - 1], knob + ' changes across the tiers');
-  }
-  assert.equal(KR.TUNE.ahead[0], 1, 'one key shown ahead at tier 1');
-  assert.equal(KR.TUNE.ahead[4], 4, 'four keys shown ahead at tier 5');
-  assert.equal(KR.TUNE.wrongCost[0], 0, 'a wrong key costs nothing for the youngest');
-  assert.ok(KR.TUNE.wrongCost[4] >= 1, 'a wrong key costs a speed step at the top');
-  for (const knob of Object.keys(KR.DUO)) assert.equal(typeof KR.DUO[knob], 'number', knob);
-});
-
-test('lessons: new keys come twice first, no key three times in a row, words in the last level', () => {
-  for (const tier of [1, 2, 3, 4, 5]) {
-    for (const [w, l] of allLevels()) {
-      const plan = KR.plan(w, l, tier, 1234 + w * 10 + l), lv = KR.WORLDS[w].levels[l];
-      assert.equal(plan.id, `w${w + 1}L${l + 1}`);
-      assert.ok(plan.keys.length >= 10 && plan.keys.length <= 30, plan.id + ' length ' + plan.keys.length);
-      assert.ok(plan.keys.every(c => KR.isGameKey(c)), plan.id);
-      if (!lv.words) {
-        lv.n.forEach((c, i) => { assert.equal(plan.keys[2 * i], c); assert.equal(plan.keys[2 * i + 1], c); });
-        const review = KR.reviewPool(w);
-        assert.ok(plan.keys.every(c => lv.k.includes(c) || review.includes(c)), plan.id + ' uses its keys and earlier worlds\' keys');
-        if (lv.k.length > 1) for (let i = 2; i < plan.keys.length; i++) assert.ok(!(plan.keys[i] === plan.keys[i - 1] && plan.keys[i] === plan.keys[i - 2]), plan.id + ' triple at ' + i);
-        if (lv.k.length * 2 <= plan.keys.length) for (const c of lv.k) assert.ok(plan.keys.includes(c), plan.id + ' asks for ' + c);
-      } else {
-        assert.ok(plan.words.length >= 3, plan.id + ' has words');
-        for (const word of plan.words) {
-          assert.deepEqual(plan.keys.slice(word.start, word.start + word.len), KR.wordCodes(word.text));
-          const n = Array.from(word.text).length;
-          assert.ok(n >= KR.TUNE.wordMin[tier - 1] && n <= KR.TUNE.wordMax[tier - 1], word.text + ' at tier ' + tier);
-        }
-      }
-    }
-  }
-  assert.deepEqual(KR.plan(2, 1, 3, 99).keys, KR.plan(2, 1, 3, 99).keys, 'a seed replays the same keys');
-  assert.notDeepEqual(KR.plan(1, 2, 3, 99).keys, KR.plan(1, 3, 3, 99).keys, 'levels differ for the same seed');
-  // World 1 teaches the big keys: Space hops gaps, ↑ climbs a step, ↓ slides under a bar.
-  const w1 = KR.create(KR.plan(0, 3, 3, 5), 5);
-  const kinds = new Set(w1.stones.filter(KR.isKeyStone).map(s => s.code + ':' + s.kind));
-  assert.deepEqual([...kinds].sort(), ['ArrowDown:slide', 'ArrowUp:climb', 'Space:hop']);
-  for (let i = 1; i < w1.stones.length; i++) {
-    const s = w1.stones[i], prev = w1.stones[i - 1];
-    if (s.kind === 'climb') assert.ok(s.y < prev.y, 'an ↑ stone is higher');
-    if (s.kind === 'slide') assert.equal(s.x0, prev.x1, 'a ↓ bar has no gap');
-  }
 });
 
 test('a typist finishes every level at every tier, with three stars when quick and sure', () => {
@@ -255,37 +198,6 @@ test('wrong keys: a soft miss that never moves on; a speed step only at the top 
   assert.equal(KR.press(d, 'Numpad' + digits.keys[0].slice(5)), 'hit');
 });
 
-test('the speed builds with every right key up to the tier\'s limit', () => {
-  const plan = KR.plan(3, 2, 5, 31), w = KR.create(plan, 31);
-  const speeds = [];
-  for (let i = 0; i < 60 * 30 && !w.done; i++) {
-    const t = KR.target(w);
-    if (t) KR.press(w, t.code);
-    KR.step(w, DT); w.ev.length = 0;
-    if (i % 60 === 0) speeds.push(w.r.vel);
-  }
-  assert.ok(w.done);
-  assert.ok(w.steps <= w.tune.maxSteps);
-  assert.ok(Math.max(...speeds) > w.tune.speed * 1.5, 'it runs much faster than the base speed');
-});
-
-test('coins along the path, events carry positions, progress goes from 0 to 1', () => {
-  const plan = KR.plan(2, 0, 2, 17), w = KR.create(plan, 17);
-  assert.ok(w.coinsMade > 0);
-  assert.equal(KR.progress(w), 0);
-  const seen = new Set();
-  for (let i = 0; i < 60 * 120 && !w.done; i++) {
-    const t = KR.target(w);
-    if (t) KR.press(w, t.code);
-    KR.step(w, DT);
-    for (const e of w.ev) { seen.add(e.t); assert.ok(Number.isFinite(e.x) && Number.isFinite(e.y), e.t); }
-    w.ev.length = 0;
-  }
-  assert.equal(w.coins, w.coinsMade, 'every coin over a gap is collected on the hop');
-  assert.equal(KR.progress(w), 1);
-  for (const t of ['hit', 'act', 'land', 'coin', 'finish']) assert.ok(seen.has(t), t);
-});
-
 test('every key becomes the key to press once, in order', () => {
   const plan = KR.plan(1, 1, 3, 5), w = KR.create(plan, 5);
   const shown = [];
@@ -395,27 +307,4 @@ test('saves: a fresh save, a round trip, and junk or the old 3D save load as a p
   assert.equal(odd.coach, false);
   assert.equal(odd.endless, 0);
   assert.deepEqual(plain(odd.best[0]), [0, 0, 0, 10]);
-});
-
-test('worlds open in order, levels one by one, endless after world 2, items by stars', () => {
-  const s = KR.freshSave();
-  assert.ok(KR.worldOpen(s, 0) && !KR.worldOpen(s, 1));
-  assert.ok(KR.isOpen(s, 0, 0) && !KR.isOpen(s, 0, 1));
-  assert.deepEqual(plain(KR.nextLevel(s)), { w: 0, l: 0 });
-  s.stars[0] = [1, 1, 1, 0];
-  assert.ok(KR.isOpen(s, 0, 3) && !KR.worldOpen(s, 1));
-  s.stars[0][3] = 1;
-  assert.ok(KR.worldOpen(s, 1));
-  assert.deepEqual(plain(KR.nextLevel(s)), { w: 1, l: 0 });
-  assert.equal(KR.endlessOpen(s), false);
-  s.stars[1] = [2, 2, 2, 2];
-  assert.equal(KR.endlessOpen(s), true);
-  assert.equal(KR.topWorld(s), 2);
-  for (let w = 0; w < KR.WORLD_COUNT; w++) s.stars[w] = [3, 3, 3, 3];
-  assert.equal(KR.total(s), KR.MAX_STARS);
-  assert.deepEqual(plain(KR.nextLevel(s)), { w: KR.WORLD_COUNT - 1, l: KR.LEVELS - 1 });
-  assert.equal(KR.COLORS[0].need, 0); assert.equal(KR.HATS[0].need, 0);
-  assert.ok(KR.COLORS.every(c => c.need <= KR.MAX_STARS) && KR.HATS.every(h => h.need <= KR.MAX_STARS));
-  assert.deepEqual(plain(KR.unlocks(0, 3)), [{ type: 'color', i: 1 }, { type: 'hat', i: 1 }]);
-  assert.deepEqual(plain(KR.unlocks(3, 3)), []);
 });

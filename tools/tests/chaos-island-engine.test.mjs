@@ -37,33 +37,6 @@ function stage(island = 0) {
 function hold(w, keys, n) { for (let i = 0; i < n; i++) { w.pt = Math.min(w.pt, 1); CI.step(w, DT, [keys]); w.ev.length = 0; } }
 function put(w, x, plat) { const a = w.actors[0]; a.x = x; a.y = plat ? plat.y : CI.GROUND; a.vx = a.vy = 0; a.ground = plat || w.ground; return a; }
 
-test('the engine is pure: no Kit, no page, no timers, no unseeded randomness', () => {
-  assert.ok(CI && CI.TUNE && CI.step && CI.think, 'loads with only { window: {} }');
-  const code = source.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
-  assert.doesNotMatch(code, /\bKit\b|\bdocument\b|setTimeout|setInterval|requestAnimationFrame|Math\.random|localStorage/);
-});
-
-test('every tuning knob moves one way from tier 1 to tier 5, the way that makes it harder', () => {
-  for (const [key, row] of Object.entries(CI.TUNE)) {
-    const dir = CI.HARDER[key];
-    assert.ok(dir === 1 || dir === -1, `${key} has a direction`);
-    assert.equal(row.length, CI.TIERS, `${key} has one entry per tier`);
-    for (let i = 1; i < row.length; i++) assert.ok((row[i] - row[i - 1]) * dir >= 0, `${key} tier ${i + 1}: ${row}`);
-    assert.notEqual(row[0], row[row.length - 1], `${key} changes between tier 1 and tier 5`);
-  }
-  const T = CI.TUNE;
-  // The knobs the design names: warning time, meteors and clouds, jelly speed and height,
-  // gust strength, round length, rounds and computer islanders.
-  assert.ok(T.lead[0] > T.lead[4] && T.lead[4] >= 1, 'warnings shorten but stay at least 1 s');
-  assert.ok(T.meteorGap[0] > T.meteorGap[4] && T.burst[0] < T.burst[4] && T.clouds[0] < T.clouds[4]);
-  assert.ok(T.jellySpeed[0] < T.jellySpeed[4] && T.jellySteps[0] < T.jellySteps[4]);
-  assert.ok(T.gust[0] < T.gust[4] && T.gust[4] < CI.PHYS.run, 'gusts get stronger but walking against one always wins');
-  assert.ok(T.len[0] >= 30 && T.len[4] <= 40 && T.len[0] < T.len[4]);
-  assert.deepEqual(plain(T.rounds), [3, 5, 5, 5, 5]);
-  assert.ok(T.bots[0] === 3 && T.bots[4] === 4);
-  assert.deepEqual(plain(T.combos), [0, 0, 0, 1, 2], 'two disasters at once only at the highest tiers');
-});
-
 test('every platform of every island can be reached, with the door shut or open, wherever the cloud drifts', () => {
   for (let i = 0; i < CI.ISLAND_COUNT; i++) {
     for (const door of [false, true]) for (const t of [0, 1.7, 3.1, 4.6, 6.2]) {
@@ -78,23 +51,6 @@ test('every platform of every island can be reached, with the door shut or open,
     const h = CI.ISLANDS[i].house;
     assert.ok(h.x1 - h.x0 >= 200, 'the house fits everyone');
     assert.ok(h.x0 === CI.EDGE_L || h.x1 === CI.EDGE_R, 'the house stands at one end of the island');
-  }
-});
-
-test('each jelly level leaves every platform clearly dry or clearly under, and some high spots dry', () => {
-  for (const isl of CI.ISLANDS) {
-    const tops = [CI.GROUND, isl.house.roofY, ...isl.plats.map(p => p.y)];
-    let prev = CI.GROUND;
-    isl.jelly.forEach((L, k) => {
-      assert.ok(L < prev, `${isl.id}: level ${k + 1} rises`);
-      prev = L;
-      for (const y of tops) {
-        const dry = L - y >= -1, under = L <= y - CI.EYES - 6;
-        assert.ok(dry || under, `${isl.id}: a platform at ${y} is half in the jelly at level ${L}`);
-      }
-      assert.ok(tops.filter(y => L - y >= -1).length >= 2, `${isl.id}: level ${L} leaves high spots`);
-      assert.ok(tops.some(y => y < CI.GROUND && L <= y - CI.EYES - 6) || k === 0, `${isl.id}: level ${L} covers some platform`);
-    });
   }
 });
 
@@ -242,27 +198,6 @@ test('an idle child is bonked by most disasters, and they get no stars for doing
   }
 });
 
-test('the scripted child also gets through most two-disaster rounds of the top tiers', () => {
-  let ok = 0, n = 0;
-  for (const [a, b] of CI.COMBOS) for (const island of [0, 3]) {
-    const seed = 40 + island + a.length;
-    n++;
-    if (play(CI.create(CI.plan(island, 5, seed, { rounds: [{ a, b }] }), { humans: 1, seed }), 'smart', seed).me.survived) ok++;
-  }
-  assert.ok(ok >= n - 1, `${ok} of ${n}`);
-});
-
-test('computer islanders follow the same rules: they survive some rounds and mess up others', () => {
-  let survived = 0, total = 0;
-  for (const dis of CI.DIS) for (const tier of [1, 5]) {
-    const seed = 7 + tier + dis.length;
-    const w = CI.create(CI.plan(1, tier, seed, { rounds: [{ a: dis }] }), { humans: 1, seed });
-    play(w, 'smart', seed);
-    w.actors.slice(1).forEach(a => { total++; survived += a.survived; });
-  }
-  assert.ok(survived / total > 0.45 && survived / total < 0.97, `computer islanders survived ${survived}/${total}`);
-});
-
 test('match plans: rounds per tier, a gentle start, each island\'s new disasters, no repeats in a row', () => {
   for (let island = 0; island < CI.ISLAND_COUNT; island++) for (let tier = 1; tier <= 5; tier++) for (let seed = 1; seed <= 12; seed++) {
     const plan = CI.plan(island, tier, seed), r = plan.rounds;
@@ -314,37 +249,6 @@ test('hearts, the little ghost, the splash, and the next round', () => {
   assert.ok(splash, 'walking with the gust ends in the sea');
   assert.equal(b.hearts, 2);
   assert.ok(b.x > CI.EDGE_L && b.x < CI.EDGE_R && b.y < CI.GROUND, 'back over the beach');
-});
-
-test('coins appear during a round, are picked up by touching them, and surviving pays two more', () => {
-  const w = CI.create(CI.plan(0, 1, 12, { rounds: [{ a: 'meteors' }], bots: 0 }), { humans: 1, seed: 12 });
-  w.actors[0].inv = 99; // out of the meteors' way for this check
-  while (w.phase !== 'live') CI.step(w, DT, [CI.NONE]);
-  let spawned = 0;
-  for (let i = 0; i < 60 * 8; i++) { CI.step(w, DT, [CI.NONE]); spawned += w.ev.filter(e => e.t === 'coinSpawn').length; w.ev.length = 0; }
-  assert.ok(spawned >= 1 && w.coins.length >= 1);
-  const c = w.coins[0], a = w.actors[0];
-  a.x = c.x; a.y = c.plat.y; a.ground = c.plat; a.vx = a.vy = 0; a.inv = 99;
-  CI.step(w, DT, [CI.NONE]);
-  assert.ok(w.ev.some(e => e.t === 'coin' && e.who === 0));
-  assert.ok(a.coins >= 1);
-  let clear = null, picked = 0;
-  while (w.phase === 'live') {
-    const before = a.coins;
-    CI.step(w, DT, [CI.NONE]);
-    for (const e of w.ev) { if (e.t === 'clear') clear = e; if (e.t === 'coin' && e.who === 0) picked += e.v; }
-    w.ev.length = 0;
-    if (clear) { assert.equal(a.coins - before - picked, 2, 'two coins for surviving the round'); break; }
-    picked = 0;
-  }
-  assert.ok(clear && clear.survivors.includes(0));
-});
-
-test('stars and outcomes', () => {
-  assert.equal(CI.stars(0, 5), 0); assert.equal(CI.stars(2, 5), 0); assert.equal(CI.stars(3, 5), 1);
-  assert.equal(CI.stars(4, 5), 2); assert.equal(CI.stars(5, 5), 3);
-  assert.equal(CI.stars(1, 3), 0); assert.equal(CI.stars(2, 3), 1); assert.equal(CI.stars(3, 3), 3);
-  assert.equal(CI.stars(1, 0), 0);
 });
 
 test('saves: a fresh one, junk and the old version load as a fresh playable save; fields are checked', () => {

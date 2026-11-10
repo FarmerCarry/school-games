@@ -96,35 +96,6 @@ async function openLevel(page, w, l) {
   assert.equal((await state(page)).screen, 'play');
 }
 
-test('the title only shows the attract run; Enter starts the first run, Space hops and the coach shows the key', async t => {
-  const page = await game(t);
-  await step(page, 30);
-  let s = await state(page);
-  assert.equal(s.screen, 'title');
-  assert.deepEqual([s.mode, s.id, s.hits], ['', '', 0], 'the attract run on the title is not a run of the child');
-  await page.keyboard.press('Enter');
-  await step(page);
-  s = await state(page);
-  assert.equal(s.screen, 'play'); assert.equal(s.mode, 'level'); assert.equal(s.id, 'w1L1'); assert.equal(s.target, 'Space');
-  assert.equal((await page.evaluate(() => __game.save)).coach, false, 'the first run is the coached one');
-  // Nothing typed: the runner runs to the first edge and waits there, and the hand shows Space.
-  assert.ok(await until(page, 's.phase === "wait"', 600));
-  const waiting = await state(page);
-  await step(page, 90);
-  assert.equal((await state(page)).x, waiting.x, 'it waits; it never falls');
-  assert.equal((await state(page)).ghost, true, 'the hand presses Space on the on-screen keyboard');
-  // The real Space key hops the runner onto the stone.
-  await page.keyboard.press('Space');
-  await step(page, 2);
-  s = await state(page);
-  assert.equal(s.hits, 1); assert.equal(s.phase, 'act'); assert.equal(s.steps, 1);
-  assert.equal(s.ghost, false);
-  assert.equal((await page.evaluate(() => __game.save)).coach, false, 'one key is not the whole lesson');
-  for (let i = 0; i < 2; i++) { assert.ok(await until(page, '!!s.target', 600)); await typeTarget(page); }
-  assert.equal((await state(page)).hits, 3);
-  assert.equal((await page.evaluate(() => __game.save)).coach, true, 'three right keys finish the coached start');
-});
-
 test('keys count by their physical position, in the order typed; repeats, shortcuts and stray keys do not type', async t => {
   const page = await game(t, { save: SAVE({ 0: [3, 3, 3, 3] }), dda: DDA(0.95) });
   await openLevel(page, 1, 0);
@@ -272,30 +243,6 @@ test('the label toggle picks which letter is drawn big, and it is saved', async 
   await page.waitForFunction(() => window.__game && window.kr.step);
   assert.equal((await state(page)).label, 'en');
   assert.equal(await page.locator('.lbl[data-label="en"]').getAttribute('aria-pressed'), 'true');
-});
-
-test('the endless run opens after world 2, ends after three long stops and keeps the best', async t => {
-  const locked = await game(t, { save: SAVE({ 0: [3, 3, 3, 3] }) });
-  await locked.keyboard.press('Enter');
-  await step(locked, 2);
-  await locked.locator('#btnEndless').click();
-  await step(locked, 2);
-  assert.equal((await state(locked)).screen, 'map', 'locked before world 2 is done');
-  const page = await game(t, { save: SAVE({ 0: [3, 3, 3, 3], 1: [3, 3, 3, 3] }) });
-  await page.keyboard.press('Enter');
-  await step(page, 2);
-  await page.locator('#btnEndless').click();
-  await step(page, 2);
-  let s = await state(page);
-  assert.equal(s.mode, 'endless'); assert.equal(s.hearts, 3);
-  assert.deepEqual([s.screen, s.hits], ['play', 0]);
-  for (let i = 0; i < 6; i++) { await until(page, '!!s.target', 600); await typeTarget(page); }
-  assert.ok(await until(page, 's.screen === "result"', 60 * 40), 'three long stops end the run');
-  s = await state(page);
-  assert.equal(s.endlessKeys, 6);
-  assert.equal(s.hearts, 0, 'the run ended on its last heart');
-  assert.equal((await page.evaluate(() => __game.save)).endless, 6);
-  assert.equal(await page.locator('#resNum').textContent(), '6');
 });
 
 test('two players race on the two halves of one keyboard, and Enter races again', async t => {

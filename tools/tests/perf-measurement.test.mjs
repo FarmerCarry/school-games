@@ -28,7 +28,7 @@ function report(values = [100, 102, 104, 106, 108]) {
     samples, summary: summarize(samples, ['hoop-heads']) };
 }
 
-test('comparison refuses mismatched profiles, missing samples, failed input and SW/DPR contamination', () => {
+test('comparison validates paired samples and rejects incompatible runs', () => {
   const baseline = report();
   assert.throws(() => compareReports(baseline, report([100, 101, 102, 103])), /at least five/);
   for (const mutate of [
@@ -48,10 +48,6 @@ test('comparison refuses mismatched profiles, missing samples, failed input and 
   assert.throws(() => compareReports(baseline, sw), /service-worker/);
   const dpr = report(); dpr.samples[0].warm.dpr = 2;
   assert.throws(() => compareReports(baseline, dpr), /DPR/);
-});
-
-test('comparison requires the same repetition IDs before claiming paired timing evidence', () => {
-  const baseline = report();
   for (const offset of [1, 5]) {
     const candidate = report([50, 52, 54, 56, 58]);
     for (const sample of candidate.samples) sample.repetition += offset;

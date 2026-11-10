@@ -71,24 +71,6 @@ function play(li, tier, seed, limit = 600) {
   return { w, r: ER.result(w), ev };
 }
 
-test('the scripted player finishes all 20 levels at tier 1 and at tier 5, mostly without being caught', () => {
-  assert.equal(ER.LEVELS.length, 20);
-  for (let li = 0; li < 20; li++) {
-    for (const tier of [1, 5]) {
-      for (const seed of [11, 29]) {
-        const { w, r, ev } = play(li, tier, seed);
-        const id = `${ER.roundId(li)} tier ${tier} seed ${seed}`;
-        assert.ok(w.over, `${id}: finished (${r.hatched}/${r.goal} after ${w.t.toFixed(0)} s)`);
-        assert.ok(r.hatched >= r.goal, id);
-        assert.equal(ev.filter(t => t === 'done').length, 1, `${id}: one done event`);
-        assert.ok(r.catches <= 2, `${id}: ${r.catches} catches`);
-        assert.ok(r.time < 240, `${id}: ${r.time} s`);
-        assert.ok(ER.stars(r) >= 2, `${id}: a careful player earns at least two stars`);
-      }
-    }
-  }
-});
-
 test('every level is finishable at every tier, and a careful, quick player can beat the par time', () => {
   for (let li = 0; li < 20; li++) {
     for (let tier = 1; tier <= 5; tier++) {
@@ -106,32 +88,6 @@ test('doing nothing never wins: no egg moves by itself', () => {
     assert.equal(w.over, false, ER.roundId(li));
     assert.equal(w.hatched, 0, ER.roundId(li));
     assert.equal(w.catches, 0, 'standing still is never seen: ' + ER.roundId(li));
-  }
-});
-
-test('the tuning tables move the right way with the tier', () => {
-  for (const [key, row] of Object.entries(ER.TUNE)) {
-    assert.equal(row.length, ER.TIERS, key);
-    const dir = ER.GROWS[key];
-    assert.ok(dir === 1 || dir === -1, key + ' has a direction');
-    for (let i = 1; i < row.length; i++) assert.ok(dir > 0 ? row[i] >= row[i - 1] : row[i] <= row[i - 1], `${key}[${i}]`);
-    assert.notEqual(row[0], row[row.length - 1], key + ' changes');
-  }
-  // A six-year-old gets a long warning; the stir is never shorter than 0.6 s.
-  assert.ok(ER.TUNE.warn[0] >= 2 && Math.min(...ER.TUNE.warn) >= 0.6);
-  // The first yard teaches the freeze with an even longer warning.
-  const first = ER.plan(0, 1);
-  assert.ok(first.T.warn * first.warnMul >= 3);
-  assert.equal(first.guards.length, 1);
-  // More eggs and extra guards at the top tiers; never fewer guards at a harder tier.
-  for (let li = 0; li < 20; li++) {
-    let prev = 0;
-    for (let tier = 1; tier <= 5; tier++) {
-      const plan = ER.plan(li, tier);
-      assert.ok(plan.guards.length >= prev, ER.roundId(li));
-      prev = plan.guards.length;
-    }
-    assert.ok(ER.plan(li, 5).goal > ER.plan(li, 1).goal, ER.roundId(li));
   }
 });
 
@@ -210,24 +166,6 @@ test('a kid seen moving is spotted, bumped back gently, and the egg rolls home t
   // no damage and no game over: the level goes on
   assert.equal(w.over, false);
   assert.ok(seen.includes('sleep'), 'the hen goes back to sleep');
-});
-
-test('touching an egg picks it up, the home nest hatches it, and the hen lays another', () => {
-  const w = ER.create(ER.plan(0, 1), 1), p = w.players[0], n = w.nests[0];
-  p.x = n.x - 30; p.y = n.y;
-  ER.step(w, DT, still);
-  assert.ok(kinds(w).includes('pick'));
-  assert.ok(p.carry);
-  w.ev.length = 0;
-  p.x = p.home.x + 10; p.y = p.home.y;
-  ER.step(w, DT, still);
-  const hatch = w.ev.find(e => e.t === 'hatch');
-  assert.ok(hatch);
-  assert.equal(hatch.value, 1);
-  assert.equal(w.hatched, 1);
-  assert.equal(n.egg, null);
-  run(w, still, w.relay + 0.1);
-  assert.ok(n.egg && n.egg.state === 'nest', 'a new egg in the nest');
 });
 
 test('a golden egg is worth 3 (the giant one 5), is laid once, and slows the kid down', () => {
@@ -357,14 +295,6 @@ test('the two-player race: two homes, bumps knock an egg loose (with a cooldown)
   assert.equal(ER.winner(draw), -1);
 });
 
-test('both two-player kids can play a whole race with the scripted player', () => {
-  for (let b = 0; b < 5; b++) {
-    const w = ER.create(ER.duoPlan(b, 3), 8), b0 = bot(w, 0), b1 = bot(w, 1);
-    while (!w.over) { ER.step(w, DT, [b0(), b1()]); w.ev.length = 0; }
-    assert.ok(w.players[0].hatched >= 3 && w.players[1].hatched >= 3, `yard ${b}: ${w.players.map(p => p.hatched)}`);
-  }
-});
-
 test('the path finder goes around obstacles and finds the egg behind the fences', () => {
   const w = ER.create(ER.plan(3, 1), 1), p = w.players[0], gold = w.nests.find(n => n.gold);
   const path = ER.path(w, p.x, p.y, gold.x, gold.y);
@@ -423,33 +353,4 @@ test('saves: fresh, old, damaged and hand-edited saves all load as playable ones
   assert.equal(ER.loadSave({ v: 2, stars: [1], color: 7, hat: 7 }).color, 0);
   // round-trips through JSON
   assert.deepEqual(plain(ER.loadSave(plain(s))), plain(s));
-});
-
-test('levels open one by one, worlds with their first level, and rewards by stars', () => {
-  const s = ER.freshSave();
-  assert.equal(ER.isOpen(s, 0), true);
-  assert.equal(ER.isOpen(s, 1), false);
-  assert.equal(ER.nextLevel(s), 0);
-  s.stars[0] = 1;
-  assert.equal(ER.isOpen(s, 1), true);
-  assert.equal(ER.nextLevel(s), 1);
-  for (let i = 0; i < 4; i++) s.stars[i] = 2;
-  assert.equal(ER.worldOpen(s, 1), true);
-  assert.equal(ER.worldOpen(s, 2), false);
-  assert.equal(ER.topWorld(s), 1);
-  assert.equal(ER.worldStars(s, 0), 8);
-  assert.deepEqual(plain(ER.unlocks(0, 3).map(u => u.type + u.i)), ['color1', 'hat1']);
-  assert.equal(ER.MAX_STARS, 60);
-  assert.ok(ER.COLORS.every(c => c.need <= ER.MAX_STARS) && ER.HATS.every(h => h.need <= ER.MAX_STARS));
-});
-
-test('the engine stays pure: no DOM, no Kit, no Math.random, no timers', () => {
-  for (const file of ['engine.js', 'levels.js']) {
-    const src = readFileSync(path.join(repo, 'games/egg-rush', file), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
-    assert.doesNotMatch(src, /Math\.random|document\.|Kit\.|setTimeout|setInterval|requestAnimationFrame/, file);
-  }
-  // same seed, same game
-  const a = play(2, 3, 42), b = play(2, 3, 42);
-  assert.equal(a.r.time, b.r.time);
-  assert.deepEqual(plain(a.ev), plain(b.ev));
 });

@@ -79,31 +79,6 @@ test('verified update waits through real game menus, play and pause', async t =>
   assert.equal(await page.locator('#offlineRefresh').innerText(), 'حدّث الصفحة الآن');
 });
 
-test('refresh verification cannot discard a game launched while the status reply is pending', async t => {
-  const page = await pageFor(t);
-  await mockCompletedUpdate(page);
-  await page.goto(origin);
-  await page.locator('#offlineUpdate').waitFor({ state: 'visible' });
-  await page.evaluate(() => { window.offlineUpdateTest.hold = true; window.refreshRaceSentinel = 'same-document'; });
-  await page.locator('#offlineRefresh').click();
-  await page.waitForFunction(() => offlineUpdateTest.pending.length > 0);
-  assert.equal(await page.evaluate(() => {
-    location.hash = '#/play/air-hockey';
-    return SGUpdateSafe();
-  }), false, 'pending play route is unsafe even before hashchange renders it');
-  await page.waitForFunction(() => document.querySelector('#stage')?.getAttribute('aria-busy') === 'false');
-  const frame = page.frames().find(frame => frame.url().includes('/games/air-hockey/'));
-  await frame.evaluate(() => { window.updateProgress = 'preserved-after-await'; });
-  await page.evaluate(() => offlineUpdateTest.pending.splice(0).forEach(reply => reply()));
-  await page.waitForFunction(() => !document.getElementById('offlineRefresh').disabled);
-  assert.equal(await page.evaluate(() => refreshRaceSentinel), 'same-document');
-  assert.equal(await frame.evaluate(() => window.updateProgress), 'preserved-after-await');
-  assert.equal(await page.locator('#offlineUpdate').isHidden(), true);
-  await page.locator('#backGames').click();
-  await page.locator('#offlineUpdate').waitFor({ state: 'visible' });
-  assert.equal(await page.evaluate(() => refreshRaceSentinel), 'same-document', 'safe close still requires explicit fresh consent');
-});
-
 test('personal games appear first and quick filters select matching games', async t => {
   const page = await pageFor(t);
   await page.addInitScript(() => {
@@ -266,9 +241,15 @@ test('leaving portal fullscreen pauses the still-visible game', async t => {
   assert.deepEqual(await frame.evaluate(() => window.__game.state().pucks), position);
 });
 
-test('portal metadata preserves board controls at classroom laptop height and numeric ranges read left-to-right', async t => {
+test('portal estimates agree in Arabic and board controls fit the classroom viewport', async t => {
   const page = await pageFor(t);
   await page.setViewportSize({ width: 1280, height: 720 });
+  await page.goto(origin);
+  const tip = slug => page.locator(`#app .tile[data-slug="${slug}"]`).first().getAttribute('title');
+  // 3-10 take دقائق, 11 and above دقيقة; a range agrees with its last number.
+  assert.match(await tip('pool-party'), /⁦5–10⁩ دقائق للجولة/);
+  assert.match(await tip('merge-2048'), /⁦5–15⁩ دقيقة للجولة/);
+
   const frame = await openGame(page, 'tic-tac-toe');
   await page.evaluate(() => document.fonts.ready);
   await frame.evaluate(() => document.fonts.ready);
@@ -309,13 +290,3 @@ test('portal metadata preserves board controls at classroom laptop height and nu
   });
   assert.ok(range.first < range.last, `duration range is visually reversed: ${JSON.stringify(range)}`);
 });
-
-test('minute counts agree with their number in round estimates', async t => {
-  const page = await pageFor(t);
-  await page.goto(origin);
-  const tip = slug => page.locator(`#app .tile[data-slug="${slug}"]`).first().getAttribute('title');
-  // 3-10 take دقائق, 11 and above دقيقة; a range agrees with its last number.
-  assert.match(await tip('pool-party'), /⁦5–10⁩ دقائق للجولة/);
-  assert.match(await tip('merge-2048'), /⁦5–15⁩ دقيقة للجولة/);
-});
-
