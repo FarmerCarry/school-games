@@ -287,6 +287,8 @@ test('عربي / English: the prompt, the printed keys and the word levels follo
   await page.locator('#scrMap .lang[data-lang="en"]').click(); await step(page);
   assert.equal((await page.evaluate(() => __game.save)).lang, 'en');
   assert.equal(await page.locator('.world .keys').first().textContent(), 'ASDF');
+  // Key names stay as printed, except the space bar: «مسافة» in English mode too.
+  assert.deepEqual(await page.evaluate(() => ['Space', 'Enter', 'ShiftLeft'].map(c => KO.label(c, __game.save.lang))), ['مسافة', 'Enter', 'Shift']);
   await page.locator('.world').nth(0).locator('.lvl').nth(5).click(); await step(page);
   s = await state(page);
   assert.equal(s.lang, 'en');

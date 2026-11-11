@@ -40,10 +40,11 @@
   }
   // A key's printed legends, placed like the real Dell keys: a letter top-left with its Arabic
   // letter bottom-right, a digit bottom-left with its Arabic-Indic digit bottom-right and the
-  // Shift sign top-left. The chosen language is printed big.
+  // Shift sign top-left. The chosen language is printed big. The space bar reads «مسافة» in
+  // both languages.
   function legends(g, k, x, y, w, h, lang, color, dim) {
     var pad = 0.13 * h, lat = k.lat, ar = k.ar;
-    if (k.code === 'Space') { text(g, lang === 'en' ? 'Space' : 'مسافة', x + w / 2, y + h * 0.52, h * 0.36, color); return; }
+    if (k.code === 'Space') { text(g, 'مسافة', x + w / 2, y + h * 0.52, h * 0.36, color); return; }
     if (k.finger < 0) {
       var c = dim || 'rgba(28,34,80,0.62)';
       if (k.code === 'Backspace') text(g, '←', x + pad * 1.6, y + h * 0.42, h * 0.42, c, { align: 'left' });

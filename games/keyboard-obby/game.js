@@ -531,20 +531,7 @@
       point: page,
       keyPoint: code => { const p = H.keyCenter(code, KB.x, KB.y, KB.u); return p ? page(p.x, p.y) : null; },
       worldPoint: code => { const k = view.keyWorld(code), p = view.project(k.x, k.y, k.z); return page(p.x, p.y); },
-      drawCalls: () => view.info().calls,
-      // Milliseconds per frame for the 3D update, the WebGL draw and the HUD (a debug aid).
-      profile: (n = 10) => {
-        const out = { update: 0, gl: 0, hud: 0 };
-        for (let i = 0; i < n; i++) {
-          let t0 = performance.now();
-          view.update({ mode: 'play', dt: 1 / 60, t: time + i / 60, w: world, next: world ? KO.target(world) : '', ahead: '', queued: null });
-          let t1 = performance.now(); view.render(); view.renderer.getContext().finish();
-          let t2 = performance.now(); drawHud();
-          const t3 = performance.now();
-          out.update += (t1 - t0) / n; out.gl += (t2 - t1) / n; out.hud += (t3 - t2) / n;
-        }
-        return out;
-      }
+      drawCalls: () => view.info().calls
     };
     render();
     loop = Kit.loop(update, render);

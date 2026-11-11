@@ -63,12 +63,13 @@
   KO.AR_CODE = {};
   KO.KEYS.forEach(function (k) { if (k.finger >= 0 && k.finger < 8 && k.ar.length === 1 && !k.digit) KO.AR_CODE[k.ar] = k.code; });
   // What the prompt bubble shows for a key: the Arabic letter or the Latin one. Digits are
-  // shown as 0-9 in both languages (the site writes numbers with Western digits).
+  // shown as 0-9 in both languages (the site writes numbers with Western digits), and the
+  // space bar is «مسافة» in both (docs/GAME_SPEC.md: key names stay as printed, Space = مسافة).
   KO.LANGS = ['ar', 'en'];
   KO.label = function (code, lang) {
     var k = KO.KEY[code];
     if (!k) return '';
-    if (k.code === 'Space') return lang === 'en' ? 'Space' : 'مسافة';
+    if (k.code === 'Space') return 'مسافة';
     if (k.digit || lang === 'en' || !k.ar) return k.lat;
     return k.ar;
   };

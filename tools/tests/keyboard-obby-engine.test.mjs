@@ -81,7 +81,8 @@ test('the keyboard table is the school Dell Arabic 101 keyboard, key for key (th
   for (const code of ['ShiftLeft', 'Tab', 'Enter', 'Escape', 'ArrowLeft', 'Backspace', 'CapsLock', 'Minus', 'F2']) assert.equal(KO.isGameKey(code), false, code);
   assert.equal(KO.label('KeyF', 'ar'), 'ب'); assert.equal(KO.label('KeyF', 'en'), 'F');
   assert.equal(KO.label('Digit4', 'ar'), '4', 'digits are Western digits in both languages');
-  assert.equal(KO.label('Space', 'ar'), 'مسافة'); assert.equal(KO.label('Space', 'en'), 'Space');
+  assert.equal(KO.label('Space', 'ar'), 'مسافة'); assert.equal(KO.label('Space', 'en'), 'مسافة', 'Space is «مسافة» in both languages');
+  for (const k of ['Enter', 'ShiftLeft', 'Tab', 'CapsLock']) assert.equal(KO.label(k, 'en'), KO.KEY[k].lat, `${k} keeps its printed name`);
 });
 
 test('five worlds of five or six levels teach the home row, the top row, the bottom row, the digits, then everything', () => {
