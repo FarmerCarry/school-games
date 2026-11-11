@@ -65,13 +65,19 @@
     { id: 'rainbow', name: 'قوس قزح', price: 6500 }
   ];
 
+  // thrust: each rocket pushes harder. aim: a wider gold zone on the swing gauge.
+  // skip: the ball skims water more easily, even rolling. treasure: +10% coins a level.
   var upgrades = {
     power: { max: 12, base: 30, growth: 1.36 },
     bounce: { max: 10, base: 25, growth: 1.4 },
     rockets: { max: 5, base: 60, growth: 1.9 },
-    magnet: { max: 5, base: 40, growth: 1.8 }
+    magnet: { max: 5, base: 40, growth: 1.8 },
+    thrust: { max: 5, base: 50, growth: 1.75 },
+    aim: { max: 4, base: 45, growth: 1.8 },
+    skip: { max: 4, base: 35, growth: 1.7 },
+    treasure: { max: 5, base: 80, growth: 2 }
   };
-  var KINDS = ['power', 'bounce', 'rockets', 'magnet'];
+  var KINDS = ['power', 'bounce', 'rockets', 'magnet', 'thrust', 'aim', 'skip', 'treasure'];
 
   var clamp = function (x, a, b) { return x < a ? a : x > b ? b : x; };
   var finite = function (x, fallback) { return typeof x === 'number' && Number.isFinite(x) ? x : fallback; };
@@ -257,24 +263,28 @@
   function bounceOf(u) { return 0.36 + u.bounce * 0.02; }
   function magnetOf(u) { return 1.3 + u.magnet * 0.7; }
   function rocketsOf(u) { return 1 + u.rockets; }
+  // Where the gold (perfect) top of the swing gauge starts: 0.9, down to 0.8 at aim 4.
+  function perfectBand(raw) { return PERFECT_POWER - 0.025 * levels(raw).aim; }
+  // A rolling or flying ball skims water faster than this (m/s); 9 without the upgrade.
+  function skimSpeed(u) { return 9 - 1.5 * u.skip; }
 
   // power is the swing gauge, 0 to 1.
-  function grade(power) {
+  function grade(power, raw) {
     power = clamp(finite(power, 0), 0, 1);
-    return power >= PERFECT_POWER ? 'perfect' : power >= GREAT_POWER ? 'great' : power >= GOOD_POWER ? 'good' : 'weak';
+    return power >= perfectBand(raw) ? 'perfect' : power >= GREAT_POWER ? 'great' : power >= GOOD_POWER ? 'good' : 'weak';
   }
 
   function launch(course, raw, power) {
     var u = levels(raw);
     power = clamp(finite(power, 0), 0, 1);
-    var g = grade(power), perfect = g === 'perfect';
+    var g = grade(power, raw), perfect = g === 'perfect';
     var speed = (33 + u.power * 4.6) * (0.4 + 0.6 * power) * (perfect ? 1.1 : 1);
     var angle = (36 + 8 * power) * Math.PI / 180;
     var y = heightAt(course, 0) + RADIUS;
     return { x: 0, y: y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, r: RADIUS,
       mode: 'air', done: false, reason: null, time: 0, maxX: 0, maxY: y, power: power, grade: g, perfect: perfect,
       rockets: rocketsOf(u), rocketsLeft: rocketsOf(u), armed: false, armAge: 0, combo: 0, bestCombo: 0,
-      supers: 0, bounces: 0, skips: 0, coins: 0, gems: 0, pops: 0, rings: 0, got: {}, used: {},
+      supers: 0, bounces: 0, skips: 0, coins: 0, gems: 0, pops: 0, rings: 0, got: {}, used: {}, treasure: u.treasure,
       lastPad: -1, lateUntil: -1, lateOut: 0, space: false, hole: false, ace: false, surface: null, trackVy: 0 };
   }
 
@@ -318,10 +328,11 @@
   // The player's one button during a flight.
   function press(course, ball, raw) {
     if (ball.done) return { type: 'none' };
+    var u = levels(raw);
     if (ball.mode === 'air' && ball.time <= ball.lateUntil && !ball.armed) {
       // Just missed the landing: turn the bounce into a good super bounce
       // instead of spending a rocket.
-      var u = levels(raw), extra = ball.lateOut * 0.1 * Math.pow(0.92, ball.supers) / Math.max(0.1, bounceOf(u));
+      var extra = ball.lateOut * 0.1 * Math.pow(0.92, ball.supers) / Math.max(0.1, bounceOf(u));
       ball.vy += extra; ball.supers++; ball.combo = 0; ball.lateUntil = -1;
       return { type: 'late', x: ball.x, y: ball.y - ball.r };
     }
@@ -339,9 +350,9 @@
       ball.rocketsLeft--;
       if (ball.mode === 'roll') { ball.mode = 'air'; ball.y += 0.05; }
       ball.armed = false;
-      ball.vy = Math.max(ball.vy, 0) + 18;
-      ball.vx = Math.max(ball.vx, 0) + 6;
-      return { type: 'rocket', left: ball.rocketsLeft, x: ball.x, y: ball.y };
+      ball.vy = Math.max(ball.vy, 0) + 18 + 3 * u.thrust;
+      ball.vx = Math.max(ball.vx, 0) + 6 + 1.5 * u.thrust;
+      return { type: 'rocket', left: ball.rocketsLeft, x: ball.x, y: ball.y, thrust: u.thrust };
     }
     return { type: 'empty' };
   }
@@ -378,9 +389,11 @@
       return;
     }
     if (type === 'water') {
-      if (ball.armed || (ball.vx > 9 && -ball.vy < ball.vx * 1.1)) {
+      // Fast and flat enough, the ball skims like a stone; the skip upgrade lowers the
+      // speed it needs, lets steeper landings skim, and keeps more speed each time.
+      if (ball.armed || (ball.vx > skimSpeed(u) && -ball.vy < ball.vx * (1.1 + 0.25 * u.skip))) {
         ball.skips++; ball.armed = false;
-        ball.vy = Math.abs(ball.vy) * 0.5 + 2.5; ball.vx *= 0.84;
+        ball.vy = Math.abs(ball.vy) * 0.5 + 2.5 + 0.5 * u.skip; ball.vx *= 0.84 + 0.03 * u.skip;
         ball.y = f.level + ball.r + 0.02;
         events.push({ type: 'skip', x: ball.x, y: f.level, count: ball.skips });
         return;
@@ -497,7 +510,16 @@
       if (ball.mode === 'roll') {
         var f = surfaceAt(course, ball.x), type = f ? f.type : course.world.ground;
         if (type === 'pad' && padLaunch(course, ball, u, f, events)) continue;
-        if (type === 'water') { events.push({ type: 'splash', x: ball.x, y: f.level }); ball.y = f.level; finish(course, ball, events, 'water'); break; }
+        if (type === 'water') {
+          // With the skip upgrade a fast rolling ball hops onto the water and skims on.
+          if (u.skip && ball.vx > skimSpeed(u)) {
+            ball.skips++; ball.mode = 'air'; ball.armed = false;
+            ball.vy = 3 + u.skip; ball.vx *= 0.84 + 0.03 * u.skip; ball.y = f.level + ball.r + 0.05;
+            events.push({ type: 'skip', x: ball.x, y: f.level, count: ball.skips });
+            continue;
+          }
+          events.push({ type: 'splash', x: ball.x, y: f.level }); ball.y = f.level; finish(course, ball, events, 'water'); break;
+        }
         var s = slopeAt(course, ball.x), friction = (SURFACES[type] || SURFACES.grass).roll;
         var along = -g * s / Math.sqrt(1 + s * s);
         var next = ball.vx + along * h;
@@ -567,6 +589,9 @@
       bonus: (b.perfect ? 5 : 0) + (b.supers | 0) + (b.hole ? (b.ace ? 150 : 40) + Math.floor(distance / 10) : 0) + (b.space ? 100 : 0)
     };
     parts.total = parts.coins + parts.distance + parts.bonus;
+    // The treasure upgrade adds a tenth of the shot's coins per level.
+    parts.treasure = Math.floor(parts.total * 0.1 * clamp(Math.floor(finite(b.treasure, 0)), 0, upgrades.treasure.max));
+    parts.total += parts.treasure;
     return parts;
   }
 
@@ -617,7 +642,7 @@
     ARM_WINDOW: ARM_WINDOW, PERFECT_WINDOW: PERFECT_WINDOW, bands: { perfect: PERFECT_POWER, great: GREAT_POWER, good: GOOD_POWER },
     createCourse: createCourse, heightAt: heightAt, surfaceType: surfaceType, features: features,
     levels: levels, grade: grade, launch: launch, press: press, predictImpact: predictImpact, perfectTiming: perfectTiming, step: step, pace: pace,
-    reward: reward, cost: cost, sanitizeSave: sanitizeSave, magnetOf: magnetOf, rocketsOf: rocketsOf };
+    reward: reward, cost: cost, sanitizeSave: sanitizeSave, magnetOf: magnetOf, rocketsOf: rocketsOf, perfectBand: perfectBand };
   root.GolfPhysics = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -221,6 +221,71 @@ test('Golf: quick repeat clicks on one upgrade each buy a level', async t => {
   assert.equal((await saved(page)).upgrades.power, 3, 'a rebuilt card is still the same control');
 });
 
+const cards = page => page.locator('#upgrades [data-upgrade]').evaluateAll(list => list.map(b => b.dataset.upgrade));
+
+test('Golf: the shop sells all eight upgrades and every card fits on screen', async t => {
+  const page = await game(t, { play: false, progress: { v: 2, coins: 400, shots: 3, tips: 2 } });
+  await page.locator('#open-shop').click();
+  await settled(page);
+  assert.deepEqual(await cards(page), ['power', 'bounce', 'rockets', 'magnet', 'thrust', 'aim', 'skip', 'treasure']);
+  const fit = await page.evaluate(() => {
+    const panel = document.getElementById('panel').getBoundingClientRect(), view = innerHeight;
+    return [...document.querySelectorAll('#upgrades [data-upgrade], #skins-content button')].every(b => {
+      const r = b.getBoundingClientRect();
+      return r.width > 0 && r.top >= panel.top && r.bottom <= panel.bottom && r.bottom <= view;
+    });
+  });
+  assert.equal(fit, true, 'every card sits inside the panel and the window');
+  for (const kind of ['thrust', 'aim', 'skip', 'treasure']) await page.locator(`[data-upgrade="${kind}"]`).click();
+  const { upgrades, coins } = await saved(page);
+  assert.deepEqual([upgrades.thrust, upgrades.aim, upgrades.skip, upgrades.treasure], [1, 1, 1, 1]);
+  assert.equal(coins, 400 - 50 - 45 - 35 - 80);
+});
+
+test('Golf: the result card offers the four cheapest upgrades and keeps them while it is open', async t => {
+  const page = await game(t, { progress: { v: 2, coins: 200, shots: 3, tips: 2 } });
+  await swing(page);
+  await land(page);
+  await page.keyboard.press('Space');
+  assert.equal(await phase(page), 'result');
+  assert.deepEqual(await cards(page), ['power', 'bounce', 'magnet', 'skip'], 'bounce 25, power 30, skip 35 and magnet 40, in shop order');
+  await page.locator('[data-upgrade="bounce"]').click();
+  await page.locator('[data-upgrade="bounce"]').click();
+  assert.equal((await saved(page)).upgrades.bounce, 2);
+  assert.deepEqual(await cards(page), ['power', 'bounce', 'magnet', 'skip'], 'the row does not shuffle under the pointer');
+  await page.keyboard.press('KeyR');
+  await swing(page);
+  await land(page);
+  await page.keyboard.press('Space');
+  assert.deepEqual(await cards(page), ['power', 'magnet', 'aim', 'skip'], 'the next card picks again: bounce now costs 49');
+});
+
+test('Golf: the golden-hit upgrade turns a strong swing into a perfect one', async t => {
+  const strike = async progress => {
+    const page = await game(t, { progress });
+    const value = await page.evaluate(() => { for (let i = 0; i < 60 && golfState.gauge.value < 0.82; i++) advanceGolfFrames(1); return golfState.gauge.value; });
+    assert(value >= 0.82 && value < 0.88, 'stopped between the old and the new gold zone: ' + value);
+    await page.keyboard.press('Space');
+    await page.evaluate(() => advanceGolfFrames(6));
+    const out = await page.evaluate(() => [golfState.ball.grade, golfState.gauge.perfect]);
+    await page.close();
+    return out;
+  };
+  assert.deepEqual(await strike({ v: 2, shots: 3, tips: 2 }), ['great', 0.9]);
+  assert.deepEqual(await strike({ v: 2, shots: 3, tips: 2, upgrades: { aim: 4 } }), ['perfect', 0.8]);
+});
+
+test('Golf: the treasure upgrade adds its own coins to the result', async t => {
+  const page = await game(t, { progress: { v: 2, coins: 0, shots: 3, tips: 2, upgrades: { treasure: 5 } } });
+  await swing(page);
+  await land(page);
+  await page.keyboard.press('Space');
+  const parts = await page.evaluate(() => GolfPhysics.reward(golfState.ball));
+  assert(parts.treasure > 0 && parts.treasure === Math.floor((parts.total - parts.treasure) * 0.5), JSON.stringify(parts));
+  assert.match(await page.locator('#result-coins').textContent(), new RegExp('الكنز ' + parts.treasure));
+  assert.equal((await saved(page)).coins, parts.total);
+});
+
 test('Golf: the mute button works while a menu is open', async t => {
   const page = await game(t);
   await page.keyboard.press('Escape');

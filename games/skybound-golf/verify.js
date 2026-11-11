@@ -3,7 +3,9 @@
 const assert = require('node:assert/strict');
 const P = require('./physics.js');
 
-const all = level => ({ power: level, bounce: Math.min(10, level), rockets: Math.min(5, Math.round(level / 2)), magnet: Math.min(5, Math.round(level / 2)) });
+const half = (level, max) => Math.min(max, Math.round(level / 2));
+const all = level => ({ power: level, bounce: Math.min(10, level), rockets: half(level, 5), magnet: half(level, 5),
+  thrust: half(level, 5), aim: Math.min(4, Math.round(level / 3)), skip: Math.min(4, Math.round(level / 3)), treasure: half(level, 5) });
 
 // bot: 'idle' never presses; 'timed' arms each landing just before impact;
 // 'rockets' also fires every rocket on the way up; 'skill' fires them at the
@@ -57,6 +59,43 @@ P.step(course, soft, {}, 1 / 60); P.step(course, spring, { bounce: 10 }, 1 / 60)
 assert(spring.vy > soft.vy, 'bounce upgrade keeps more energy');
 assert.equal(P.launch(course, { rockets: 3 }, 1).rocketsLeft, 4, 'rocket upgrade adds rockets');
 assert(P.magnetOf({ magnet: 5 }) > P.magnetOf({ magnet: 0 }) * 3, 'magnet widens coin pickup');
+// Rocket power: the same rocket kicks harder.
+const kick = thrust => {
+  const b = P.launch(course, { thrust }, 1);
+  for (let i = 0; i < 20; i++) P.step(course, b, { thrust }, 1 / 60);
+  const before = [b.vx, b.vy];
+  assert.equal(P.press(course, b, { thrust }).type, 'rocket');
+  return [b.vx - before[0], b.vy - before[1]];
+};
+assert(kick(5)[1] > kick(0)[1] + 12 && kick(5)[0] > kick(0)[0] + 6, 'rocket power makes each rocket push harder');
+assert(avg(0, { rockets: 2, thrust: 5 }, 'skill') > avg(0, { rockets: 2 }, 'skill'), 'stronger rockets carry the ball further');
+// Golden swing: the gold zone starts lower, so more swings are perfect (and fly further).
+assert.equal(P.perfectBand({}), P.bands.perfect);
+assert(P.perfectBand({ aim: 4 }) < P.perfectBand({}) - 0.09 && P.perfectBand({ aim: 4 }) > P.bands.great, 'the gold zone grows but stays above orange');
+assert.equal(P.grade(0.83), 'great'); assert.equal(P.grade(0.83, { aim: 4 }), 'perfect');
+assert(P.launch(course, { aim: 4 }, 0.83).vx > P.launch(course, {}, 0.83).vx, 'a perfect swing launches faster');
+// Water skipper: a slow, steep landing on water splashes without it and skims with it,
+// and a fast rolling ball hops over the water instead of sinking.
+const water = P.features(course, 0, 4000).flats.find(f => f.type === 'water');
+assert(water, 'the meadow has a pond to test skipping');
+const onto = (skip, vx, vy, mode) => {
+  const b = P.launch(course, { skip }, 1);
+  Object.assign(b, { x: water.x - (mode === 'roll' ? water.hw + 0.2 : 0), mode: mode || 'air', vx, vy, time: 3 });
+  b.y = (mode === 'roll' ? P.heightAt(course, b.x) : water.level) + b.r + (mode === 'roll' ? 0 : 0.02);
+  const seen = [];
+  for (let i = 0; i < 30 && !b.done; i++) seen.push(...P.step(course, b, { skip }, 1 / 60).map(e => e.type));
+  return seen;
+};
+assert(onto(0, 7, -9).includes('splash') && !onto(0, 7, -9).includes('skip'), 'a slow landing sinks without the upgrade');
+assert(onto(4, 7, -9).includes('skip'), 'the water skipper skims the same landing');
+assert(onto(0, 12, 0, 'roll').includes('splash'), 'a rolling ball sinks without the upgrade');
+assert(onto(4, 12, 0, 'roll').includes('skip'), 'with it a rolling ball hops over the water');
+// Treasure: a tenth more coins per level, shown as its own part of the reward.
+const plain = P.reward({ maxX: 300, coins: 20 }), rich = P.reward({ maxX: 300, coins: 20, treasure: 5 });
+assert.equal(plain.treasure, 0);
+assert.equal(rich.treasure, Math.floor(plain.total * 0.5));
+assert.equal(rich.total, plain.total + rich.treasure);
+assert.equal(P.launch(course, { treasure: 3 }, 1).treasure, 3, 'the ball carries the treasure level into its reward');
 
 // The one button: rockets in the air, a super bounce near the ground.
 const air = P.launch(course, {}, 1);
@@ -140,12 +179,17 @@ for (let x = 0; x < 3000; x += 0.37) assert(Number.isFinite(P.heightAt(moon, x))
 
 // Saves: clean, migrated from the first version, never trusted blindly.
 const clean = P.sanitizeSave({ coins: -20, best: NaN, world: 3, upgrades: { power: Infinity, bounce: 91, rockets: -3 }, shots: -7 });
-assert.deepEqual([clean.coins, clean.best, clean.world, clean.upgrades], [0, 0, 0, { power: 0, bounce: 10, rockets: 0, magnet: 0 }]);
+const none = { power: 0, bounce: 0, rockets: 0, magnet: 0, thrust: 0, aim: 0, skip: 0, treasure: 0 };
+assert.deepEqual([clean.coins, clean.best, clean.world, clean.upgrades], [0, 0, 0, { ...none, bounce: 10 }]);
+// Saves from before the four new upgrades keep their levels and start the new ones at 0.
+assert.deepEqual(P.sanitizeSave({ v: 2, upgrades: { power: 4, bounce: 3, rockets: 2, magnet: 1 } }).upgrades,
+  { ...none, power: 4, bounce: 3, rockets: 2, magnet: 1 });
+assert.deepEqual(P.sanitizeSave({ v: 2, upgrades: { thrust: 9, aim: 2.7, skip: -1, treasure: '3' } }).upgrades, { ...none, thrust: 5, aim: 2 });
 assert.equal(clean.skin, 'classic');
 const old = P.sanitizeSave({ coins: 100, best: 640, world: 2, upgrades: { power: 2, bounce: 1, glide: 0 }, skins: ['gold', 'hacked'], skin: 'gold', shots: 9, holes: 2 });
 assert.equal(old.coins, 100 + 65 + 95 + 50, 'old upgrades are refunded as coins');
 assert.deepEqual([old.best, old.world, old.skin, old.skins, old.shots, old.holes, old.tips], [640, 2, 'gold', ['classic', 'gold'], 9, 2, 2]);
-assert.deepEqual(old.upgrades, { power: 0, bounce: 0, rockets: 0, magnet: 0 });
+assert.deepEqual(old.upgrades, none);
 assert.deepEqual(P.sanitizeSave(old), old, 'a sanitized save is stable');
 assert.equal(P.sanitizeSave({ v: 2, best: 100, world: 4 }).world, 0, 'locked worlds fall back');
 assert.equal(P.sanitizeSave({ v: 2, bests: { snow: 700 } }).best, 700, 'best follows the world records');

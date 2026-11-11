@@ -609,8 +609,9 @@
   function gauge(c, s) {
     if (!s.gauge || !s.gauge.show) return;
     var k = view.k, scale = k / 46, X = sx(-1.3) + SHOULDER.x * scale, Y = sy(P.heightAt(s.course, -1.3)) + SHOULDER.y * scale;
-    var R = (REACH + 6) * scale, w = 20 * scale, bands = P.bands, v = s.gauge.value;
-    var parts = [[0, bands.good, '#8fa3d9'], [bands.good, bands.great, '#ffe14d'], [bands.great, bands.perfect, '#ff9b2f'], [bands.perfect, 1, '#ffd000']];
+    // The golden-swing upgrade moves the start of the gold zone down (s.gauge.perfect).
+    var R = (REACH + 6) * scale, w = 20 * scale, bands = P.bands, v = s.gauge.value, top = s.gauge.perfect || bands.perfect;
+    var parts = [[0, bands.good, '#8fa3d9'], [bands.good, bands.great, '#ffe14d'], [bands.great, top, '#ff9b2f'], [top, 1, '#ffd000']];
     c.save();
     c.beginPath(); c.arc(X, Y, R, GAUGE_FROM - 0.03, GAUGE_TO + 0.03); c.lineWidth = w + 9; c.strokeStyle = INK; c.lineCap = 'round'; c.stroke();
     c.lineCap = 'butt';
@@ -619,8 +620,8 @@
       c.lineWidth = w; c.strokeStyle = parts[n][2]; c.stroke();
     }
     // The gold zone pulses and sparkles.
-    var hot = v >= bands.perfect, pulse = s.reduced ? 0.5 : 0.5 + 0.5 * Math.sin(s.time * 10);
-    c.beginPath(); c.arc(X, Y, R, gaugeAngle(bands.perfect), gaugeAngle(1));
+    var hot = v >= top, pulse = s.reduced ? 0.5 : 0.5 + 0.5 * Math.sin(s.time * 10);
+    c.beginPath(); c.arc(X, Y, R, gaugeAngle(top), gaugeAngle(1));
     c.lineWidth = w * (hot ? 1.5 : 0.5 + pulse * 0.3); c.strokeStyle = hot ? '#fff6a0' : 'rgba(255,255,255,0.65)'; c.stroke();
     var sa = gaugeAngle(1) + 0.18;
     star(c, X + Math.cos(sa) * R, Y + Math.sin(sa) * R, 13 * scale * (hot ? 1.4 : 1), '#ffd000');

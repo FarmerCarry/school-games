@@ -134,9 +134,11 @@ Existing puzzle stars and unlocks carry over, and the galaxy table still unlocks
 **ضربة إلى الفضاء (Skybound Golf)** is a one-button golf launcher. Press Space or click when the
 backswing reaches the gold zone, then use the same button in flight: in the air it fires a rocket,
 just before landing it makes a super bounce (also across water). Collect coins, pop balloons, fly
-through boost rings and roll into a hole for a bonus. Coins buy power, bounce, rocket and magnet
-upgrades and ball styles; longer shots unlock five worlds from the meadow to the moon, and rockets
-can carry the ball to the edge of space. Progress saves locally; saves from the earlier version keep
+through boost rings and roll into a hole for a bonus. Coins buy eight upgrades (power, bounce,
+rockets, magnet, rocket thrust, a wider gold zone, skipping over water and extra treasure coins)
+and ball styles; the shop shows all eight, and the result card offers the four cheapest still to
+buy. Longer shots unlock five worlds from the meadow to the moon, and rockets can carry the ball to
+the edge of space. Progress saves locally; saves from the earlier version keep
 their coins, best distance and balls, and get their upgrade coins back.
 
 **أصابع البرق (Lightning Fingers)** is a typing game for children. Pick «عربي» or «English», then type

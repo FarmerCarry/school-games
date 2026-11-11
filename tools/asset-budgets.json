@@ -29,7 +29,7 @@
     "pool-party": 129500,
     "rail-rush": 140000,
     "road-hopper": 114000,
-    "skybound-golf": 111500,
+    "skybound-golf": 115500,
     "snake-arena": 96500,
     "splat-strike": 228500,
     "sumo-bonk": 119000,
@@ -48,5 +48,5 @@
     "fredoka-latin-500-normal.woff2": 18500,
     "fredoka-latin-700-normal.woff2": 18000
   },
-  "precacheBytes": 5931000
+  "precacheBytes": 5935000
 }
