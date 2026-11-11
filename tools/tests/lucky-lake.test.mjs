@@ -268,8 +268,11 @@ test('P, Esc, the button and a lost focus pause the lake; nothing moves while pa
   }
 });
 
-test('leaving a place shows the trip: its catches and stars; Play again and R start a new trip', async t => {
-  const page = await game(t, { save: SAVE(), dda: TIER[1] });
+// The pond is one fish (any catch counts towards its 5-fish goal) from its second star,
+// so the first catch opens the river and the result's Enter goes there.
+const NEAR_RIVER = () => SAVE({ places: [{ n: 4, g: [0, 1, 0] }, ...places().slice(1)] });
+for (const [label, save] of [['', SAVE], [' (the first catch opens the river)', NEAR_RIVER]]) test('leaving a place shows the trip: its catches and stars; Play again and R start a new trip' + label, async t => {
+  const page = await game(t, { save: save(), dda: TIER[1] });
   await page.keyboard.press('Enter'); await step(page, 2);
   await page.keyboard.press('Enter'); await step(page, 2);
   assert.ok(await catchOne(page));
@@ -281,6 +284,13 @@ test('leaving a place shows the trip: its catches and stars; Play again and R st
   assert.equal(s.screen, 'result');
   assert.equal(await page.locator('#resCount').textContent(), '1', 'the trip shows its catches');
   assert.equal(s.tripOpen, false, 'the basket button ends the trip');
+  // A catch that earns the pond's second star (a big catfish does it from a fresh save)
+  // opens the river, and Play again goes there instead.
+  const opened = await page.locator('#resNext').getAttribute('aria-label') === 'المكان الجديد';
+  if (save === NEAR_RIVER) {
+    const junk = Object.keys((await stored(page)).junk).length > 0;
+    assert.equal(opened, !junk, 'a fish (not junk) opens the river');
+  }
   // Enter, Space and R are ignored for the first moment, then play again.
   await page.keyboard.press('Enter'); await step(page);
   assert.equal((await state(page)).screen, 'result');
@@ -288,6 +298,8 @@ test('leaving a place shows the trip: its catches and stars; Play again and R st
   await page.keyboard.press('Enter'); await step(page, 2);
   s = await state(page);
   assert.equal(s.screen, 'play'); assert.equal(s.trip, 0); assert.equal(s.p1.casts, 0); assert.equal(s.tripOpen, true);
+  assert.equal(s.place, opened ? 1 : 0, 'the same place again, or the place the trip opened');
+  const here = s.place;
   // The pause menu's places button also ends the trip; R on the result fishes here again.
   await page.keyboard.press('KeyP'); await step(page);
   await page.locator('#btnMenu').click(); await step(page, 60);
@@ -296,7 +308,7 @@ test('leaving a place shows the trip: its catches and stars; Play again and R st
   assert.equal(await page.locator('#resCount').textContent(), '0', 'that trip landed nothing');
   await page.keyboard.press('KeyR'); await step(page, 2);
   s = await state(page);
-  assert.equal(s.screen, 'play'); assert.equal(s.tripOpen, true); assert.equal(s.place, 0);
+  assert.equal(s.screen, 'play'); assert.equal(s.tripOpen, true); assert.equal(s.place, here);
   // Restart from the pause starts a fresh trip too.
   const casted = await mouseTo(page, 650, 420);
   await page.mouse.click(casted.x, casted.y); await step(page, 5);
