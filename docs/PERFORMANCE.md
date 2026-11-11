@@ -985,3 +985,34 @@ Measured with the Linux minified build, against the previous entry's measurement
 
 Both limits are again the measured size rounded up (the game to the next 500 bytes, the
 cache to the next 1,000).
+
+## Six new games, 11 November 2026
+
+Six games join the catalog: «مغامرة الكيبورد» (Keyboard Obby, three.js), «حديقة الكلمات»
+(Word Garden), «مصنع الاختصارات» (Shortcut Factory), «ابحث وكبّر» (Seek & Zoom), «سلك الشرارة»
+(Steady Hand) and «بوابات الحساب» (Math Gates, three.js). Each is one inlined page like the other
+games; the two 3D games share the cached three.js. The portal grows by each game's catalog entry
+and inlined thumbnail (about 6.9 KB a game), and the offline cache by six pages.
+
+Measured with the Linux minified build, against the previous entry's measurements.
+
+| Measurement | Before bytes | After bytes | Before limit | New limit |
+| --- | ---: | ---: | ---: | ---: |
+| Portal | 377,312 | 418,491 | 378,000 | 419,000 |
+| Keyboard Obby page | — | 118,754 | — | 119,000 |
+| Word Garden page | — | 119,538 | — | 120,000 |
+| Shortcut Factory page | — | 122,245 | — | 122,500 |
+| Seek & Zoom page | — | 129,833 | — | 130,000 |
+| Steady Hand page | — | 97,872 | — | 98,000 |
+| Math Gates page | — | 116,620 | — | 117,000 |
+| Offline precache, 51 → 57 files | 5,934,503 | 6,680,544 | 5,935,000 | 6,681,000 |
+| Offline ZIP | 2,079,123 | 2,339,551 | — | — |
+
+Every limit is again the measured size rounded up (the games to the next 500 bytes, the portal
+and the cache to the next 1,000). Frame rates were not measured: the build machine renders
+WebGL and canvas in software at a few frames per second for every game. The two 3D games keep
+their draw calls low (Keyboard Obby about 15 per frame with one merged key mesh and one legend
+atlas; Math Gates at most about 30 with an instanced crowd capped at 150 runners), and the 2D
+games draw their busy scenes once into cached images. Measure them on the school's weakest PC
+with `npm run perf -- --native-gpu --headed --seconds 30 keyboard-obby math-gates seek-zoom
+steady-hand shortcut-factory word-garden`.

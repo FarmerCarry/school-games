@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#6fcfff"/>
+      <stop offset="1" stop-color="#d8f4ff"/>
+    </linearGradient>
+    <clipPath id="lens"><circle cx="226" cy="196" r="96"/></clipPath>
+  </defs>
+  <rect width="400" height="400" fill="url(#sky)"/>
+  <path d="M0 150 Q50 118 100 146 T200 142 T300 140 T400 146 L400 400 L0 400 Z" fill="#6cc24a" stroke="#2b2452" stroke-width="5"/>
+  <rect y="168" width="400" height="232" fill="#7ed957"/>
+  <path d="M-10 330 Q100 300 200 330 T410 320 L410 372 Q300 380 200 360 T-10 380 Z" fill="#f2d49b" stroke="#2b2452" stroke-width="4"/>
+  <ellipse cx="300" cy="262" rx="88" ry="40" fill="#3fb4ef" stroke="#2b2452" stroke-width="4"/>
+  <!-- little trees and people far away -->
+  <g stroke="#2b2452" stroke-width="3">
+    <circle cx="36" cy="150" r="22" fill="#3fae49"/><circle cx="70" cy="140" r="18" fill="#56c35a"/><circle cx="352" cy="148" r="22" fill="#2f9a52"/>
+    <circle cx="160" cy="318" r="9" fill="#ffd7b5"/><rect x="152" y="328" width="16" height="22" rx="4" fill="#ff5d6c"/>
+    <circle cx="112" cy="236" r="9" fill="#c98b5e"/><rect x="104" y="246" width="16" height="22" rx="4" fill="#4f7bff"/>
+    <circle cx="330" cy="330" r="9" fill="#f2b98b"/><rect x="322" y="340" width="16" height="22" rx="4" fill="#ffd23f"/>
+    <path d="M30 210 q14 -18 28 0 q14 -18 28 0 z" fill="#4fbf4f"/>
+    <path d="M290 112 l14 -24 l14 24 l-14 22 z" fill="#3d8bff"/>
+  </g>
+  <!-- the magnifying glass shows a big red kite and a sleeping cat -->
+  <g clip-path="url(#lens)">
+    <rect x="120" y="90" width="220" height="220" fill="#8fdcff"/>
+    <rect x="120" y="222" width="220" height="90" fill="#7ed957"/>
+    <path d="M206 206 q-16 14 4 28 q-18 10 0 22" fill="none" stroke="#2b2452" stroke-width="4"/>
+    <path d="M206 214 l12 8 l-12 8 l-12 -8 z M210 238 l10 7 l-10 7 l-10 -7 z" fill="#ffd23f" stroke="#2b2452" stroke-width="3"/>
+    <path d="M206 112 L248 160 L206 208 L164 160 Z" fill="#ff4d4d" stroke="#2b2452" stroke-width="7" stroke-linejoin="round"/>
+    <path d="M206 112 L248 160 L206 160 Z" fill="#ff8a8a"/>
+    <path d="M206 116 L206 204 M168 160 L244 160" stroke="#2b2452" stroke-width="4"/>
+    <path d="M292 262 q22 -2 14 -26" fill="none" stroke="#2b2452" stroke-width="12" stroke-linecap="round"/>
+    <path d="M292 262 q22 -2 14 -26" fill="none" stroke="#ff9f43" stroke-width="6" stroke-linecap="round"/>
+    <ellipse cx="264" cy="256" rx="38" ry="22" fill="#ff9f43" stroke="#2b2452" stroke-width="5"/>
+    <path d="M258 238 l4 14 M272 236 l2 14" stroke="#d86e1c" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="232" cy="250" r="19" fill="#ff9f43" stroke="#2b2452" stroke-width="5"/>
+    <path d="M218 240 l1 -19 l13 11 z M236 233 l10 -14 l5 17 z" fill="#ff9f43" stroke="#2b2452" stroke-width="4" stroke-linejoin="round"/>
+    <path d="M222 251 q4 4 8 0 M236 251 q4 4 8 0" fill="none" stroke="#2b2452" stroke-width="3" stroke-linecap="round"/>
+    <path d="M262 214 h12 l-12 12 h12 M280 198 h9 l-9 9 h9" fill="none" stroke="#4f7bff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <path d="M296 266 L352 322" stroke="#2b2452" stroke-width="34" stroke-linecap="round"/>
+  <path d="M296 266 L352 322" stroke="#c98a4a" stroke-width="22" stroke-linecap="round"/>
+  <circle cx="226" cy="196" r="96" fill="none" stroke="#2b2452" stroke-width="18"/>
+  <circle cx="226" cy="196" r="96" fill="none" stroke="#ffd23f" stroke-width="10"/>
+  <path d="M160 160 A70 70 0 0 1 190 128" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="round" opacity="0.85"/>
+  <!-- the mouse with its wheel -->
+  <g transform="translate(58 318)" stroke="#2b2452" stroke-width="5" stroke-linejoin="round">
+    <rect x="-30" y="-40" width="60" height="92" rx="30" fill="#ffffff"/>
+    <path d="M-30 -2 L30 -2 M0 -40 L0 -2" fill="none"/>
+    <rect x="-7" y="-32" width="14" height="24" rx="7" fill="#ffd23f"/>
+    <path d="M0 -70 L-16 -50 L16 -50 Z" fill="#3ddc84"/>
+  </g>
+</svg>

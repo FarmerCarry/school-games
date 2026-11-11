@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0.4" y2="1">
+      <stop offset="0" stop-color="#0b1748"/>
+      <stop offset="1" stop-color="#2a0b4a"/>
+    </linearGradient>
+    <radialGradient id="glow">
+      <stop offset="0" stop-color="#fff1a0" stop-opacity="0.95"/>
+      <stop offset="0.45" stop-color="#ffd23f" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#ffd23f" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="sparkGlow">
+      <stop offset="0" stop-color="#ffd23f" stop-opacity="0.8"/>
+      <stop offset="1" stop-color="#ffb800" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="body" cx="0.4" cy="0.38">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.5" stop-color="#ffe14d"/>
+      <stop offset="1" stop-color="#ffaa00"/>
+    </radialGradient>
+  </defs>
+  <rect width="400" height="400" fill="url(#bg)"/>
+  <!-- a faint circuit board -->
+  <g fill="none" stroke="#3df0ff" stroke-opacity="0.12" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M20 40 H120 L140 60 V110"/><path d="M260 330 H330 L350 310 V250"/><path d="M40 360 V330 L60 310"/><path d="M380 160 H320 L300 180"/>
+  </g>
+  <g fill="#3df0ff" fill-opacity="0.18"><circle cx="20" cy="40" r="6"/><circle cx="140" cy="110" r="6"/><circle cx="350" cy="250" r="6"/><circle cx="300" cy="180" r="6"/></g>
+  <!-- the wire track -->
+  <g fill="none" stroke-linecap="round">
+    <path d="M24 262 C110 262 118 178 200 178 S292 106 344 92" stroke="#0b6cff" stroke-opacity="0.35" stroke-width="104"/>
+    <path d="M24 262 C110 262 118 178 200 178 S292 106 344 92" stroke="#3df0ff" stroke-width="84"/>
+    <path d="M24 262 C110 262 118 178 200 178 S292 106 344 92" stroke="#ffffff" stroke-width="76"/>
+    <path d="M24 262 C110 262 118 178 200 178 S292 106 344 92" stroke="#0a0e2c" stroke-width="70"/>
+    <path d="M24 262 C110 262 118 178 200 178 S292 106 344 92" stroke="#ffffff" stroke-opacity="0.25" stroke-width="5" stroke-dasharray="1 20"/>
+  </g>
+  <!-- a turning bar across the track -->
+  <g stroke-linecap="round">
+    <path d="M300 182 L246 76" stroke="#ff4d7a" stroke-opacity="0.35" stroke-width="22"/>
+    <path d="M300 182 L246 76" stroke="#ff4d7a" stroke-width="13"/>
+    <path d="M300 182 L246 76" stroke="#fff4f7" stroke-width="5"/>
+  </g>
+  <circle cx="300" cy="182" r="13" fill="#ffe2b8" stroke="#ff7a2e" stroke-width="5"/>
+  <!-- the lamp at the end, lit -->
+  <circle cx="344" cy="92" r="84" fill="url(#glow)"/>
+  <g transform="translate(344 92) rotate(-15)" stroke="#141a44" stroke-linejoin="round">
+    <rect x="25" y="-14" width="19" height="28" rx="5" fill="#c9d0e8" stroke-width="4"/>
+    <path d="M44 -8 A8 8 0 0 1 44 8 Z" fill="#141a44"/>
+    <path d="M0 -30 A30 30 0 1 0 26 15 L26 -15 A30 30 0 0 0 0 -30 Z" fill="#fff7c2" stroke="#ffcf3a" stroke-width="5"/>
+    <path d="M26 -6 L3 -9 L-4 -4 L2 0 L-4 4 L3 9 L26 6" fill="none" stroke="#ff8a1f" stroke-width="4"/>
+  </g>
+  <!-- a lit lantern -->
+  <circle cx="92" cy="186" r="30" fill="url(#glow)"/>
+  <g transform="translate(92 186)" stroke-width="3">
+    <rect x="-3" y="6" width="6" height="16" rx="2" fill="#a9b0e0"/>
+    <rect x="-12" y="-14" width="24" height="22" rx="7" fill="#fff3a8" stroke="#ffb800"/>
+    <rect x="-14" y="-20" width="28" height="7" rx="3" fill="#ffb800"/>
+    <path d="M0 -10 Q6 -3 0 4 Q-6 -3 0 -10 Z" fill="#ff8a1f" stroke="none"/>
+  </g>
+  <!-- the trail -->
+  <g fill="#ffe14d">
+    <circle cx="160" cy="194" r="9" opacity="0.85"/><circle cx="130" cy="212" r="7" opacity="0.65"/>
+    <circle cx="106" cy="236" r="5.5" opacity="0.45"/><circle cx="84" cy="254" r="4" opacity="0.3"/>
+  </g>
+  <!-- the spark -->
+  <circle cx="200" cy="178" r="70" fill="url(#sparkGlow)"/>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M200 142 L194 130 L204 127 L199 110" stroke="#ffe14d" stroke-width="8"/>
+    <path d="M178 150 L166 142 L175 135 L162 124" stroke="#ffe14d" stroke-width="8"/>
+    <path d="M222 150 L230 137 L238 144 L246 128" stroke="#ffe14d" stroke-width="8"/>
+    <path d="M200 142 L194 130 L204 127 L199 110 M178 150 L166 142 L175 135 L162 124 M222 150 L230 137 L238 144 L246 128" stroke="#ffffff" stroke-width="3"/>
+  </g>
+  <circle cx="200" cy="178" r="36" fill="url(#body)" stroke="#c98a00" stroke-width="3"/>
+  <ellipse cx="187" cy="172" rx="8.5" ry="11" fill="#ffffff"/>
+  <ellipse cx="213" cy="172" rx="8.5" ry="11" fill="#ffffff"/>
+  <circle cx="190" cy="174" r="5.5" fill="#141a44"/><circle cx="216" cy="174" r="5.5" fill="#141a44"/>
+  <circle cx="192" cy="171.5" r="2" fill="#ffffff"/><circle cx="218" cy="171.5" r="2" fill="#ffffff"/>
+  <circle cx="177" cy="188" r="5" fill="#ff5a8c" opacity="0.55"/><circle cx="223" cy="188" r="5" fill="#ff5a8c" opacity="0.55"/>
+  <path d="M190 189 Q200 199 210 189" fill="none" stroke="#141a44" stroke-width="4.5" stroke-linecap="round"/>
+  <!-- the name -->
+  <g font-family="Fredoka, 'Segoe UI', Tahoma, sans-serif" font-weight="700" text-anchor="middle" direction="rtl">
+    <text x="200" y="376" font-size="62" fill="#141a44" stroke="#141a44" stroke-width="16" stroke-linejoin="round" paint-order="stroke">سلك الشرارة</text>
+    <text x="200" y="376" font-size="62" fill="#ffffff">سلك الشرارة</text>
+  </g>
+</svg>

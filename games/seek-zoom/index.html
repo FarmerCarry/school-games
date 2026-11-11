@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ابحث وكبّر</title>
+<link rel="icon" type="image/svg+xml" href="../../favicon.svg">
+<link rel="stylesheet" href="../../shared/game.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<svg class="defs" aria-hidden="true" focusable="false" width="0" height="0">
+  <symbol id="i-play" viewBox="0 0 64 64"><path d="M22 11 Q18 9 18 14 L18 50 Q18 55 22 53 L52 35 Q56 32 52 29 Z"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 64 64"><rect x="15" y="12" width="12" height="40" rx="5"/><rect x="37" y="12" width="12" height="40" rx="5"/></symbol>
+  <symbol id="i-again" viewBox="0 0 64 64"><path d="M50 30 A19 19 0 1 1 41 15" fill="none" stroke="currentColor" stroke-width="9" stroke-linecap="round"/><path d="M33 4 L52 13 L37 27 Z"/></symbol>
+  <symbol id="i-map" viewBox="0 0 64 64"><path d="M6 15 L22 8 L42 15 L58 8 L58 49 L42 56 L22 49 L6 56 Z"/><path d="M22 10 L22 47 M42 17 L42 54" stroke="#2b2452" stroke-width="4" opacity=".35"/><circle cx="32" cy="30" r="6" fill="#ff5d6c"/></symbol>
+  <symbol id="i-home" viewBox="0 0 64 64"><path d="M8 32 L32 10 L56 32 L49 32 L49 54 L37 54 L37 40 L27 40 L27 54 L15 54 L15 32 Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></symbol>
+  <symbol id="i-star" viewBox="0 0 64 64"><path d="M32 5 L39 23.3 L58.6 24.4 L43.4 36.7 L48.5 55.6 L32 45 L15.5 55.6 L20.6 36.7 L5.4 24.4 L25 23.3 Z" stroke-linejoin="round"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 64 64"><path d="M20 28 L20 20 A12 12 0 0 1 44 20 L44 28" fill="none" stroke="currentColor" stroke-width="7"/><rect x="12" y="28" width="40" height="30" rx="7"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 64 64"><path d="M32 12 L32 52 M12 32 L52 32" stroke="currentColor" stroke-width="11" stroke-linecap="round"/></symbol>
+  <symbol id="i-minus" viewBox="0 0 64 64"><path d="M12 32 L52 32" stroke="currentColor" stroke-width="11" stroke-linecap="round"/></symbol>
+  <symbol id="i-glass" viewBox="0 0 64 64"><path d="M38 38 L56 56" stroke="#2b2452" stroke-width="14" stroke-linecap="round"/><path d="M38 38 L56 56" stroke="#c98a4a" stroke-width="8" stroke-linecap="round"/><circle cx="26" cy="26" r="17" fill="#d6f4ff" stroke="#2b2452" stroke-width="8"/><circle cx="26" cy="26" r="17" fill="none" stroke="#ffd23f" stroke-width="4"/><path d="M17 21 A11 11 0 0 1 24 15" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round"/></symbol>
+  <symbol id="i-book" viewBox="0 0 64 64"><path d="M32 14 Q20 6 6 10 L6 52 Q20 48 32 56 Q44 48 58 52 L58 10 Q44 6 32 14 Z M32 14 L32 56" stroke="#2b2452" stroke-width="4" stroke-linejoin="round"/><circle cx="19" cy="30" r="7" fill="#ff5d9e"/><circle cx="45" cy="30" r="7" fill="#ffd23f"/></symbol>
+  <symbol id="i-miss" viewBox="0 0 64 64"><circle cx="32" cy="32" r="22" fill="#fff" stroke="#2b2452" stroke-width="6"/><path d="M23 23 L41 41 M41 23 L23 41" stroke="#ff5d6c" stroke-width="8" stroke-linecap="round"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 64 64"><circle cx="32" cy="34" r="24" fill="#fff" stroke="#2b2452" stroke-width="6"/><path d="M32 34 L32 20 M32 34 L42 40" stroke="#2b2452" stroke-width="6" stroke-linecap="round"/><path d="M24 6 L40 6" stroke="#2b2452" stroke-width="6" stroke-linecap="round"/></symbol>
+</svg>
+
+<canvas id="game" tabindex="0" aria-label="ابحث وكبّر"></canvas>
+
+<div id="ui">
+<div id="hud" hidden>
+  <button type="button" id="btnPause" class="sz-btn sz-round" aria-label="استراحة" title="استراحة (P)"><svg aria-hidden="true"><use href="#i-pause"/></svg></button>
+  <div id="zoomBox">
+    <button type="button" id="btnIn" class="sz-btn sz-round" aria-label="كبّر" title="كبّر (+)"><svg aria-hidden="true"><use href="#i-plus"/></svg></button>
+    <div id="zoomBar" aria-hidden="true"><i id="zoomFill"></i></div>
+    <button type="button" id="btnOut" class="sz-btn sz-round" aria-label="صغّر" title="صغّر (−)"><svg aria-hidden="true"><use href="#i-minus"/></svg></button>
+  </div>
+  <button type="button" id="btnHint" class="sz-btn sz-round" aria-label="العدسة تدلّك" title="العدسة (H)"><svg aria-hidden="true"><use href="#i-glass"/></svg></button>
+</div>
+
+<section id="scrTitle" class="screen" aria-label="ابحث وكبّر">
+  <h1 class="logo"><span class="l1">ابحث</span> <span class="l2">وكبّر</span></h1>
+  <div class="chip" id="titleStars" aria-label="النجوم"><svg aria-hidden="true"><use href="#i-star"/></svg><b>0</b></div>
+  <button type="button" id="btnPlay" class="sz-btn sz-play ring" aria-label="العب"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
+  <div class="howto">
+    <div class="how"><canvas id="howWheel" width="150" height="110"></canvas><b>الفأرة</b><span>أدر العجلة لتكبّر</span></div>
+    <div class="how"><canvas id="howDrag" width="150" height="110"></canvas><b>اسحب</b><span>لتتحرّك في المكان</span></div>
+    <div class="how"><canvas id="howClick" width="150" height="110"></canvas><b>انقر</b><span>على ما تجده</span></div>
+    <div class="how keys">
+      <div class="kr"><span dir="ltr"><span class="sg-key">+</span><span class="sg-key">−</span></span><span>كبّر وصغّر</span></div>
+      <div class="kr"><span dir="ltr"><span class="sg-key">←</span><span class="sg-key">↑</span><span class="sg-key">↓</span><span class="sg-key">→</span></span><span>تحرّك</span></div>
+      <div class="kr"><span dir="ltr"><span class="sg-key">P</span></span><span>استراحة</span></div>
+    </div>
+  </div>
+  <button type="button" id="btnBook" class="sz-btn sz-side" aria-label="الملصقات"><svg aria-hidden="true"><use href="#i-book"/></svg><span>الملصقات</span></button>
+</section>
+
+<section id="scrMap" class="screen" aria-label="الأماكن" hidden>
+  <button type="button" id="mapHome" class="sz-btn sz-round" aria-label="البداية"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
+  <div class="chip" id="mapStars" aria-label="النجوم"><svg aria-hidden="true"><use href="#i-star"/></svg><b>0</b></div>
+  <div id="worlds"></div>
+</section>
+
+<section id="scrPause" class="screen dim" aria-label="استراحة" hidden>
+  <div class="card">
+    <button type="button" id="btnResume" class="sz-btn sz-go" aria-label="تابع"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
+    <div class="row">
+      <button type="button" id="btnMenu" class="sz-btn sz-round big" aria-label="الأماكن"><svg aria-hidden="true"><use href="#i-map"/></svg></button>
+      <button type="button" id="btnRestart" class="sz-btn sz-round big" aria-label="ابدأ من جديد"><svg aria-hidden="true"><use href="#i-again"/></svg></button>
+    </div>
+  </div>
+</section>
+
+<section id="scrResult" class="screen" aria-label="النتيجة" hidden>
+  <div class="card result">
+    <div class="ribbon" id="resBest" hidden>رقم جديد!</div>
+    <h2 id="resPlace"></h2>
+    <div class="stars3" id="resStars" aria-hidden="true"><svg><use href="#i-star"/></svg><svg><use href="#i-star"/></svg><svg><use href="#i-star"/></svg></div>
+    <div class="facts">
+      <span class="fact"><svg aria-hidden="true"><use href="#i-clock"/></svg><b id="resTime">0:00</b></span>
+      <span class="fact" id="resMissFact"><svg aria-hidden="true"><use href="#i-miss"/></svg><b id="resMiss">0</b></span>
+      <span class="fact" id="resFoundFact" hidden><svg aria-hidden="true"><use href="#i-glass"/></svg><b id="resFound">0/0</b></span>
+    </div>
+    <div class="sticker" id="resSticker" hidden><canvas id="resStickerArt" width="120" height="120"></canvas><span id="resStickerText">ملصق جديد!</span></div>
+    <div class="row">
+      <button type="button" id="resMap" class="sz-btn sz-round big" aria-label="الأماكن"><svg aria-hidden="true"><use href="#i-map"/></svg></button>
+      <button type="button" id="resNext" class="sz-btn sz-go ring" aria-label="المرحلة التالية"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
+      <button type="button" id="resAgain" class="sz-btn sz-round big" aria-label="العب مرة أخرى"><svg aria-hidden="true"><use href="#i-again"/></svg></button>
+    </div>
+  </div>
+</section>
+
+<section id="scrBook" class="screen" aria-label="الملصقات" hidden>
+  <button type="button" id="bookBack" class="sz-btn sz-round" aria-label="رجوع"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
+  <div class="chip" id="bookCount" aria-label="الملصقات"><svg aria-hidden="true"><use href="#i-book"/></svg><b>0</b></div>
+  <div id="stickers"></div>
+</section>
+</div>
+<div id="live" class="sr" aria-live="polite"></div>
+
+<script src="../../shared/kit.js"></script>
+<script src="../../shared/juice.js"></script>
+<script src="engine.js"></script>
+<script src="art.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

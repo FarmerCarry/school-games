@@ -1,6 +1,6 @@
 {
   "format": 1,
-  "portalBytes": 378000,
+  "portalBytes": 419000,
   "gameHtmlBytes": {
     "air-hockey": 113000,
     "beat-dash": 110500,
@@ -19,7 +19,9 @@
     "fire-and-ice": 120500,
     "hoop-heads": 146500,
     "key-runner": 117500,
+    "keyboard-obby": 119000,
     "lucky-lake": 137000,
+    "math-gates": 117000,
     "maze-dash": 113500,
     "merge-2048": 78500,
     "moto-madness": 130000,
@@ -29,9 +31,12 @@
     "pool-party": 129500,
     "rail-rush": 140000,
     "road-hopper": 114000,
+    "seek-zoom": 130000,
+    "shortcut-factory": 122500,
     "skybound-golf": 115500,
     "snake-arena": 96500,
     "splat-strike": 228500,
+    "steady-hand": 98000,
     "sumo-bonk": 119000,
     "swing-hook": 105500,
     "tank-splat": 110000,
@@ -39,7 +44,8 @@
     "troll-level": 251500,
     "tunnel-blitz": 93500,
     "typing-test": 116500,
-    "wacky-soccer": 152000
+    "wacky-soccer": 152000,
+    "word-garden": 120000
   },
   "threeBytes": 750000,
   "fontBytes": {
@@ -48,5 +54,5 @@
     "fredoka-latin-500-normal.woff2": 18500,
     "fredoka-latin-700-normal.woff2": 18000
   },
-  "precacheBytes": 5935000
+  "precacheBytes": 6681000
 }
