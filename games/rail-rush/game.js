@@ -1998,7 +1998,7 @@
   // Debug / test hook
   window.__game = {
     get state() {
-      return { mode: S.mode, menu: S.menu, score: run.score, dist: Math.floor(run.dist || 0), speed: +S.speed.toFixed(2), coins: run.coins, lane: P.lane, x: +P.x.toFixed(2), y: +P.y.toFixed(2), grounded: P.grounded, roll: P.roll > 0,
+      return { mode: S.mode, menu: S.menu, score: run.score, dist: Math.floor(run.dist || 0), speed: +S.speed.toFixed(2), coins: run.coins, bonus: run.bonus || 0, lane: P.lane, x: +P.x.toFixed(2), y: +P.y.toFixed(2), grounded: P.grounded, roll: P.roll > 0,
         stumble: P.stumbleT > 0, pow: Object.assign({}, POW), obstacles: obstacles.length, coinsActive: coins.length, pickups: pickups.length, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, saveCoins: save.coins, best: save.best, mlevel: save.mlevel, runs: save.runs };
     },
     save: save,
