@@ -638,8 +638,11 @@ test('world 9: the arrows and WASD steer the submarine to the starfish', async t
     const after = (await state(page)).sub;
     assert.ok((after[axis] - before[axis]) * sign > 30, `${key} moves the submarine (${JSON.stringify(before)} → ${JSON.stringify(after)})`);
   }
-  // Steer to the first starfish with the arrows.
-  for (let i = 0; i < 40 && (await state(page)).hits === 0; i++) {
+  // Starfish drift towards a submarine the child is steering, so the four presses
+  // above may already have collected some (even two). Count only what the steering
+  // below collects: steer to the next starfish with the arrows.
+  const collected = (await state(page)).hits;
+  for (let i = 0; i < 40 && (await state(page)).hits === collected; i++) {
     const s = await state(page), f = s.targets[0];
     if (!f) { await step(page, 5); continue; }
     const keys = [];
@@ -649,7 +652,7 @@ test('world 9: the arrows and WASD steer the submarine to the starfish', async t
     await step(page, 6);
     for (const k of keys) await page.keyboard.up(k);
   }
-  assert.equal((await state(page)).hits, 1, 'the submarine picked up a starfish');
+  assert.equal((await state(page)).hits, collected + 1, 'steering picked up the next starfish');
 });
 
 test('world 10: the letter on the balloon pops it, in English or Arabic input; a wrong key costs nothing', async t => {
