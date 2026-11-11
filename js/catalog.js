@@ -73,6 +73,10 @@ window.GAMES = [
       { keys: ['6–0', 'Y–P', 'H–;', 'N–/'], action: 'اللاعب الثاني في سباق اثنين' },
       { keys: ['Esc'], action: 'إيقاف مؤقت' }
     ] },
+  { slug: 'word-garden', roundMinutes: [2, 5], inputStyle: 'keyboard', title: 'حديقة الكلمات', en: 'Word Garden Arabic spelling missing letter words typing keyboard English', tags: 'إملاء حروف كلمات حرف ناقص كتابة لوحة المفاتيح كيبورد حديقة زهور', cats: ['puzzle', 'challenge'], players: '1', color: '#5ccf4a',
+    blurb: 'اكتب الحرف الناقص من الكلمة فتنبت زهرة في حديقتك! بالعربية والإنجليزية.',
+    tip: 'إذا تعثّرت يضيء المفتاح الصحيح في لوحة المفاتيح أسفل الشاشة. اجمع البذور واشترِ بها نباتات وزينة لحديقتك.',
+    controls: [{ keys: ['الحروف'], action: 'اكتب الحرف الناقص' }, { keys: ['Esc'], action: 'استراحة' }, { keys: ['Enter', 'R'], action: 'المرحلة التالية / مرة أخرى' }] },
   { slug: 'neon-slope', roundMinutes: [1, 3], inputStyle: 'keyboard', title: 'منحدر النيون', en: 'Neon Slope', cats: ['running', 'arcade'], players: '1', color: '#22e3a1', hot: true,
     blurb: 'تدحرج بسرعة على منحدر النيون، تفادَ الأحمر واقفز من المنصات!',
     controls: [{ keys: ['←', '→'], action: 'توجيه الكرة' }, { keys: ['A', 'D'], action: 'توجيه الكرة (بديل)' }] },

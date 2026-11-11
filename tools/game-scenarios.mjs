@@ -214,6 +214,14 @@ export const scenarios = {
     await page.waitForFunction(() => !!window.__game.state.next, null, { timeout: 15000, polling: 40 });
     await page.keyboard.type(await page.evaluate(() => window.__game.state.next));
   }, '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.keys === 0 && ${g}.state.done === 0`),
+  // Word Garden in English (Playwright types non-US letters without key events): the first
+  // level's word waits with its first letter missing. The input is the real key of that
+  // letter (the hook only reads it); the hint timer runs by itself, so the input check
+  // watches the right letters typed alone. Restart begins the level again with no letter typed.
+  'word-garden': defaults(['[data-lang="en"]', '.lvl-btn.next'], `${g}.state.screen === 'play'`, `[${g}.state.t,${g}.state.keys,${g}.state.errors,${g}.state.item,${g}.state.pos,${g}.state.lit]`, async page => {
+    await page.waitForFunction(() => !!window.__game.state.need, null, { timeout: 15000, polling: 40 });
+    await page.keyboard.press(await page.evaluate(() => window.__game.state.need));
+  }, '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.keys === 0 && ${g}.state.done === 0 && ${g}.state.item === 0`),
   // The first yard opens behind a picture card; a held arrow closes it and walks the kid.
   // Restart puts the kid back on the doorstep with no egg hatched.
   'egg-rush': defaults(['#btnPlay'], `${g}.screen==='play'`, `[${g}.px,${g}.py,${g}.time,${g}.hatched,${g}.guards]`, hold('ArrowRight'), '#btnPause', `${g}.screen==='pause'`, '#btnRestart', `${g}.screen==='play' && ${g}.atStart && ${g}.hatched===0 && !${g}.intro`)
@@ -237,7 +245,7 @@ const inputSnapshots = {
   'air-hockey': `${g}.state().mallets[0]`, 'hoop-heads': `${g}.info().p[0].x`,
   'wacky-soccer': `${g}.world.players.filter(p => p.side === 0).map(p => p.kickT)`,
   'pool-party': `${g}.aim`, 'critter-mart': `${g}.state().player`, 'cake-guards': `${g}.state.towers`,
-  'lucky-lake': `${g}.state.p1.casts`, 'typing-test': `${g}.state.keys`,
+  'lucky-lake': `${g}.state.p1.casts`, 'typing-test': `${g}.state.keys`, 'word-garden': `${g}.state.keys`,
   'bubble-bop': `[${g}.state.hits,${g}.state.travel]`,
   'key-runner': `${g}.state.hits`,
   'block-world': `${g}.player.x`, 'candy-rope': `${g}.world().ropes.filter(r => r.alive).length`,
@@ -279,7 +287,9 @@ const inputSeen = {
   'bubble-bop': `${g}.state.hits > sgInput.before[0] && ${g}.state.travel > sgInput.before[1] + 40`,
   // The runner runs to the first edge by itself and waits there; only the key its next
   // stone shows counts as a hit (any other key is a miss, nothing at all is nothing).
-  'key-runner': `${g}.state.hits > sgInput.before`
+  'key-runner': `${g}.state.hits > sgInput.before`,
+  // The key glows by itself after a while; only the child's right letter fills the gap.
+  'word-garden': `${g}.state.keys > sgInput.before`
 };
 for (const [slug, expr] of Object.entries(inputSeen)) scenarios[slug].inputSeen = expr;
 
