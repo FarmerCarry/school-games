@@ -272,7 +272,10 @@ export const scenarios = {
       await page.keyboard.press('Control+KeyC');
       await page.keyboard.press('Control+KeyV');
     }, '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.boxes[0].items.length === 0 && !${g}.state.clip`,
-    { settle: `!${g}.state.demo`, settleTimeout: 15000 })
+    { settle: `!${g}.state.demo`, settleTimeout: 15000 }),
+  // Math Gates: a first visit starts level 1-1 in the middle lane. The crowd runs by itself;
+  // only the child's keys (or mouse) change its lane. Restart begins the level again.
+  'math-gates': defaults(['#btnPlay'], `${g}.state.screen === 'play'`, `[${g}.state.d,${g}.state.lane,${g}.state.count,${g}.state.t]`, hold('ArrowLeft'), '#btnPause', `${g}.state.screen === 'paused'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.attempt > 1 && ${g}.state.passed === 0 && ${g}.state.lane === 1`)
 };
 for (const slug of ['connect-four','tic-tac-toe']) scenarios[slug] = {
   start: [click('#localButton')], active: `document.getElementById('boardApp').dataset.mode === 'local' && document.getElementById('gameBoard').dataset.winner === '0' && document.getElementById('gameBoard').dataset.draw !== 'true'`,
@@ -304,7 +307,8 @@ const inputSnapshots = {
   'blob-battle': `${g}.info().player`, 'splat-strike': `[${g}.state.player.x,${g}.state.player.z]`,
   // Only the child's drag, keys, wheel or zoom buttons move Seek and Zoom's camera.
   'seek-zoom': `${g}.state.cam`,
-  'steady-hand': `${g}.state.dragged`
+  'steady-hand': `${g}.state.dragged`,
+  'math-gates': `${g}.state.lane`
 };
 for (const [slug, expr] of Object.entries(inputSnapshots)) scenarios[slug].inputSnapshot = expr;
 
@@ -348,7 +352,9 @@ const inputSeen = {
   // A spark sent home after a touch moves too; only a real drag adds to how far it was dragged.
   'steady-hand': `${g}.state.dragged > sgInput.before + 20`,
   // The belt moves the toys by itself; only a pasted copy puts a toy into the box.
-  'shortcut-factory': `${g}.state.boxes[0].items.length > sgInput.before`
+  'shortcut-factory': `${g}.state.boxes[0].items.length > sgInput.before`,
+  // The crowd runs forward by itself; only the child's keys or mouse move it to another lane.
+  'math-gates': `${g}.state.lane !== sgInput.before`
 };
 for (const [slug, expr] of Object.entries(inputSeen)) scenarios[slug].inputSeen = expr;
 
@@ -367,7 +373,8 @@ const heldKeys = {
   // Level 1-1 always starts with F: the key goes down once (the hero hops) and stays down
   // until the hop is seen, so a slow software-rendered frame cannot miss it.
   'keyboard-obby': 'KeyF',
-  'lucky-lake': 'Space', 'seek-zoom': 'ArrowRight'
+  'lucky-lake': 'Space', 'seek-zoom': 'ArrowRight',
+  'lucky-lake': 'Space', 'math-gates': 'ArrowLeft'
 };
 for (const [slug, key] of Object.entries(heldKeys)) scenarios[slug].heldKey = key;
 

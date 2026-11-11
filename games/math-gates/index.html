@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>بوابات الحساب</title>
+<link rel="icon" type="image/svg+xml" href="../../favicon.svg">
+<link rel="stylesheet" href="../../shared/game.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-mode="title">
+<!-- Icons: every button is a picture, so a child who cannot read yet can play. -->
+<svg class="defs" aria-hidden="true" focusable="false" width="0" height="0">
+  <defs><linearGradient id="g-rainbow" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff5a7a"/><stop offset=".35" stop-color="#ffd23f"/><stop offset=".65" stop-color="#5be38f"/><stop offset="1" stop-color="#4fb8ff"/></linearGradient></defs>
+  <symbol id="i-play" viewBox="0 0 64 64"><path d="M22 11 Q18 9 18 14 L18 50 Q18 55 22 53 L52 35 Q56 32 52 29 Z"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 64 64"><rect x="15" y="12" width="12" height="40" rx="5"/><rect x="37" y="12" width="12" height="40" rx="5"/></symbol>
+  <symbol id="i-again" viewBox="0 0 64 64"><path d="M50 30 A19 19 0 1 1 41 15" fill="none" stroke="currentColor" stroke-width="9" stroke-linecap="round"/><path d="M33 4 L52 13 L37 27 Z"/></symbol>
+  <symbol id="i-map" viewBox="0 0 64 64"><path d="M6 15 L22 8 L42 15 L58 8 L58 49 L42 56 L22 49 L6 56 Z"/><path d="M22 10 L22 47 M42 17 L42 54" stroke="#2a2140" stroke-width="4" opacity=".35"/><circle cx="32" cy="30" r="6" fill="#ff5d6c"/></symbol>
+  <symbol id="i-home" viewBox="0 0 64 64"><path d="M8 32 L32 10 L56 32 L49 32 L49 54 L37 54 L37 40 L27 40 L27 54 L15 54 L15 32 Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></symbol>
+  <symbol id="i-hat" viewBox="0 0 64 64"><path d="M32 4 L48 50 H16 Z" fill="#7a5cff" stroke="#2a2140" stroke-width="4" stroke-linejoin="round"/><path d="M24 24 H40 M20 38 H44" stroke="#ffd23f" stroke-width="5"/><circle cx="32" cy="7" r="6" fill="#ff4f9a" stroke="#2a2140" stroke-width="3"/><path d="M8 52 Q32 44 56 52 Q56 60 32 60 Q8 60 8 52 Z" fill="#ff8fc6" stroke="#2a2140" stroke-width="4"/></symbol>
+  <symbol id="i-star" viewBox="0 0 64 64"><path d="M32 5 L39 23.3 L58.6 24.4 L43.4 36.7 L48.5 55.6 L32 45 L15.5 55.6 L20.6 36.7 L5.4 24.4 L25 23.3 Z" stroke-linejoin="round"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 64 64"><path d="M20 28 L20 20 A12 12 0 0 1 44 20 L44 28" fill="none" stroke="currentColor" stroke-width="7"/><rect x="12" y="28" width="40" height="30" rx="7"/></symbol>
+  <symbol id="i-flag" viewBox="0 0 64 64"><path d="M14 6 V60" stroke="#2a2140" stroke-width="6" stroke-linecap="round"/><path d="M16 8 H54 L46 21 L54 34 H16 Z" fill="#ff5d6c" stroke="#2a2140" stroke-width="4" stroke-linejoin="round"/></symbol>
+  <symbol id="i-crowd" viewBox="0 0 64 64"><g stroke="#2a2140" stroke-width="3.5"><ellipse cx="18" cy="38" rx="12" ry="13" fill="#4fb8ff"/><ellipse cx="46" cy="38" rx="12" ry="13" fill="#ffd23f"/><ellipse cx="32" cy="30" rx="13" ry="14" fill="#ff6fae"/></g><circle cx="27" cy="27" r="3" fill="#2a2140"/><circle cx="37" cy="27" r="3" fill="#2a2140"/></symbol>
+  <symbol id="i-quiz" viewBox="0 0 64 64"><rect x="6" y="8" width="52" height="38" rx="14" fill="#fff" stroke="#2a2140" stroke-width="4"/><path d="M22 46 L18 58 L32 46" fill="#fff" stroke="#2a2140" stroke-width="4" stroke-linejoin="round"/><path d="M25 22 Q25 15 32 15 Q39 15 39 21 Q39 26 32 28 L32 32" fill="none" stroke="#7a3cff" stroke-width="5" stroke-linecap="round"/><circle cx="32" cy="39" r="3" fill="#7a3cff"/></symbol>
+  <symbol id="i-mouse" viewBox="0 0 64 64"><rect x="16" y="6" width="32" height="52" rx="16" fill="#fff" stroke="#2a2140" stroke-width="4"/><path d="M32 8 L32 26 M17 26 L47 26" stroke="#2a2140" stroke-width="3.5"/><rect x="18" y="8" width="13" height="17" rx="6" fill="#ffd23f"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 64 64"><path d="M20 4 H44 V34 H58 L32 60 L6 34 H20 Z" fill="#ffd23f" stroke="#2a2140" stroke-width="5" stroke-linejoin="round"/></symbol>
+</svg>
+
+<canvas id="scene" tabindex="0" aria-label="بوابات الحساب. السهمان إلى اليمين واليسار، أو A و D، أو الفأرة، لتغيير الطريق."></canvas>
+
+<!-- A 1280x720 layer laid over the middle of the 3D view (scaled by game.js). -->
+<div id="ui">
+  <section id="title" class="screen" aria-label="بوابات الحساب">
+    <h1 class="logo"><span class="l1">بوابات</span><span class="l2">الحساب</span></h1>
+    <div class="chips">
+      <div class="chip" aria-label="النجوم"><svg aria-hidden="true"><use href="#i-star"/></svg><b id="title-stars">0</b></div>
+      <div class="chip" aria-label="العملات"><i class="coin"></i><b id="title-coins">0</b></div>
+    </div>
+    <div class="howto card" aria-label="طريقة اللعب">
+      <div class="hrow"><span class="say">غيّر الطريق</span><span dir="ltr" class="keys"><span class="sg-key">←</span><span class="sg-key">→</span></span><span class="or">أو</span><span dir="ltr" class="keys"><span class="sg-key">A</span><span class="sg-key">D</span></span><span class="or">أو</span><svg class="mouse" aria-hidden="true"><use href="#i-mouse"/></svg></div>
+      <div class="hrow ex"><span class="say">اختر البوابة الأكبر!</span><span class="gate g3" dir="ltr">−3</span><span class="gate g2" dir="ltr">+10</span><span class="gate g1" dir="ltr">×2</span></div>
+    </div>
+    <div class="title-row">
+      <button type="button" id="btn-wardrobe" class="btn round side pink" aria-label="الخزانة"><svg aria-hidden="true"><use href="#i-hat"/></svg></button>
+      <button type="button" id="btnPlay" class="btn play ring" aria-label="العب"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
+      <button type="button" id="btn-map" class="btn round side orange" aria-label="المراحل"><svg aria-hidden="true"><use href="#i-map"/></svg></button>
+    </div>
+  </section>
+
+  <section id="map" class="screen" aria-label="المراحل" hidden>
+    <button type="button" id="map-home" class="btn round corner" aria-label="البداية"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
+    <button type="button" id="map-wardrobe" class="btn round corner2 pink" aria-label="الخزانة"><svg aria-hidden="true"><use href="#i-hat"/></svg></button>
+    <div class="chip map-stars" aria-label="النجوم"><svg aria-hidden="true"><use href="#i-star"/></svg><b id="map-stars">0</b></div>
+    <div id="worlds"></div>
+  </section>
+
+  <section id="wardrobe" class="screen" aria-label="الخزانة" hidden>
+    <button type="button" id="wardrobe-back" class="btn round corner" aria-label="رجوع"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
+    <div class="closet card">
+      <div class="chip bank" aria-label="العملات"><i class="coin"></i><b id="bank">0</b></div>
+      <div class="shelf" id="colors" role="group" aria-label="الألوان"></div>
+      <div class="shelf" id="hats" role="group" aria-label="القبعات"></div>
+    </div>
+  </section>
+
+  <div id="hud" hidden>
+    <button type="button" id="btnPause" class="btn round hud-pause" aria-label="استراحة" title="استراحة (P / Esc)"><svg aria-hidden="true"><use href="#i-pause"/></svg></button>
+    <div class="chip hud-level"><b id="hud-level" dir="ltr">1-1</b></div>
+    <div class="chip hud-coins" aria-label="العملات"><i class="coin"></i><b id="hud-coins">0</b></div>
+    <div class="trip" dir="ltr"><i class="fill" id="trip-fill"></i><span class="me" id="trip-me"><svg aria-hidden="true"><use href="#i-crowd"/></svg></span><span class="foe"><svg aria-hidden="true"><use href="#i-flag"/></svg><b id="hud-rival">0</b></span></div>
+    <div id="crowdNum" class="num" hidden><b>0</b></div>
+    <div id="rivalNum" class="num foe" hidden><b>0</b></div>
+    <svg id="pointer" class="pointer" aria-hidden="true" hidden><use href="#i-arrow"/></svg>
+    <div id="multChip" class="hud-mult" dir="ltr" hidden>×1</div>
+    <div id="floats" aria-hidden="true"></div>
+    <div id="popup" class="popup" role="status" hidden></div>
+    <div id="banner" class="banner" hidden></div>
+    <div id="coach" class="coach" hidden><span class="say">اختر البوابة الأكبر!</span><span dir="ltr" class="keys"><span class="sg-key">←</span><span class="sg-key">→</span></span><svg class="mouse" aria-hidden="true"><use href="#i-mouse"/></svg></div>
+  </div>
+
+  <section id="pause-screen" class="screen dim" aria-label="استراحة" hidden>
+    <div class="card pause-card">
+      <button type="button" id="btnResume" class="btn play" aria-label="تابع اللعب"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
+      <div class="row">
+        <button type="button" id="btnQuit" class="btn round big" aria-label="المراحل"><svg aria-hidden="true"><use href="#i-map"/></svg></button>
+        <button type="button" id="btnRestart" class="btn round big" aria-label="ابدأ من جديد"><svg aria-hidden="true"><use href="#i-again"/></svg><span class="sg-key">R</span></button>
+      </div>
+      <p class="keys"><span dir="ltr"><span class="sg-key">P</span></span> <span dir="ltr"><span class="sg-key">Esc</span></span></p>
+    </div>
+  </section>
+
+  <section id="result" class="screen" aria-label="النتيجة" hidden>
+    <div class="card result">
+      <h2 id="res-title">فزت!</h2>
+      <div class="stars3" id="res-stars">
+        <div class="slot"><svg class="star" aria-hidden="true"><use href="#i-star"/></svg><span class="cap"><svg aria-hidden="true"><use href="#i-flag"/></svg>فوز</span></div>
+        <div class="slot"><svg class="star" aria-hidden="true"><use href="#i-star"/></svg><span class="cap"><svg aria-hidden="true"><use href="#i-crowd"/></svg>جمهور كبير</span></div>
+        <div class="slot"><svg class="star" aria-hidden="true"><use href="#i-star"/></svg><span class="cap"><svg aria-hidden="true"><use href="#i-quiz"/></svg>كل الأسئلة <b id="res-quiz" dir="ltr">0/0</b></span></div>
+      </div>
+      <div class="vs" dir="ltr"><span class="mine"><svg aria-hidden="true"><use href="#i-crowd"/></svg><b id="res-count">0</b></span><span class="cmp" id="res-cmp">&gt;</span><span class="theirs"><b id="res-rival">0</b><svg aria-hidden="true"><use href="#i-crowd"/></svg></span></div>
+      <div class="facts"><span class="fact coins"><i class="coin"></i><b id="res-coins">+0</b></span><span class="fact mult" id="res-mult" dir="ltr">×1</span></div>
+      <div class="newbest" id="res-best" hidden><svg aria-hidden="true"><use href="#i-star"/></svg><span>رقم جديد!</span></div>
+      <button type="button" class="btn gift" id="res-gift" aria-label="شيء جديد في الخزانة" hidden></button>
+      <div class="row">
+        <button type="button" id="res-map" class="btn round big" aria-label="المراحل"><svg aria-hidden="true"><use href="#i-map"/></svg></button>
+        <button type="button" id="res-next" class="btn play" aria-label="المرحلة التالية"><svg aria-hidden="true"><use href="#i-play"/></svg><span class="sg-key">Enter</span></button>
+        <button type="button" id="res-again" class="btn round big" aria-label="مرة أخرى"><svg aria-hidden="true"><use href="#i-again"/></svg><span class="sg-key">R</span></button>
+      </div>
+    </div>
+  </section>
+
+  <section id="error-screen" class="screen dim" hidden>
+    <div class="card"><h2>تعذّر تشغيل اللعبة</h2><p>الرسوم ثلاثية الأبعاد غير متاحة الآن.<br>أعد فتح اللعبة أو اختر لعبة أخرى.</p></div>
+  </section>
+  <div id="context-notice" class="notice" role="status" hidden>توقفت الرسوم لحظة… انتظر قليلًا.</div>
+</div>
+<div id="live" class="sr" aria-live="polite"></div>
+
+<script src="../../shared/kit.js"></script>
+<script src="../../shared/juice.js"></script>
+<script src="../../lib/three/three.min.js"></script>
+<script src="engine.js"></script>
+<script src="art.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

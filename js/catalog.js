@@ -215,6 +215,10 @@ window.GAMES = [
       { keys: ['Enter'], action: 'اشحن الصندوق' },
       { keys: ['Ctrl', 'S'], action: 'احفظ واختم عمل اليوم' },
       { keys: ['P', 'Esc'], action: 'استراحة' }
-    ] }
+    ] },
+  { slug: 'math-gates', roundMinutes: [1, 2], inputStyle: 'mixed', title: 'بوابات الحساب', en: 'Math Gates crowd runner math gates three lanes add subtract multiply divide numbers', tags: 'حساب رياضيات جمع طرح ضرب قسمة أرقام بوابات جري جمهور أسئلة', cats: ['running', 'puzzle'], players: '1', color: '#ff6fae',
+    blurb: 'اجرِ مع فريقك في ثلاثة طرق، واختر البوابة الأكبر: +10 أم ×2؟ أجب عن الأسئلة، وتغلّب على الفريق المنافس عند خط النهاية!',
+    tip: 'فكّر قبل أن تصل: ×2 أفضل حين يكون فريقك كبيرًا، و+10 أفضل حين يكون صغيرًا. الإجابة الصحيحة تعطيك لاعبين أكثر. اضغط <b>P</b> أو <b>Esc</b> للاستراحة.',
+    controls: [{ keys: ['←', '→'], action: 'غيّر الطريق' }, { keys: ['A', 'D'], action: 'غيّر الطريق' }, { keys: ['انقر', 'اسحب'], action: 'اختر الطريق بالفأرة' }, { keys: ['P', 'Esc'], action: 'استراحة' }, { keys: ['R'], action: 'العب المرحلة مرة أخرى' }] }
 ];
 
