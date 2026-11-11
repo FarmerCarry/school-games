@@ -259,7 +259,20 @@ export const scenarios = {
     await page.mouse.down();
     for (const p of pts.slice(1)) await page.mouse.move(p.x, p.y, { steps: 4 });
     await page.mouse.up();
-  }, '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.atStart`)
+  }, '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.atStart`),
+  // Shortcut Factory: a first visit starts level 1-1 behind its Ctrl+C / Ctrl+V demo card
+  // (Enter closes it, or it closes by itself). The belt carries the duck by itself; only the
+  // child's click on the duck, then real Ctrl+C and Ctrl+V, put a duck into the box.
+  // Restart begins the level again: an empty box and an empty copy machine.
+  'shortcut-factory': defaults(['#btnPlay', async page => { await page.waitForTimeout(500); await page.keyboard.press('Enter'); }],
+    `${g}.state.screen === 'play' && ${g}.state.level === 0`, `[${g}.state.time,${g}.state.offset,${g}.state.boxes,${g}.state.clip,${g}.state.sel]`, async page => {
+      const toy = await page.evaluate(() => window.__game.state.belts[0].items.find(t => t.visible));
+      const point = await page.evaluate(id => window.__game.toyPoint(id), toy.id);
+      await page.mouse.click(point.x, point.y);
+      await page.keyboard.press('Control+KeyC');
+      await page.keyboard.press('Control+KeyV');
+    }, '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.boxes[0].items.length === 0 && !${g}.state.clip`,
+    { settle: `!${g}.state.demo`, settleTimeout: 15000 })
 };
 for (const slug of ['connect-four','tic-tac-toe']) scenarios[slug] = {
   start: [click('#localButton')], active: `document.getElementById('boardApp').dataset.mode === 'local' && document.getElementById('gameBoard').dataset.winner === '0' && document.getElementById('gameBoard').dataset.draw !== 'true'`,
@@ -283,6 +296,7 @@ const inputSnapshots = {
   'lucky-lake': `${g}.state.p1.casts`, 'typing-test': `${g}.state.keys`, 'word-garden': `${g}.state.keys`,
   'bubble-bop': `[${g}.state.hits,${g}.state.travel]`,
   'key-runner': `${g}.state.hits`, 'keyboard-obby': `${g}.state.hops`,
+  'key-runner': `${g}.state.hits`, 'shortcut-factory': `${g}.state.boxes[0].items.length`,
   'block-world': `${g}.player.x`, 'candy-rope': `${g}.world().ropes.filter(r => r.alive).length`,
   'maze-dash': `[${g}.state.px,${g}.state.py,${g}.state.dots]`,
   // Paint Grab's blob keeps moving; only the arrow keys or pointer set its steering target.
@@ -332,7 +346,9 @@ const inputSeen = {
   // glowing key shows makes the hero hop.
   'keyboard-obby': `${g}.state.hops > sgInput.before`,
   // A spark sent home after a touch moves too; only a real drag adds to how far it was dragged.
-  'steady-hand': `${g}.state.dragged > sgInput.before + 20`
+  'steady-hand': `${g}.state.dragged > sgInput.before + 20`,
+  // The belt moves the toys by itself; only a pasted copy puts a toy into the box.
+  'shortcut-factory': `${g}.state.boxes[0].items.length > sgInput.before`
 };
 for (const [slug, expr] of Object.entries(inputSeen)) scenarios[slug].inputSeen = expr;
 
