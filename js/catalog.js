@@ -181,6 +181,24 @@ window.GAMES = [
   { slug: 'egg-rush', roundMinutes: [1, 4], inputStyle: 'keyboard', title: 'سباق البيض', en: 'Egg Rush sneak freeze eggs hatch chicks farm', tags: 'بيض فقس كتاكيت مزرعة دجاج تمثال', cats: ['two-player', 'arcade'], players: '1-2', color: '#ffd23f',
     blurb: 'تسلّل إلى العشّ وخذ البيضة إلى بيتك لتفقس! وإذا فتح الحارس عينه فقف مكانك كالتمثال.',
     tip: 'عندما تظهر <b>؟</b> فوق الحارس قف حتى ينام. القش والشجيرات تخفيك.',
-    controls: [{ keys: ['←', '↑', '→', '↓'], action: 'امشِ (واللاعب 2 في سباق اثنين)' }, { keys: ['W', 'A', 'S', 'D'], action: 'امشِ (واللاعب 1 في سباق اثنين)' }, { keys: ['الفأرة'], action: 'اضغط مطوّلًا لتمشي نحو المؤشر' }, { keys: ['P', 'Esc'], action: 'استراحة' }] }
+    controls: [{ keys: ['←', '↑', '→', '↓'], action: 'امشِ (واللاعب 2 في سباق اثنين)' }, { keys: ['W', 'A', 'S', 'D'], action: 'امشِ (واللاعب 1 في سباق اثنين)' }, { keys: ['الفأرة'], action: 'اضغط مطوّلًا لتمشي نحو المؤشر' }, { keys: ['P', 'Esc'], action: 'استراحة' }] },
+  { slug: 'shortcut-factory', roundMinutes: [2, 5], inputStyle: 'mixed', title: 'مصنع الاختصارات', en: 'Shortcut Factory keyboard shortcuts copy paste cut undo select all ctrl', tags: 'اختصارات نسخ لصق قص تراجع حذف تحديد الكل كنترول لوحة المفاتيح كيبورد كمبيوتر مصنع ألعاب روبوت', cats: ['puzzle', 'challenge'], players: '1', color: '#ffb020',
+    blurb: 'مصنع ألعاب مجنون! انسخ البطات والصقها، قُصّ وانقل، أرسل المكسور للتدوير، وتراجع عن خراب الروبوت المشاغب بُرغي!',
+    tip: 'اضغط <b>Ctrl</b> بإصبعك الصغير ثم الحرف: <b>C</b> نسخ، <b>V</b> لصق، <b>X</b> قص، <b>Z</b> تراجع. المفاتيح المطلوبة تضيء على لوحة المفاتيح أسفل الشاشة.',
+    controls: [
+      { keys: ['انقر'], action: 'اختر لعبة أو صندوقًا' },
+      { keys: ['Shift', 'انقر'], action: 'اختر أكثر من لعبة' },
+      { keys: ['Ctrl', 'C'], action: 'نسخ' },
+      { keys: ['Ctrl', 'V'], action: 'لصق في الصندوق المختار' },
+      { keys: ['Ctrl', 'X'], action: 'قص' },
+      { keys: ['Delete'], action: 'أرسل اللعبة المكسورة للتدوير' },
+      { keys: ['Ctrl', 'Z'], action: 'تراجع' },
+      { keys: ['Ctrl', 'Y'], action: 'إعادة' },
+      { keys: ['Ctrl', 'A'], action: 'تحديد الكل' },
+      { keys: ['Tab', '←', '→'], action: 'اختر اللعبة التالية' },
+      { keys: ['Enter'], action: 'اشحن الصندوق' },
+      { keys: ['Ctrl', 'S'], action: 'احفظ واختم عمل اليوم' },
+      { keys: ['P', 'Esc'], action: 'استراحة' }
+    ] }
 ];
 

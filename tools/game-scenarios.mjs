@@ -216,7 +216,20 @@ export const scenarios = {
   }, '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.keys === 0 && ${g}.state.done === 0`),
   // The first yard opens behind a picture card; a held arrow closes it and walks the kid.
   // Restart puts the kid back on the doorstep with no egg hatched.
-  'egg-rush': defaults(['#btnPlay'], `${g}.screen==='play'`, `[${g}.px,${g}.py,${g}.time,${g}.hatched,${g}.guards]`, hold('ArrowRight'), '#btnPause', `${g}.screen==='pause'`, '#btnRestart', `${g}.screen==='play' && ${g}.atStart && ${g}.hatched===0 && !${g}.intro`)
+  'egg-rush': defaults(['#btnPlay'], `${g}.screen==='play'`, `[${g}.px,${g}.py,${g}.time,${g}.hatched,${g}.guards]`, hold('ArrowRight'), '#btnPause', `${g}.screen==='pause'`, '#btnRestart', `${g}.screen==='play' && ${g}.atStart && ${g}.hatched===0 && !${g}.intro`),
+  // Shortcut Factory: a first visit starts level 1-1 behind its Ctrl+C / Ctrl+V demo card
+  // (Enter closes it, or it closes by itself). The belt carries the duck by itself; only the
+  // child's click on the duck, then real Ctrl+C and Ctrl+V, put a duck into the box.
+  // Restart begins the level again: an empty box and an empty copy machine.
+  'shortcut-factory': defaults(['#btnPlay', async page => { await page.waitForTimeout(500); await page.keyboard.press('Enter'); }],
+    `${g}.state.screen === 'play' && ${g}.state.level === 0`, `[${g}.state.time,${g}.state.offset,${g}.state.boxes,${g}.state.clip,${g}.state.sel]`, async page => {
+      const toy = await page.evaluate(() => window.__game.state.belts[0].items.find(t => t.visible));
+      const point = await page.evaluate(id => window.__game.toyPoint(id), toy.id);
+      await page.mouse.click(point.x, point.y);
+      await page.keyboard.press('Control+KeyC');
+      await page.keyboard.press('Control+KeyV');
+    }, '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.boxes[0].items.length === 0 && !${g}.state.clip`,
+    { settle: `!${g}.state.demo`, settleTimeout: 15000 })
 };
 for (const slug of ['connect-four','tic-tac-toe']) scenarios[slug] = {
   start: [click('#localButton')], active: `document.getElementById('boardApp').dataset.mode === 'local' && document.getElementById('gameBoard').dataset.winner === '0' && document.getElementById('gameBoard').dataset.draw !== 'true'`,
@@ -239,7 +252,7 @@ const inputSnapshots = {
   'pool-party': `${g}.aim`, 'critter-mart': `${g}.state().player`, 'cake-guards': `${g}.state.towers`,
   'lucky-lake': `${g}.state.p1.casts`, 'typing-test': `${g}.state.keys`,
   'bubble-bop': `[${g}.state.hits,${g}.state.travel]`,
-  'key-runner': `${g}.state.hits`,
+  'key-runner': `${g}.state.hits`, 'shortcut-factory': `${g}.state.boxes[0].items.length`,
   'block-world': `${g}.player.x`, 'candy-rope': `${g}.world().ropes.filter(r => r.alive).length`,
   'maze-dash': `[${g}.state.px,${g}.state.py,${g}.state.dots]`,
   // Paint Grab's blob keeps moving; only the arrow keys or pointer set its steering target.
@@ -279,7 +292,9 @@ const inputSeen = {
   'bubble-bop': `${g}.state.hits > sgInput.before[0] && ${g}.state.travel > sgInput.before[1] + 40`,
   // The runner runs to the first edge by itself and waits there; only the key its next
   // stone shows counts as a hit (any other key is a miss, nothing at all is nothing).
-  'key-runner': `${g}.state.hits > sgInput.before`
+  'key-runner': `${g}.state.hits > sgInput.before`,
+  // The belt moves the toys by itself; only a pasted copy puts a toy into the box.
+  'shortcut-factory': `${g}.state.boxes[0].items.length > sgInput.before`
 };
 for (const [slug, expr] of Object.entries(inputSeen)) scenarios[slug].inputSeen = expr;
 
