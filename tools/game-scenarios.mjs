@@ -234,7 +234,19 @@ export const scenarios = {
   }, '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.keys === 0 && ${g}.state.done === 0 && ${g}.state.item === 0`),
   // The first yard opens behind a picture card; a held arrow closes it and walks the kid.
   // Restart puts the kid back on the doorstep with no egg hatched.
-  'egg-rush': defaults(['#btnPlay'], `${g}.screen==='play'`, `[${g}.px,${g}.py,${g}.time,${g}.hatched,${g}.guards]`, hold('ArrowRight'), '#btnPause', `${g}.screen==='pause'`, '#btnRestart', `${g}.screen==='play' && ${g}.atStart && ${g}.hatched===0 && !${g}.intro`)
+  'egg-rush': defaults(['#btnPlay'], `${g}.screen==='play'`, `[${g}.px,${g}.py,${g}.time,${g}.hatched,${g}.guards]`, hold('ArrowRight'), '#btnPause', `${g}.screen==='pause'`, '#btnRestart', `${g}.screen==='play' && ${g}.atStart && ${g}.hatched===0 && !${g}.intro`),
+  // Seek and Zoom: a first visit opens the park's first round, where the zoom is still
+  // locked and the scene is moved by dragging it (or by holding an arrow key). Only the
+  // child's own drag, arrows, wheel or zoom buttons move the camera; Restart starts the
+  // round again with nothing found and no pan or zoom yet.
+  'seek-zoom': defaults(['#btnPlay'], `${g}.state.screen === 'play'`, `[${g}.state.time,${g}.state.cam,${g}.state.found,${g}.state.movers]`, async page => {
+    const from = await page.evaluate(() => window.__game.point(760, 380));
+    const to = await page.evaluate(() => window.__game.point(500, 300));
+    await page.mouse.move(from.x, from.y);
+    await page.mouse.down();
+    await page.mouse.move(to.x, to.y, { steps: 8 });
+    await page.mouse.up();
+  }, '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.found === 0 && ${g}.state.moves === 0`)
 };
 for (const slug of ['connect-four','tic-tac-toe']) scenarios[slug] = {
   start: [click('#localButton')], active: `document.getElementById('boardApp').dataset.mode === 'local' && document.getElementById('gameBoard').dataset.winner === '0' && document.getElementById('gameBoard').dataset.draw !== 'true'`,
@@ -262,7 +274,9 @@ const inputSnapshots = {
   'maze-dash': `[${g}.state.px,${g}.state.py,${g}.state.dots]`,
   // Paint Grab's blob keeps moving; only the arrow keys or pointer set its steering target.
   'paint-grab': `${g}.player.target`, 'snake-arena': `SA.game.kb`, 'egg-rush': `${g}.px`,
-  'blob-battle': `${g}.info().player`, 'splat-strike': `[${g}.state.player.x,${g}.state.player.z]`
+  'blob-battle': `${g}.info().player`, 'splat-strike': `[${g}.state.player.x,${g}.state.player.z]`,
+  // Only the child's drag, keys, wheel or zoom buttons move Seek and Zoom's camera.
+  'seek-zoom': `${g}.state.cam`
 };
 for (const [slug, expr] of Object.entries(inputSnapshots)) scenarios[slug].inputSnapshot = expr;
 
@@ -320,7 +334,8 @@ const heldKeys = {
   'lucky-lake': 'Space',
   // Level 1-1 always starts with F: the key goes down once (the hero hops) and stays down
   // until the hop is seen, so a slow software-rendered frame cannot miss it.
-  'keyboard-obby': 'KeyF'
+  'keyboard-obby': 'KeyF',
+  'lucky-lake': 'Space', 'seek-zoom': 'ArrowRight'
 };
 for (const [slug, key] of Object.entries(heldKeys)) scenarios[slug].heldKey = key;
 

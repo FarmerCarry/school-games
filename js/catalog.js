@@ -189,6 +189,10 @@ window.GAMES = [
   { slug: 'egg-rush', roundMinutes: [1, 4], inputStyle: 'keyboard', title: 'سباق البيض', en: 'Egg Rush sneak freeze eggs hatch chicks farm', tags: 'بيض فقس كتاكيت مزرعة دجاج تمثال', cats: ['two-player', 'arcade'], players: '1-2', color: '#ffd23f',
     blurb: 'تسلّل إلى العشّ وخذ البيضة إلى بيتك لتفقس! وإذا فتح الحارس عينه فقف مكانك كالتمثال.',
     tip: 'عندما تظهر <b>؟</b> فوق الحارس قف حتى ينام. القش والشجيرات تخفيك.',
-    controls: [{ keys: ['←', '↑', '→', '↓'], action: 'امشِ (واللاعب 2 في سباق اثنين)' }, { keys: ['W', 'A', 'S', 'D'], action: 'امشِ (واللاعب 1 في سباق اثنين)' }, { keys: ['الفأرة'], action: 'اضغط مطوّلًا لتمشي نحو المؤشر' }, { keys: ['P', 'Esc'], action: 'استراحة' }] }
+    controls: [{ keys: ['←', '↑', '→', '↓'], action: 'امشِ (واللاعب 2 في سباق اثنين)' }, { keys: ['W', 'A', 'S', 'D'], action: 'امشِ (واللاعب 1 في سباق اثنين)' }, { keys: ['الفأرة'], action: 'اضغط مطوّلًا لتمشي نحو المؤشر' }, { keys: ['P', 'Esc'], action: 'استراحة' }] },
+  { slug: 'seek-zoom', roundMinutes: [1, 4], inputStyle: 'pointer', title: 'ابحث وكبّر', en: 'Seek and Zoom hidden objects find zoom mouse wheel drag look', tags: 'ابحث جد أشياء مخبأة مخفية بحث تكبير عدسة عجلة الفأرة ماوس سحب حديقة سوق شاطئ ألعاب فضاء ملصقات', cats: ['puzzle'], players: '1', color: '#ff9f1c',
+    blurb: 'أدر عجلة الفأرة لتكبّر، واسحب المكان، وجِد الأشياء المخبّأة: طائرة ورقية حمراء، وثلاث بطّات، وقطًّا نائمًا!',
+    tip: 'أدر العجلة حيث تشير الفأرة لتكبّر هناك، واسحب لتتحرّك. إذا علقت انتظر قليلًا فتلمع العدسة وتدلّك. اضغط <b>P</b> أو <b>Esc</b> للاستراحة.',
+    controls: [{ keys: ['الفأرة'], action: 'أدر العجلة لتكبّر وتصغّر' }, { keys: ['اسحب'], action: 'حرّك المكان' }, { keys: ['انقر'], action: 'اختر الشيء الذي وجدته' }, { keys: ['+', '−'], action: 'كبّر وصغّر' }, { keys: ['←', '↑', '→', '↓'], action: 'تحرّك في المكان' }, { keys: ['H'], action: 'العدسة تدلّك' }, { keys: ['P', 'Esc'], action: 'استراحة' }] }
 ];
 
