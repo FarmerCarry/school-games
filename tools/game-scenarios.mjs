@@ -216,7 +216,20 @@ export const scenarios = {
   }, '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.keys === 0 && ${g}.state.done === 0`),
   // The first yard opens behind a picture card; a held arrow closes it and walks the kid.
   // Restart puts the kid back on the doorstep with no egg hatched.
-  'egg-rush': defaults(['#btnPlay'], `${g}.screen==='play'`, `[${g}.px,${g}.py,${g}.time,${g}.hatched,${g}.guards]`, hold('ArrowRight'), '#btnPause', `${g}.screen==='pause'`, '#btnRestart', `${g}.screen==='play' && ${g}.atStart && ${g}.hatched===0 && !${g}.intro`)
+  'egg-rush': defaults(['#btnPlay'], `${g}.screen==='play'`, `[${g}.px,${g}.py,${g}.time,${g}.hatched,${g}.guards]`, hold('ArrowRight'), '#btnPause', `${g}.screen==='pause'`, '#btnRestart', `${g}.screen==='play' && ${g}.atStart && ${g}.hatched===0 && !${g}.intro`),
+  // Steady Hand: a first visit goes straight to the first wire. The spark moves only when
+  // the child presses on it and drags it along the track with the real mouse; Restart puts
+  // it back on its start with no touch and nothing dragged.
+  'steady-hand': defaults(['#btnPlay'], `${g}.state.screen === 'play' && ${g}.state.id === '1-1'`, `[${g}.state.time,${g}.state.spark,${g}.state.touches,${g}.state.dragged]`, async page => {
+    const pts = await page.evaluate(() => {
+      const game = window.__game, from = game.state.best;
+      return [0, 30, 60, 90, 120, 150].map(d => { const p = game.at(from + d); return game.point(p.x, p.y); });
+    });
+    await page.mouse.move(pts[0].x, pts[0].y);
+    await page.mouse.down();
+    for (const p of pts.slice(1)) await page.mouse.move(p.x, p.y, { steps: 4 });
+    await page.mouse.up();
+  }, '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.atStart`)
 };
 for (const slug of ['connect-four','tic-tac-toe']) scenarios[slug] = {
   start: [click('#localButton')], active: `document.getElementById('boardApp').dataset.mode === 'local' && document.getElementById('gameBoard').dataset.winner === '0' && document.getElementById('gameBoard').dataset.draw !== 'true'`,
@@ -244,7 +257,8 @@ const inputSnapshots = {
   'maze-dash': `[${g}.state.px,${g}.state.py,${g}.state.dots]`,
   // Paint Grab's blob keeps moving; only the arrow keys or pointer set its steering target.
   'paint-grab': `${g}.player.target`, 'snake-arena': `SA.game.kb`, 'egg-rush': `${g}.px`,
-  'blob-battle': `${g}.info().player`, 'splat-strike': `[${g}.state.player.x,${g}.state.player.z]`
+  'blob-battle': `${g}.info().player`, 'splat-strike': `[${g}.state.player.x,${g}.state.player.z]`,
+  'steady-hand': `${g}.state.dragged`
 };
 for (const [slug, expr] of Object.entries(inputSnapshots)) scenarios[slug].inputSnapshot = expr;
 
@@ -279,7 +293,9 @@ const inputSeen = {
   'bubble-bop': `${g}.state.hits > sgInput.before[0] && ${g}.state.travel > sgInput.before[1] + 40`,
   // The runner runs to the first edge by itself and waits there; only the key its next
   // stone shows counts as a hit (any other key is a miss, nothing at all is nothing).
-  'key-runner': `${g}.state.hits > sgInput.before`
+  'key-runner': `${g}.state.hits > sgInput.before`,
+  // A spark sent home after a touch moves too; only a real drag adds to how far it was dragged.
+  'steady-hand': `${g}.state.dragged > sgInput.before + 20`
 };
 for (const [slug, expr] of Object.entries(inputSeen)) scenarios[slug].inputSeen = expr;
 

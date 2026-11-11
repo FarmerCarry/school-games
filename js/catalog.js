@@ -181,6 +181,10 @@ window.GAMES = [
   { slug: 'egg-rush', roundMinutes: [1, 4], inputStyle: 'keyboard', title: 'سباق البيض', en: 'Egg Rush sneak freeze eggs hatch chicks farm', tags: 'بيض فقس كتاكيت مزرعة دجاج تمثال', cats: ['two-player', 'arcade'], players: '1-2', color: '#ffd23f',
     blurb: 'تسلّل إلى العشّ وخذ البيضة إلى بيتك لتفقس! وإذا فتح الحارس عينه فقف مكانك كالتمثال.',
     tip: 'عندما تظهر <b>؟</b> فوق الحارس قف حتى ينام. القش والشجيرات تخفيك.',
-    controls: [{ keys: ['←', '↑', '→', '↓'], action: 'امشِ (واللاعب 2 في سباق اثنين)' }, { keys: ['W', 'A', 'S', 'D'], action: 'امشِ (واللاعب 1 في سباق اثنين)' }, { keys: ['الفأرة'], action: 'اضغط مطوّلًا لتمشي نحو المؤشر' }, { keys: ['P', 'Esc'], action: 'استراحة' }] }
+    controls: [{ keys: ['←', '↑', '→', '↓'], action: 'امشِ (واللاعب 2 في سباق اثنين)' }, { keys: ['W', 'A', 'S', 'D'], action: 'امشِ (واللاعب 1 في سباق اثنين)' }, { keys: ['الفأرة'], action: 'اضغط مطوّلًا لتمشي نحو المؤشر' }, { keys: ['P', 'Esc'], action: 'استراحة' }] },
+  { slug: 'steady-hand', roundMinutes: [1, 3], inputStyle: 'pointer', title: 'سلك الشرارة', en: 'Steady Hand spark wire maze mouse control precision buzz', tags: 'سلك شرارة كهرباء برق متاهة فأرة ماوس سحب يد ثابتة تركيز مصباح', cats: ['challenge', 'arcade'], players: '1', color: '#3df0ff',
+    blurb: 'خذ الشرارة الصغيرة في السلك المضيء إلى المصباح ولا تلمس الحافة، بززز! ثلاثون مرحلة فيها مراوح وأبواب وجدران تتنفس.',
+    tip: 'اضغط على الشرارة مطوّلًا واسحبها ببطء في وسط السلك. إذا تركت الزر بقيت الشرارة مكانها بأمان، والفوانيس تحفظ مكانك.',
+    controls: [{ keys: ['الفأرة'], action: 'ضع المؤشر على الشرارة' }, { keys: ['اضغط مطولًا', 'اسحب'], action: 'خذ الشرارة في السلك' }, { keys: ['انقر', 'مسافة'], action: 'افتح الباب' }, { keys: ['P', 'Esc'], action: 'استراحة' }, { keys: ['R'], action: 'ابدأ المرحلة من جديد' }] }
 ];
 
