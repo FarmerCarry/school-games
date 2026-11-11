@@ -299,7 +299,7 @@ const inputSnapshots = {
   'lucky-lake': `${g}.state.p1.casts`, 'typing-test': `${g}.state.keys`, 'word-garden': `${g}.state.keys`,
   'bubble-bop': `[${g}.state.hits,${g}.state.travel]`,
   'key-runner': `${g}.state.hits`, 'keyboard-obby': `${g}.state.hops`,
-  'key-runner': `${g}.state.hits`, 'shortcut-factory': `${g}.state.boxes[0].items.length`,
+  'shortcut-factory': `${g}.state.boxes[0].items.length`,
   'block-world': `${g}.player.x`, 'candy-rope': `${g}.world().ropes.filter(r => r.alive).length`,
   'maze-dash': `[${g}.state.px,${g}.state.py,${g}.state.dots]`,
   // Paint Grab's blob keeps moving; only the arrow keys or pointer set its steering target.
@@ -369,12 +369,10 @@ const heldKeys = {
   'fire-and-ice': 'ArrowRight', 'tank-splat': 'KeyD', 'hoop-heads': 'ArrowRight', 'critter-mart': 'ArrowRight',
   'block-world': 'ArrowRight', 'troll-level': 'ArrowRight', 'chaos-island': 'ArrowRight', 'splat-strike': 'KeyW',
   'paint-grab': 'ArrowRight', 'snake-arena': 'ArrowRight', 'egg-rush': 'ArrowRight',
-  'lucky-lake': 'Space',
+  'lucky-lake': 'Space', 'seek-zoom': 'ArrowRight', 'math-gates': 'ArrowLeft',
   // Level 1-1 always starts with F: the key goes down once (the hero hops) and stays down
   // until the hop is seen, so a slow software-rendered frame cannot miss it.
-  'keyboard-obby': 'KeyF',
-  'lucky-lake': 'Space', 'seek-zoom': 'ArrowRight',
-  'lucky-lake': 'Space', 'math-gates': 'ArrowLeft'
+  'keyboard-obby': 'KeyF'
 };
 for (const [slug, key] of Object.entries(heldKeys)) scenarios[slug].heldKey = key;
 

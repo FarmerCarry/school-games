@@ -19,13 +19,19 @@ play on each PC), and none of them plays background music.
 | Game | English name | Players | Type |
 |---|---|---|---|
 | فقاعات بوب | Bubble Bop (first game for new mouse users) | 1 | نقطة البداية، أركيد |
+| ابحث وكبّر | Seek & Zoom (hidden objects: zoom with the mouse wheel, drag, click) | 1 | ألغاز |
+| سلك الشرارة | Steady Hand (guide a spark along wires with the mouse) | 1 | تحديات، أركيد |
 | أربعة على التوالي | Connect 4 | 1-2 | ألغاز، لاعبان على نفس الجهاز |
 | إكس أو | Tic-tac-toe | 1-2 | ألغاز، لاعبان على نفس الجهاز |
 | أصابع البرق | Lightning Fingers (typing game with lightning clouds and a speed test, Arabic + English) | 1 | تحديات، أركيد |
 | عدّاء المفاتيح | Key Runner (find the keys on the school keyboard) | 1-2 | تحديات، لاعبان |
+| مغامرة الكيبورد | Keyboard Obby (hop across a giant 3D school keyboard) | 1 | تحديات، أركيد |
+| حديقة الكلمات | Word Garden (type the missing letter, Arabic + English) | 1 | ألغاز، تحديات |
+| مصنع الاختصارات | Shortcut Factory (Ctrl+C, V, X, Z and other shortcuts) | 1 | ألغاز، تحديات |
 | ضربة الطلاء | Splat Strike (3D paint-blaster arena vs bots) | 1 | تصويب، تحدي الروبوتات |
 | عدّاء السكة | Rail Rush | 1 | جري |
 | الديناصور ثلاثي الأبعاد | Dino 3D (voxel dinosaur journey) | 1 | جري، أركيد |
+| بوابات الحساب | Math Gates (three-lane crowd runner for practising math) | 1 | جري، ألغاز |
 | منحدر النيون | Neon Slope | 1 | جري، أركيد |
 | نفق السرعة | Tunnel Blitz | 1 | جري، أركيد |
 | قفزة الإيقاع | Beat Dash | 1 | جري، أركيد |
@@ -152,6 +158,54 @@ animal from a snail to a rocket. «اختبار السرعة» is a 30 s or 60 s
 accuracy formulas, a personal best and a history chart. For a class race, click **تحدٍّ للصف** →
 «للمعلم: رمز جديد», pick a test and write the 4-digit code on the board; every student who types
 that code gets exactly the same words.
+
+**مغامرة الكيبورد (Keyboard Obby)** is a 3D obby on a giant copy of the school's Dell Arabic
+keyboard, floating over a jelly sea. Press the glowing key and Zarroor (زرّور), a little keycap with
+feet, hops onto it (keys are matched by position, so either input language works); a wrong key only
+makes him wobble. Crumbling and sinking keys, bumper bars and slowly rising jelly add pressure, but a
+fall just bounces him back to the last checkpoint, and after three falls in one place the hazards
+ease off. Five worlds (home row, top row, bottom row, digits, whole keyboard with words) and 29
+levels in «عربي» or «English»; a small keyboard at the bottom always lights the next key. Coins
+buy colours and hats.
+
+**حديقة الكلمات (Word Garden)** is a spelling game: a picture and its word with a glowing gap; type
+the missing letter and a flower grows in the garden. The school keyboard is always on screen and the
+right key lights up after a short wait (at once after two wrong tries). Five worlds per language
+(«عربي» or «English») go from the first or last letter to middle letters, two letters, whole words
+and two-word phrases; for the youngest tiers hamza forms, ة/ه and ى/ي count as the same letter, and
+the B key's «لا» counts. Seeds buy plants and decorations for the garden screen.
+
+**مصنع الاختصارات (Shortcut Factory)** teaches the shortcuts children use at school. Toys ride
+conveyor belts and order cards ask for them: pick toys with a click, Shift+click, Tab, the arrows or
+Ctrl+A, then Ctrl+C / Ctrl+V on the copy machine, Ctrl+X to move, Delete to recycle, Ctrl+Z / Ctrl+Y
+to undo and redo (also the mess of «بُرغي», a cheeky gremlin), Enter to ship a box and Ctrl+S to
+stamp the day. Each new shortcut gets a short demo with big keycaps; five worlds of six levels end
+with timed rushes. Shortcuts work by key position, so Ctrl+C works with Arabic input; browser keys
+such as Ctrl+W are never used.
+
+**ابحث وكبّر (Seek & Zoom)** is a hidden-object game for the mouse wheel and dragging. Five big
+scenes drawn in code (park, market, beach, toy room, space station) list things to find as pictures
+with short words: scroll the wheel to zoom around the pointer, drag to look around, click to find.
+The first rounds need only dragging, later ones tiny things in crowds, moving animals, and toy boxes
+and hatches that open when you zoom in; the space station has timed rounds. The wheel never scrolls
+or zooms the page; + / − buttons and keys work too, and a magnifying-glass hint helps. Stickers go
+into a sticker book.
+
+**سلك الشرارة (Steady Hand)** trains careful mouse control: press on a glowing spark and drag it
+along neon wire tracks to light a lamp. Touching the edge gives a funny "bzzt" and sends it back to
+the last lantern (never game over); letting go, leaving the window or pausing just drops it safely,
+and a fast flick cannot jump through a wall. Five worlds of six levels: gentle curves, zigzags (and
+levels where the spark follows the mouse without pressing), sliding gates and turning bars, doors
+that open with a click or Space and stretches where the button must be held, then a final tower.
+Coins buy spark colours and trails.
+
+**بوابات الحساب (Math Gates)** is a three-lane crowd runner for practising math. A crowd of candy
+runners runs by itself; ← → or A / D (or the mouse) change lane. Rows of three gates (+ − × ÷, later
+two-step gates) change the crowd's number, which is always shown, and exactly one gate is best;
+question rows like «7 + 5 = ?» have three answer gates, and a wrong answer shows the right one. At
+the finish the crowd meets a rival crowd in a number battle, then climbs a bonus staircase for
+coins. Five worlds: + and − to 20, to 100, multiplication, division, and everything mixed; results
+are always whole numbers and the difficulty follows the PC's results like the other games.
 
 **ضربة الطلاء (shooter)** is a first-person arena game in the style of Krunker / Shell Shockers,
 made school-friendly: toy paint blasters, cute round "splat buddies", and paint splats instead of
