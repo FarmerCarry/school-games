@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#47b8ff"/>
+      <stop offset="1" stop-color="#ffe1f0"/>
+    </linearGradient>
+    <linearGradient id="jelly" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ff7cb8"/>
+      <stop offset="1" stop-color="#ff3d8e"/>
+    </linearGradient>
+    <radialGradient id="glow">
+      <stop offset="0" stop-color="#ffe14d" stop-opacity="0.95"/>
+      <stop offset="1" stop-color="#ffe14d" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="400" height="400" fill="url(#sky)"/>
+  <!-- clouds -->
+  <g fill="#ffffff">
+    <circle cx="58" cy="70" r="22"/><circle cx="86" cy="62" r="28"/><circle cx="116" cy="74" r="20"/>
+    <circle cx="300" cy="48" r="18"/><circle cx="324" cy="42" r="24"/><circle cx="350" cy="52" r="17"/>
+  </g>
+  <!-- the jelly sea -->
+  <path d="M-10 170 Q40 156 90 170 T190 170 T290 170 T410 166 L410 410 L-10 410 Z" fill="url(#jelly)" stroke="#1c2250" stroke-width="4"/>
+  <g fill="#ffd0e6" opacity="0.8">
+    <ellipse cx="60" cy="370" rx="40" ry="9"/><ellipse cx="330" cy="382" rx="48" ry="10"/><ellipse cx="210" cy="196" rx="34" ry="6"/>
+    <circle cx="372" cy="200" r="6"/><circle cx="24" cy="214" r="5"/>
+  </g>
+  <!-- a lollipop and a gumdrop in the jelly -->
+  <rect x="352" y="96" width="9" height="90" rx="4" fill="#ffffff" stroke="#1c2250" stroke-width="3"/>
+  <circle cx="356" cy="92" r="26" fill="#ff5d9e" stroke="#1c2250" stroke-width="4"/>
+  <circle cx="356" cy="92" r="13" fill="#ffffff"/>
+  <path d="M8 196 Q30 150 58 196 Z" fill="#4fd1ff" stroke="#1c2250" stroke-width="4"/>
+  <!-- the giant keyboard: three rows of chunky keys, nearer rows bigger -->
+  <g stroke="#1c2250" stroke-width="4">
+    <g transform="translate(46 200) scale(0.72)">
+      <rect x="0" y="10" width="62" height="50" rx="12" fill="#46e08e"/><rect x="0" y="0" width="62" height="48" rx="12" fill="#fffaf0"/>
+      <rect x="72" y="10" width="62" height="50" rx="12" fill="#ffcf3a"/><rect x="72" y="0" width="62" height="48" rx="12" fill="#fffaf0"/>
+      <rect x="144" y="10" width="62" height="50" rx="12" fill="#ff9a3d"/><rect x="144" y="0" width="62" height="48" rx="12" fill="#fffaf0"/>
+      <rect x="216" y="10" width="62" height="50" rx="12" fill="#ff9a3d"/><rect x="216" y="0" width="62" height="48" rx="12" fill="#fffaf0"/>
+      <rect x="288" y="10" width="62" height="50" rx="12" fill="#ffcf3a"/><rect x="288" y="0" width="62" height="48" rx="12" fill="#fffaf0"/>
+      <rect x="360" y="10" width="62" height="50" rx="12" fill="#46e08e"/><rect x="360" y="0" width="62" height="48" rx="12" fill="#fffaf0"/>
+    </g>
+    <g transform="translate(18 252) scale(0.86)">
+      <rect x="0" y="10" width="62" height="50" rx="12" fill="#4fc3ff"/><rect x="0" y="0" width="62" height="48" rx="12" fill="#fffaf0"/>
+      <rect x="72" y="10" width="62" height="50" rx="12" fill="#46e08e"/><rect x="72" y="0" width="62" height="48" rx="12" fill="#fffaf0"/>
+      <rect x="144" y="10" width="62" height="50" rx="12" fill="#ffcf3a"/><rect x="144" y="0" width="62" height="48" rx="12" fill="#fffaf0"/>
+      <rect x="216" y="10" width="62" height="50" rx="12" fill="#d99a00"/><rect x="216" y="0" width="62" height="48" rx="12" fill="#ffe14d"/>
+      <rect x="288" y="10" width="62" height="50" rx="12" fill="#ff9a3d"/><rect x="288" y="0" width="62" height="48" rx="12" fill="#fffaf0"/>
+      <rect x="360" y="10" width="62" height="50" rx="12" fill="#ffcf3a"/><rect x="360" y="0" width="62" height="48" rx="12" fill="#fffaf0"/>
+    </g>
+    <g transform="translate(-8 314)">
+      <rect x="0" y="12" width="70" height="56" rx="14" fill="#4fc3ff"/><rect x="0" y="0" width="70" height="54" rx="14" fill="#fffaf0"/>
+      <rect x="80" y="12" width="70" height="56" rx="14" fill="#e9b46a"/><rect x="80" y="0" width="70" height="54" rx="14" fill="#fff0d8"/>
+      <rect x="160" y="12" width="70" height="56" rx="14" fill="#46e08e"/><rect x="160" y="0" width="70" height="54" rx="14" fill="#fffaf0"/>
+      <rect x="240" y="12" width="70" height="56" rx="14" fill="#ffcf3a"/><rect x="240" y="0" width="70" height="54" rx="14" fill="#fffaf0"/>
+      <rect x="320" y="12" width="70" height="56" rx="14" fill="#ff9a3d"/><rect x="320" y="0" width="70" height="54" rx="14" fill="#fffaf0"/>
+    </g>
+  </g>
+  <!-- legends on the keys -->
+  <g font-family="Fredoka, 'Segoe UI', Tahoma, sans-serif" font-weight="700" fill="#1c2250">
+    <text x="22" y="276" font-size="18">A</text><text x="66" y="285" font-size="22" text-anchor="end">ش</text>
+    <text x="84" y="276" font-size="18">S</text><text x="128" y="285" font-size="22" text-anchor="end">س</text>
+    <text x="146" y="276" font-size="18">D</text><text x="190" y="285" font-size="22" text-anchor="end">ي</text>
+    <text x="270" y="276" font-size="18">G</text><text x="314" y="285" font-size="22" text-anchor="end">ل</text>
+    <text x="332" y="276" font-size="18">H</text><text x="376" y="285" font-size="22" text-anchor="end">ا</text>
+    <text x="4" y="340" font-size="20">Z</text><text x="58" y="351" font-size="24" text-anchor="end">ئ</text>
+    <text x="164" y="340" font-size="20">C</text><text x="218" y="351" font-size="24" text-anchor="end">ؤ</text>
+    <text x="244" y="340" font-size="20">V</text><text x="298" y="351" font-size="24" text-anchor="end">ر</text>
+    <text x="324" y="340" font-size="20">B</text><text x="378" y="351" font-size="24" text-anchor="end">لا</text>
+    <text x="54" y="222" font-size="14">Q</text><text x="106" y="222" font-size="14">W</text><text x="158" y="222" font-size="14">E</text><text x="210" y="222" font-size="14">R</text><text x="262" y="222" font-size="14">T</text><text x="314" y="222" font-size="14">Y</text>
+  </g>
+  <!-- the glowing key (F / ب) -->
+  <ellipse cx="231" cy="276" rx="66" ry="40" fill="url(#glow)"/>
+  <rect x="204" y="252" width="53.3" height="41.3" rx="10" fill="#ffe14d" stroke="#1c2250" stroke-width="4"/>
+  <text x="210" y="273" font-family="Fredoka, 'Segoe UI', Tahoma, sans-serif" font-weight="700" font-size="18" fill="#1c2250">F</text>
+  <text x="252" y="285" font-family="Fredoka, 'Segoe UI', Tahoma, sans-serif" font-weight="700" font-size="30" fill="#1c2250" text-anchor="end">ب</text>
+  <path d="M231 214 L246 196 L238 196 L238 178 L224 178 L224 196 L216 196 Z" fill="#ffd23f" stroke="#1c2250" stroke-width="4" stroke-linejoin="round"/>
+  <!-- the hop arc -->
+  <path d="M108 318 Q150 110 214 196" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="round" stroke-dasharray="2 14"/>
+  <!-- Zarroor, the keycap hero, mid-jump and stretched -->
+  <g transform="translate(152 150) rotate(12)">
+    <rect x="-30" y="6" width="22" height="18" rx="5" fill="#2a7fd6" stroke="#1c2250" stroke-width="4"/>
+    <rect x="8" y="6" width="22" height="18" rx="5" fill="#2a7fd6" stroke="#1c2250" stroke-width="4"/>
+    <rect x="-38" y="-62" width="76" height="68" rx="14" fill="#4fc3ff" stroke="#1c2250" stroke-width="5"/>
+    <rect x="-32" y="-74" width="64" height="16" rx="6" fill="#9fdfff" stroke="#1c2250" stroke-width="4"/>
+    <rect x="-52" y="-44" width="14" height="28" rx="6" fill="#4fc3ff" stroke="#1c2250" stroke-width="4" transform="rotate(-30 -45 -30)"/>
+    <rect x="38" y="-44" width="14" height="28" rx="6" fill="#4fc3ff" stroke="#1c2250" stroke-width="4" transform="rotate(30 45 -30)"/>
+    <rect x="-24" y="-48" width="19" height="22" rx="6" fill="#ffffff" stroke="#1c2250" stroke-width="3.5"/>
+    <rect x="5" y="-48" width="19" height="22" rx="6" fill="#ffffff" stroke="#1c2250" stroke-width="3.5"/>
+    <circle cx="-12" cy="-36" r="5.5" fill="#1c2250"/><circle cx="17" cy="-36" r="5.5" fill="#1c2250"/>
+    <circle cx="-14" cy="-39" r="2" fill="#ffffff"/><circle cx="15" cy="-39" r="2" fill="#ffffff"/>
+    <circle cx="-28" cy="-18" r="5" fill="#ff8fb8"/><circle cx="28" cy="-18" r="5" fill="#ff8fb8"/>
+    <path d="M-9 -20 Q0 -8 9 -20 Z" fill="#1c2250"/>
+    <!-- party hat -->
+    <path d="M-16 -74 L0 -112 L16 -74 Z" fill="#ffd23f" stroke="#1c2250" stroke-width="4" stroke-linejoin="round"/>
+    <circle cx="0" cy="-114" r="7" fill="#ff5d9e" stroke="#1c2250" stroke-width="3"/>
+  </g>
+  <!-- coins -->
+  <g stroke="#1c2250" stroke-width="4">
+    <circle cx="300" cy="150" r="15" fill="#ffd23f"/><circle cx="300" cy="150" r="7" fill="none" stroke="#ffb020" stroke-width="3"/>
+    <path d="M78 148 L92 134 L106 148 L92 170 Z" fill="#ff4fd8"/>
+  </g>
+</svg>
