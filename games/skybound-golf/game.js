@@ -17,7 +17,7 @@
   var s = {
     world: save.world, course: P.createCourse(save.world), phase: 'title', time: 0,
     cam: { x: TEE_CAM.x, y: TEE_CAM.y, zoom: TEE_CAM.zoom }, ball: null, skin: save.skin, reduced: reduced,
-    golfer: { angle: A.ADDRESS, jump: 0, jumpT: 0 }, gauge: { show: false, value: 0 },
+    golfer: { angle: A.ADDRESS, jump: 0, jumpT: 0 }, gauge: { show: false, value: 0, perfect: P.bands.perfect },
     trail: [], particles: [], popups: [], shake: { x: 0, y: 0 }, flash: 0, reticle: null,
     bestX: 0, unlockX: 0, unlockName: '', flame: 0, squash: null, landed: null,
     padPulse: null, propHit: null, magnet: 0, space: false, hints: true
@@ -67,8 +67,21 @@
     power: { name: 'قوة الضربة', explain: 'انطلق أبعد', icon: '<path d="M22 3 9 21h10l-4 14 16-20H21z" fill="#ffd000" stroke="#24133f" stroke-width="3" stroke-linejoin="round"/>' },
     bounce: { name: 'الارتداد', explain: 'قفزات أعلى', icon: '<path d="M5 33Q11 4 19 24Q24 10 33 28" fill="none" stroke="#7dff8a" stroke-width="5" stroke-linecap="round"/><circle cx="31" cy="11" r="5" fill="#fff" stroke="#24133f" stroke-width="3"/>' },
     rockets: { name: 'الصواريخ', explain: 'صاروخ إضافي', icon: '<path d="M20 3c7 6 9 15 6 24h-12C11 18 13 9 20 3z" fill="#fff" stroke="#24133f" stroke-width="3"/><circle cx="20" cy="15" r="3.5" fill="#2bd1c1" stroke="#24133f" stroke-width="2"/><path d="M14 22l-6 8 7-1M26 22l6 8-7-1" fill="#ff4f6d" stroke="#24133f" stroke-width="2.5" stroke-linejoin="round"/><path d="M16 29l4 9 4-9z" fill="#ff8a1a"/>' },
-    magnet: { name: 'المغناطيس', explain: 'اجذب العملات', icon: '<path d="M9 6v14a11 11 0 0 0 22 0V6h-7v14a4 4 0 0 1-8 0V6z" fill="#ff4f6d" stroke="#24133f" stroke-width="3" stroke-linejoin="round"/><path d="M9 6h7v6H9zM24 6h7v6h-7z" fill="#e6e8ff" stroke="#24133f" stroke-width="3"/>' }
+    magnet: { name: 'المغناطيس', explain: 'اجذب العملات', icon: '<path d="M9 6v14a11 11 0 0 0 22 0V6h-7v14a4 4 0 0 1-8 0V6z" fill="#ff4f6d" stroke="#24133f" stroke-width="3" stroke-linejoin="round"/><path d="M9 6h7v6H9zM24 6h7v6h-7z" fill="#e6e8ff" stroke="#24133f" stroke-width="3"/>' },
+    thrust: { name: 'قوة الصاروخ', explain: 'دفعة أقوى', icon: '<path d="M15 20c-1 8 2 13 5 18 3-5 6-10 5-18z" fill="#ff8a1a" stroke="#24133f" stroke-width="2.5" stroke-linejoin="round"/><path d="M18 22c0 5 1 8 2 11 1-3 2-6 2-11z" fill="#ffd000"/><path d="M20 2c6 5 7 12 5 19h-10c-2-7-1-14 5-19z" fill="#fff" stroke="#24133f" stroke-width="3" stroke-linejoin="round"/><circle cx="20" cy="11" r="3" fill="#2bd1c1" stroke="#24133f" stroke-width="2"/><path d="M7 13v12M33 13v12M3 17v6M37 17v6" stroke="#7dff8a" stroke-width="3.5" stroke-linecap="round"/>' },
+    aim: { name: 'الضربة الذهبية', explain: 'منطقة ذهبية أكبر', icon: '<path d="M6 32a14 14 0 0 1 28 0" fill="none" stroke="#24133f" stroke-width="11" stroke-linecap="round"/><path d="M6 32a14 14 0 0 1 9-13" fill="none" stroke="#8fa3d9" stroke-width="6"/><path d="M15 19a14 14 0 0 1 19 13" fill="none" stroke="#ffd000" stroke-width="6"/><path d="M20 32l9-9" stroke="#fff" stroke-width="3.5" stroke-linecap="round"/><circle cx="20" cy="32" r="3" fill="#fff" stroke="#24133f" stroke-width="2"/><path d="M32 2l2 5 5 2-5 2-2 5-2-5-5-2 5-2z" fill="#ffd000" stroke="#24133f" stroke-width="1.8" stroke-linejoin="round"/>' },
+    skip: { name: 'القفز على الماء', explain: 'اقفز فوق الماء', icon: '<path d="M3 32q4-4 8 0t8 0 8 0 8 0" fill="none" stroke="#4fc3ff" stroke-width="4.5" stroke-linecap="round"/><path d="M5 27q5-13 10 0q4-9 8 0q3-6 6-1" fill="none" stroke="#fff" stroke-width="2.5" stroke-dasharray="2 3" stroke-linecap="round"/><circle cx="31" cy="20" r="5" fill="#fff" stroke="#24133f" stroke-width="2.5"/>' },
+    treasure: { name: 'الكنز', explain: 'عملات أكثر', icon: '<circle cx="12" cy="11" r="4.5" fill="#ffd000" stroke="#24133f" stroke-width="2"/><circle cx="27" cy="8" r="4.5" fill="#ffd000" stroke="#24133f" stroke-width="2"/><circle cx="20" cy="13" r="4" fill="#ffe36b" stroke="#24133f" stroke-width="2"/><path d="M6 19c0-6 28-6 28 0z" fill="#e08a3a" stroke="#24133f" stroke-width="3" stroke-linejoin="round"/><path d="M6 19h28v15H6z" fill="#c2702e" stroke="#24133f" stroke-width="3" stroke-linejoin="round"/><path d="M17 21h6v7h-6z" fill="#ffd000" stroke="#24133f" stroke-width="2"/>' }
   };
+  // The result screen has room for one row of upgrades: the four cheapest still to buy,
+  // chosen when it opens and kept in place while it stays open, in the shop's order.
+  var resultKinds = null;
+  function cheapestKinds() {
+    var open = P.kinds.filter(function (k) { return save.upgrades[k] < P.upgrades[k].max; });
+    open.sort(function (a, b) { return P.cost(a, save.upgrades[a]) - P.cost(b, save.upgrades[b]) || P.kinds.indexOf(a) - P.kinds.indexOf(b); });
+    var done = P.kinds.filter(function (k) { return open.indexOf(k) < 0; });
+    return open.concat(done).slice(0, 4).sort(function (a, b) { return P.kinds.indexOf(a) - P.kinds.indexOf(b); });
+  }
   var ROCKET_SVG = '<svg viewBox="0 0 40 44" aria-hidden="true">' + UPGRADES.rockets.icon + '</svg>';
   var WORLD_LOOKS = [['#3aa6f2', '#6fd64b'], ['#ff8f5a', '#f8d27c'], ['#5ea8ff', '#ffffff'], ['#8a74ff', '#ffffff'], ['#0d0a2c', '#cfcbea']];
   var INK = 'stroke="#24133f" stroke-width="3" stroke-linejoin="round"';
@@ -186,6 +199,7 @@
     $('journey').textContent = next ? 'العالم التالي: ' + next.name + ' عند ' + next.unlock + ' متر' : 'فتحت كل العوالم… هل تصل إلى حافة الفضاء؟';
     s.unlockX = next ? next.unlock : 0; s.unlockName = next ? next.name : '';
     s.magnet = P.magnetOf(save.upgrades);
+    s.gauge.perfect = P.perfectBand(save.upgrades);
     s.hints = save.tips < 2 || save.shots < 8;
   }
   function controls() {
@@ -220,6 +234,7 @@
     $('menu').hidden = mode === 'shop' || mode === 'worlds';
     $('modal-heading').textContent = mode === 'shop' ? 'المتجر' : mode === 'worlds' ? 'اختر عالمك' : mode === 'pause' ? 'استراحة' : '';
     $('modal-tip').textContent = mode === 'result' ? 'مسافة أو Enter أو R: ضربة أخرى' : mode === 'pause' ? 'P أو Esc للمتابعة' : 'Esc للرجوع · كل شيء يُحفظ تلقائيًا';
+    if (mode === 'result') resultKinds = cheapestKinds();
     if (mode === 'shop' || mode === 'result') renderShop();
     if (mode === 'worlds') renderWorlds();
     controls();
@@ -246,7 +261,7 @@
   function renderShop() {
     var focusKind = document.activeElement && document.activeElement.dataset.upgrade;
     var host = $('upgrades'); host.textContent = '';
-    P.kinds.forEach(function (kind) {
+    (modalMode === 'result' && resultKinds ? resultKinds : P.kinds).forEach(function (kind) {
       var level = save.upgrades[kind], max = P.upgrades[kind].max, price = P.cost(kind, level), maxed = level >= max;
       var b = document.createElement('button'); b.type = 'button'; b.dataset.upgrade = kind;
       b.className = 'upgrade' + (maxed ? ' maxed' : save.coins >= price ? ' can' : '');
@@ -355,7 +370,7 @@
   }
   function strike() {
     var power = s.gauge.value;
-    swing = { power: power, grade: P.grade(power), from: s.golfer.angle, t: 0 };
+    swing = { power: power, grade: P.grade(power, save.upgrades), from: s.golfer.angle, t: 0 };
     s.phase = 'swing'; sfx.swing(); controls();
   }
   function contact() {
@@ -380,9 +395,10 @@
     var r = P.press(s.course, b, save.upgrades);
     if (r.type === 'rocket') {
       hint();
-      s.flame = 0.45; sfx.rocket(); kick(7, 0.12);
+      // Rocket power makes a bigger blast.
+      s.flame = 0.45 + 0.05 * r.thrust; sfx.rocket(); kick(7 + r.thrust, 0.12);
       var sp = Math.hypot(b.vx, b.vy) || 1;
-      burst('flame', b.x, b.y, 16, { angle: Math.atan2(-b.vy, -b.vx), spread: 1.2, speed: 16, size: 14, life: 0.5, g: -2 });
+      burst('flame', b.x, b.y, 16 + 3 * r.thrust, { angle: Math.atan2(-b.vy, -b.vx), spread: 1.2, speed: 16, size: 14, life: 0.5, g: -2 });
       burst('ring', b.x, b.y, 1, { speed: 0, size: 70, color: '#ffb020', life: 0.35, g: 0 });
       popup('صاروخ!', b.x, b.y + 3 + sp * 0.02, '#ffb020', 36);
       $('rockets').classList.remove('empty');
@@ -505,6 +521,7 @@
     if (parts.coins) html += '<span class="chip">جمعت ' + parts.coins + '</span>';
     html += '<span class="chip">المسافة ' + parts.distance + '</span>';
     if (parts.bonus) html += '<span class="chip">مكافأة ' + parts.bonus + '</span>';
+    if (parts.treasure) html += '<span class="chip">الكنز ' + parts.treasure + '</span>';
     $('result-coins').innerHTML = html;
     var unlocked = P.worlds.filter(function (w) { return w.unlock > r.oldBest && w.unlock <= save.best; });
     var box = $('result-unlock'); box.hidden = !unlocked.length;
@@ -608,7 +625,7 @@
       s.gauge.value = v;
       // On the title the golfer lines up the ball with a small waggle.
       g.angle = s.phase === 'ready' ? A.gaugeAngle(v) : A.ADDRESS + 0.12 + (reduced ? 0 : 0.08 * Math.sin(s.time * 2.4));
-      var hot = s.phase === 'ready' && v >= P.bands.perfect;
+      var hot = s.phase === 'ready' && v >= s.gauge.perfect;
       if (hot && !gaugeHot) sfx.gauge();
       gaugeHot = hot;
     } else if (s.phase === 'swing') {

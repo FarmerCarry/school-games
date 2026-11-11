@@ -159,6 +159,14 @@ html[data-sg-motion="reduce"] .button:active, html[data-sg-motion="reduce"] .upg
 .skin[aria-pressed="true"] { background: linear-gradient(#45d36a, #2a9f52); }
 .skin[aria-pressed="true"] span { color: #fff; }
 .skin:disabled { opacity: 0.55; cursor: default; }
+/* Eight upgrades: the shop shows them as two rows of compact cards. */
+.shop-panel .upgrades { gap: 10px; margin: 4px 0 2px; }
+.shop-panel .upgrade { padding: 6px 6px 8px; }
+.shop-panel .upgrade .upgrade-icon { width: 46px; height: 46px; padding: 5px; margin-bottom: 2px; }
+.shop-panel .upgrade strong { font-size: 19px; }
+.shop-panel .upgrade .explain { font-size: 14px; min-height: 18px; }
+.shop-panel .pips { margin: 4px 0 6px; }
+.shop-panel .upgrade .price { height: 32px; font-size: 19px; }
 .result-panel .upgrades { margin-top: 8px; }
 .result-panel .shop-wallet { right: auto; left: 22px; }
 /* The heading keeps clear of the wallet on both sides, even at 9,999,999 coins. */

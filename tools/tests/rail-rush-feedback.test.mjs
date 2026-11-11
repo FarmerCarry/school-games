@@ -178,7 +178,8 @@ test('Rail Rush keeps the coins and best score of a run left through the pause m
   // would collect more coins, and the banked total would no longer match.
   const done = await page.evaluate(() => {
     __game.restart(); __game.god = true; __game.sim(25);
-    const run = { coins: __game.state.coins, score: __game.state.score };
+    // Mystery boxes add a random bonus on top of the coins; both are banked.
+    const run = { coins: __game.state.coins + __game.state.bonus, score: __game.state.score };
     document.getElementById('pauseBtn').click();
     rr.step(1);
     document.getElementById('restartBtn').click();

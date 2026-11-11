@@ -966,3 +966,22 @@ previous entry's measurements.
 Each game page shrinks by about 3,000 bytes (the Kit statistics, telemetry and profile
 code it inlined, plus each game's own calls). Every limit is again the measured size
 rounded up (the games to the next 500 bytes, the portal and the cache to the next 1,000).
+
+## Skybound Golf: four more upgrades, 11 November 2026
+
+Skybound Golf gains four upgrades: rocket thrust (a stronger rocket kick), the golden hit (a
+wider gold zone on the swing gauge), skipping over water and treasure (a tenth more coins per
+level). The shop shows all eight cards in two rows; the result card keeps one row with the
+four cheapest still to buy. The code adds the four icons, the card layout and the engine
+rules; nothing new is drawn each frame.
+
+Measured with the Linux minified build, against the previous entry's measurements.
+
+| Measurement | Before bytes | After bytes | Before limit | New limit |
+| --- | ---: | ---: | ---: | ---: |
+| Skybound Golf page | 111,382 | 115,176 | 111,500 | 115,500 |
+| Offline precache, 51 files | 5,930,692 | 5,934,486 | 5,931,000 | 5,935,000 |
+| Offline ZIP | 2,078,154 | 2,079,123 | — | — |
+
+Both limits are again the measured size rounded up (the game to the next 500 bytes, the
+cache to the next 1,000).
