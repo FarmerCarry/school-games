@@ -73,6 +73,10 @@ window.GAMES = [
       { keys: ['6–0', 'Y–P', 'H–;', 'N–/'], action: 'اللاعب الثاني في سباق اثنين' },
       { keys: ['Esc'], action: 'إيقاف مؤقت' }
     ] },
+  { slug: 'keyboard-obby', roundMinutes: [1, 4], inputStyle: 'keyboard', title: 'مغامرة الكيبورد', en: 'Keyboard Obby giant keyboard parkour jump keys learn the keyboard', tags: 'أوبي اوبي باركور قفز لوحة المفاتيح كيبورد حروف أرقام كلمات جيلي مفاتيح عملاقة', cats: ['challenge', 'arcade'], players: '1', color: '#ff5d9e',
+    blurb: 'لوحة مفاتيح عملاقة فوق بحر من الجيلي! اضغط الحرف المضيء ليقفز زرّور إليه قبل أن يرتفع الجيلي.',
+    tip: 'المفتاح التالي يضيء دائمًا على لوحة المفاتيح الصغيرة أسفل الشاشة. اختر <b>عربي</b> أو <b>English</b> من شاشة البداية.',
+    controls: [{ keys: ['الحروف', 'الأرقام'], action: 'اضغط المفتاح المضيء ليقفز زرّور إليه' }, { keys: ['مسافة'], action: 'القفز بين الكلمات (العالم الأخير)' }, { keys: ['Esc'], action: 'إيقاف مؤقت' }, { keys: ['Enter', 'R'], action: 'المرحلة التالية أو مرة أخرى' }] },
   { slug: 'neon-slope', roundMinutes: [1, 3], inputStyle: 'keyboard', title: 'منحدر النيون', en: 'Neon Slope', cats: ['running', 'arcade'], players: '1', color: '#22e3a1', hot: true,
     blurb: 'تدحرج بسرعة على منحدر النيون، تفادَ الأحمر واقفز من المنصات!',
     controls: [{ keys: ['←', '→'], action: 'توجيه الكرة' }, { keys: ['A', 'D'], action: 'توجيه الكرة (بديل)' }] },
