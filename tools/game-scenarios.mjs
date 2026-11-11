@@ -216,7 +216,10 @@ export const scenarios = {
   }, '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.keys === 0 && ${g}.state.done === 0`),
   // The first yard opens behind a picture card; a held arrow closes it and walks the kid.
   // Restart puts the kid back on the doorstep with no egg hatched.
-  'egg-rush': defaults(['#btnPlay'], `${g}.screen==='play'`, `[${g}.px,${g}.py,${g}.time,${g}.hatched,${g}.guards]`, hold('ArrowRight'), '#btnPause', `${g}.screen==='pause'`, '#btnRestart', `${g}.screen==='play' && ${g}.atStart && ${g}.hatched===0 && !${g}.intro`)
+  'egg-rush': defaults(['#btnPlay'], `${g}.screen==='play'`, `[${g}.px,${g}.py,${g}.time,${g}.hatched,${g}.guards]`, hold('ArrowRight'), '#btnPause', `${g}.screen==='pause'`, '#btnRestart', `${g}.screen==='play' && ${g}.atStart && ${g}.hatched===0 && !${g}.intro`),
+  // Math Gates: a first visit starts level 1-1 in the middle lane. The crowd runs by itself;
+  // only the child's keys (or mouse) change its lane. Restart begins the level again.
+  'math-gates': defaults(['#btnPlay'], `${g}.state.screen === 'play'`, `[${g}.state.d,${g}.state.lane,${g}.state.count,${g}.state.t]`, hold('ArrowLeft'), '#btnPause', `${g}.state.screen === 'paused'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.attempt > 1 && ${g}.state.passed === 0 && ${g}.state.lane === 1`)
 };
 for (const slug of ['connect-four','tic-tac-toe']) scenarios[slug] = {
   start: [click('#localButton')], active: `document.getElementById('boardApp').dataset.mode === 'local' && document.getElementById('gameBoard').dataset.winner === '0' && document.getElementById('gameBoard').dataset.draw !== 'true'`,
@@ -244,7 +247,8 @@ const inputSnapshots = {
   'maze-dash': `[${g}.state.px,${g}.state.py,${g}.state.dots]`,
   // Paint Grab's blob keeps moving; only the arrow keys or pointer set its steering target.
   'paint-grab': `${g}.player.target`, 'snake-arena': `SA.game.kb`, 'egg-rush': `${g}.px`,
-  'blob-battle': `${g}.info().player`, 'splat-strike': `[${g}.state.player.x,${g}.state.player.z]`
+  'blob-battle': `${g}.info().player`, 'splat-strike': `[${g}.state.player.x,${g}.state.player.z]`,
+  'math-gates': `${g}.state.lane`
 };
 for (const [slug, expr] of Object.entries(inputSnapshots)) scenarios[slug].inputSnapshot = expr;
 
@@ -279,7 +283,9 @@ const inputSeen = {
   'bubble-bop': `${g}.state.hits > sgInput.before[0] && ${g}.state.travel > sgInput.before[1] + 40`,
   // The runner runs to the first edge by itself and waits there; only the key its next
   // stone shows counts as a hit (any other key is a miss, nothing at all is nothing).
-  'key-runner': `${g}.state.hits > sgInput.before`
+  'key-runner': `${g}.state.hits > sgInput.before`,
+  // The crowd runs forward by itself; only the child's keys or mouse move it to another lane.
+  'math-gates': `${g}.state.lane !== sgInput.before`
 };
 for (const [slug, expr] of Object.entries(inputSeen)) scenarios[slug].inputSeen = expr;
 
@@ -294,7 +300,7 @@ const heldKeys = {
   'fire-and-ice': 'ArrowRight', 'tank-splat': 'KeyD', 'hoop-heads': 'ArrowRight', 'critter-mart': 'ArrowRight',
   'block-world': 'ArrowRight', 'troll-level': 'ArrowRight', 'chaos-island': 'ArrowRight', 'splat-strike': 'KeyW',
   'paint-grab': 'ArrowRight', 'snake-arena': 'ArrowRight', 'egg-rush': 'ArrowRight',
-  'lucky-lake': 'Space'
+  'lucky-lake': 'Space', 'math-gates': 'ArrowLeft'
 };
 for (const [slug, key] of Object.entries(heldKeys)) scenarios[slug].heldKey = key;
 

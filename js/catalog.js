@@ -181,6 +181,10 @@ window.GAMES = [
   { slug: 'egg-rush', roundMinutes: [1, 4], inputStyle: 'keyboard', title: 'سباق البيض', en: 'Egg Rush sneak freeze eggs hatch chicks farm', tags: 'بيض فقس كتاكيت مزرعة دجاج تمثال', cats: ['two-player', 'arcade'], players: '1-2', color: '#ffd23f',
     blurb: 'تسلّل إلى العشّ وخذ البيضة إلى بيتك لتفقس! وإذا فتح الحارس عينه فقف مكانك كالتمثال.',
     tip: 'عندما تظهر <b>؟</b> فوق الحارس قف حتى ينام. القش والشجيرات تخفيك.',
-    controls: [{ keys: ['←', '↑', '→', '↓'], action: 'امشِ (واللاعب 2 في سباق اثنين)' }, { keys: ['W', 'A', 'S', 'D'], action: 'امشِ (واللاعب 1 في سباق اثنين)' }, { keys: ['الفأرة'], action: 'اضغط مطوّلًا لتمشي نحو المؤشر' }, { keys: ['P', 'Esc'], action: 'استراحة' }] }
+    controls: [{ keys: ['←', '↑', '→', '↓'], action: 'امشِ (واللاعب 2 في سباق اثنين)' }, { keys: ['W', 'A', 'S', 'D'], action: 'امشِ (واللاعب 1 في سباق اثنين)' }, { keys: ['الفأرة'], action: 'اضغط مطوّلًا لتمشي نحو المؤشر' }, { keys: ['P', 'Esc'], action: 'استراحة' }] },
+  { slug: 'math-gates', roundMinutes: [1, 2], inputStyle: 'mixed', title: 'بوابات الحساب', en: 'Math Gates crowd runner math gates three lanes add subtract multiply divide numbers', tags: 'حساب رياضيات جمع طرح ضرب قسمة أرقام بوابات جري جمهور أسئلة', cats: ['running', 'puzzle'], players: '1', color: '#ff6fae',
+    blurb: 'اجرِ مع فريقك في ثلاثة طرق، واختر البوابة الأكبر: +10 أم ×2؟ أجب عن الأسئلة، وتغلّب على الفريق المنافس عند خط النهاية!',
+    tip: 'فكّر قبل أن تصل: ×2 أفضل حين يكون فريقك كبيرًا، و+10 أفضل حين يكون صغيرًا. الإجابة الصحيحة تعطيك لاعبين أكثر. اضغط <b>P</b> أو <b>Esc</b> للاستراحة.',
+    controls: [{ keys: ['←', '→'], action: 'غيّر الطريق' }, { keys: ['A', 'D'], action: 'غيّر الطريق' }, { keys: ['انقر', 'اسحب'], action: 'اختر الطريق بالفأرة' }, { keys: ['P', 'Esc'], action: 'استراحة' }, { keys: ['R'], action: 'العب المرحلة مرة أخرى' }] }
 ];
 
