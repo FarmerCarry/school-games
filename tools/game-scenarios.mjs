@@ -246,7 +246,20 @@ export const scenarios = {
     await page.mouse.down();
     await page.mouse.move(to.x, to.y, { steps: 8 });
     await page.mouse.up();
-  }, '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.found === 0 && ${g}.state.moves === 0`)
+  }, '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.found === 0 && ${g}.state.moves === 0`),
+  // Steady Hand: a first visit goes straight to the first wire. The spark moves only when
+  // the child presses on it and drags it along the track with the real mouse; Restart puts
+  // it back on its start with no touch and nothing dragged.
+  'steady-hand': defaults(['#btnPlay'], `${g}.state.screen === 'play' && ${g}.state.id === '1-1'`, `[${g}.state.time,${g}.state.spark,${g}.state.touches,${g}.state.dragged]`, async page => {
+    const pts = await page.evaluate(() => {
+      const game = window.__game, from = game.state.best;
+      return [0, 30, 60, 90, 120, 150].map(d => { const p = game.at(from + d); return game.point(p.x, p.y); });
+    });
+    await page.mouse.move(pts[0].x, pts[0].y);
+    await page.mouse.down();
+    for (const p of pts.slice(1)) await page.mouse.move(p.x, p.y, { steps: 4 });
+    await page.mouse.up();
+  }, '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.atStart`)
 };
 for (const slug of ['connect-four','tic-tac-toe']) scenarios[slug] = {
   start: [click('#localButton')], active: `document.getElementById('boardApp').dataset.mode === 'local' && document.getElementById('gameBoard').dataset.winner === '0' && document.getElementById('gameBoard').dataset.draw !== 'true'`,
@@ -276,7 +289,8 @@ const inputSnapshots = {
   'paint-grab': `${g}.player.target`, 'snake-arena': `SA.game.kb`, 'egg-rush': `${g}.px`,
   'blob-battle': `${g}.info().player`, 'splat-strike': `[${g}.state.player.x,${g}.state.player.z]`,
   // Only the child's drag, keys, wheel or zoom buttons move Seek and Zoom's camera.
-  'seek-zoom': `${g}.state.cam`
+  'seek-zoom': `${g}.state.cam`,
+  'steady-hand': `${g}.state.dragged`
 };
 for (const [slug, expr] of Object.entries(inputSnapshots)) scenarios[slug].inputSnapshot = expr;
 
@@ -316,7 +330,9 @@ const inputSeen = {
   'word-garden': `${g}.state.keys > sgInput.before`,
   // The jelly, the sinking keys and the bumper bars move by themselves; only the key the
   // glowing key shows makes the hero hop.
-  'keyboard-obby': `${g}.state.hops > sgInput.before`
+  'keyboard-obby': `${g}.state.hops > sgInput.before`,
+  // A spark sent home after a touch moves too; only a real drag adds to how far it was dragged.
+  'steady-hand': `${g}.state.dragged > sgInput.before + 20`
 };
 for (const [slug, expr] of Object.entries(inputSeen)) scenarios[slug].inputSeen = expr;
 
