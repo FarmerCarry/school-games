@@ -11,6 +11,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { launchChromium } from './browser.mjs';
 import { classroomNavigation, isRetryableNavigationError } from './classroom-nav.mjs';
 import { runScenario } from './game-scenarios.mjs';
+import { withPageDeadline } from './page-wait.mjs';
 import { copyClassroomSite } from './classroom-files.mjs';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -30,6 +31,33 @@ let browser;
 function gotoDownloaded(page, file) {
   return page.goto(pathToFileURL(file).href, classroomNavigation);
 }
+// The first WebGL page of a browser also starts WebGL in the GPU process (ANGLE and
+// SwiftShader here), whatever the game. Linux Chromium with these flags, five runs each:
+// Dino 3D as the first WebGL page showed its hook after a median 929 ms, 631 ms after a
+// one-pixel draw in another page (GPU-process time before the hook 960 -> 780 ms).
+// Whichever game opens first pays that on top of its own start-up (Dino 3D in both
+// passes below), so it is paid once per browser here instead.
+async function warmUpWebGL(context) {
+  const page = await context.newPage();
+  try {
+    const pixel = await withPageDeadline(page, () => {
+      const canvas = document.createElement('canvas');
+      const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
+      if (!gl) return null;
+      gl.clearColor(0, 0.5, 1, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      const out = new Uint8Array(4);
+      gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, out);
+      gl.getExtension('WEBGL_lose_context')?.loseContext();
+      return Array.from(out);
+    }, 30000, 'WebGL warm-up');
+    if (!pixel) console.log('WebGL warm-up: no WebGL in this browser; the 3D games will say so.');
+  } catch (error) {
+    console.log('WebGL warm-up failed: ' + String(error.message || error).split('\n')[0]);
+  } finally {
+    await page.close().catch(() => {});
+  }
+}
 
 try {
   for (const deniedStorage of [false, true]) {
@@ -39,6 +67,7 @@ try {
     const label = deniedStorage ? 'storage-blocked' : 'normal';
     const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, serviceWorkers: 'block', reducedMotion: 'reduce', offline: true });
     try {
+      await warmUpWebGL(context);
       if (deniedStorage) {
         await context.addInitScript(() => {
           for (const method of ['getItem', 'setItem', 'removeItem']) {

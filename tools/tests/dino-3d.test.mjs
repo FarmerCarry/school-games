@@ -22,7 +22,9 @@ const starsUpTo = n => Array.from({ length: 15 }, (_, i) => i < n ? 3 : 0);
 // (probe.results: [id, outcome]), and storage that can fail. `ddaStart: { main, endless }`
 // is the level each difficulty starts at before it has a result (Kit.dda's `start`).
 // It never moves obstacles or the dino: input goes through the real keyboard and mouse.
-async function game(t, { save, ddaStart = {}, deniedStorage = false, viewport = { width: 1100, height: 620 } } = {}) {
+// `holdFirstFrame`: the fence that tells the game its first frame is drawn stays unsignalled
+// until the page sets `window.releaseFirstFrame`, and game() does not wait for ready.
+async function game(t, { save, ddaStart = {}, deniedStorage = false, viewport = { width: 1100, height: 620 }, holdFirstFrame = false } = {}) {
   const context = await browser.newContext({ viewport, serviceWorkers: 'block', reducedMotion: 'reduce' });
   const page = await context.newPage(), errors = [];
   page.on('pageerror', error => errors.push(error.message));
@@ -67,8 +69,17 @@ async function game(t, { save, ddaStart = {}, deniedStorage = false, viewport = 
       return read.apply(this, arguments);
     };
   }, { save, ddaStart, deniedStorage });
+  if (holdFirstFrame) {
+    await context.addInitScript(() => {
+      const status = WebGL2RenderingContext.prototype.getSyncParameter;
+      WebGL2RenderingContext.prototype.getSyncParameter = function (sync, pname) {
+        if (pname === this.SYNC_STATUS && !window.releaseFirstFrame) { window.firstFramePolls = (window.firstFramePolls || 0) + 1; return this.UNSIGNALED; }
+        return status.call(this, sync, pname);
+      };
+    });
+  }
   await page.goto(`${server.origin}/games/dino-3d/`);
-  await page.waitForFunction(() => !!window.Dino3DGame && window.dinoProbe.ready === 1, null, { polling: 50 });
+  if (!holdFirstFrame) await page.waitForFunction(() => !!window.Dino3DGame && window.dinoProbe.ready === 1, null, { polling: 50 });
   return page;
 }
 const state = page => page.evaluate(() => Dino3DGame.state);
@@ -189,6 +200,24 @@ test('the title waits for Play; Play starts level 1-1 with its coach, and real k
   await key(page, 'ArrowDown', 'up');
   await step(page, 2);
   assert.equal((await state(page)).player.duck, false);
+});
+
+// On a software renderer a cold browser's first frame can take seconds. The title is up and
+// answers meanwhile; the game says it is ready (hook, Kit.ready) only once that frame is
+// drawn, and a Play pressed before then starts the run then.
+test('the title shows before the first 3D frame is drawn; ready waits for it; an early Play still starts', async t => {
+  const page = await game(t, { holdFirstFrame: true });
+  await page.waitForFunction(() => window.firstFramePolls > 3, null, { polling: 50 });
+  assert.ok(await visible(page, '#title') && await visible(page, '#play'), 'the title is on screen while the frame draws');
+  assert.equal(await page.evaluate(() => window.dinoProbe.ready), 0, 'not ready before the first frame is drawn');
+  assert.equal(await page.evaluate(() => typeof window.Dino3DGame), 'undefined');
+  await page.locator('#play').click();
+  assert.ok(await visible(page, '#title'), 'the press waits for the 3D view');
+  await page.evaluate(() => { window.releaseFirstFrame = true; });
+  await page.waitForFunction(() => !!window.Dino3DGame && window.dinoProbe.ready === 1, null, { polling: 50 });
+  assert.equal(await mode(page), 'playing', 'the early Play started level 1-1');
+  await step(page);
+  assert.equal((await state(page)).id, 'b1L1');
 });
 
 test('P and Esc pause and resume; a pause freezes the world; focus loss pauses and coming back does not resume', async t => {
