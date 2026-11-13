@@ -7,12 +7,26 @@ who has never held a mouse to an 11-year-old expert (Bubble Bop, Road Hopper, Di
 Lightning Fingers, Egg Rush, Lucky Lake and Chaos Island adapt their difficulty to how the children
 play on each PC), and none of them plays background music.
 
-- **No ads, no accounts, no profiles, no names, no chat, no statistics, no analytics, no links to other sites.**
-  Children open a game and play; nothing is typed and nothing about their play is recorded or sent.
-- The site makes no network requests: every game, sound, font and picture lives in this repo,
-  and all games run locally in the browser.
+- **No ads, no accounts, no profiles, no names, no ages, no chat, no third-party analytics, no links to other sites.**
+  Children open a game and play; nothing they type is ever sent.
+- Every game, sound, font and picture lives in this repo, and all games run locally in the browser.
+  The only network use is **anonymous play statistics** (see [Privacy](#privacy)).
 - **Made for Windows PCs with a mouse and keyboard.**
 - Scores, progress and each game's difficulty are saved in each browser (localStorage).
+
+## Privacy
+
+The published fast version sends **anonymous play statistics** to the school's own statistics
+server: which games are played on each PC, how they were opened, how long and how smoothly
+they run, and how each round went (level, win or loss, score, hits and misses, reaction
+times). There are no accounts, profiles, names or ages, so nothing says which child played;
+a random code per PC and per page load ties the numbers together. Nothing typed, no error
+text, no dates or times of day and no cookies are sent.
+
+Only `js/telemetry.js` sends, and only when the fast build is given the server's address
+(`SG_TELEMETRY_URL`, set in `.github/workflows/build.yml`). The source files, a build without
+the address, the offline ZIP run from a folder and a browser with Global Privacy Control send
+nothing. Details, the exact fields and how to turn it off: [`docs/TELEMETRY.md`](docs/TELEMETRY.md).
 
 ## The games (38)
 
@@ -349,15 +363,17 @@ Everything the home page shows comes from **`js/catalog.js`**:
 index.html, css/, js/     the portal (plain HTML/CSS/JS, no build step)
 js/catalog.js             list of games, categories and site name
 js/offline.js             the fast build's offline cache controller (footer status, update prompt)
+js/telemetry.js           the only network sender: anonymous play statistics to the school's server (off without an address)
 games/<slug>/             one folder per game (index.html + thumb.svg + its own files)
 shared/kit.js             tiny helper library all games use (sound, saving, input, scaling, lifecycle,
-                          difficulty control Kit.dda)
+                          difficulty control Kit.dda, play statistics Kit.stats and Kit.track)
 shared/juice.js           procedural sound effects (Kit.juice in games, Juice in the portal)
 shared/game.css           shared game page styles + the Fredoka font
 lib/three/                three.js r159 (MIT) for the 3D games
 docs/ARCHITECTURE.md      the platform contract: runtime, Kit, the portal, sound, difficulty
 docs/GAME_SPEC.md         the rules every game follows
 docs/PERFORMANCE.md       size limits per game, slow-disk rules and how the fast build is measured
+docs/TELEMETRY.md         the anonymous play statistics: when they are sent, the exact fields, turning them on or off
 tools/playtest.mjs        headless Chromium playtest harness (Playwright)
 tools/build.mjs           builds the fast version (one file per game + offline cache + offline ZIP)
 ```
