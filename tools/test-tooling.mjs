@@ -49,10 +49,10 @@ test('the classroom warm-up finds the WebGL games of both download kinds', () =>
   }
   // Kit's 2D canvas option and its "three great ones" comment are not WebGL.
   assert.equal(usesWebGL(source('shared/kit.js')), false);
-  assert.equal(describeWarmup('normal', { ms: 4200, pages: [
-    { slug: 'dino-3d', ok: true, ms: 3100, hookMs: 2400 },
-    { slug: 'road-hopper', ok: false, ms: 30000, error: 'page.waitForFunction: Timeout 29000ms exceeded.' }
-  ] }), 'WARMUP normal 4.2 s: dino-3d 3.1 s (hook 2.4 s), road-hopper not ready after 30.0 s: page.waitForFunction: Timeout 29000ms exceeded.');
+  assert.equal(describeWarmup('normal', { ms: 52100, pages: [
+    { slug: 'dino-3d', ok: true, ms: 7100, timings: { dom: 300, hook: 2400, active: 5200, input: 6900 } },
+    { slug: 'road-hopper', ok: false, ms: 45000, timings: { dom: 900, hook: 1200 }, error: 'not through its first input within 45 s' }
+  ] }), 'WARMUP normal 52.1 s: dino-3d 7.1 s (hook 2.4, active 5.2, input 6.9); road-hopper failed after 45.0 s (hook 1.2): not through its first input within 45 s');
 });
 
 test('an explicit clickControl timeout bounds every step; the default keeps 5 s for visibility only', async () => {

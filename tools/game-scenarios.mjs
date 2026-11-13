@@ -333,14 +333,12 @@ export async function prepareScenario(page, slug) {
   assert.ok(s, `No gameplay scenario for ${slug}`);
   if (s.init) await page.addInitScript(s.init);
 }
-// Every game assigns one of these once its first screen is built.
-export const GAME_HOOK = '!!window.Kit && (!!window.__game || !!document.getElementById("boardApp") || !!window.GolfArt || !!window.Dino3DGame)';
 async function start(page, slug, s, onStage) {
   // The hook is assigned before the first paint, but that paint is one task.
   // On software WebGL it can block the main thread for longer than a gameplay
   // check, so the poll below cannot observe the assignment until the frame
   // yields. Same condition as every other gate; only this wait covers that frame.
-  await requireState(page, GAME_HOOK, `${slug}: initialized`, 20000);
+  await requireState(page, '!!window.Kit && (!!window.__game || !!document.getElementById("boardApp") || !!window.GolfArt || !!window.Dino3DGame)', `${slug}: initialized`, 20000);
   onStage?.('hook');
   for (let i=0;i<s.start.length;i++) if (!s.startIf || await evaluate(page,s.startIf[i])) await s.start[i](page);
   await focusSurface(page);

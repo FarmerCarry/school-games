@@ -48,8 +48,9 @@ try {
     // the full normal pass out of the blocked-storage pass.
     browser = await launchChromium();
     const label = deniedStorage ? 'storage-blocked' : 'normal';
-    // Pay this browser's cold software-WebGL start before the timed checks
-    // (tools/classroom-warmup.mjs). Its own context: the checks' storage is untouched.
+    // Pay this browser's cold software-WebGL start before the timed checks: play
+    // each WebGL game once to its first input (tools/classroom-warmup.mjs). Its
+    // own context, so the checks' storage is untouched.
     const warmup = { label, ...await warmUpWebGL(browser, contextOptions, webglPages) };
     warmups.push(warmup);
     console.log(describeWarmup(label, warmup));
