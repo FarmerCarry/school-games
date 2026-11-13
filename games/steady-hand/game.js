@@ -173,6 +173,9 @@
     world = SH.create(i, params());
     tried = true;
     resetPlay();
+    // Play stats: every level try is a round; the hand that shows how to carry the spark is the tutorial.
+    Kit.stats.round('L' + (i + 1));
+    if (!save.coach) Kit.stats.tutorial('start');
     const L = world.L;
     // Where the "how to open" picture of each door goes: beside the track, with room.
     doorIcons = L.gates.map(d => spotBeside(L, d, d.half + 46));
@@ -200,6 +203,7 @@
   }
   // Leaving a level half way is a try too, when the child really tried it.
   function leaveLevel() {
+    Kit.stats.end('quit'); // a level left unfinished (nothing when it was finished)
     if (world && tried && !world.done && (world.touches > 0 || world.best - world.L.start.s > world.L.len * 0.25)) dda.result(SH.outcome(false, world.touches));
     tried = false;
   }
@@ -228,9 +232,10 @@
   function onGoal() {
     const L = world.L, stars = SH.stars(L, world.touches, world.clock), before = save.lv[cur].s;
     const res = SH.applyResult(save, cur, stars, world.clock, world.coins);
-    if (!save.coach) save.coach = true;
+    if (!save.coach) { save.coach = true; Kit.stats.tutorial('done'); }
     persist();
     dda.result(SH.outcome(true, world.touches));
+    Kit.stats.end('win', stars);
     tried = false;
     result = { stars: stars, before: before, res: res, touches: world.touches, time: world.clock, par: L.par, got: world.got, all: L.coins.length };
     celebrate = CELEBRATE;
@@ -367,6 +372,7 @@
           break;
         case 'drop': if (e.why === 'release') J.tap(); break;
         case 'touch':
+          Kit.track.miss();
           bzzt(); shake.add(9);
           arcs.push({ x: e.hx, y: e.hy, sx: e.x, sy: e.y, t: 0, seed: (Math.random() * 1e9) | 0 });
           if (arcs.length > 4) arcs.shift();
@@ -379,6 +385,7 @@
           break;
         case 'cp': {
           const cp = L.cps[e.i];
+          Kit.track.hit();
           J.chime(1); cpPop[e.i] = 1;
           fx.burst(cp.lx, cp.ly - 6, { count: 14, colors: ['#ffd23f', '#ffffff'], speed: 200, life: 0.6, size: 6, gravity: 200 });
           break;
@@ -418,7 +425,7 @@
     SH.step(world, dt, inp);
     handleEvents();
     // The first real drag ends the first lesson's hand.
-    if (!save.coach && world.dragged > 120) save.coach = true;
+    if (!save.coach && world.dragged > 120) { save.coach = true; Kit.stats.tutorial('done'); }
     // Coach: after a few idle seconds without the spark, the hand shows what to do.
     if (world.held || world.done || world.stun > 0) { coach.idle = 0; coach.on = false; }
     else {

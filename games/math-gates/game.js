@@ -167,6 +167,9 @@
     $('hud-rival').textContent = String(run.rival);
     $('hud-coins').textContent = '0';
     coach.on = !save.coach && i === 0; coach.rows = 0; coach.t = 0;
+    // Play stats: every level try is a round (L1-1 .. L5-6); the first level's coach is the tutorial.
+    Kit.stats.round('L' + L.tag);
+    if (coach.on) Kit.stats.tutorial('start');
     $('coach').hidden = !(coach.on || run.tier === 1 && i % MG.PER_WORLD === 0);
     $('coach').classList.remove('out');
     showBanner(L);
@@ -186,7 +189,7 @@
     J.select(); Kit.keys.reset();
     setMode('play');
   }
-  function quit() { J.back(); toMap(); }
+  function quit() { Kit.stats.end('quit'); J.back(); toMap(); }
   function showBanner(L) {
     var b = $('banner');
     b.innerHTML = '<span class="big" dir="ltr">' + L.tag + '</span><span>' + MG.WORLDS[L.world].name + '</span>';
@@ -239,6 +242,7 @@
           $('hud-coins').textContent = String(run.runCoins); wiggle($('hud-coins').parentNode);
           break;
         case 'hit':
+          Kit.track.miss();
           J.impact(0.5); J.pop(0.3); view.shake(0.45); view.knock(e.id); streak = 0;
           if (e.lost) float(ltr(MG.MINUS + e.lost), 'bad', view.crowdTop);
           break;
@@ -252,6 +256,7 @@
           if (e.after > e.before) { J.pop(0.7); view.burst(MG.laneX(e.lane), 2, -row.d, { count: 22, speed: 5, life: 0.9 }); }
           else if (e.after < e.before) { J.back(); view.shake(0.2); }
           float(ltr(e.after >= e.before ? '+' + (e.after - e.before) : MG.MINUS + (e.before - e.after)), e.after >= e.before ? 'good' : 'bad', view.crowdTop);
+          if (e.best) Kit.track.hit(); else Kit.track.miss();
           if (e.best) {
             streak++;
             J.streak(Math.min(8, streak));
@@ -267,6 +272,7 @@
           row = run.rows[e.row];
           view.gatePop(e.row, e.lane, e.right);
           var eq = ltr(row.q.text.replace('?', String(row.q.ans)));
+          if (e.right) Kit.track.hit(); else Kit.track.miss();
           if (e.right) {
             J.chime(2); J.pop(1);
             view.burst(MG.laneX(e.lane), 2.4, -row.d, { count: 40, speed: 6, life: 1.2 });
@@ -305,10 +311,12 @@
 
   // The result is saved the moment the level ends, before the celebration.
   function finishLevel() {
-    var res = run.result, before = save.coins, prevStars = save.stars[cur];
+    var res = run.result, before = save.coins, prevStars = save.stars[cur], coached = !save.coach;
     var out = MG.applyResult(save, cur, res);
     persist();
     dda.result(MG.outcome(res));
+    if (coached && save.coach) Kit.stats.tutorial('done');
+    Kit.stats.end(res.won ? 'win' : 'lose', res.count);
     result = { res: res, out: out, before: before, prevStars: prevStars, next: cur < MG.LEVELS_N - 1 && MG.isOpen(save, cur + 1) };
     later(res.won ? 0.4 : 0.2, showResult);
   }

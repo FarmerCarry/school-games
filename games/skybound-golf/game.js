@@ -24,7 +24,7 @@
   };
   var modalMode = '', paused = false, gaugeT = 0, swing = null, hitStop = 0, follow = -1, shake = 0;
   var landedT = 0, result = null, newWorld = -1, burstEl = null, lastFocus = null, toastTimer = 0;
-  var coinStreak = 0, lastCoinAt = -9, gaugeHot = false, emptyWarned = false, unlockSeen = false;
+  var coinStreak = 0, lastCoinAt = -9, busyAt = 0, gaugeHot = false, emptyWarned = false, unlockSeen = false;
   var renderDirty = true, renderedTime = -1, hud = { meters: -1, coins: -1, alt: -1, rockets: '' };
   var mute = K.muteButton(); ui.appendChild(mute);
   // A held Space or Enter must not keep pressing the button that a screen
@@ -355,6 +355,7 @@
     if (s.phase === 'flight') commit();
     closeModal(); resetScene(); stats();
     s.phase = 'ready';
+    if (!save.shots) Kit.stats.tutorial('start');
     updateHud(); controls(); canvas.focus({ preventScroll: true });
     announce('اضرب عندما يصل المضرب إلى المنطقة الذهبية');
   }
@@ -370,6 +371,8 @@
   }
   function strike() {
     var power = s.gauge.value;
+    // Play stats: each shot is a round of its world.
+    Kit.stats.round(worldId());
     swing = { power: power, grade: P.grade(power, save.upgrades), from: s.golfer.angle, t: 0 };
     s.phase = 'swing'; sfx.swing(); controls();
   }
@@ -455,7 +458,7 @@
       burst('ring', e.x, e.y + 0.3, 1, { speed: 0, size: perfect ? 120 : 70, color: perfect ? '#ffd000' : '#ffffff', life: 0.45, g: 0 });
       burst('spark', e.x, e.y + 0.3, perfect ? 12 : 5, { speed: 14, size: 11, color: perfect ? '#ffd000' : '#ffffff', angle: -Math.PI / 2, spread: 2.2, g: 10, life: 0.6 });
       popup(perfect ? 'قفزة خارقة!' + (e.combo > 1 ? ' ' + ltr('×' + e.combo) : '') : 'قفزة جيدة', e.x, e.y + 4, perfect ? '#ffd000' : '#ffffff', perfect ? 44 : 32);
-      if (perfect && save.tips < 2) { save.tips = 2; hint(); }
+      if (perfect && save.tips < 2) { save.tips = 2; Kit.stats.tutorial('done'); hint(); }
     } else if (e.type === 'skip') {
       sfx.skip(); kick(4);
       burst('dust', e.x, e.y, 10, { speed: 9, size: 9, color: '#9fe3ff', angle: -Math.PI / 2, spread: 1.6, g: 20, life: 0.6 });
@@ -494,6 +497,7 @@
     save.high = Math.max(save.high, Math.floor(b.maxY));
     save.shots++; if (b.hole) save.holes++; if (b.space) save.spaces++;
     if (save.tips < 1) save.tips = 1;
+    Kit.stats.end('end', distance);
     persist(); stats();
     return result;
   }
@@ -656,6 +660,7 @@
     var b = s.ball;
     var events = P.step(s.course, b, save.upgrades, dt * P.pace(b));
     for (var n = 0; n < events.length; n++) onEvent(events[n]);
+    if (s.time > busyAt) { busyAt = s.time + 1; Kit.stats.busy(); }
     if (!reduced && !b.done) { s.trail.push({ x: b.x, y: b.y }); if (s.trail.length > 26) s.trail.shift(); }
     if (b.mode === 'air' && b.vy < 0 && !b.done) {
       var p = P.predictImpact(s.course, b, P.ARM_WINDOW);
