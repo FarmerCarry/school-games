@@ -160,6 +160,9 @@
     names = world.actors.map((a, i) => a.human ? (duo ? String(i + 1) : 'أنت') : pool[i % pool.length]);
     matches++;
     tutorial = !duo && !save.tut;
+    // Play stats: every match is a round, one per island; two children on one PC report no winner.
+    Kit.stats.round(duo ? 'duo' : 'isle' + (isle + 1));
+    if (tutorial) Kit.stats.tutorial('start');
     ending = 0; result = null; streak = 0; shownCoins = [0, 0]; goT = 0; doorHintT = 0; keysShowT = duo ? 7 : 5;
     parts.length = 0; floats.length = 0; debris.length = 0; flyers.length = 0;
     coach.mind = CI.mind(0, 0, 77); coach.idle = 0; coach.on = false;
@@ -182,6 +185,7 @@
   }
   function restart() { J.select(); startMatch(duo); }
   function quitToMenu() {
+    Kit.stats.end('quit');
     J.back();
     toTitle();
   }
@@ -197,6 +201,7 @@
       if (tutorial) { save.tut = true; tutorial = false; }
       persist();
       ddaSolo.result(CI.outcome(w, 0));
+      Kit.stats.end(stars > 0 ? 'win' : 'lose', coins);
       result = { duo: false, stars: stars, prev: prev, coins: coins, best: coins > best && coins > 0, newIsle: isle < 3 && !nextWasOpen && CI.isOpen(save, isle + 1) ? isle + 1 : -1, rank: rank };
     } else {
       const a = w.actors[0], b = w.actors[1], coins = a.coins + b.coins, best = save.duo;
@@ -204,6 +209,7 @@
       if (coins > best) save.duo = coins;
       persist();
       ddaDuo.result((a.survived + b.survived) / (2 * rounds));
+      Kit.stats.end('end', coins);
       result = { duo: true, coins: coins, best: coins > best && coins > 0, newIsle: -1, rank: rank };
     }
     ending = 1.3;
@@ -319,6 +325,8 @@
           break;
         case 'door': doorHintT = 6; J.select(); break;
         case 'warn':
+          // A disaster is coming: the child's next key press is a reaction time.
+          if (!duo) Kit.track.cue();
           if (e.kind === 'flood') J.chime(1);
           else if (e.kind === 'wind') J.whoosh(0.35);
           else if (e.kind === 'tornado') { J.whoosh(0.8); doorHintT = 4; }
@@ -395,9 +403,11 @@
       }
     });
     const ok = humans.some(a => e.survivors.indexOf(a.i) >= 0);
+    // Each disaster survived is a hit, each one lost a miss (one child only).
+    if (!duo) { if (ok) Kit.track.hit(); else Kit.track.miss(); }
     if (ok) { J.chime(2); burst(640, 200, 30, ['#ff7eb6', '#ffd23f', '#4fc3ff', '#5be38f', '#ffffff'], 400, 1, 9, 400); }
     else J.fail();
-    if (tutorial && e.round === 0 && ok) { save.tut = true; persist(); tutorial = false; }
+    if (tutorial && e.round === 0 && ok) { save.tut = true; persist(); tutorial = false; Kit.stats.tutorial('done'); }
   }
   function tick(el) { el.classList.remove('tick'); void el.offsetWidth; el.classList.add('tick'); }
   function showCard(kinds) {

@@ -161,6 +161,9 @@
     level = WG.create(plan, (Math.random() * 2147483647) | 0);
     cur = { w: w, l: l };
     ending = null; result = null;
+    // Play stats: every level try is a round (ar:w1-1, en:w2-3); the very first word is the tutorial.
+    Kit.stats.round(lang + ':w' + (w + 1) + '-' + (l + 1));
+    if (coaching) Kit.stats.tutorial('start');
     clearFx();
     const kinds = WG.plantKinds(save);
     plots = level.items.map((it, i) => ({ x: plotX(i, level.total), kind: kinds[(Math.random() * kinds.length) | 0], k: 0, grow: false, phase: Math.random() * 6 }));
@@ -187,7 +190,7 @@
     setScreen('play');
     Kit.keys.reset();
   }
-  function quit() { J.back(); toMap(); }
+  function quit() { Kit.stats.end('quit'); J.back(); toMap(); }
 
   /* ------------------------------------------------------------ the word */
   // The word is DOM text, so the browser shapes it whole and its letters stay joined.
@@ -273,18 +276,20 @@
     let changed = -1;
     for (const e of level.ev) {
       if (e.t === 'good') {
+        Kit.track.hit();
         J.pop(0.45);
         changed = it.gaps.findIndex(g => e.at >= g[0] && e.at < g[1]);
         const from = A.keyCenter(ev ? ev.code : 'Space') || { x: 640, y: 600 }, to = target || gapPoint(null);
         if (!calm()) flyers.push({ x0: from.x, y0: from.y - 10, x1: to.x, y1: to.y, t: 0, ch: it.text.slice(e.at, e.at + e.n) });
         if (flyers.length > 6) flyers.shift();
       } else if (e.t === 'gap') {
-        if (it.state === 'type') J.chime(1);
+        if (it.state === 'type') { J.chime(1); Kit.track.cue(); } // the next gap (or word, below): its first key is a reaction time
       } else if (e.t === 'word') wordDone(e);
       else if (e.t === 'miss') {
+        Kit.track.miss();
         J.error(); shakeGap(); shake.add(2);
       } else if (e.t === 'hint') J.hover();
-      else if (e.t === 'next') { renderWord(true); cardPop = 0; }
+      else if (e.t === 'next') { renderWord(true); cardPop = 0; Kit.track.cue(); }
       else if (e.t === 'done') finishLevel();
     }
     level.ev.length = 0;
@@ -300,7 +305,7 @@
       seeds.push({ x0: c.x, y0: c.y + 40, x1: p.x, y1: 412, t: 0, plot: p });
     } else { p.grow = true; p.k = 1; addBug(p); }
     if (e.done % 3 === 0 && e.done < level.total) float(1022, 340, PRAISE[(e.done / 3 - 1) % PRAISE.length], '#ffd23f', 54);
-    if (coaching) { coaching = false; if (!save.coach) { save.coach = true; persist(); } }
+    if (coaching) { coaching = false; Kit.stats.tutorial('done'); if (!save.coach) { save.coach = true; persist(); } }
   }
   function addBug(p) {
     if (bugs.length >= 7) return;
@@ -316,6 +321,7 @@
     save.seeds += got;
     persist();
     dda[lang].result(WG.outcome(r));
+    Kit.stats.end('win', stars);
     result = { r: r, stars: stars, seeds: got, newBest: rec.newBest, newWorld: nextWorld >= 0 && WG.worldOpen(save, lang, nextWorld) ? nextWorld : -1 };
     ending = { t: 0.5 };
     J.levelUp();

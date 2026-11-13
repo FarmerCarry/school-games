@@ -131,6 +131,7 @@ function buildFixture(t) {
   write('index.html', '<!doctype html><body><script src="js/catalog.js"></script><script src="js/site.js"></script></body>');
   write('js/catalog.js', 'window.GAMES=[{slug:"demo"}];');
   write('js/site.js', 'window.ready=true;');
+  write('js/telemetry.js', 'window.SGTelemetry={};'); // check-all reads the one allowed sender
   write('games/demo/index.html', '<!doctype html><body>Demo</body>');
   write('games/demo/thumb.svg', '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400"><rect fill="#ff00ff" width="400" height="400"/></svg>');
   write('shared/fonts/LICENSE-Test.txt', 'Test font license');

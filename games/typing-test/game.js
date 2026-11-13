@@ -149,6 +149,9 @@
     cur = { w: w, l: l };
     test = null;
     coaching = !save.coach;
+    // Play stats: every level try is a round (ar:w1-1, en:w2-3); the first-time coach is the tutorial.
+    Kit.stats.round(lang + ':w' + (w + 1) + '-' + (l + 1));
+    if (coaching) Kit.stats.tutorial('start');
     ending = null; result = null;
     clearFx(); clearGarden();
     coach.idle = 0; coach.next = coaching ? 2.2 : 4;
@@ -176,6 +179,7 @@
     Kit.keys.reset();
   }
   function quit() {
+    Kit.stats.end('quit');
     J.back();
     if (pausedFrom === 'test') { if (testCfg && testCfg.code) toTitle(); else openSetup(); } else toMap(-1);
   }
@@ -187,6 +191,7 @@
     if (stars > prev) save.stars[lang][cur.w][cur.l] = stars;
     persist();
     dda[lang].result(TT.outcome(r));
+    Kit.stats.end(r.won ? 'win' : 'lose', stars);
     result = { stars: stars, r: r, newWorld: nextWorld >= 0 && TT.worldOpen(save, lang, nextWorld) ? nextWorld : -1 };
     ending = { t: r.won ? 1.6 : 1.4 };
     if (r.won) {
@@ -245,6 +250,8 @@
   function startTest(cfg) {
     testCfg = cfg;
     test = TT.test(cfg);
+    // A speed test is a round too (test:ar:30s, test:en:60s; easy for the short-word challenge).
+    Kit.stats.round('test:' + test.lang + ':' + test.dur + 's' + (test.kind === 'easy' ? ':easy' : ''));
     world = null;
     testResult = null; ending = null;
     clearFx();
@@ -256,6 +263,7 @@
   function finishTest() {
     // An easy class challenge (short words) is not a speed record for the usual test.
     const r = TT.testResult(test), isBest = test.kind === 'easy' ? false : TT.addTest(save, test.lang, test.dur, r, !!testCfg.challenge);
+    Kit.stats.end('end', Math.round(r.wpm));
     if (test.kind !== 'easy') persist();
     testResult = { r: r, isBest: isBest, best: save.best[test.lang + test.dur] };
     ending = { t: 0.9 };
@@ -425,6 +433,7 @@
     coach.idle = 0; stopGhost();
     flashKey(ev.code, n > 0 ? 'good' : 'bad');
     for (const e of test.ev) {
+      if (e.t === 'key') Kit.track.hit(); else if (e.t === 'miss') Kit.track.miss();
       if (e.t === 'key') { J.tap(); if (e.combo > 0 && e.combo % 25 === 0) praise(e.combo / 25 - 1, 640, 330); }
       else if (e.t === 'word') { J.pop(0.4); slide += 1; }
       else if (e.t === 'miss') miss(640, 230);
@@ -449,8 +458,9 @@
   function burstAt(x, y, color) { fx.burst(x, y, { count: 16, colors: [color, '#ffffff', '#ffd23f'], speed: 300, life: 0.6, size: 8, gravity: 300 }); }
   function handleEvents(ev) {
     for (const e of world.ev) {
-      if (e.t === 'spawn') { /* clouds slide in quietly */ }
+      if (e.t === 'spawn') Kit.track.cue(); // clouds slide in quietly; the first key at one is a reaction time
       else if (e.t === 'key') {
+        Kit.track.hit();
         J.tap();
         const c = TT.find(world, e.id), from = keyTop(ev ? ev.code : 'Space');
         if (c) sparks.push({ x1: from.x, y1: from.y, x2: c.letterX || c.x, y2: c.letterY || c.y, t: 0 });
@@ -458,7 +468,7 @@
         if (e.combo >= 3) comboBump = 1;
         if (e.combo > 0 && e.combo % 15 === 0) praise(e.combo / 15 - 1, W / 2, 210);
       } else if (e.t === 'zap') zap(e, ev);
-      else if (e.t === 'miss') miss(e.x, e.y);
+      else if (e.t === 'miss') { Kit.track.miss(); miss(e.x, e.y); }
       else if (e.t === 'rain') {
         J.land(0.4); shake.add(4);
         sunBump[Math.max(0, Math.min(2, e.suns))] = 1;
@@ -485,7 +495,7 @@
     // a flower grows in the garden for every cloud
     const side = flowers.length % 2, fxr = side ? 1040 + Math.random() * 216 : 24 + Math.random() * 212;
     if (flowers.length < 60) flowers.push({ x: fxr, y: 480 + Math.random() * 220, kind: (Math.random() * 6) | 0, t: 0 });
-    if (coaching) { coaching = false; if (!save.coach) { save.coach = true; persist(); } }
+    if (coaching) { coaching = false; Kit.stats.tutorial('done'); if (!save.coach) { save.coach = true; persist(); } }
     coach.idle = 0; coach.next = 4;
   }
 

@@ -8,7 +8,7 @@ this file wins and they are updated to match.
 
 | Question | Decision |
 |---|---|
-| Play tracking | **None.** No telemetry server, no dashboard, no local play statistics or teacher statistics page, no analytics. The site makes no network requests and records nothing about how children play. |
+| Play tracking | **Anonymous play statistics only** ("Play statistics" below): the fast build may send what is played on each PC, never who plays it, to the school's own statistics server, and only when the build is given its address (`SG_TELEMETRY_URL`). No names, accounts, profiles or ages; no local play statistics or teacher statistics page; no third-party analytics. Nothing else on the site uses the network. |
 | Players | **No profiles.** No "who's playing", guests, age bands or XP: children open a game and play. Each game's progress and difficulty belong to the PC. |
 | Classroom settings | **None.** No classroom panel, quiet/effects preset, session timer or hand-over. The topbar 🔊 button mutes the portal and the games. |
 | Difficulty | Every game scales: tiered complexity per game plus dynamic difficulty (`Kit.dda`) that adapts to how the children play on that PC. |
@@ -22,8 +22,11 @@ this file wins and they are updated to match.
 * **Zero background music.** Only tactile, procedural SFX (see below).
 * **Lightweight.** No audio files, no fetched assets, one file per game in the fast
   build, procedural canvas/SVG/three.js art, offline cache.
-* **Private by construction.** Nothing is sent anywhere and nothing about play is stored
-  beyond each game's own progress and difficulty in that browser.
+* **Private by construction.** There is nothing to identify a child: no names, accounts,
+  profiles or ages. Beyond each game's own progress and difficulty in that browser, the only
+  record of play is the anonymous statistics a fast build with an address sends to the
+  school's own server; a source tree, a build without an address and a downloaded folder
+  send nothing at all.
 
 ## Zero-BGM policy (hard rule)
 
@@ -58,10 +61,13 @@ time, after a 2 s tail). Any start in a window, or any output above −60 dBFS, 
 ## Runtime layers
 
 ```
-games/<slug>/            game code (the UI layer calls Kit.dda; engines stay pure)
+games/<slug>/            game code (the UI layer calls Kit.dda, Kit.stats, Kit.track; engines stay pure)
 shared/juice.js          Kit.juice  — procedural SFX engine (opt-in; portal + games)
-shared/kit.js            Kit        — lifecycle, input, audio graph, saving, scaling, Kit.dda
+shared/kit.js            Kit        — lifecycle, input, audio graph, saving, scaling, Kit.dda,
+                                      play statistics (Kit.stats, Kit.track, sg:telemetry)
 js/catalog.js            the games, categories and site name
+js/telemetry.js          SGTelemetry — the ONLY network sender: anonymous play statistics
+                                      to the school's server, off without an address
 js/site.js               portal shell, iframe host, routes, favourites and recent games
 js/offline.js            the fast build's offline cache controller
 ```
@@ -74,6 +80,9 @@ the portal only through `postMessage` via Kit.
 Kit is inlined into every game page, so every minified byte in `shared/kit.js` costs
 ~38 bytes of offline cache.
 
+* The play statistics in `shared/kit.js` (`Kit.stats`, `Kit.track`, `sg:telemetry`):
+  **about 2,060 minified bytes** (measured with the build's esbuild options), about 90 KB of
+  offline cache over the 44 game pages. Further growth needs a budget decision.
 * `shared/juice.js`: **≤ 4,500 minified bytes**, loaded only by pages that use it
   (`<script src="../../shared/juice.js">` after `kit.js`; the portal loads
   `shared/juice.js` before `js/site.js`).
@@ -83,7 +92,8 @@ Kit is inlined into every game page, so every minified byte in `shared/kit.js` c
 
 ## Kit (shared/kit.js)
 
-Kit posts nothing at load and adds no timers. Its messages with the portal:
+Kit posts nothing at load and adds no timers; only while the portal says its statistics
+sender is on does it post `sg:telemetry` and run one 10 s timer. Its messages with the portal:
 
 | Direction | Message | Meaning |
 |---|---|---|
@@ -91,9 +101,10 @@ Kit posts nothing at load and adds no timers. Its messages with the portal:
 | game → portal | `{ type: 'sg:warn', version: 1, message }` | One stray error after ready (at most once per 10 s). |
 | game → portal | `{ type: 'sg:error', version: 1, message }` | `Kit.fail()` or a failed start: the portal offers Retry. |
 | game → portal | `'sg:focus-portal'` | Shift+Tab from the game surface: keyboard focus goes back to the portal. |
+| game → portal | `{ type: 'sg:telemetry', version: 2, e, f, il, ev }` | Anonymous play statistics ([`TELEMETRY.md`](TELEMETRY.md), "Kit"): engaged ms, frames, input latency, round events. Only after ready, while embedded and told `telemetry: true`. |
 | portal → game | `{ type: 'sg:request-ready' }` | Repeat `sg:ready` if the game is already ready. |
 | portal → game | `{ type: 'sg:pause', reason }` | Pause now (portal fullscreen exit and similar). |
-| portal → game | `{ type: 'sg:preferences', quiet?, motionPreference? }` | The portal's mute and motion settings, for file:// pages that cannot read the portal's storage. |
+| portal → game | `{ type: 'sg:preferences', telemetry, quiet?, motionPreference? }` | The portal's mute and motion settings, for file:// pages that cannot read the portal's storage, and whether its statistics sender is on (`telemetry`, a boolean; never stored by Kit). |
 
 Messages are accepted only from the parent window; on http(s) they are posted to the
 page's own origin.
@@ -160,7 +171,41 @@ category chips, quick filters and search. A game opens in an iframe with fullscr
 restart and favourite buttons, and its controls and tips beside it. The topbar 🔊 button
 saves `sg:site:muted` (which Kit and Juice read) and tells the open game at once. The
 reduced-motion choice `sg:site:motion` is shared with the games through `Kit.motion`.
-The portal stores only favourites, recent games and these two preferences.
+The portal stores only favourites, recent games and these two preferences, and, while its
+statistics sender is active, this PC's random code (`sg:site:rid`) and the batches still to
+send (`sg:site:tm:anon:<hash>`).
+
+## Play statistics
+
+The owner's decision: keep anonymous play statistics, with no student accounts and no age
+ranges. The full contract is [`TELEMETRY.md`](TELEMETRY.md).
+
+* **Who:** nobody. There are no accounts, profiles, names or ages, and several children share
+  each PC. A session is one portal page load; a random PC code ties the sessions of one PC
+  together. Never a field about a child: no student code, age band, profile age, days since
+  the last play, new-profile flag, level or XP, classroom mode or classroom timer.
+* **What:** the build, the device's rough size (cores, memory, screen width), the time zone
+  name; each game visit (the game, how it was opened, load time, engaged time, frame
+  smoothness, input latency, load errors, hearts, tutorial start and end; the order of visits
+  gives the game before and after); each round (the game's round id, outcome, score, attempt
+  number, difficulty tier and level, hits and misses, reaction times, inputs, idle lapses,
+  pauses, engaged and wall time).
+* **Where to:** only the school's own statistics server, and only when the fast build is
+  given its address (`SG_TELEMETRY_URL`, set by `.github/workflows/build.yml`). The source
+  tree, a build without the address, a downloaded folder, this computer and a browser with
+  Global Privacy Control send nothing. `js/telemetry.js` is the only file allowed to use the
+  network, and only `fetch()` without cookies (`tools/lib/network-rules.mjs`).
+* **Games:** every catalog game reports its rounds through `Kit.stats` in its UI layer, and
+  the score, hits, misses, cues and first-time tutorial where it has them; engines, levels
+  and simulations never report, and demos, attract modes, replays and bots never report:
+
+| Reports | Games |
+|---|---|
+| rounds, outcome and score | all 44 (connect-four and tic-tac-toe through `shared/board-game.js`); no score: block-world, critter-mart, pizza-clicker, tank-splat, the board games and two-player rounds |
+| hits and misses | bubble-bop, chaos-island, dino-3d, egg-rush, key-runner, keyboard-obby, lucky-lake, math-gates, road-hopper, seek-zoom, shortcut-factory, steady-hand, typing-test, word-garden |
+| reaction times (`Kit.track.cue` / `react`) | bubble-bop, chaos-island, dino-3d, key-runner, keyboard-obby, lucky-lake, road-hopper, shortcut-factory, typing-test, word-garden |
+| difficulty tier and level | every game that uses `Kit.dda` (reported by Kit at each read) |
+| tutorial start and done | the games with a first-time coach |
 
 ## The onboarding game: «فقاعات بوب» (`bubble-bop`)
 

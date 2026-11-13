@@ -202,6 +202,8 @@
     queue.length = 0; floats = []; flyers = []; poofs = []; toast = null; appear = {}; flash = {}; boxShake = {};
     bump.copier = bump.bin = 0; mood.m = ''; mood.t = 0; hand.on = false;
     fx.clear(); Kit.keys.reset();
+    // Play stats: every working day (level) is a round.
+    Kit.stats.round('L' + (i + 1));
     say('المرحلة ' + def.id);
     setScreen('play');
     J.whoosh(0.5);
@@ -219,7 +221,7 @@
     Kit.keys.reset();
   }
   function restart() { J.select(); startLevel(li); }
-  function quitToMap() { J.back(); toMap(); }
+  function quitToMap() { Kit.stats.end('quit'); J.back(); toMap(); }
 
   /* ------------------------------------------------------------ result */
   function finishLevel() {
@@ -229,6 +231,7 @@
     persist();
     dda.result(SF.outcome(w));
     const fail = w.phase !== 'done', Wd = SF.WORLDS[w.def.world];
+    Kit.stats.end(fail ? 'lose' : 'win', res.stars);
     result = { res: res, fail: fail };
     resultT = 0; resultLock = 0.6;
     $('resTitle').textContent = fail ? 'انتهى الوقت!' : w.def.id + ' · ' + Wd.name;
@@ -434,6 +437,7 @@
         case 'all': J.chime(1); e.ids.forEach(id => { flash[id] = 0.5; }); break;
         case 'ship': {
           const c = w.cons[e.con];
+          Kit.track.hit();
           J.coin(Math.min(5, e.combo)); J.whoosh(0.7); setMood('happy', 1.3);
           burst(c.x, BOX.y + 40, 26);
           float(c.x, BOX.y - 10, '+2', '#ffd23f', 40);
@@ -441,12 +445,13 @@
           break;
         }
         case 'wrong':
+          Kit.track.miss();
           J.error(); boxShake[e.con] = 0.6; setMood('oops', 1.2);
           float(w.cons[e.con].x, BOX.y + 20, e.empty ? 'الصندوق فارغ!' : 'ليس بعد!', '#ffffff', 34);
           break;
-        case 'full': J.error(); if (e.con >= 0) float(w.cons[e.con].x, BOX.y + 20, 'ممتلئ!', '#ffffff', 34); break;
+        case 'full': Kit.track.miss(); J.error(); if (e.con >= 0) float(w.cons[e.con].x, BOX.y + 20, 'ممتلئ!', '#ffffff', 34); break;
         case 'nothing': if (NOTHING[e.a]) { J.error(); float(640, 300, NOTHING[e.a], '#ffffff', 34); } break;
-        case 'arrive': J.whoosh(0.25); break;
+        case 'arrive': J.whoosh(0.25); Kit.track.cue(); break; // a box to handle: the next shortcut is a reaction time
         case 'gremlin': J.hover(); float(1180, 200, '!', '#ff5d6c', 60); break;
         case 'mess':
           J.impact(0.45); shake.add(5); setMood('oops', 1.6);

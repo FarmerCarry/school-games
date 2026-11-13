@@ -218,6 +218,9 @@
     resetRound();
     $('trip').hidden = false; $('meters').hidden = true; $('code-tag').hidden = true;
     coach.intro = !save.coach && i === 0 ? 7 : 0;
+    // Play stats: every level try is a round; the first coached level is the tutorial.
+    Kit.stats.round('L' + (i + 1));
+    if (coach.intro) Kit.stats.tutorial('start');
     if (coach.intro) showIntro(); else $('intro').hidden = true;
     showBanner(L, !!coach.intro);
     setMode('playing');
@@ -233,6 +236,7 @@
     $('trip').hidden = true; $('meters').hidden = false; $('hud-far').textContent = String(save.far);
     $('code-tag').hidden = !shared; $('code-now').textContent = shared ? code : '';
     $('intro').hidden = true; coach.intro = 0;
+    Kit.stats.round(shared ? 'code' : 'endless');
     showBanner(null);
     setMode('playing');
     J.whoosh(0.5);
@@ -250,6 +254,7 @@
     setMode('playing');
   }
   function quit() {
+    Kit.stats.end('quit');
     J.back();
     if (cur.endless) toTitle(); else toMap();
   }
@@ -263,14 +268,16 @@
       if (best) save.far = r.distance;
       persist();
       if (!cur.code) ddaRun.result(D.outcome(r));
+      Kit.stats.end('end', r.distance);
       result = { endless: true, won: false, r: r, best: best && far > 0, distance: r.distance, items: D.unlocks(before, save.bank) };
     } else {
       var i = cur.level, st = D.stars(r), prev = save.stars[i], prevBest = save.best[i];
       if (st > prev) save.stars[i] = st;
       if (r.finished && r.eggs > prevBest) save.best[i] = r.eggs;
-      if (r.finished && i === 0 && !save.coach) save.coach = true;
+      if (r.finished && i === 0 && !save.coach) { save.coach = true; Kit.stats.tutorial('done'); }
       persist();
       ddaMain.result(D.outcome(r));
+      Kit.stats.end(r.finished ? 'win' : 'lose', r.eggs);
       result = { endless: false, won: r.finished, r: r, stars: st, best: r.finished && prevBest > 0 && r.eggs > prevBest, items: D.unlocks(before, save.bank),
         next: i < 14 && D.isOpen(save, i + 1) };
     }
@@ -447,6 +454,7 @@
         case 'jump': inputJumps++; J.jump(0.6); view.kick('jump'); view.burst(world.x - 0.2, 0.05, 0, { count: 5, colors: [0xffffff, 0xf0e0c0], speed: 1.6, up: 0.2, life: 0.4, size: 0.13, gravity: 2 }); break;
         case 'land': J.land(e.power * 0.7); view.kick('land', e.power); if (e.power > 0.35) view.burst(world.x, 0.05, 0, { count: 8, colors: [0xffffff, 0xf0e0c0], speed: 2, up: 0.15, life: 0.45, size: 0.14, gravity: 2 }); break;
         case 'cue':
+          Kit.track.cue(); // an obstacle comes: the next jump, duck or dash is a reaction time
           coach.seen[e.kind] = (coach.seen[e.kind] || 0) + 1;
           if (e.kind === 'crate' && p.roar >= 1) showCoach('dash', e.id);
           else if (wantsCoach(e.kind)) { showCoach(e.kind === 'vine' || e.form === 'mid' ? 'duck' : 'jump', e.id); if (coach.bumped[e.kind]) coach.bumped[e.kind]--; }
@@ -454,11 +462,13 @@
           break;
         case 'clear':
           if (e.id === coach.id) hideCoach();
+          Kit.track.hit();
           streak++;
           if (streak % 6 === 0) { callout(PRAISE[Math.min(3, streak / 6 - 1)], world.x, p.y + 2.2); J.streak(Math.min(8, streak / 6 + 1)); }
           break;
         case 'smash':
           if (e.id === coach.id) hideCoach();
+          Kit.track.hit();
           o = obsById(e.id);
           J.impact(0.8); J.pop(1); view.shake(0.35);
           if (o) view.burst(o.x + o.w / 2, 0.6, 0, { count: 26, colors: e.kind === 'crate' ? [0xf2b248, 0xa45f22, 0xffe14d] : [0xffffff, 0xffd23f, 0x9a6236], speed: 5.5, up: 0.6, life: 0.9, size: 0.2, gravity: 12, vx: 3 });
@@ -467,11 +477,13 @@
           break;
         case 'bump':
           if (e.id === coach.id) hideCoach();
+          Kit.track.miss();
           coach.bumped[e.kind] = 2; streak = 0;
           J.impact(0.5); view.kick('bump'); view.shake(0.5);
           view.burst(world.x + 0.4, p.y + 1, 0, { count: 12, colors: BIT, speed: 3, life: 0.7, size: 0.12, gravity: 4 });
           break;
         case 'splash':
+          Kit.track.miss();
           coach.bumped.gap = 2; streak = 0; hideCoach();
           J.pop(0.9); J.land(0.8); view.kick('bump'); view.shake(0.4);
           view.burst(world.x, -0.1, 0, { count: 22, colors: [view.BIO[D.biomeAt(world, world.x)].goo, 0xffffff], speed: 4.5, up: 1.2, life: 0.8, size: 0.16, gravity: 10 });

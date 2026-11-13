@@ -181,6 +181,9 @@
     view.setTheme(w); view.setLevel(L);
     queue.length = 0; floats = []; hudFlash = {}; ending = null; result = null; idle = 0; reported = false;
     banner = { t: 0 };
+    // Play stats: every level try is a round (w1-1 ..); the coached first level is the tutorial.
+    Kit.stats.round('w' + (w + 1) + '-' + (l + 1));
+    if (!save.coach && w === 0 && l === 0) Kit.stats.tutorial('start');
     Kit.keys.reset();
     setScreen('play');
     J.whoosh(0.5);
@@ -188,6 +191,7 @@
   }
   // Leaving a level the child kept falling in counts as a hard try for the difficulty.
   function leaveLevel() {
+    Kit.stats.end('quit'); // a level left unfinished (nothing when it was finished)
     if (world && world.started && !world.done && !reported && world.falls >= 2) { reported = true; dda.result(Math.min(0.25, KO.progress(world) * 0.3)); }
     world = null; ending = null; banner = null;
     view.setLevel(null);
@@ -212,7 +216,9 @@
   /* ------------------------------------------------------------- result */
   function finish() {
     const r = KO.result(world), out = KO.apply(save, cur.w, cur.l, r);
+    if (!save.coach) Kit.stats.tutorial('done');
     save.coach = true;
+    Kit.stats.end('win', out.stars);
     persist();
     dda.result(KO.outcome(r));
     reported = true;
@@ -332,16 +338,18 @@
       view.event(e, w);
       switch (e.t) {
         case 'ok':
+          Kit.track.hit();
           hudFlash[e.code] = ['ok', 0.22]; bubbleBump = 1;
           if (e.combo >= 5 && e.combo % 5 === 0) { J.streak(e.combo / 5); addFloat(PRAISE[Math.min(PRAISE.length - 1, e.combo / 5 - 1)], heroAbove(w.hero, 1.6), '#ffd23f', 46); }
           break;
         case 'wrong':
+          Kit.track.miss();
           hudFlash[e.code] = ['wrong', 0.45]; view.flash(e.code, 'wrong');
           J.error(); oops();
           addFloat('أوه!', heroAbove(e, 1.3), '#ff8fa3', 42);
           break;
         case 'hop': J.jump(Math.min(1, 0.25 + e.d / 8)); view.flash(e.code, 'ok'); break;
-        case 'land': J.land(Math.min(1, 0.25 + e.d * 0.08)); break;
+        case 'land': J.land(Math.min(1, 0.25 + e.d * 0.08)); Kit.track.cue(); break; // the next key is asked for
         case 'coin': J.coin(Math.min(5, e.n)); coinBump = 1; addFloat('+1', heroAbove(e, 1.1), '#ffd23f', 38); break;
         case 'gem': J.chime(2); coinBump = 1; addFloat('+5', heroAbove(e, 1.2), '#ff9cf0', 42); break;
         case 'checkpoint': J.chime(1); addFloat('نقطة حفظ!', heroAbove(e, 1.5), '#7dffb0', 40); say('نقطة حفظ'); break;

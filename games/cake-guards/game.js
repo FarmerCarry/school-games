@@ -40,7 +40,7 @@
   /* --------------------------------------------------------------- state */
   let screen = 'title', world = null, levelIdx = 0, endless = false, endlessBest = 0, speed = 1;
   let placing = null, selected = -1, menuPad = -1, hoverPad = -1, mouse = { x: -100, y: -100 };
-  let time = 0, ending = null, result = null, resultLock = 0;
+  let time = 0, ending = null, result = null, resultLock = 0, busyT = 0;
   let floats = [], zaps = [], rings = [], tutorial = 0, hud = {};
   let bg = null, bgKey = '';
 
@@ -60,7 +60,7 @@
   function begin(def) {
     world = CG.create(def);
     speed = 1; placing = null; selected = -1; menuPad = -1; hoverPad = -1;
-    fx.clear(); floats = []; zaps = []; rings = []; time = 0; ending = null; result = null;
+    fx.clear(); floats = []; zaps = []; rings = []; time = 0; ending = null; result = null; busyT = 0;
     hud = {};
     buildBar();
     hideBanner();
@@ -71,7 +71,10 @@
   }
   function startLevel(i) {
     endless = false; levelIdx = i;
+    // Play statistics: every start (play, retry, restart, next level) is a round.
+    Kit.stats.round('L' + (i + 1));
     tutorial = i === 0 && !save.stars[0] ? 1 : 0;
+    if (tutorial) Kit.stats.tutorial('start');
     begin(CG.LEVELS[i]);
     const fresh = CG.LEVELS[i].towers.filter(t => i > 0 && CG.LEVELS[i - 1].towers.indexOf(t) < 0);
     if (fresh.length && !save.stars[i]) banner('برج جديد: ' + CG.TOWERS[fresh[0]].name, CG.TOWERS[fresh[0]].tip, 'tip', 4500);
@@ -80,6 +83,7 @@
   }
   function startEndless() {
     endless = true; tutorial = 0; endlessBest = save.endless;
+    Kit.stats.round('endless');
     begin(CG.ENDLESS);
     banner('بلا نهاية', 'كم موجة تستطيع أن تصمد؟', '', 2500);
   }
@@ -158,6 +162,8 @@
     const prev = save.stars[levelIdx], before = totalStars(), wasOpen = endlessOpen();
     if (stars > prev) save.stars[levelIdx] = stars;
     persist();
+    Kit.stats.end('win', stars);
+    if (tutorial) Kit.stats.tutorial('done');
     const cake = CG.CAKES.find(c => c.stars > before && c.stars <= totalStars());
     result = { stars: stars, prev: prev, hearts: world.hearts, cake: cake, endless: !wasOpen && endlessOpen() };
   }
@@ -167,8 +173,10 @@
       // Held waves are saved as they clear, so the record to beat is the one the run started with.
       const best = cleared > endlessBest;
       if (cleared > save.endless) { save.endless = cleared; persist(); }
+      Kit.stats.end('end', cleared);
       result = { cleared: cleared, best: best };
     } else {
+      Kit.stats.end('lose', cleared);
       result = { cleared: cleared };
     }
   }
@@ -585,6 +593,9 @@
       time += dt;
       if (!ending) {
         for (let i = 0; i < speed && !ending; i++) { CG.step(world, dt); handleEvents(); }
+        // A wave the child is watching is play time too (at most once a second).
+        busyT += dt;
+        if (busyT >= 1) { busyT = 0; if (world.phase === 'wave') Kit.stats.busy(); }
         if (tutorial === 2 && world.phase !== 'build') showTutorial();
       } else {
         // The board keeps its celebration going until the result screen opens.

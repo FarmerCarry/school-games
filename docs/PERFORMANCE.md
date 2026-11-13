@@ -1015,6 +1015,100 @@ their draw calls low (Keyboard Obby about 15 per frame with one merged key mesh 
 atlas; Math Gates at most about 30 with an instanced crowd capped at 150 runners), and the 2D
 games draw their busy scenes once into cached images. Measure them on the school's weakest PC
 with `npm run perf -- --native-gpu --headed --seconds 30 keyboard-obby math-gates seek-zoom
+steady-hand shortcut-factory word-garden`.
+
+## Anonymous play statistics again, 13 November 2026
+
+The owner brings the play statistics back without student accounts or age ranges: the portal's
+sender (`js/telemetry.js`, 8,242 minified bytes inlined into the portal), Kit's statistics
+(`Kit.stats`, `Kit.track` and `sg:telemetry`, about 2,060 minified bytes inlined into every game
+page) and each game's few reporting calls. Nothing about profiles, ages or classrooms comes back.
+Kit posts statistics and runs its one 10 s timer only while the portal says the sender is on, so a
+build without an address does no more work than before.
+
+Measured with the Linux minified build made as CI makes it (with the default statistics address,
+which adds 103 bytes to the portal and to the cache), against the committed tree built the same
+way without an address.
+
+| Measurement | Before bytes | After bytes | Before limit | New limit |
+| --- | ---: | ---: | ---: | ---: |
+| Portal | 418,491 | 427,428 | 419,000 | 428,000 |
+| 44 game pages together | 5,413,827 | 5,513,567 | — | each rounded up to 500 |
+| Offline precache, 57 files | 6,680,544 | 6,789,221 | 6,681,000 | 6,790,000 |
+| Offline ZIP | 2,339,551 | 2,389,245 | — | — |
+
+Each game page grows by 2,112 to 2,567 bytes (Kit's statistics plus the game's own calls). Every
+limit that grew is again the measured size rounded up (the games to the next 500 bytes, the portal
+and the cache to the next 1,000):
+
+| Game page | Before bytes | After bytes | Before limit | New limit |
+| --- | ---: | ---: | ---: | ---: |
+| air-hockey | 112,719 | 114,926 | 113,000 | 115,000 |
+| beat-dash | 110,418 | 112,717 | 110,500 | 113,000 |
+| blob-battle | 103,200 | 105,338 | 103,500 | 105,500 |
+| block-burst | 111,665 | 113,917 | 112,000 | 114,000 |
+| block-world | 155,597 | 157,801 | 156,000 | 158,000 |
+| bubble-bop | 172,050 | 174,617 | 172,500 | 175,000 |
+| cake-guards | 81,458 | 83,764 | 81,500 | 84,000 |
+| candy-rope | 108,985 | 111,228 | 109,000 | 111,500 |
+| chaos-island | 148,176 | 150,466 | 148,500 | 150,500 |
+| connect-four | 52,362 | 54,554 | 52,500 | 55,000 |
+| critter-mart | 159,033 | 161,225 | 159,500 | 161,500 |
+| dino-3d | 123,723 | 126,088 | 124,000 | 126,500 |
+| drift-king | 106,487 | 108,697 | 106,500 | 109,000 |
+| egg-rush | 152,158 | 154,458 | 152,500 | 154,500 |
+| fire-and-ice | 120,372 | 122,578 | 120,500 | 123,000 |
+| hoop-heads | 146,264 | 148,640 | 146,500 | 149,000 |
+| key-runner | 117,154 | 119,506 | 117,500 | 120,000 |
+| keyboard-obby | 118,754 | 121,035 | 119,000 | 121,500 |
+| lucky-lake | 136,723 | 139,071 | 137,000 | 139,500 |
+| math-gates | 116,620 | 118,949 | 117,000 | 119,000 |
+| maze-dash | 113,273 | 115,585 | 113,500 | 116,000 |
+| merge-2048 | 78,146 | 80,281 | 78,500 | 80,500 |
+| moto-madness | 129,667 | 131,907 | 130,000 | 132,000 |
+| neon-slope | 119,662 | 121,904 | 120,000 | 122,000 |
+| paint-grab | 107,514 | 109,760 | 108,000 | 110,000 |
+| pizza-clicker | 120,626 | 122,789 | 121,000 | 123,000 |
+| pool-party | 129,283 | 131,671 | 129,500 | 132,000 |
+| rail-rush | 139,715 | 141,908 | 140,000 | 142,000 |
+| road-hopper | 113,984 | 116,267 | 114,000 | 116,500 |
+| seek-zoom | 129,833 | 132,164 | 130,000 | 132,500 |
+| shortcut-factory | 122,245 | 124,454 | 122,500 | 124,500 |
+| skybound-golf | 115,176 | 117,388 | 115,500 | 117,500 |
+| snake-arena | 96,170 | 98,393 | 96,500 | 98,500 |
+| splat-strike | 228,251 | 230,557 | 228,500 | 231,000 |
+| steady-hand | 97,872 | 100,124 | 98,000 | 100,500 |
+| sumo-bonk | 118,997 | 121,216 | 119,000 | 121,500 |
+| swing-hook | 105,399 | 107,668 | 105,500 | 108,000 |
+| tank-splat | 109,596 | 111,866 | 110,000 | 112,000 |
+| tic-tac-toe | 52,340 | 54,532 | 52,500 | 55,000 |
+| troll-level | 251,169 | 253,399 | 251,500 | 253,500 |
+| tunnel-blitz | 93,106 | 95,218 | 93,500 | 95,500 |
+| typing-test | 116,411 | 118,853 | 116,500 | 119,000 |
+| wacky-soccer | 151,936 | 154,284 | 152,000 | 154,500 |
+| word-garden | 119,538 | 121,804 | 120,000 | 122,000 |,
+## Beat Dash: a first level children can finish, 13 November 2026
+
+Beat Dash gains a three-step tutorial on level 1 (slow motion and a green spot to jump
+from), a wait-for-a-press state for practice respawns and unattended tries, safe manual
+checkpoints and a difficulty (`Kit.dda`) that slows a try down and widens its timing after
+quick crashes. Level 1 is rebuilt shorter (332 blocks instead of 508). Nothing new is drawn
+on other levels; the tutorial's spots are computed once per difficulty setting, not per frame.
+
+Measured with the Linux minified build, against the previous commit built the same way.
+
+| Measurement | Before bytes | After bytes | Before limit | New limit |
+| --- | ---: | ---: | ---: | ---: |
+| Beat Dash page | 110,418 | 115,037 | 110,500 | 115,500 |
+| Offline precache, 51 files | 5,934,503 | 5,939,122 | 5,935,000 | 5,940,000 |
+| Offline ZIP | 2,079,134 | 2,081,146 | — | — |
+
+The cache grows only by the page's 4,619 bytes. Both limits are the measured size rounded
+up (the game to the next 500 bytes, the cache to the next 1,000).
+
+When this fix was merged with the restored play statistics (one more `Kit.stats` round and
+tutorial report in Beat Dash), the measured sizes were 117,503 bytes for the page and
+6,793,938 bytes for the offline precache, so the limits are now 118,000 and 6,794,000 bytes.,
 steady-hand shortcut-factory word-garden`.,
 ## Dino 3D on software rendering, 13 November 2026
 
@@ -1046,6 +1140,10 @@ Linux Chromium with SwiftShader, cold browser, median of three runs, before → 
 Both limits are again the measured size rounded up (the game to the next 500 bytes, the
 cache to the next 1,000).
 
+Merged with the play statistics and the Beat Dash fix, the measured sizes are 127,809 bytes for
+the Dino 3D page and 6,795,659 bytes for the offline precache, so those limits are now 128,000
+and 6,796,000 bytes.
+
 The Windows runner then showed the cause more directly: while Dino 3D's title was up, the
 test process itself could not run for 10 s. Dino handed the graphics process its next frame
 as soon as the last one was done, so software rendering kept every core busy (Linux, four
@@ -1056,3 +1154,6 @@ cores. Play is not paced (26 frames a second before and after), and neither is a
 card.
 The Dino 3D page is 125,995 bytes, so its limit is now 126,000; the offline precache,
 6,682,850 bytes, stays within 6,683,000.
+
+With the play statistics and the Beat Dash fix, the paced Dino 3D page is 128,360 bytes and
+the offline precache 6,796,210 bytes, so those limits are now 128,500 and 6,797,000 bytes.

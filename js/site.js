@@ -690,6 +690,7 @@
   var playReturn = null;
   var pendingReturn = null;
   var hadFullscreen = false;
+  var frameAt = 0;        // when the current frame was made (performance.now())
   function routeHash() { return location.hash || '#/'; }
   function frameEl() { return $('#stage iframe'); }
   // A paused game and its title/menu still own a session.
@@ -697,6 +698,15 @@
   window.SGUpdateSafe = function () {
     return renderedHash !== null && !current && !frameEl() && parseRoute().name !== 'play';
   };
+  // The anonymous play statistics sender (js/telemetry.js, docs/TELEMETRY.md). It does
+  // nothing unless the fast build gave it the school's statistics server; tm() skips a
+  // hook the loaded sender does not have and never lets it break the portal.
+  function tm(name, a, b) {
+    try { var t = window.SGTelemetry; if (t && typeof t[name] === 'function') t[name](a, b); } catch (e) { /* statistics are optional */ }
+  }
+  function telemetryOn() {
+    try { return !!(window.SGTelemetry && window.SGTelemetry.active && window.SGTelemetry.active()); } catch (e) { return false; }
+  }
   // file:// uses an opaque origin, so target/source Window identity is the
   // authentication boundary. Never accept messages from other windows.
   function postGame(message) {
@@ -705,8 +715,9 @@
   }
   // quiet: the child's own mute, sent when the topbar button changes it, and whenever
   // storage could not keep it (a newly opened game reads the stored value instead).
+  // telemetry: whether the game should count play for the statistics sender.
   function sendPreferences(quiet) {
-    var message = { type: 'sg:preferences' };
+    var message = { type: 'sg:preferences', telemetry: telemetryOn() };
     if (typeof quiet !== 'boolean' && personalMuted !== !!storedPreference('muted', false)) quiet = personalMuted;
     if (typeof quiet === 'boolean') message.quiet = quiet;
     postGame(message);
@@ -731,6 +742,8 @@
   function onGameMessage(e) {
     var f = frameEl();
     if (location.protocol !== 'file:' && e.origin !== location.origin) return;
+    // The sender also accepts the last statistics of a game removed under 2 s ago.
+    tm('msg', e.source, e.data);
     if (!f || e.source !== f.contentWindow) return;
     if (e.data === 'sg:focus-portal') {
       portalFocus = true;
@@ -740,6 +753,7 @@
     }
     var type = e.data && e.data.type;
     if (type === 'sg:ready') {
+      if (!frameReady) tm('ready', current, performance.now() - frameAt);
       clearTimeout(readyTimer);
       frameReady = true;
       f.removeAttribute('inert');
@@ -759,6 +773,7 @@
   }
   function failFrame(f, kind) {
     if (frameEl() !== f) return;
+    tm('fail', kind);
     clearTimeout(readyTimer);
     frameReady = false;
     $('#stage').classList.remove('loading');
@@ -766,6 +781,7 @@
     $('#stageMsg').hidden = false;
     // Dispose the browsing context, including timers, audio and pending saves.
     // Merely hiding a game after a runtime error leaves its simulation alive.
+    tm('gone');
     f.parentNode.removeChild(f);
     portalFocus = true;
     focusPortal();
@@ -777,7 +793,7 @@
     var stage = $('#stage');
     if (!stage) return;
     var old = frameEl();
-    if (old) old.parentNode.removeChild(old);
+    if (old) { tm('gone'); old.parentNode.removeChild(old); }
     var msg = $('#stageMsg');
     if (msg) msg.hidden = true;
     stage.classList.add('loading');
@@ -797,6 +813,8 @@
     f.addEventListener('error', function () { failFrame(f); });
     f.src = 'games/' + encodeURIComponent(slug) + '/index.html';
     stage.appendChild(f);
+    frameAt = performance.now();
+    tm('mount', f.contentWindow);
     readyTimer = setTimeout(function () { failFrame(f, 't'); }, 20000);
   }
   function isFullscreen() { return !!(document.fullscreenElement || document.webkitFullscreenElement); }
@@ -848,6 +866,7 @@
     try { window.localStorage.setItem('sg:site:' + key, JSON.stringify(value)); } catch (e) { /* Current session still works through the frame protocol. */ }
   }
   function setupPlay(slug) {
+    tm('open', slug, !renderedHash);
     pushRecent(slug);
     mountFrame(slug);
     var stage = $('#stage');
@@ -856,6 +875,7 @@
     $('#favBtn').addEventListener('click', function (e) {
       var result = toggleFav(slug), on = result.on;
       var b = this;
+      tm('fav', slug, on);
       b.classList.toggle('on', on);
       b.setAttribute('aria-pressed', on);
       b.title = on ? T.favOn : T.fav;
@@ -967,8 +987,9 @@
       var tag = noEmoji(SITE.tagline);
       title = name + (tag ? ' — ' + tag : '');
     }
-    // Leaving the game or switching games closes its session; a re-render of
+    // Leaving the game or switching games closes its visit; a re-render of
     // the same game only replaces the frame.
+    tm(current && current === previousGame ? 'gone' : 'close');
     if (previousGame && !current) juice('back');
     // fullscreenchange comes only after the fullscreen stage is replaced here.
     parkToast();
@@ -1023,6 +1044,7 @@
     var b = $('#surprise');
     b.classList.remove('roll'); void b.offsetWidth; b.classList.add('roll');
     juice('whoosh', 0.8);
+    tm('tag', g.slug, 'surprise');
     go('#/play/' + enc(g.slug));
   }
 
@@ -1065,6 +1087,8 @@
       var t = e.target && e.target.closest ? e.target.closest('.tile[data-slug], .starter') : null;
       if (!t || e.button || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
       juice('select');
+      // The statistics tell the «ابدأ من هنا» card apart from the game tiles.
+      if (t.classList.contains('starter')) tm('tag', t.getAttribute('data-slug'), 'starter');
     });
     document.addEventListener('click', function (e) {
       var tile = tileFrom(e);
@@ -1113,7 +1137,7 @@
     $('#searchForm').addEventListener('submit', function (e) {
       e.preventDefault();
       var res = search(q.value);
-      if (res.length === 1) { q.blur(); go('#/play/' + enc(res[0].slug)); return; }
+      if (res.length === 1) { q.blur(); tm('tag', res[0].slug, 'search'); go('#/play/' + enc(res[0].slug)); return; }
       // Several results: hand keyboard focus to the first one.
       var first = $('#app .tile');
       if (res.length && first) first.focus(); else q.blur();
