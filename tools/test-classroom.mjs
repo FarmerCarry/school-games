@@ -12,6 +12,7 @@ import { launchChromium } from './browser.mjs';
 import { classroomNavigation, isRetryableNavigationError } from './classroom-nav.mjs';
 import { runScenario } from './game-scenarios.mjs';
 import { copyClassroomSite } from './classroom-files.mjs';
+import { describeWarmup, usesWebGL, warmUpWebGL } from './classroom-warmup.mjs';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ROOT = process.env.SG_ROOT ? path.resolve(REPO, process.env.SG_ROOT) : REPO;
@@ -25,10 +26,20 @@ const inventory = copyClassroomSite(ROOT, folder, {mode: process.env.SG_ROOT ? '
 fs.writeFileSync(path.join(artifactDir, 'download-inventory.json'), JSON.stringify({ root: ROOT, folder, files: inventory }, null, 2) + '\n');
 console.log(`Verified ${inventory.length} downloaded files at ${folder}`);
 
-const cases = [], errors = [];
+const GAMES = ['tic-tac-toe', 'connect-four', 'air-hockey', 'merge-2048', 'pizza-clicker', 'dino-3d', 'cake-guards', 'neon-slope', 'road-hopper'];
+const gameFile = slug => path.join(folder, 'games', slug, 'index.html');
+const webglPages = GAMES.filter(slug => usesWebGL(fs.readFileSync(gameFile(slug), 'utf8')))
+  .map(slug => ({ slug, url: pathToFileURL(gameFile(slug)).href }));
+const contextOptions = { viewport: { width: 1280, height: 720 }, serviceWorkers: 'block', reducedMotion: 'reduce', offline: true };
+const cases = [], errors = [], warmups = [];
 let browser;
 function gotoDownloaded(page, file) {
   return page.goto(pathToFileURL(file).href, classroomNavigation);
+}
+const seconds = ms => (ms / 1000).toFixed(1);
+function describeTimings(item) {
+  const stages = Object.entries(item.timings || {}).map(([stage, ms]) => `${stage} ${seconds(ms)}`);
+  return ` [${seconds(item.ms)} s${stages.length ? '; ' + stages.join(', ') : ''}]`;
 }
 
 try {
@@ -37,7 +48,12 @@ try {
     // the full normal pass out of the blocked-storage pass.
     browser = await launchChromium();
     const label = deniedStorage ? 'storage-blocked' : 'normal';
-    const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, serviceWorkers: 'block', reducedMotion: 'reduce', offline: true });
+    // Pay this browser's cold software-WebGL start before the timed checks
+    // (tools/classroom-warmup.mjs). Its own context: the checks' storage is untouched.
+    const warmup = { label, ...await warmUpWebGL(browser, contextOptions, webglPages) };
+    warmups.push(warmup);
+    console.log(describeWarmup(label, warmup));
+    const context = await browser.newContext(contextOptions);
     try {
       if (deniedStorage) {
         await context.addInitScript(() => {
@@ -80,14 +96,22 @@ try {
         page.setDefaultTimeout(10000);
         return { page, watch: watchPage(page) };
       }
+      // item.ms is the whole case; item.timings are milliseconds from the start
+      // of the (last) attempt to each stage the action marks.
       async function check(caseLabel, action) {
         const item = { label: caseLabel, ok: false };
         cases.push(item);
+        const started = Date.now();
+        const attempt = async page => {
+          const t0 = Date.now();
+          item.timings = {};
+          await action(page, stage => { item.timings[stage] = Date.now() - t0; });
+        };
         let current;
         try {
           current = await openPage();
           try {
-            await action(current.page);
+            await attempt(current.page);
             item.ok = true;
           } catch (error) {
             // One fresh page, and only when Edge aborted or never finished the
@@ -100,13 +124,14 @@ try {
             await current.page.close().catch(() => {});
             current = null;
             current = await openPage();
-            await action(current.page);
+            await attempt(current.page);
             item.ok = true;
           }
         } catch (error) {
           item.ok = false;
           item.error = error.stack || String(error);
         }
+        item.ms = Date.now() - started;
         if (current) {
           try { await current.page.screenshot({ path: path.join(artifactDir, caseLabel + '.png'), fullPage: true }); }
           catch (error) { item.screenshotError = error.message; }
@@ -114,11 +139,12 @@ try {
           await current.page.close().catch(() => {});
         }
         const retryNote = item.navigationRetry ? ' (retried a file navigation)' : '';
-        console.log(`${item.ok ? 'PASS' : 'FAIL'} ${caseLabel}${retryNote}${item.error ? ': ' + item.error.split('\n')[0] : ''}`);
+        console.log(`${item.ok ? 'PASS' : 'FAIL'} ${caseLabel}${retryNote}${describeTimings(item)}${item.error ? ': ' + item.error.split('\n')[0] : ''}`);
       }
 
-      await check(label + '-portal', async page => {
+      await check(label + '-portal', async (page, mark) => {
         await gotoDownloaded(page, path.join(folder, 'index.html'));
+        mark('dom');
         await page.waitForFunction(() => document.querySelectorAll('a[data-slug]').length >= 31);
         assert.ok(await page.locator('a[data-slug]').count() >= 31, 'catalog renders from a file URL');
         await page.locator('a[data-slug="tic-tac-toe"]').first().click();
@@ -131,19 +157,21 @@ try {
         await frame.waitForFunction(() => document.getElementById('gameBoard').dataset.moves === '1');
       });
 
-      for (const slug of ['tic-tac-toe', 'connect-four', 'air-hockey', 'merge-2048', 'pizza-clicker', 'dino-3d', 'cake-guards', 'neon-slope', 'road-hopper']) {
-        await check(label + '-' + slug, async page => {
-          await gotoDownloaded(page, path.join(folder, 'games', slug, 'index.html'));
-          const result = await runScenario(page, slug, { mode: 'performance' });
+      for (const slug of GAMES) {
+        await check(label + '-' + slug, async (page, mark) => {
+          await gotoDownloaded(page, gameFile(slug));
+          mark('dom');
+          const result = await runScenario(page, slug, { mode: 'performance', onStage: mark });
           assert.ok(result.checks.length, 'the game completes observable gameplay checks');
         });
       }
-      await check(label + '-pool-party', async page => {
+      await check(label + '-pool-party', async (page, mark) => {
         await gotoDownloaded(page, path.join(folder, 'games', 'pool-party', 'index.html'));
+        mark('dom');
         await page.locator('#btnTrick').click();
         assert.equal(await page.locator('#lvgrid .lvl').count(), 12, 'all twelve trick-shot puzzles are available in the downloaded menu');
         await page.locator('#lvBack').click();
-        const result = await runScenario(page, 'pool-party', { mode: 'performance' });
+        const result = await runScenario(page, 'pool-party', { mode: 'performance', onStage: mark });
         assert.ok(result.checks.length, 'Pool completes observable gameplay checks after leaving the puzzle menu');
       });
     } finally { await context.close(); }
@@ -156,7 +184,7 @@ try {
   if (browser) await browser.close();
   fs.rmSync(temporary, { recursive: true, force: true });
   const report = { platform: process.platform, channel: process.env.PLAYWRIGHT_CHANNEL || 'chromium',
-    root: path.relative(REPO, ROOT) || 'source', cases, errors };
+    root: path.relative(REPO, ROOT) || 'source', warmups, cases, errors };
   fs.writeFileSync(path.join(artifactDir, 'report.json'), JSON.stringify(report, null, 2) + '\n');
 }
 if (cases.some(item => !item.ok) || errors.length || !cases.length) {

@@ -55,7 +55,12 @@ const defaults = (start, active, snapshot, input, pause, paused, restart, reset,
   ({ start: start.map(step => typeof step === 'function' ? step : click(step)), active, snapshot, input, pause, paused, restart, reset, ...extra });
 
 export const scenarios = {
-  'dino-3d': defaults(['#play'], `window.Dino3DGame.mode === 'playing'`, `[window.Dino3DGame.state.score,window.Dino3DGame.state.distance,window.Dino3DGame.state.player]`, hold('Space', 180), '#pause-button', `window.Dino3DGame.mode === 'paused'`, '#restart', `window.Dino3DGame.state.score < 10`),
+  // Dino 3D sets its hook right after the title's first render. On software
+  // WebGL the GPU process compiles that frame's pipelines afterwards, and until
+  // it finishes every page call and screenshot waits (Windows Edge, Dino 3D as
+  // the first 3D page of a fresh browser: 5 to 15 s and more). Same bound as
+  // Road Hopper's title.
+  'dino-3d': defaults([page => clickControl(page, '#play', { timeout: 20000 })], `window.Dino3DGame.mode === 'playing'`, `[window.Dino3DGame.state.score,window.Dino3DGame.state.distance,window.Dino3DGame.state.player]`, hold('Space', 180), '#pause-button', `window.Dino3DGame.mode === 'paused'`, '#restart', `window.Dino3DGame.state.score < 10`),
   // A first visit starts world 1, level 1. The runner waits at each edge: only the real key
   // its next stone shows (Space here) counts as a hit and hops it on.
   'key-runner': defaults(['#btnPlay'], `${g}.state.screen === 'play' && ${g}.state.id === 'w1L1'`, `[${g}.state.time,${g}.state.x,${g}.state.hits]`, async page => {
@@ -328,17 +333,21 @@ export async function prepareScenario(page, slug) {
   assert.ok(s, `No gameplay scenario for ${slug}`);
   if (s.init) await page.addInitScript(s.init);
 }
-async function start(page, slug, s) {
+// Every game assigns one of these once its first screen is built.
+export const GAME_HOOK = '!!window.Kit && (!!window.__game || !!document.getElementById("boardApp") || !!window.GolfArt || !!window.Dino3DGame)';
+async function start(page, slug, s, onStage) {
   // The hook is assigned before the first paint, but that paint is one task.
   // On software WebGL it can block the main thread for longer than a gameplay
   // check, so the poll below cannot observe the assignment until the frame
   // yields. Same condition as every other gate; only this wait covers that frame.
-  await requireState(page, '!!window.Kit && (!!window.__game || !!document.getElementById("boardApp") || !!window.GolfArt || !!window.Dino3DGame)', `${slug}: initialized`, 20000);
+  await requireState(page, GAME_HOOK, `${slug}: initialized`, 20000);
+  onStage?.('hook');
   for (let i=0;i<s.start.length;i++) if (!s.startIf || await evaluate(page,s.startIf[i])) await s.start[i](page);
   await focusSurface(page);
   await requireState(page,s.active,`${slug}: Start must reach gameplay`);
   if (s.ready) await requireState(page,s.ready,`${slug}: countdown must reach active play`);
   if (s.settle) await requireState(page, s.settle, `${slug}: the round must be ready for input`, s.settleTimeout || 8000);
+  onStage?.('active');
 }
 export async function performInput(page, slug, {repeat = false} = {}) {
   const s = scenarios[slug];
@@ -370,17 +379,20 @@ export async function ensureActive(page, slug) {
   await start(page,slug,s);
   return true;
 }
-export async function runScenario(page, slug, { mode = 'smoke' } = {}) {
+// onStage(name) is called as the run passes 'hook', 'active' and 'input', so a
+// harness can log where a slow start spent its time.
+export async function runScenario(page, slug, { mode = 'smoke', onStage } = {}) {
   const s = scenarios[slug];
   assert.ok(s, `No gameplay scenario for ${slug}`);
   const checks = [];
-  await start(page,slug,s); checks.push('Start reaches active gameplay');
+  await start(page,slug,s,onStage); checks.push('Start reaches active gameplay');
   const watch = await performInput(page,slug);
   // Software-rendered CI can deliver the next simulation/HUD update late.
   // Require observable input progress, waiting within the same bounded gate
   // as startup, rather than assuming it must be painted after 120 ms.
   await requireState(page,'window.sgInput.seen',
     `${slug}: primary input must change gameplay (${watch.before}): ${watch.seen}`);
+  onStage?.('input');
   checks.push('Primary input changes gameplay');
   if (mode === 'performance') return {slug,checks};
   if (!s.noPause) {
