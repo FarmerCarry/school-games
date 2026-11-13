@@ -4,7 +4,6 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { classroomNavigation, isRetryableNavigationError } from './classroom-nav.mjs';
-import { describeWarmup, usesWebGL } from './classroom-warmup.mjs';
 import { startTestServer } from './test-server.mjs';
 import { reportPassed } from './playtest-report.mjs';
 import { clickControl } from './ui-input.mjs';
@@ -33,26 +32,6 @@ test('downloaded-folder navigation retries only a file URL hang or abort', () =>
   assert.equal(isRetryableNavigationError(new Error('Timeout 10000ms exceeded.')), false);
   assert.equal(isRetryableNavigationError(new Error('road-hopper: primary input must change gameplay')), false);
   assert.equal(isRetryableNavigationError(new Error('catalog renders from a file URL')), false);
-});
-
-test('the classroom warm-up finds the WebGL games of both download kinds', () => {
-  const source = file => fs.readFileSync(new URL('../' + file, import.meta.url), 'utf8');
-  // Source folder: the page loads three.js. Built single file: three.js is inline.
-  assert.equal(usesWebGL('<script src="../../lib/three/three.min.js"></script>'), true);
-  assert.equal(usesWebGL('<script>var r=new THREE.WebGLRenderer({canvas:c})</script>'), true);
-  assert.equal(usesWebGL(`<script>c.getContext('webgl2')</script>`), true);
-  for (const game of ['tic-tac-toe', 'connect-four', 'air-hockey', 'merge-2048', 'pizza-clicker', 'cake-guards', 'pool-party']) {
-    assert.equal(usesWebGL(source(`games/${game}/index.html`)), false, game);
-  }
-  for (const game of ['dino-3d', 'neon-slope', 'road-hopper']) {
-    assert.equal(usesWebGL(source(`games/${game}/index.html`)), true, game);
-  }
-  // Kit's 2D canvas option and its "three great ones" comment are not WebGL.
-  assert.equal(usesWebGL(source('shared/kit.js')), false);
-  assert.equal(describeWarmup('normal', { ms: 52100, pages: [
-    { slug: 'dino-3d', ok: true, ms: 7100, timings: { dom: 300, hook: 2400, active: 5200, input: 6900 } },
-    { slug: 'road-hopper', ok: false, ms: 45000, timings: { dom: 900, hook: 1200 }, error: 'not through its first input within 45 s' }
-  ] }), 'WARMUP normal 52.1 s: dino-3d 7.1 s (hook 2.4, active 5.2, input 6.9); road-hopper failed after 45.0 s (hook 1.2): not through its first input within 45 s');
 });
 
 test('an explicit clickControl timeout bounds every step; the default keeps 5 s for visibility only', async () => {

@@ -56,10 +56,10 @@ const defaults = (start, active, snapshot, input, pause, paused, restart, reset,
 
 export const scenarios = {
   // Dino 3D sets its hook right after the title's first render. On software
-  // WebGL the GPU process compiles that frame's pipelines afterwards, and until
-  // it finishes every page call and screenshot waits (Windows Edge, Dino 3D as
-  // the first 3D page of a fresh browser: 5 to 15 s and more). Same bound as
-  // Road Hopper's title.
+  // WebGL the GPU process can stay busy after that, and until it is done every
+  // page call and screenshot waits: 5 to 40 s on the Windows Edge runner in
+  // Nov 2026, most often on the first 3D page of a fresh browser, but also on
+  // a warm one (PR #90). Same bound as Road Hopper's title.
   'dino-3d': defaults([page => clickControl(page, '#play', { timeout: 20000 })], `window.Dino3DGame.mode === 'playing'`, `[window.Dino3DGame.state.score,window.Dino3DGame.state.distance,window.Dino3DGame.state.player]`, hold('Space', 180), '#pause-button', `window.Dino3DGame.mode === 'paused'`, '#restart', `window.Dino3DGame.state.score < 10`),
   // A first visit starts world 1, level 1. The runner waits at each edge: only the real key
   // its next stone shows (Space here) counts as a hit and hops it on.

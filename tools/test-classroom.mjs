@@ -12,7 +12,6 @@ import { launchChromium } from './browser.mjs';
 import { classroomNavigation, isRetryableNavigationError } from './classroom-nav.mjs';
 import { runScenario } from './game-scenarios.mjs';
 import { copyClassroomSite } from './classroom-files.mjs';
-import { describeWarmup, usesWebGL, warmUpWebGL } from './classroom-warmup.mjs';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ROOT = process.env.SG_ROOT ? path.resolve(REPO, process.env.SG_ROOT) : REPO;
@@ -28,10 +27,7 @@ console.log(`Verified ${inventory.length} downloaded files at ${folder}`);
 
 const GAMES = ['tic-tac-toe', 'connect-four', 'air-hockey', 'merge-2048', 'pizza-clicker', 'dino-3d', 'cake-guards', 'neon-slope', 'road-hopper'];
 const gameFile = slug => path.join(folder, 'games', slug, 'index.html');
-const webglPages = GAMES.filter(slug => usesWebGL(fs.readFileSync(gameFile(slug), 'utf8')))
-  .map(slug => ({ slug, url: pathToFileURL(gameFile(slug)).href }));
-const contextOptions = { viewport: { width: 1280, height: 720 }, serviceWorkers: 'block', reducedMotion: 'reduce', offline: true };
-const cases = [], errors = [], warmups = [];
+const cases = [], errors = [];
 let browser;
 function gotoDownloaded(page, file) {
   return page.goto(pathToFileURL(file).href, classroomNavigation);
@@ -48,13 +44,7 @@ try {
     // the full normal pass out of the blocked-storage pass.
     browser = await launchChromium();
     const label = deniedStorage ? 'storage-blocked' : 'normal';
-    // Pay this browser's cold software-WebGL start before the timed checks: play
-    // each WebGL game once to its first input (tools/classroom-warmup.mjs). Its
-    // own context, so the checks' storage is untouched.
-    const warmup = { label, ...await warmUpWebGL(browser, contextOptions, webglPages) };
-    warmups.push(warmup);
-    console.log(describeWarmup(label, warmup));
-    const context = await browser.newContext(contextOptions);
+    const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, serviceWorkers: 'block', reducedMotion: 'reduce', offline: true });
     try {
       if (deniedStorage) {
         await context.addInitScript(() => {
@@ -185,7 +175,7 @@ try {
   if (browser) await browser.close();
   fs.rmSync(temporary, { recursive: true, force: true });
   const report = { platform: process.platform, channel: process.env.PLAYWRIGHT_CHANNEL || 'chromium',
-    root: path.relative(REPO, ROOT) || 'source', warmups, cases, errors };
+    root: path.relative(REPO, ROOT) || 'source', cases, errors };
   fs.writeFileSync(path.join(artifactDir, 'report.json'), JSON.stringify(report, null, 2) + '\n');
 }
 if (cases.some(item => !item.ok) || errors.length || !cases.length) {
