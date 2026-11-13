@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { monitorEventLoopDelay } from 'node:perf_hooks';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { launchChromium } from './browser.mjs';
 import { classroomNavigation, isRetryableNavigationError } from './classroom-nav.mjs';
@@ -65,12 +66,22 @@ async function warmUpWebGL(context) {
 // trace is printed only when a case fails.
 function traceSlowFrames() {
   if (!/\/games\/(dino-3d|neon-slope|road-hopper)\//.test(decodeURI(location.pathname))) return;
-  const trace = window.__sgTrace = { hook: null, slow: [], long: [], frames: 0, longestFrame: [0, 0] };
+  // perSecond: animation frames in each second of the page's life; longestGap: the longest
+  // wait between two frames. Long animation frames also count rendering, which long tasks do not:
+  // [start, duration, ms before rendering began, blocking ms].
+  const trace = window.__sgTrace = { hook: null, slow: [], long: [], loaf: [], frames: 0, perSecond: [], longestFrame: [0, 0], longestGap: [0, 0] };
   try {
     new PerformanceObserver(list => {
       for (const entry of list.getEntries()) if (trace.long.length < 40) trace.long.push([Math.round(entry.startTime), Math.round(entry.duration)]);
     }).observe({ type: 'longtask', buffered: true });
   } catch { /* no long-task timing in this browser */ }
+  try {
+    new PerformanceObserver(list => {
+      for (const entry of list.getEntries()) {
+        if (entry.duration > 150 && trace.loaf.length < 30) trace.loaf.push([Math.round(entry.startTime), Math.round(entry.duration), Math.round((entry.renderStart || entry.startTime) - entry.startTime), Math.round(entry.blockingDuration || 0)]);
+      }
+    }).observe({ type: 'long-animation-frame', buffered: true });
+  } catch { /* no long-animation-frame timing in this browser */ }
   for (const Context of [window.WebGL2RenderingContext, window.WebGLRenderingContext]) {
     if (!Context) continue;
     for (const name of Object.getOwnPropertyNames(Context.prototype)) {
@@ -87,12 +98,21 @@ function traceSlowFrames() {
     }
   }
   const request = window.requestAnimationFrame;
+  let lastFrame = 0, lastFrameTime = -1;
   window.requestAnimationFrame = function (callback) {
     return request.call(window, time => {
       const start = performance.now();
+      // Several callbacks share one frame (the same time stamp); count the frame once.
+      if (time !== lastFrameTime) {
+        lastFrameTime = time;
+        trace.frames++;
+        const second = Math.floor(start / 1000);
+        if (second < 40) { while (trace.perSecond.length <= second) trace.perSecond.push(0); trace.perSecond[second]++; }
+        if (lastFrame && start - lastFrame > trace.longestGap[1]) trace.longestGap = [Math.round(lastFrame), Math.round(start - lastFrame)];
+        lastFrame = start;
+      }
       try { return callback(time); } finally {
         const ms = performance.now() - start;
-        trace.frames++;
         if (ms > trace.longestFrame[1]) trace.longestFrame = [Math.round(start), Math.round(ms)];
       }
     });
@@ -157,6 +177,10 @@ try {
       async function check(caseLabel, action) {
         const item = { label: caseLabel, ok: false };
         cases.push(item);
+        // How long this test process itself could not run (a starved machine stalls every
+        // browser call, not only the page's).
+        const lag = monitorEventLoopDelay({ resolution: 20 });
+        lag.enable();
         let current;
         try {
           current = await openPage();
@@ -201,6 +225,7 @@ try {
           current.watch.commit();
           await current.page.close().catch(() => {});
         }
+        lag.disable();
         const retryNote = item.navigationRetry ? ' (retried a file navigation)' : '';
         console.log(`${item.ok ? 'PASS' : 'FAIL'} ${caseLabel}${retryNote}${item.error ? ': ' + item.error.split('\n')[0] : ''}`);
         if (!item.ok) {
@@ -208,6 +233,7 @@ try {
           const detail = String(item.error || '').split('\n').slice(1).filter(line => !/^\s+at /.test(line)).slice(0, 12);
           for (const line of detail) console.log('  ' + line.replace(/\x1b\[[0-9;]*m/g, ''));
           if (item.pageState !== undefined) console.log('  page: ' + JSON.stringify(item.pageState));
+          console.log(`  test process: longest event-loop delay ${Math.round(lag.max / 1e6)} ms`);
         }
       }
 
