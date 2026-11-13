@@ -124,12 +124,10 @@ const joined = page => page.evaluate(() => {
   el.parentNode.append(probe);
   probe.textContent = text;
   const whole = probe.getBoundingClientRect().width;
-  probe.textContent = [...text].join('‌');
-  const apart = probe.getBoundingClientRect().width;
   probe.remove();
   const range = document.createRange(); range.selectNodeContents(el);
   const joins = [...text].filter((c, i) => __game.engine.joins(c, text[i + 1])).length;
-  return { text, nodes: el.childNodes.length, elements: el.children.length, shown: range.getBoundingClientRect().width, whole, apart, joins };
+  return { text, nodes: el.childNodes.length, elements: el.children.length, shown: range.getBoundingClientRect().width, whole, joins };
 });
 
 test('the title waits; a language opens its map; the first level shows a picture and its word with one glowing gap', async t => {
@@ -175,8 +173,10 @@ test('the right letter, by its key with an Arabic or a Latin key value, complete
   let j = await joined(page);
   assert.deepEqual([j.text, j.nodes, j.elements], [first, 1, 0], 'one run of text, exactly the word, no joiners or pieces');
   assert.ok(Math.abs(j.shown - j.whole) < 1.5, `shaped like the word itself (${j.shown} vs ${j.whole})`);
-  if (j.joins) assert.ok(Math.abs(j.apart - j.whole) > 3, 'letters forced apart would look different: the check can see broken joins');
-  // The check itself, on a word that surely joins.
+  // Whether the check can see broken joins is tested on «نحلة» below, not on this word: the
+  // first word is picked at random, and a few (جمل, دجاجة, دراجة) are almost the same width
+  // with their letters split, so a width test on them would fail by chance.
+  // The check itself, on a word whose joins surely change its width.
   const probe = await page.evaluate(() => {
     const el = document.getElementById('word'), keep = el.textContent;
     el.textContent = 'نحلة';
