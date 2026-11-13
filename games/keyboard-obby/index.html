@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>مغامرة الكيبورد</title>
+<link rel="icon" type="image/svg+xml" href="../../favicon.svg">
+<link rel="stylesheet" href="../../shared/game.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<!-- Icons: every button is a picture, so a child who cannot read yet can play. -->
+<svg class="defs" aria-hidden="true" focusable="false" width="0" height="0">
+  <symbol id="i-play" viewBox="0 0 64 64"><path d="M22 11 Q18 9 18 14 L18 50 Q18 55 22 53 L52 35 Q56 32 52 29 Z"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 64 64"><rect x="15" y="12" width="12" height="40" rx="5"/><rect x="37" y="12" width="12" height="40" rx="5"/></symbol>
+  <symbol id="i-again" viewBox="0 0 64 64"><path d="M50 30 A19 19 0 1 1 41 15" fill="none" stroke="currentColor" stroke-width="9" stroke-linecap="round"/><path d="M33 4 L52 13 L37 27 Z"/></symbol>
+  <symbol id="i-map" viewBox="0 0 64 64"><path d="M6 15 L22 8 L42 15 L58 8 L58 49 L42 56 L22 49 L6 56 Z"/><path d="M22 10 L22 47 M42 17 L42 54" stroke="#1c2250" stroke-width="4" opacity=".35"/><circle cx="32" cy="30" r="6" fill="#ff5d6c"/></symbol>
+  <symbol id="i-home" viewBox="0 0 64 64"><path d="M8 32 L32 10 L56 32 L49 32 L49 54 L37 54 L37 40 L27 40 L27 54 L15 54 L15 32 Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></symbol>
+  <symbol id="i-hat" viewBox="0 0 64 64"><path d="M10 40 Q8 14 32 12 Q56 14 54 40 Z" stroke="#1c2250" stroke-width="3.5" stroke-linejoin="round"/><path d="M40 36 Q58 33 62 42 Q50 47 38 44 Z" fill="#2a7fd6" stroke="#1c2250" stroke-width="3.5" stroke-linejoin="round"/><circle cx="32" cy="12" r="5" fill="#ffd23f" stroke="#1c2250" stroke-width="3"/></symbol>
+  <symbol id="i-star" viewBox="0 0 64 64"><path d="M32 5 L39 23.3 L58.6 24.4 L43.4 36.7 L48.5 55.6 L32 45 L15.5 55.6 L20.6 36.7 L5.4 24.4 L25 23.3 Z" stroke-linejoin="round"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 64 64"><path d="M20 28 L20 20 A12 12 0 0 1 44 20 L44 28" fill="none" stroke="currentColor" stroke-width="7"/><rect x="12" y="28" width="40" height="30" rx="7"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 64 64"><circle cx="32" cy="34" r="24" fill="#ffffff" stroke="#1c2250" stroke-width="5"/><path d="M32 20 L32 35 L42 41" fill="none" stroke="#1c2250" stroke-width="5" stroke-linecap="round"/><rect x="26" y="3" width="12" height="7" rx="3" fill="#1c2250"/></symbol>
+  <symbol id="i-oops" viewBox="0 0 64 64"><circle cx="32" cy="32" r="26" fill="#ff6b6b" stroke="#1c2250" stroke-width="5"/><rect x="28" y="14" width="8" height="24" rx="4" fill="#ffffff"/><circle cx="32" cy="47" r="5" fill="#ffffff"/></symbol>
+  <symbol id="i-check" viewBox="0 0 64 64"><path d="M12 34 L26 48 L52 18" fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+</svg>
+
+<canvas id="scene" tabindex="0" aria-label="مغامرة الكيبورد. اضغط على لوحة المفاتيح الحرف المضيء ليقفز زرّور إليه."></canvas>
+<canvas id="hud" aria-hidden="true"></canvas>
+
+<!-- A 1280x720 layer laid exactly over the canvas (scaled by game.js). -->
+<div id="ui">
+  <div id="hudBar" hidden>
+    <button type="button" id="btnPause" class="ko-btn ko-round" aria-label="استراحة" title="استراحة (Esc)"><svg aria-hidden="true"><use href="#i-pause"/></svg><span class="esc" dir="ltr">Esc</span></button>
+  </div>
+
+  <section id="scrTitle" class="screen" aria-label="مغامرة الكيبورد">
+    <h1 class="logo"><span class="l1">مغامرة</span><span class="l2">الكيبورد</span></h1>
+    <div class="chips"><div class="chip" id="titleStars" aria-label="النجوم"><svg aria-hidden="true"><use href="#i-star"/></svg><b>0</b></div>
+      <div class="chip" id="titleCoins" aria-label="العملات"><i class="coin"></i><b>0</b></div></div>
+    <button type="button" id="btnPlay" class="ko-btn ko-play ring" aria-label="العب"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
+    <div class="howto" aria-label="طريقة اللعب">
+      <span class="cap big" dir="ltr"><b class="la">F</b><i class="ar">ب</i></span>
+      <svg class="hop" viewBox="0 0 120 60" aria-hidden="true"><path d="M8 52 Q60 -14 112 46" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="round" stroke-dasharray="2 14"/><path d="M100 30 L114 48 L92 50 Z" fill="#ffffff"/></svg>
+      <span class="hero" aria-hidden="true"><i></i></span>
+      <p>اضغط المفتاح المضيء ليقفز زرّور!</p>
+    </div>
+    <div class="langs" role="group" aria-label="لغة الحروف">
+      <button type="button" class="ko-btn lang" data-lang="ar" aria-pressed="true"><span class="cap"><b>ب</b></span><span>عربي</span></button>
+      <button type="button" class="ko-btn lang" data-lang="en" aria-pressed="false"><span class="cap"><b>F</b></span><span dir="ltr">English</span></button>
+    </div>
+    <button type="button" id="btnShop" class="ko-btn ko-side" aria-label="المتجر"><svg aria-hidden="true"><use href="#i-hat"/></svg><span>المتجر</span></button>
+  </section>
+
+  <section id="scrMap" class="screen" aria-label="العوالم" hidden>
+    <button type="button" id="mapHome" class="ko-btn ko-round" aria-label="البداية"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
+    <div class="chips"><div class="chip" id="mapStars" aria-label="النجوم"><svg aria-hidden="true"><use href="#i-star"/></svg><b>0</b></div>
+      <div class="chip" id="mapCoins" aria-label="العملات"><i class="coin"></i><b>0</b></div></div>
+    <div class="langs small" role="group" aria-label="لغة الحروف">
+      <button type="button" class="ko-btn lang" data-lang="ar" aria-pressed="true"><span>عربي</span></button>
+      <button type="button" class="ko-btn lang" data-lang="en" aria-pressed="false"><span dir="ltr">English</span></button>
+    </div>
+    <div id="worlds"></div>
+  </section>
+
+  <section id="scrShop" class="screen" aria-label="المتجر" hidden>
+    <button type="button" id="shopBack" class="ko-btn ko-round" aria-label="رجوع"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
+    <div class="chips"><div class="chip" id="shopCoins" aria-label="العملات"><i class="coin"></i><b>0</b></div></div>
+    <div class="shop-panel">
+      <div class="shelf" id="colors" role="group" aria-label="الألوان"></div>
+      <div class="shelf" id="hats" role="group" aria-label="القبعات"></div>
+    </div>
+  </section>
+
+  <section id="scrPause" class="screen dim" aria-label="استراحة" hidden>
+    <div class="card">
+      <button type="button" id="btnResume" class="ko-btn ko-go" aria-label="تابع"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
+      <div class="row">
+        <button type="button" id="btnMenu" class="ko-btn ko-round big" aria-label="الخريطة"><svg aria-hidden="true"><use href="#i-map"/></svg></button>
+        <button type="button" id="btnRestart" class="ko-btn ko-round big" aria-label="ابدأ من جديد"><svg aria-hidden="true"><use href="#i-again"/></svg></button>
+      </div>
+    </div>
+  </section>
+
+  <section id="scrResult" class="screen" aria-label="النتيجة" hidden>
+    <div class="card result">
+      <h2 id="resTitle"></h2>
+      <div class="stars3" id="resStars" aria-hidden="true"><svg><use href="#i-star"/></svg><svg><use href="#i-star"/></svg><svg><use href="#i-star"/></svg></div>
+      <div class="facts">
+        <span class="fact" id="resTimeBox"><svg aria-hidden="true"><use href="#i-clock"/></svg><b id="resTime" dir="ltr">0</b></span>
+        <span class="fact" id="resOopsBox"><svg aria-hidden="true"><use href="#i-oops"/></svg><b id="resOops" dir="ltr">0</b></span>
+        <span class="fact coins"><i class="coin"></i><b id="resCoins" dir="ltr">+0</b></span>
+      </div>
+      <div class="ribbons"><span class="ribbon best" id="resBest" hidden>رقم جديد!</span><span class="ribbon open" id="resOpen" hidden>مرحلة جديدة!</span></div>
+      <div class="row">
+        <button type="button" id="resMap" class="ko-btn ko-round big" aria-label="الخريطة"><svg aria-hidden="true"><use href="#i-map"/></svg></button>
+        <button type="button" id="resNext" class="ko-btn ko-go ring" aria-label="المرحلة التالية"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
+        <button type="button" id="resAgain" class="ko-btn ko-round big" aria-label="مرة أخرى"><svg aria-hidden="true"><use href="#i-again"/></svg></button>
+      </div>
+      <p class="keys-hint"><span dir="ltr"><span class="sg-key">Enter</span></span> التالي &nbsp; <span dir="ltr"><span class="sg-key">R</span></span> مرة أخرى</p>
+    </div>
+  </section>
+
+  <section id="scrError" class="screen dim" hidden>
+    <div class="card"><h2>تعذّر تشغيل الرسوم ثلاثية الأبعاد على هذا الجهاز.</h2></div>
+  </section>
+  <div id="contextNotice" class="notice" role="status" hidden>توقفت الرسوم لحظة… انتظر قليلًا.</div>
+
+  <!-- The wordless coach: a hand that presses the key to type on the little keyboard. -->
+  <div id="ghost" aria-hidden="true" hidden>
+    <svg viewBox="0 0 80 110" width="80" height="110">
+      <g stroke="#1c2250" stroke-width="5" stroke-linejoin="round">
+        <path d="M33 104 L33 52 Q33 44 40 44 Q47 44 47 52 L47 70 Q49 64 55 64 Q61 64 61 71 L61 74 Q63 69 69 70 Q75 71 75 78 L75 84 Q75 96 66 104 Z" fill="#ffffff"/>
+        <path d="M33 74 Q27 66 21 70 Q15 75 22 84 L33 98" fill="#ffffff"/>
+        <rect x="31" y="6" width="18" height="52" rx="9" fill="#ffffff"/>
+      </g>
+      <path d="M36 14 L44 14" stroke="#1c2250" stroke-width="3" stroke-linecap="round" opacity=".35"/>
+    </svg>
+  </div>
+</div>
+<div id="live" class="sr" aria-live="polite"></div>
+
+<script src="../../shared/kit.js"></script>
+<script src="../../shared/juice.js"></script>
+<script src="../../lib/three/three.min.js"></script>
+<script src="engine.js"></script>
+<script src="art.js"></script>
+<script src="hud.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

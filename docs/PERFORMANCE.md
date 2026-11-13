@@ -985,3 +985,74 @@ Measured with the Linux minified build, against the previous entry's measurement
 
 Both limits are again the measured size rounded up (the game to the next 500 bytes, the
 cache to the next 1,000).
+
+## Six new games, 11 November 2026
+
+Six games join the catalog: «مغامرة الكيبورد» (Keyboard Obby, three.js), «حديقة الكلمات»
+(Word Garden), «مصنع الاختصارات» (Shortcut Factory), «ابحث وكبّر» (Seek & Zoom), «سلك الشرارة»
+(Steady Hand) and «بوابات الحساب» (Math Gates, three.js). Each is one inlined page like the other
+games; the two 3D games share the cached three.js. The portal grows by each game's catalog entry
+and inlined thumbnail (about 6.9 KB a game), and the offline cache by six pages.
+
+Measured with the Linux minified build, against the previous entry's measurements.
+
+| Measurement | Before bytes | After bytes | Before limit | New limit |
+| --- | ---: | ---: | ---: | ---: |
+| Portal | 377,312 | 418,491 | 378,000 | 419,000 |
+| Keyboard Obby page | — | 118,754 | — | 119,000 |
+| Word Garden page | — | 119,538 | — | 120,000 |
+| Shortcut Factory page | — | 122,245 | — | 122,500 |
+| Seek & Zoom page | — | 129,833 | — | 130,000 |
+| Steady Hand page | — | 97,872 | — | 98,000 |
+| Math Gates page | — | 116,620 | — | 117,000 |
+| Offline precache, 51 → 57 files | 5,934,503 | 6,680,544 | 5,935,000 | 6,681,000 |
+| Offline ZIP | 2,079,123 | 2,339,551 | — | — |
+
+Every limit is again the measured size rounded up (the games to the next 500 bytes, the portal
+and the cache to the next 1,000). Frame rates were not measured: the build machine renders
+WebGL and canvas in software at a few frames per second for every game. The two 3D games keep
+their draw calls low (Keyboard Obby about 15 per frame with one merged key mesh and one legend
+atlas; Math Gates at most about 30 with an instanced crowd capped at 150 runners), and the 2D
+games draw their busy scenes once into cached images. Measure them on the school's weakest PC
+with `npm run perf -- --native-gpu --headed --seconds 30 keyboard-obby math-gates seek-zoom
+steady-hand shortcut-factory word-garden`.,
+## Dino 3D on software rendering, 13 November 2026
+
+On the Windows Edge CI runner (no graphics card), Dino 3D's page stopped answering for 5 to
+10 s just after the game said it was ready, and the downloaded-folder check could not reach
+its Play button. Dino issued its first frame before setting `Kit.ready` and its test hook,
+but the GPU process only did that frame's work afterwards: in a cold browser about half of
+Dino's start-up work (Neon Slope and Road Hopper wait for their first frame before their
+hook can be seen). Now, where WebGL
+is software (SwiftShader, Basic Render Driver, llvmpipe), Dino draws without MSAA at 0.75 of
+the size; it shows the title first, and calls `Kit.ready` only once a fence says the first
+frame is finished. Shaders for eggs, fruit, dust and the night sky are queued with that first
+frame, so the same fence covers them: compiled just after `Kit.ready`, they kept the Windows
+runner's page from answering for seconds when Play was pressed. Graphics cards keep MSAA and the full size.
+
+Linux Chromium with SwiftShader, cold browser, median of three runs, before → after:
+
+| Condition | GPU-process time still owed at the hook | First 2 frames after the hook | Title frame |
+| --- | ---: | ---: | ---: |
+| 4 cores | 530 → 320 ms | 302 → 161 ms | 213 → 108 ms |
+| 1 core | 460 → 120 ms | 490 → 124 ms | 196 → 97 ms |
+| 1 core, software compositing | 370 → 170 ms | 387 → 200 ms | 172 → 77 ms |
+
+| Measurement | Before bytes | After bytes | Before limit | New limit |
+| --- | ---: | ---: | ---: | ---: |
+| Dino 3D page | 123,723 | 125,444 | 124,000 | 125,500 |
+| Offline precache, 57 files | 6,680,544 | 6,682,299 | 6,681,000 | 6,683,000 |
+
+Both limits are again the measured size rounded up (the game to the next 500 bytes, the
+cache to the next 1,000).
+
+The Windows runner then showed the cause more directly: while Dino 3D's title was up, the
+test process itself could not run for 10 s. Dino handed the graphics process its next frame
+as soon as the last one was done, so software rendering kept every core busy (Linux, four
+cores: 4.3 cores for the graphics process on the title). On a software renderer the menus
+now wait for a fence on the previous frame and then rest as long as that frame took: on
+Linux the title draws 12 frames a second instead of 34 and the graphics process uses 3.0
+cores. Play is not paced (26 frames a second before and after), and neither is a graphics
+card.
+The Dino 3D page is 125,995 bytes, so its limit is now 126,000; the offline precache,
+6,682,850 bytes, stays within 6,683,000.

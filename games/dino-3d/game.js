@@ -27,6 +27,7 @@
   var mode = 'title', world = null, cur = { level: 0, endless: false, code: '' }, view = null, time = 0, viewTime = 0;
   var inputJumps = 0, pointerJump = false, pointerTap = false, ending = null, result = null, resultT = 0, resultLock = 0, wardFrom = 'title';
   var menuIdle = 0, menuNext = 4, dirty = true, contextLost = false, snap = true, spin = 0, lastFrame = 0;
+  var live = false, queued = null; // live: the 3D view has drawn its first frame (see init)
   var coach = { id: 0, t: 0, seen: {}, bumped: {}, intro: 0 }, streak = 0, bannerT = 0, ghostT = 0;
   var hud = { hp: -1, eggs: -1, trip: -1, roar: -1, m: -1 };
   var show = { x: 0, y: 0, ground: true, running: false, hop: true, idle: true, speed: 0 };
@@ -93,12 +94,12 @@
   }
   function stars() { return D.totalStars(save); }
   function newItems() { return D.unlocks(save.seen, save.bank).length > 0; }
-  function toTitle() {
-    menuScene(D.LEVEL[D.nextLevel(save)].biome);
+  function titleScreen() {
     $('title-stars').textContent = String(stars());
     $('btn-wardrobe').classList.toggle('ring', newItems());
     setMode('title');
   }
+  function toTitle() { menuScene(D.LEVEL[D.nextLevel(save)].biome); titleScreen(); }
   function play() {
     J.select();
     if (!stars()) startLevel(0); else toMap();
@@ -497,8 +498,12 @@
   /* -------------------------------------------------------------- input */
   // A mouse click hands the keyboard back to the game; keyboard activation keeps focus.
   // The second click of a double click is dropped (it would land on the next screen).
+  // Until the 3D view is up (see init) the title's buttons only remember the press.
   function on(el, fn) {
-    el.addEventListener('click', function (e) { e.stopPropagation(); if (e.detail > 1) return; Kit.audio.unlock(); if (e.detail > 0) { el.blur(); focusGame(); } fn(e); });
+    el.addEventListener('click', function (e) {
+      e.stopPropagation(); if (e.detail > 1) return; Kit.audio.unlock(); if (e.detail > 0) { el.blur(); focusGame(); }
+      if (live) fn(e); else queued = function () { fn(e); };
+    });
   }
   on($('play'), play);
   on($('btn-endless'), function () { J.select(); openEndless(); });
@@ -539,7 +544,7 @@
 
   canvas.addEventListener('pointerdown', function (e) {
     focusGame();
-    if (e.button !== 0) return;
+    if (e.button !== 0 || !live) return;
     menuIdle = 0; hideGhost();
     if (mode === 'playing') { pointerJump = pointerTap = true; try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ } e.preventDefault(); }
     else if (mode === 'title' || mode === 'map' || mode === 'wardrobe' || mode === 'endless') { view.kick('hop'); J.jump(0.4); }
@@ -624,6 +629,9 @@
   function render() {
     if (!view || contextLost || (!dirty && mode === 'paused')) return;
     var now = performance.now();
+    // Software rendering paces its frames (view.mayDraw in art.js); the game itself keeps
+    // running at 60 steps a second.
+    if (!view.mayDraw(now, mode === 'playing')) return;
     if (mode === 'playing' && lastFrame && view.frameTime(now - lastFrame)) layout();
     lastFrame = now;
     if (mode !== 'paused' || snap) {
@@ -666,12 +674,27 @@
   canvas.addEventListener('webglcontextlost', function (e) { e.preventDefault(); contextLost = true; pause(false); $('context-notice').hidden = false; });
   canvas.addEventListener('webglcontextrestored', function () { contextLost = false; $('context-notice').hidden = true; snap = true; dirty = true; layout(); });
   if (document.fonts && document.fonts.load) document.fonts.load('700 40px Fredoka', 'رائع 5').then(function () { dirty = true; }, function () { /* fallback fonts */ });
-  var loop = null;
-  try {
-    view = D.createView(canvas);
-    view.calm = calm();
-    buildMap(); buildWardrobe(); dress();
-    layout(); toTitle(); render();
+  // Start-up runs in three steps, so the title is on screen and the page keeps answering
+  // while a software renderer works (a cold browser's first frames can keep the processor
+  // busy for seconds there):
+  //  1. now: the menus and the title, no 3D yet (the page's sky colour shows behind it);
+  //  2. after that first paint: the 3D view, its shaders and its first frame;
+  //  3. once the graphics card has finished that frame and the remaining shaders: the frame
+  //     loop, the test hook and Kit.ready, so none of that cost comes after the game says
+  //     it is ready.
+  // A title button pressed before step 3 runs then.
+  var loop = null, failed = false;
+  function fail(error) {
+    if (failed) return;
+    failed = true; live = false; queued = null;
+    if (loop) loop.stop();
+    for (var k in SCREENS) $(SCREENS[k]).hidden = true;
+    $('error-screen').hidden = false;
+    body.dataset.mode = 'error';
+    Kit.fail(error);
+  }
+  function guarded(fn) { return function () { if (failed) return; try { fn(); } catch (error) { fail(error); } }; }
+  function goLive() {
     window.Dino3DGame = {
       get mode() { return mode; },
       get state() { return snapshot(); },
@@ -682,12 +705,30 @@
       point: function (x, y, z) { var p = view.project(x, y, z || 0); return { x: p.x * window.innerWidth, y: p.y * window.innerHeight }; }
     };
     loop = Kit.loop(update, render);
+    live = true;
     Kit.ready();
+    if (queued) { var press = queued; queued = null; press(); }
+  }
+  // The portal gives up on a game that is not ready after 20 s, so a frame the graphics
+  // card has not finished after 8 s is not waited for any longer.
+  // The shaders the title does not show (eggs, fruit, dust, the night sky) are queued with
+  // the first frame, so the wait below covers them too: without background compiling
+  // (software WebGL) they would otherwise keep the graphics process, and so every frame
+  // after the game said it was ready, busy for seconds.
+  function firstFrame() { render(); view.compileRest(); view.whenDrawn(guarded(goLive), 8000); }
+  function start3D() {
+    view = D.createView(canvas);
+    view.calm = calm();
+    dress(); layout(); menuScene(D.LEVEL[D.nextLevel(save)].biome);
+    view.prepare(guarded(firstFrame));
+  }
+  try {
+    buildMap(); buildWardrobe(); layout(); titleScreen();
+    // After the next paint where frames are drawn; a hidden page gets no animation
+    // frames, so a timer starts it there.
+    var begun = false, begin = function () { if (!begun) { begun = true; setTimeout(guarded(start3D), 0); } };
+    requestAnimationFrame(begin); setTimeout(begin, 100);
   } catch (error) {
-    if (loop) loop.stop();
-    for (var k in SCREENS) $(SCREENS[k]).hidden = true;
-    $('error-screen').hidden = false;
-    body.dataset.mode = 'error';
-    Kit.fail(error);
+    fail(error);
   }
 })();
