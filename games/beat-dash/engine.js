@@ -86,9 +86,11 @@
   };
 
   /* -------------------------------------------------------------- state */
+  // t = seconds of level time (the clock of the visual beat). It runs slower than real
+  // time when a try is slowed down (see BD.tick's rate), so the beat stays on the grid.
   BD.newState = function (L) {
     return {
-      tick: 0, x: 0, y: 0, vy: 0, grav: 1, mode: 0, tier: 1,
+      tick: 0, t: 0, x: 0, y: 0, vy: 0, grav: 1, mode: 0, tier: 1,
       onGround: true, coyote: 0, buf: 0, dead: false, won: false,
       used: [], stars: 0, jumps: 0, air: 0,
       px: 0, py: 0, ev: null
@@ -97,7 +99,7 @@
 
   BD.clone = function (s) {
     return {
-      tick: s.tick, x: s.x, y: s.y, vy: s.vy, grav: s.grav, mode: s.mode, tier: s.tier,
+      tick: s.tick, t: s.t || 0, x: s.x, y: s.y, vy: s.vy, grav: s.grav, mode: s.mode, tier: s.tier,
       onGround: s.onGround, coyote: s.coyote, buf: s.buf, dead: s.dead, won: s.won,
       used: s.used.slice(), stars: s.stars, jumps: s.jumps, air: s.air,
       px: s.px, py: s.py, ev: s.ev ? [] : null
@@ -109,7 +111,7 @@
 
   function die(s, o) { if (!s.dead) { s.dead = true; ev(s, 'die', o); } }
 
-  function sub(L, s, held, dt) {
+  function sub(L, s, held, dt, haz) {
     var g = s.grav, o, i, c, list;
     if (s.mode === 0) {
       if ((s.onGround || s.coyote > 0) && (held || s.buf > 0)) {
@@ -162,7 +164,7 @@
     if (s.mode === 0 && wasGround && !s.onGround && s.vy * g <= 0) s.coyote = P.COYOTE;
 
     // everything else
-    var hx1 = s.x + P.HAZ, hx2 = s.x + 1 - P.HAZ, hy1 = s.y + P.HAZ, hy2 = s.y + 1 - P.HAZ;
+    var hx1 = s.x + haz, hx2 = s.x + 1 - haz, hy1 = s.y + haz, hy2 = s.y + 1 - haz;
     var cx = s.x + 0.5, cy = s.y + 0.5, dx, dy;
     for (c = c0; c <= c1; c++) {
       list = L.cols[c]; if (!list) continue;
@@ -222,19 +224,47 @@
     return s.x + 1 - I > o.x1 && s.x + I < o.x2 && s.y + 1 - I > o.y1 && s.y + I < o.y2;
   }
 
+  // How forgiving a try is (the game reads it from its difficulty at each try's start):
+  //   rate  level time per real second (0.8 = everything 20% slower; the course, the jump
+  //         arcs and so the moves that work stay exactly the same, only there is more time)
+  //   haz   how far the cube's spike hitbox sits inside the cube on every side (blocks)
+  //   buf   ticks a press is remembered, to jump on landing or catch an orb
+  BD.forgiving = function (o) {
+    o = o || {};
+    return {
+      rate: o.rate > 0 && o.rate <= 1.5 ? o.rate : 1,
+      haz: o.haz >= 0 && o.haz < 0.45 ? o.haz : P.HAZ,
+      buf: o.buf >= 1 && o.buf <= 30 ? Math.round(o.buf) : P.BUF
+    };
+  };
+  var STD = BD.forgiving();
+  // The settings for a difficulty level 0 (easiest) .. 1 (as designed). The game reads the
+  // level from Kit.dda at each try's start; a PC with no results starts at 0.35.
+  // slowest (optional): a course's own easiest rate (the later levels keep more of their speed).
+  BD.EASE = { rate: [0.66, 1], haz: [0.25, P.HAZ], buf: [10, P.BUF] };
+  BD.forgivingAt = function (level, slowest) {
+    var l = level >= 0 && level <= 1 ? level : 1, E = BD.EASE;
+    function at(k, easy) { return easy + (E[k][1] - easy) * l; }
+    var r0 = slowest > E.rate[0] && slowest < 1 ? slowest : E.rate[0];
+    return BD.forgiving({ rate: at('rate', r0), haz: at('haz', E.haz[0]), buf: at('buf', E.buf[0]) });
+  };
+
   // One 60 Hz tick. held = jump button is down, pressed = it went down this tick.
-  BD.tick = function (L, s, held, pressed) {
+  // opt (optional): BD.forgiving(...) settings for this try.
+  BD.tick = function (L, s, held, pressed, opt) {
     if (s.dead || s.won) return;
+    var o = opt || STD;
     s.px = s.x; s.py = s.y;
     var wasGround = s.onGround;
-    if (pressed) s.buf = P.BUF;
-    var dt = 1 / (P.HZ * P.SUB);
+    if (pressed) s.buf = o.buf;
+    var dt = o.rate / (P.HZ * P.SUB);
     for (var k = 0; k < P.SUB; k++) {
-      sub(L, s, held, dt);
+      sub(L, s, held, dt, o.haz);
       if (s.dead || s.won) break;
     }
     if (s.buf > 0) s.buf--;
     s.tick++;
+    s.t = (s.t || 0) + o.rate / P.HZ;
     if (s.onGround) {
       if (!wasGround && s.mode === 0) ev(s, 'land', s.air);
       s.air = 0;
@@ -247,8 +277,25 @@
     }
   };
 
+  // Where to jump: the range of cube positions (left edge, blocks) on the ground from which
+  // one press clears the obstacle starting at column `col` and lands safely, with no other
+  // input until `col + 3`. The same at any rate (to its 0.05-block steps); a bigger opt.haz
+  // widens it. null: none.
+  BD.takeoff = function (L, col, opt) {
+    var o = opt || STD, best = null, run = null, x0, s, i;
+    for (x0 = col - 6; x0 <= col - 0.2 + 1e-9; x0 += 0.05) {
+      s = BD.newState(L); s.x = s.px = x0;
+      for (i = 0; i < 240 && !s.dead && !s.won && s.x < col + 3; i++) BD.tick(L, s, i === 0, i === 0, o);
+      if (!s.dead) {
+        if (run && x0 - run.b < 0.07) run.b = x0; else run = { a: x0, b: x0 };
+        best = run; // the last run is the one next to the obstacle
+      } else run = null;
+    }
+    return best && { a: +best.a.toFixed(2), b: +best.b.toFixed(2) };
+  };
+
   // Seconds since the level started for a given state (the clock of the visual beat).
-  BD.time = function (s) { return s.tick / P.HZ; };
+  BD.time = function (s) { return s.t != null ? s.t : s.tick / P.HZ; };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = BD;
 })(typeof window !== 'undefined' ? window : globalThis);

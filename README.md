@@ -28,7 +28,7 @@ Only `js/telemetry.js` sends, and only when the fast build is given the server's
 the address, the offline ZIP run from a folder and a browser with Global Privacy Control send
 nothing. Details, the exact fields and how to turn it off: [`docs/TELEMETRY.md`](docs/TELEMETRY.md).
 
-## The games (38)
+## The games (44)
 
 | Game | English name | Players | Type |
 |---|---|---|---|

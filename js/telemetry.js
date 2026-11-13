@@ -345,7 +345,8 @@
     open: hook(function (slug, firstRender) {
       if (game || typeof slug != 'string' || slug.length > 40 || !SLUG.test(slug) || slug in Object.prototype) return;
       var t = now(), src = 'history';
-      if (tag && tag.g == slug && t - tag.t < 1000) src = tag.s;
+      // Five seconds: a slow school PC can take more than one to render the play page.
+      if (tag && tag.g == slug && t - tag.t < 5000) src = tag.s;
       else if (firstRender) {
         src = 'direct';
         try { if (perf.getEntriesByType('navigation')[0].type == 'reload') src = 'reload'; } catch (e) { /* direct */ }
