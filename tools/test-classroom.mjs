@@ -59,6 +59,50 @@ async function warmUpWebGL(context) {
   }
 }
 
+// On the 3D game pages, a failed case can say what kept the page from answering: graphics
+// calls slower than 40 ms, long main-thread tasks, the longest animation frame, and when the
+// game's test hook appeared (all in page milliseconds). Only those pages are traced, and the
+// trace is printed only when a case fails.
+function traceSlowFrames() {
+  if (!/\/games\/(dino-3d|neon-slope|road-hopper)\//.test(decodeURI(location.pathname))) return;
+  const trace = window.__sgTrace = { hook: null, slow: [], long: [], frames: 0, longestFrame: [0, 0] };
+  try {
+    new PerformanceObserver(list => {
+      for (const entry of list.getEntries()) if (trace.long.length < 40) trace.long.push([Math.round(entry.startTime), Math.round(entry.duration)]);
+    }).observe({ type: 'longtask', buffered: true });
+  } catch { /* no long-task timing in this browser */ }
+  for (const Context of [window.WebGL2RenderingContext, window.WebGLRenderingContext]) {
+    if (!Context) continue;
+    for (const name of Object.getOwnPropertyNames(Context.prototype)) {
+      const descriptor = Object.getOwnPropertyDescriptor(Context.prototype, name);
+      if (!descriptor || typeof descriptor.value !== 'function' || name === 'constructor') continue;
+      const original = descriptor.value;
+      Context.prototype[name] = function () {
+        const start = performance.now();
+        try { return original.apply(this, arguments); } finally {
+          const ms = performance.now() - start;
+          if (ms > 40 && trace.slow.length < 40) trace.slow.push([Math.round(start), name, Math.round(ms)]);
+        }
+      };
+    }
+  }
+  const request = window.requestAnimationFrame;
+  window.requestAnimationFrame = function (callback) {
+    return request.call(window, time => {
+      const start = performance.now();
+      try { return callback(time); } finally {
+        const ms = performance.now() - start;
+        trace.frames++;
+        if (ms > trace.longestFrame[1]) trace.longestFrame = [Math.round(start), Math.round(ms)];
+      }
+    });
+  };
+  for (const hook of ['Dino3DGame', '__game']) {
+    let value;
+    Object.defineProperty(window, hook, { configurable: true, get: () => value, set(next) { value = next; if (trace.hook === null) trace.hook = Math.round(performance.now()); } });
+  }
+}
+
 try {
   for (const deniedStorage of [false, true]) {
     // Storage policies are independent runs. Keep browser/GPU-process state from
@@ -68,6 +112,7 @@ try {
     const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, serviceWorkers: 'block', reducedMotion: 'reduce', offline: true });
     try {
       await warmUpWebGL(context);
+      await context.addInitScript(traceSlowFrames);
       if (deniedStorage) {
         await context.addInitScript(() => {
           for (const method of ['getItem', 'setItem', 'removeItem']) {
@@ -144,7 +189,8 @@ try {
             current.page.evaluate(() => ({
               readyState: document.readyState, mode: document.body ? document.body.dataset.mode || document.body.className : null,
               hook: ['__game', 'Dino3DGame', 'GolfArt'].filter(name => window[name]),
-              buttons: [...document.querySelectorAll('button')].filter(b => b.offsetParent).slice(0, 8).map(b => b.id || b.textContent.trim().slice(0, 20))
+              buttons: [...document.querySelectorAll('button')].filter(b => b.offsetParent).slice(0, 8).map(b => b.id || b.textContent.trim().slice(0, 20)),
+              now: Math.round(performance.now()), trace: window.__sgTrace
             })),
             new Promise(resolve => setTimeout(() => resolve('the page did not answer within 3 s'), 3000))
           ]).catch(error => 'the page could not be read: ' + String(error.message || error).split('\n')[0]);
