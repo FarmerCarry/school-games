@@ -985,3 +985,22 @@ Measured with the Linux minified build, against the previous entry's measurement
 
 Both limits are again the measured size rounded up (the game to the next 500 bytes, the
 cache to the next 1,000).
+
+## Beat Dash: a first level children can finish, 13 November 2026
+
+Beat Dash gains a three-step tutorial on level 1 (slow motion and a green spot to jump
+from), a wait-for-a-press state for practice respawns and unattended tries, safe manual
+checkpoints and a difficulty (`Kit.dda`) that slows a try down and widens its timing after
+quick crashes. Level 1 is rebuilt shorter (332 blocks instead of 508). Nothing new is drawn
+on other levels; the tutorial's spots are computed once per difficulty setting, not per frame.
+
+Measured with the Linux minified build, against the previous commit built the same way.
+
+| Measurement | Before bytes | After bytes | Before limit | New limit |
+| --- | ---: | ---: | ---: | ---: |
+| Beat Dash page | 110,418 | 115,037 | 110,500 | 115,500 |
+| Offline precache, 51 files | 5,934,503 | 5,939,122 | 5,935,000 | 5,940,000 |
+| Offline ZIP | 2,079,134 | 2,081,146 | — | — |
+
+The cache grows only by the page's 4,619 bytes. Both limits are the measured size rounded
+up (the game to the next 500 bytes, the cache to the next 1,000).

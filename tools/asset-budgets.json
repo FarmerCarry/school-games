@@ -3,7 +3,7 @@
   "portalBytes": 378000,
   "gameHtmlBytes": {
     "air-hockey": 113000,
-    "beat-dash": 110500,
+    "beat-dash": 115500,
     "blob-battle": 103500,
     "block-burst": 112000,
     "block-world": 156000,
@@ -48,5 +48,5 @@
     "fredoka-latin-500-normal.woff2": 18500,
     "fredoka-latin-700-normal.woff2": 18000
   },
-  "precacheBytes": 5935000
+  "precacheBytes": 5940000
 }

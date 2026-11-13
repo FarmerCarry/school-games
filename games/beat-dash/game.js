@@ -7,7 +7,13 @@
 
   var W = 1280, H = 720, U = 56, GROUND0 = 560, PLAYER_SX = 6.2;
   var TAU = Math.PI * 2;
-  var CP_LOOK = 45; // practice auto-checkpoints need 0.75 s of safe running ahead (a kid's reaction time)
+  var CP_LOOK = 45; // practice checkpoints need 0.75 s of safe running ahead (a kid's reaction time)
+  // A try counts as fully good (1) once the cube has run this many seconds (at the level's own
+  // speed) or reached the gate; a crash within 6 s is a poor try (< 0.3) for the difficulty.
+  var TRY_GOAL_S = 20;
+  // Tutorial (level 1 until it is done): the run slows to TUT_SLOW from TUT_LEAD blocks before
+  // the spot to jump, and waits there in slow motion until the player jumps or passes it.
+  var TUT_SLOW = 0.3, TUT_LEAD = 3;
   var BD = window.BD;
 
   var canvas = document.getElementById('game');
@@ -20,6 +26,9 @@
   canvas.addEventListener('contextrestored', function () { frameDirty = true; });
   var ptr = Kit.pointer(view);
   var store = Kit.store('beat-dash');
+  // One difficulty for this PC (children share it). Read at every try's start: it slows the
+  // run down and widens the timing for players who keep crashing early (BD.forgivingAt).
+  var dda = Kit.dda('beat-dash', { id: 'main' });
   var shake = Kit.shake();
   var muteBtn = Kit.muteButton();
   muteBtn.setAttribute('aria-label', 'تشغيل الصوت أو كتمه');
@@ -57,7 +66,8 @@
     stars: store.get('stars', {}), att: store.get('att', {}),
     total: store.get('total', { attempts: 0, jumps: 0 }),
     face: store.get('face', 0), c1: store.get('c1', 0), c2: store.get('c2', 1),
-    seen: store.get('seen', null), gseen: store.get('gseen', []), last: store.get('last', 0)
+    seen: store.get('seen', null), gseen: store.get('gseen', []), last: store.get('last', 0),
+    tut: store.get('tut', 0) // 1 once level 1's tutorial was finished on this PC
   };
   // A failed write stays listed until it succeeds; the in-memory save keeps this session's progress.
   var saveStatus = Kit.saveStatus({ retry: retrySaves }), failedKeys = {};
@@ -133,7 +143,7 @@
   // as the visual beat). deg 0, 2, 4 = the chord's root, third and fifth; with arp, the beat
   // nearest to now adds root, third, fifth or octave, so jumping in time plays an arpeggio.
   function noteHz(deg, oct, arp) {
-    var song = G.L ? G.L.song : menuSong, b = Math.round((G.s ? G.s.tick / 60 : 0) * song.bpm / 60);
+    var song = G.L ? G.L.song : menuSong, b = Math.round((G.s ? BD.time(G.s) : 0) * song.bpm / 60);
     return BD.mtof(BD.chordNote(song, Math.floor(b / 4), deg + (arp ? [0, 2, 4, 7][b % 4] : 0), oct));
   }
   // Soft, rounded effects (triangle/sine), so quick repeats never buzz.
@@ -221,7 +231,14 @@
     dead: false, deadT: 0, won: false, wonT: 0, paused: false,
     camY: 0, rot: 0, sqx: 1, sqy: 1, trail: [], blinkT: 2, blink: 0,
     flash: 0, flashCol: '#fff', popups: [], flashes: {}, winX: 0, winShown: false,
-    lastCpTick: 0, jumpsAtStart: 0, runBestShown: false, fireT: 0, winUnlocks: [], newBestRun: false
+    lastCpTick: 0, jumpsAtStart: 0, runBestShown: false, fireT: 0, winUnlocks: [], newBestRun: false,
+    // this try: opt = how forgiving it is (from the difficulty), sim = opt with the tutorial's
+    // slow motion; wait = the run waits for a press; latch = ignore a jump key still held
+    // from before; played = the player pressed something; reported = told the difficulty
+    opt: BD.forgiving(), sim: BD.forgiving(), slow: 1, wait: false, latch: false, played: false,
+    reported: false, jumps0: 0, cpWanted: false, deadBy: null,
+    // tutorial: on for this try, the next step, each step's spot to jump, crashes before its end
+    tutOn: false, tutStep: 0, tutWins: [], tutFails: 0, tutAgain: false
   };
   var demo = { s: null, L: demoL, camY: 0, rot: 0, trail: [], t: 0 };
   var menuT = 0, sel = 0, themeNow = LEVELS[0].theme, themeFade = null;
@@ -481,7 +498,7 @@
   function startLevel(li, practice) {
     scene = 'play';
     G.li = li; G.L = LEVELS[li]; G.practice = practice; G.cps = []; G.sessionAtt = 0;
-    G.paused = false; G.won = false; G.winShown = false;
+    G.paused = false; G.won = false; G.winShown = false; G.tutFails = 0; G.tutAgain = false;
     save.last = li; persist('last');
     setTheme(G.L.theme); themeFade = null;
     show(null);
@@ -496,17 +513,79 @@
     G.sessionAtt++;
     save.att[L.id] = (save.att[L.id] || 0) + 1; persist('att');
     save.total.attempts++; persist('total');
+    // how forgiving this try is: the PC's difficulty, read now (replays always run as designed)
+    G.opt = G.auto ? BD.forgiving() : BD.forgivingAt(dda.level, L.def.slowest);
+    G.sim.rate = G.opt.rate; G.sim.haz = G.opt.haz; G.sim.buf = G.opt.buf; G.slow = 1;
     var s;
+    // a checkpoint that is no longer safe at this try's settings is dropped, never respawned into
+    if (G.practice) while (G.cps.length && !practiceSafe(G.cps[G.cps.length - 1].s)) G.cps.pop();
     if (G.practice && G.cps.length) s = BD.clone(G.cps[G.cps.length - 1].s);
     else s = BD.newState(L);
-    s.ev = [];
+    s.ev = []; s.px = s.x; s.py = s.y; s.buf = 0;
     G.s = s; G.dead = false; G.deadT = 0; G.won = false; G.wonT = 0; G.winShown = false;
     G.jumpsAtStart = s.jumps; G.newBestRun = false;
     G.camY = targetCamY(s, 0, true);
     G.trail.length = 0; G.rot = 0; G.sqx = G.sqy = 1; G.flashes = {};
     G.lastCpTick = s.tick;
     G.attemptX = s.x;
+    // The run waits for a press after every practice respawn, and after a try in which nobody
+    // pressed anything: an unattended game never crashes over and over by itself.
+    G.wait = !G.auto && G.sessionAtt > 1 && (G.practice || !G.played);
+    G.played = false; G.reported = false; G.cpWanted = false; G.jumps0 = s.jumps;
+    // a jump key still held from the last try (or the menu) does nothing until it is let go
+    G.latch = !G.auto && jumpHeld();
+    setupTutorial(s);
     checkUnlocks().forEach(function (u) { toast(itemName(u)); });
+  }
+
+  /* ---------------------------------------------------------- tutorial */
+  // Level 1 teaches by doing: until its tutorial has been finished on this PC (or after two
+  // crashes in a row before its end, for a new child), the run slows down in front of each of
+  // its steps, shows the spot to jump from and waits there in slow motion for the press.
+  // Passing the last step finishes it; a crash only means trying those few seconds again.
+  var takeoffCache = {};
+  function setupTutorial(s) {
+    var steps = G.L.def.tutorial, key = G.L.id + ':' + G.opt.haz.toFixed(3);
+    // (a PC that already beat level 1 knows how to jump)
+    G.tutOn = !!steps && !G.auto && ((!save.tut && !save.done[G.L.id]) || G.tutAgain);
+    G.tutStep = 0;
+    if (!steps) { G.tutWins = []; return; }
+    if (!takeoffCache[key]) takeoffCache[key] = steps.map(function (st) { return BD.takeoff(G.L, st.x, G.opt); });
+    G.tutWins = takeoffCache[key];
+    // a practice respawn part-way starts at the first step still ahead
+    while (G.tutStep < steps.length && s.x > steps[G.tutStep].x - 1) G.tutStep++;
+  }
+  function tutorialSlow(s) {
+    var w = G.tutOn && G.tutWins[G.tutStep], tgt = 1;
+    if (w && s.mode === 0 && s.onGround && s.x <= w.b + 0.2) {
+      var d = w.a - s.x; // blocks still to go to the first good spot
+      tgt = d <= 0 ? TUT_SLOW : d >= TUT_LEAD ? 1 : lerp(TUT_SLOW, 1, d / TUT_LEAD);
+    }
+    G.slow += (tgt - G.slow) * (tgt < G.slow ? 0.5 : 0.07);
+    if (Math.abs(G.slow - 1) < 0.002) G.slow = 1;
+  }
+  function tutorialProgress(s) {
+    var steps = G.L.def.tutorial, st = steps && steps[G.tutStep];
+    if (!G.tutOn || !st || s.x < st.x + 1.2 || s.x > st.x + 6) return;
+    G.tutStep++;
+    sfx.cp();
+    if (G.tutStep < steps.length) return;
+    G.tutOn = false; G.tutAgain = false; G.tutFails = 0;
+    if (!save.tut) { save.tut = 1; persist('tut'); }
+    popup('أحسنت!', 'أنت جاهز!', '#7dff5a');
+  }
+  function tutorialPrompt() {
+    var s = G.s, w = G.tutOn && !G.dead && G.tutWins[G.tutStep];
+    if (!w || !s.onGround || s.mode !== 0 || s.x < w.a - TUT_LEAD - 3 || s.x > w.b) return null;
+    return { text: G.L.def.tutorial[G.tutStep].text, now: s.x >= w.a };
+  }
+
+  // One result per try that the player actually played: how far it got, up to TRY_GOAL_S.
+  function reportTry(won) {
+    if (G.auto || G.reported || !G.played) return;
+    G.reported = true;
+    var L = G.L, goal = Math.min(L.finishX - G.attemptX, TRY_GOAL_S * L.speed);
+    dda.result(won ? 1 : goal > 0 ? Math.max(0, Math.min(1, (G.s.x - G.attemptX) / goal)) : 0);
   }
 
   function targetCamY(s, cur, snap) {
@@ -539,6 +618,13 @@
     if (!calm()) { G.flash = 0.45; G.flashCol = '#ffffff'; }
     sfx.die();
     save.total.jumps += s.jumps - G.jumpsAtStart; G.jumpsAtStart = s.jumps; persist('total');
+    reportTry(false);
+    // two crashes in a row before the tutorial's end bring its help back (a new child on this PC)
+    var steps = L.def.tutorial;
+    if (steps && G.played && !G.auto) {
+      if (s.x < steps[steps.length - 1].x + 1.2) { if (++G.tutFails >= 2 && save.tut) G.tutAgain = true; }
+      else G.tutFails = 0;
+    }
     var p = pct(s);
     var key = G.practice ? 'bestP' : 'best';
     if (p > (save[key][L.id] || 0)) {
@@ -617,7 +703,7 @@
           sfx.star();
           break;
         case 'bump': if (menuT - lastBumpT > 0.15) { lastBumpT = menuT; sfx.bump(); } break;
-        case 'die': killPlayer(); break;
+        case 'die': G.deadBy = o ? o.t : 'fall'; killPlayer(); break;
         case 'win': winLevel(); break;
       }
     }
@@ -629,6 +715,7 @@
     var nextWasLocked = G.li + 1 < LEVELS.length && !levelUnlocked(G.li + 1);
     G.won = true; G.wonT = 0; G.winX = s.x; G.fireT = 0;
     save.total.jumps += s.jumps - G.jumpsAtStart; G.jumpsAtStart = s.jumps; persist('total');
+    reportTry(true);
     if (G.practice) { save.doneP[L.id] = true; persist('doneP'); save.bestP[L.id] = 100; persist('bestP'); }
     else { save.done[L.id] = true; persist('done'); save.best[L.id] = 100; persist('best'); }
     G.winUnlocks = checkUnlocks();
@@ -651,21 +738,25 @@
     if (G.wonT < 2) sfx.firework();
   }
 
+  // A checkpoint state is safe when the cube survives the next 0.75 s (real time, at this try's
+  // settings) with no input at all (a rocket: holding or not), with no remembered press.
   function practiceSafe(s) {
-    var t = BD.clone(s); t.ev = null;
-    for (var i = 0; i < CP_LOOK; i++) { BD.tick(G.L, t, false, false); if (t.dead) break; }
+    var t = BD.clone(s); t.ev = null; t.buf = 0;
+    for (var i = 0; i < CP_LOOK; i++) { BD.tick(G.L, t, false, false, G.opt); if (t.dead) break; }
     if (!t.dead) return true;
     if (s.mode === 1) {
-      t = BD.clone(s); t.ev = null;
-      for (i = 0; i < CP_LOOK; i++) { BD.tick(G.L, t, true, i === 0); if (t.dead) return false; }
+      t = BD.clone(s); t.ev = null; t.buf = 0;
+      for (i = 0; i < CP_LOOK; i++) { BD.tick(G.L, t, true, i === 0, G.opt); if (t.dead) return false; }
       return true;
     }
     return false;
   }
+  // Practice checkpoints only go where the cube stands (or a rocket flies) and is safe.
+  function cpSpot(s) { return !s.dead && (s.mode === 1 || s.onGround) && practiceSafe(s); }
   function addCheckpoint(manual) {
     var s = G.s;
     if (G.dead || G.won) return;
-    var c = BD.clone(s); c.ev = [];
+    var c = BD.clone(s); c.ev = []; c.buf = 0;
     G.cps.push({ s: c });
     if (G.cps.length > 60) G.cps.shift();
     G.lastCpTick = s.tick;
@@ -686,7 +777,7 @@
     }
     if (G.won) {
       G.wonT += dt;
-      G.winX += L.speed * BD.PHYS.TIERS[s.tier] * dt;
+      G.winX += L.speed * BD.PHYS.TIERS[s.tier] * G.opt.rate * dt;
       G.fireT -= dt;
       if (G.fireT <= 0 && G.wonT < 6 && !calm()) { firework(false); G.fireT = 0.28 + Math.random() * 0.25; }
       if (G.wonT > 1.4 && !G.winShown) showWin();
@@ -699,7 +790,8 @@
     }
     if (Kit.keys.pressed('KeyR') && !G.dead) { restartFromStart(); return; }
     if (G.practice) {
-      if (Kit.keys.pressed('KeyZ')) addCheckpoint(true);
+      // Z in mid-air or just before a spike waits for the next safe spot instead of trapping the player
+      if (Kit.keys.pressed('KeyZ') && !G.dead) { if (cpSpot(s)) addCheckpoint(true); else G.cpWanted = true; }
       if (Kit.keys.pressed('KeyX') && G.cps.length) { G.cps.pop(); sfx.bump(); }
     }
     if (G.dead) {
@@ -709,14 +801,33 @@
     }
     var held = jumpHeld(), pressed = jumpPressed();
     if (G.auto) { held = G.auto[s.tick] === '1'; pressed = held && G.auto[s.tick - 1] !== '1'; }
-    BD.tick(L, s, held, pressed);
+    else {
+      // a press is a new edge, so it also ends a latch; a held key alone does nothing
+      if (G.latch && (pressed || !held)) G.latch = false;
+      if (G.latch) held = pressed = false;
+      if (pressed) G.played = true;
+      if (G.wait) {
+        if (!pressed) return;
+        // the press that starts the run is not a jump (so it never jumps into anything)
+        G.wait = false; G.latch = true; sfx.click();
+        return;
+      }
+    }
+    tutorialSlow(s);
+    G.sim.rate = G.opt.rate * G.slow;
+    BD.tick(L, s, held, pressed, G.sim);
     handleEvents(s);
     if (G.dead || G.won) return;
-    // practice auto-checkpoints
-    if (G.practice && s.tick - G.lastCpTick > 140 && (s.mode === 1 || s.onGround) && practiceSafe(s)) addCheckpoint(false);
+    tutorialProgress(s);
+    // practice checkpoints: a wanted one (Z) at the next safe spot; automatic ones every
+    // 140 ticks once the player has jumped in this try (an idle run places none)
+    if (G.practice) {
+      if (G.cpWanted) { if (cpSpot(s)) { G.cpWanted = false; addCheckpoint(true); } }
+      else if (s.tick - G.lastCpTick > 140 && s.jumps > G.jumps0 && cpSpot(s)) addCheckpoint(false);
+    }
     // visuals
     if (s.mode === 0) {
-      if (!s.onGround) G.rot += 0.135 * s.grav;
+      if (!s.onGround) G.rot += 0.135 * s.grav * G.sim.rate;
       else { var tr = Math.round(G.rot / (Math.PI / 2)) * (Math.PI / 2); G.rot += (tr - G.rot) * 0.4; }
     } else {
       var ang = -Math.atan2(s.vy, L.speed * BD.PHYS.TIERS[s.tier]) * 0.9;
@@ -1212,6 +1323,65 @@
     ctx.restore();
   }
 
+  // Level 1's tutorial steps: a green strip on the ground under the spots to jump from
+  // (where the middle of the cube is when the press clears it), lit up while the cube is on it.
+  function drawJumpSpots(L, s, x, camX, gy, bi) {
+    var steps = L.def.tutorial;
+    if (!steps || G.won) return;
+    for (var i = 0; i < steps.length; i++) {
+      var w = G.tutWins[i];
+      if (!w || (i < G.tutStep && G.tutOn) || x > w.b + 1) continue;
+      var x1 = (w.a + 0.5 - camX) * U, x2 = (w.b + 0.5 - camX) * U;
+      if (x2 < -20 || x1 > W + 20) continue;
+      var on = x >= w.a && x <= w.b && !G.dead, a = on ? 1 : 0.5 + 0.25 * bi.tint;
+      ctx.save();
+      ctx.globalAlpha = a * 0.35;
+      ctx.fillStyle = '#7dff5a';
+      BD.rr(ctx, x1 - 6, gy - 16, x2 - x1 + 12, 22, 11); ctx.fill();
+      ctx.globalAlpha = a;
+      BD.rr(ctx, x1, gy - 9, x2 - x1, 9, 4.5); ctx.fill();
+      ctx.lineWidth = 2.5; ctx.strokeStyle = '#0a4a26'; ctx.stroke();
+      // up arrows: "jump here"
+      ctx.fillStyle = '#7dff5a'; ctx.strokeStyle = '#0a4a26'; ctx.lineJoin = 'round';
+      for (var ax = x1 + 14; ax < x2 - 6; ax += 34) {
+        ctx.beginPath(); ctx.moveTo(ax - 9, gy - 18); ctx.lineTo(ax, gy - 30); ctx.lineTo(ax + 9, gy - 18); ctx.closePath();
+        ctx.fill(); ctx.stroke();
+      }
+      ctx.restore();
+    }
+  }
+
+  // The run's prompts: "press to go" while a try waits for the player, and the tutorial's
+  // "jump now!", each with the keys to press. Drawn above the cube (screen px).
+  function drawPrompt(cx, cy, t) {
+    var tp = G.wait ? { text: 'اضغط لتنطلق!', now: true } : tutorialPrompt();
+    if (!tp || G.paused || G.won) return;
+    var k = tp.now && !calm() ? 1 + 0.06 * Math.sin(t * 9) : 1;
+    // ahead of the cube and just above it, below the try's "المحاولة N" (5.2 blocks up)
+    var px = Math.max(250, Math.min(W - 250, cx + 150)), py = Math.max(150, Math.min(cy - 125, 400));
+    ctx.save();
+    ctx.translate(px, py); ctx.scale(k, k);
+    ctx.direction = 'rtl'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+    ctx.font = '700 56px Fredoka, "Segoe UI", sans-serif';
+    ctx.lineWidth = 11; ctx.strokeStyle = '#1b1033'; ctx.strokeText(tp.text, 0, 0);
+    ctx.fillStyle = tp.now ? '#7dff5a' : '#ffffff'; ctx.fillText(tp.text, 0, 0);
+    // [مسافة] أو [انقر], read right to left
+    ctx.font = '700 22px Fredoka, "Segoe UI", sans-serif';
+    var a = 'مسافة', b = 'انقر', or = 'أو', wa = ctx.measureText(a).width + 26, wb = ctx.measureText(b).width + 26, wo = ctx.measureText(or).width + 20;
+    var x0 = (wa + wo + wb) / 2, y0 = 46;
+    keycap(x0 - wa, y0, wa, a);
+    ctx.direction = 'rtl'; ctx.textAlign = 'center'; ctx.fillStyle = '#ffffff';
+    ctx.lineWidth = 5; ctx.strokeStyle = '#1b1033'; ctx.strokeText(or, x0 - wa - wo / 2, y0 + 17); ctx.fillText(or, x0 - wa - wo / 2, y0 + 17);
+    keycap(x0 - wa - wo - wb, y0, wb, b);
+    ctx.restore();
+  }
+  function keycap(x, y, w, label) {
+    ctx.fillStyle = '#9aa3c7'; BD.rr(ctx, x, y + 4, w, 32, 8); ctx.fill();
+    ctx.fillStyle = '#ffffff'; BD.rr(ctx, x, y, w, 32, 8); ctx.fill();
+    ctx.direction = 'rtl'; ctx.textAlign = 'center'; ctx.fillStyle = '#1d2340';
+    ctx.fillText(label, x + w / 2, y + 17);
+  }
+
   function render(alpha) {
     // A paused run is a still picture: draw it once, then again only after a resize,
     // a restored canvas, a late font or a motion-setting change.
@@ -1226,11 +1396,13 @@
     var look = myLook();
     if (scene === 'play' && G.s) {
       var s = G.s, L = G.L;
-      // the beat follows the game clock (the level's tempo also sets its speed)
-      var songTime = (G.dead || G.paused) ? s.tick / 60 : (s.tick + (G.won ? 0 : alpha)) / 60;
-      var bi = lastBeat = beatInfo(L.song, G.won ? songTime + G.wonT : songTime);
-      var x = G.won ? G.winX : lerp(s.px, s.x, G.dead ? 1 : alpha);
-      var y = G.dead ? s.y : lerp(s.py, s.y, alpha);
+      // the beat follows the game clock (the level's tempo also sets its speed); a slowed try
+      // slows its beat too, so the beat stays on the course's grid
+      var still = G.dead || G.paused || G.wait || G.won;
+      var songTime = BD.time(s) + (still ? 0 : alpha * G.sim.rate / 60);
+      var bi = lastBeat = beatInfo(L.song, G.won ? songTime + G.wonT * G.opt.rate : songTime);
+      var x = G.won ? G.winX : lerp(s.px, s.x, G.dead || G.wait ? 1 : alpha);
+      var y = G.dead || G.wait ? s.y : lerp(s.py, s.y, alpha);
       var camX = Math.min(x, G.won ? G.winX : 1e9) - PLAYER_SX;
       if (G.won) camX = Math.min(G.winX, L.finishX + 2) - PLAYER_SX;
       var camY = G.camY;
@@ -1253,10 +1425,12 @@
         }
       }
       drawGround(th, camX, camY, bi);
+      drawJumpSpots(L, s, x, camX, gy, bi);
       if (!G.dead) drawPlayer(s, x, y, camX, gy, G.rot, G.sqx, G.sqy, look, t);
       drawParts(camX, gy, false);
       ctx.restore();
       drawHUD(L, s, t);
+      drawPrompt((x + 0.5 - camX) * U, gy - (y + 0.5) * U, t);
     } else {
       // menu backdrop: attract mode
       var ds = demo.s || BD.newState(demoL);
@@ -1315,7 +1489,11 @@
     get scene() { return scene; },
     get beat() { return lastBeat; },
     get level() { return G.L ? G.L.id : null; },
-    get state() { var s = G.s; return s ? { x: +s.x.toFixed(2), y: +s.y.toFixed(2), pct: G.L ? pct(s) : 0, dead: G.dead, won: G.won, mode: s.mode, grav: s.grav, stars: s.stars, attempt: G.sessionAtt, practice: G.practice, paused: G.paused, cps: G.cps.length } : null; },
+    get state() { var s = G.s; return s ? { x: +s.x.toFixed(2), y: +s.y.toFixed(2), pct: G.L ? pct(s) : 0, dead: G.dead, won: G.won, mode: s.mode, grav: s.grav, stars: s.stars, attempt: G.sessionAtt, practice: G.practice, paused: G.paused, cps: G.cps.length, wait: G.wait, onGround: s.onGround, rate: +G.sim.rate.toFixed(3), deadBy: G.dead ? G.deadBy : null } : null; },
+    // level 1's tutorial: on for this try, the next step, its spots to jump from, done on this PC
+    get tutorial() { return { on: G.tutOn, step: G.tutStep, steps: G.L && G.L.def.tutorial ? G.L.def.tutorial.length : 0, spots: G.tutWins, done: !!save.tut }; },
+    // the PC's difficulty (0..1) and how forgiving the current try is
+    get difficulty() { return { level: dda.level, opt: G.opt }; },
     save: save,
     levels: LEVELS.map(function (L) { return { id: L.id, name: L.name, length: L.finishX, seconds: +(L.finishX / L.speed).toFixed(1) }; }),
     start: function (i, practice) { G.auto = null; startLevel(i, !!practice); },
