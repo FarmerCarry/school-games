@@ -695,7 +695,31 @@
       if (ctx.mode === 'play' && s.running && s.ground && fireT <= 0) { fireT = s.dash ? 0.03 : 0.14; view.burst(s.x - 0.3, 0.05, (Math.random() - 0.5) * 0.4, { count: s.dash ? 3 : 1, colors: s.dash ? [0xffffff, 0xffd23f] : [shade(BIO[biomeAt(s.x)].path[0], 0.9)], speed: 1, up: 0.5, life: 0.35, size: s.dash ? 0.12 : 0.08, gravity: 1, vx: -1.2 }); }
       stepParticles(dt); drawParticles();
     };
-    view.render = function () { renderer.render(scene, camera); };
+    // Frame pacing on a software renderer. There the processor draws every frame, and a game
+    // that hands over its next frame as soon as the last one is done keeps every core busy: on
+    // the Windows Edge test runner, where the graphics process runs at a raised priority, the
+    // test process itself could not run for 10 s while the title was up. So after each frame a
+    // fence is set and no frame is drawn until it has passed; on the menus the game then rests
+    // as long as the frame took. A graphics card is never paced.
+    var gl0 = renderer.getContext();
+    var pace = software && typeof gl0.fenceSync === 'function' ? { sync: null, t0: 0, busy: 0 } : null;
+    view.mayDraw = function (now, playing) {
+      if (!pace) return true;
+      if (pace.sync) {
+        var done = true;
+        try { done = gl0.isContextLost() || gl0.getSyncParameter(pace.sync, gl0.SYNC_STATUS) === gl0.SIGNALED; } catch (e) { done = true; }
+        if (!done && now - pace.t0 < 1000) return false;
+        try { gl0.deleteSync(pace.sync); } catch (e) { /* lost with the context */ }
+        pace.sync = null;
+        pace.busy = Math.min(500, now - pace.t0);
+      }
+      return playing || now - pace.t0 >= pace.busy * 2;
+    };
+    view.render = function () {
+      renderer.render(scene, camera);
+      if (!pace) return;
+      try { pace.sync = gl0.fenceSync(gl0.SYNC_GPU_COMMANDS_COMPLETE, 0); gl0.flush(); pace.t0 = performance.now(); } catch (e) { pace = null; }
+    };
     view.resize = function (w, h) {
       renderer.setSize(w, h, false);
       camera.aspect = w / Math.max(1, h); camera.updateProjectionMatrix();

@@ -629,6 +629,9 @@
   function render() {
     if (!view || contextLost || (!dirty && mode === 'paused')) return;
     var now = performance.now();
+    // Software rendering paces its frames (view.mayDraw in art.js); the game itself keeps
+    // running at 60 steps a second.
+    if (!view.mayDraw(now, mode === 'playing')) return;
     if (mode === 'playing' && lastFrame && view.frameTime(now - lastFrame)) layout();
     lastFrame = now;
     if (mode !== 'paused' || snap) {
