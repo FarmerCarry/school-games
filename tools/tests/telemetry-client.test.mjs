@@ -156,7 +156,7 @@ const bare = b => { const { w, ...rest } = b; return rest; };
 const rid = async page => JSON.parse(await page.evaluate(() => localStorage.getItem('sg:site:rid')));
 async function until(check, label, ms = 20000) {
   for (const end = Date.now() + ms; !check();) {
-    if (Date.now() > end) throw new Error('timed out waiting for ' + label);
+    if (Date.now() > end) throw new Error('timed out waiting for ' + (typeof label === 'function' ? label() : label));
     await new Promise(resolve => setTimeout(resolve, 50));
   }
 }
@@ -551,7 +551,9 @@ test('the queue survives a reload, sends oldest first, and keeps at most 128 KB 
   const order = stored.map(x => x.e.b);
   down = false;
   await page.clock.runFor(60000);
-  await until(() => state.posts.length === 2 + order.length, 'every batch delivered');
+  // Seven requests one after another, six of them about 26 KB: give a busy machine time.
+  await until(() => state.posts.length >= 2 + order.length, () => `every batch delivered (${state.posts.length} of ${2 + order.length})`, 60000);
+  assert.equal(state.posts.length, 2 + order.length);
   await page.waitForFunction(n => window.fetched === n, 1 + order.length);
   const sent = batches(state).slice(1, 1 + order.length);
   assert.deepEqual(sent.map(b => b.b), order, 'oldest first');
