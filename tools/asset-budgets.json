@@ -13,7 +13,7 @@
     "chaos-island": 150500,
     "connect-four": 55000,
     "critter-mart": 161500,
-    "dino-3d": 128000,
+    "dino-3d": 128500,
     "drift-king": 109000,
     "egg-rush": 154500,
     "fire-and-ice": 123000,
@@ -54,5 +54,5 @@
     "fredoka-latin-500-normal.woff2": 18500,
     "fredoka-latin-700-normal.woff2": 18000
   },
-  "precacheBytes": 6796000
+  "precacheBytes": 6797000
 }

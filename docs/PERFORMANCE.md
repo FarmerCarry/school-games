@@ -1143,3 +1143,17 @@ cache to the next 1,000).
 Merged with the play statistics and the Beat Dash fix, the measured sizes are 127,809 bytes for
 the Dino 3D page and 6,795,659 bytes for the offline precache, so those limits are now 128,000
 and 6,796,000 bytes.
+
+The Windows runner then showed the cause more directly: while Dino 3D's title was up, the
+test process itself could not run for 10 s. Dino handed the graphics process its next frame
+as soon as the last one was done, so software rendering kept every core busy (Linux, four
+cores: 4.3 cores for the graphics process on the title). On a software renderer the menus
+now wait for a fence on the previous frame and then rest as long as that frame took: on
+Linux the title draws 12 frames a second instead of 34 and the graphics process uses 3.0
+cores. Play is not paced (26 frames a second before and after), and neither is a graphics
+card.
+The Dino 3D page is 125,995 bytes, so its limit is now 126,000; the offline precache,
+6,682,850 bytes, stays within 6,683,000.
+
+With the play statistics and the Beat Dash fix, the paced Dino 3D page is 128,360 bytes and
+the offline precache 6,796,210 bytes, so those limits are now 128,500 and 6,797,000 bytes.
