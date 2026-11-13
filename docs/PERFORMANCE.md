@@ -1108,4 +1108,37 @@ up (the game to the next 500 bytes, the cache to the next 1,000).
 
 When this fix was merged with the restored play statistics (one more `Kit.stats` round and
 tutorial report in Beat Dash), the measured sizes were 117,503 bytes for the page and
-6,793,938 bytes for the offline precache, so the limits are now 118,000 and 6,794,000 bytes.
+6,793,938 bytes for the offline precache, so the limits are now 118,000 and 6,794,000 bytes.,
+steady-hand shortcut-factory word-garden`.,
+## Dino 3D on software rendering, 13 November 2026
+
+On the Windows Edge CI runner (no graphics card), Dino 3D's page stopped answering for 5 to
+10 s just after the game said it was ready, and the downloaded-folder check could not reach
+its Play button. Dino issued its first frame before setting `Kit.ready` and its test hook,
+but the GPU process only did that frame's work afterwards: in a cold browser about half of
+Dino's start-up work (Neon Slope and Road Hopper wait for their first frame before their
+hook can be seen). Now, where WebGL
+is software (SwiftShader, Basic Render Driver, llvmpipe), Dino draws without MSAA at 0.75 of
+the size; it shows the title first, and calls `Kit.ready` only once a fence says the first
+frame is finished. Shaders for eggs, fruit, dust and the night sky are queued when the title
+is up. Graphics cards keep MSAA and the full size.
+
+Linux Chromium with SwiftShader, cold browser, median of three runs, before → after:
+
+| Condition | GPU-process time still owed at the hook | First 2 frames after the hook | Title frame |
+| --- | ---: | ---: | ---: |
+| 4 cores | 530 → 320 ms | 302 → 161 ms | 213 → 108 ms |
+| 1 core | 460 → 120 ms | 490 → 124 ms | 196 → 97 ms |
+| 1 core, software compositing | 370 → 170 ms | 387 → 200 ms | 172 → 77 ms |
+
+| Measurement | Before bytes | After bytes | Before limit | New limit |
+| --- | ---: | ---: | ---: | ---: |
+| Dino 3D page | 123,723 | 125,444 | 124,000 | 125,500 |
+| Offline precache, 57 files | 6,680,544 | 6,682,299 | 6,681,000 | 6,683,000 |
+
+Both limits are again the measured size rounded up (the game to the next 500 bytes, the
+cache to the next 1,000).
+
+Merged with the play statistics and the Beat Dash fix, the measured sizes are 127,809 bytes for
+the Dino 3D page and 6,795,659 bytes for the offline precache, so those limits are now 128,000
+and 6,796,000 bytes.

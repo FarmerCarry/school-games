@@ -9,11 +9,40 @@
   'use strict';
   var D = window.Dino3D;
 
+  // Whether WebGL here is drawn by the processor instead of a graphics card (SwiftShader,
+  // Windows' Basic Render Driver, llvmpipe). A throwaway context answers before the game's
+  // own context is made, because MSAA cannot be switched off once a context exists.
+  function softwareGL() {
+    var gl = null;
+    try {
+      var c = document.createElement('canvas'), opts = { powerPreference: 'high-performance' };
+      gl = c.getContext('webgl2', opts) || c.getContext('webgl', opts);
+      if (!gl) return false;
+      var name = String(gl.getParameter(gl.RENDERER) || '');
+      // Chromium reports "WebKit WebGL" there; Firefox already gives the real name.
+      if (/^webkit webgl$/i.test(name)) {
+        var info = gl.getExtension('WEBGL_debug_renderer_info');
+        if (info) name = String(gl.getParameter(info.UNMASKED_RENDERER_WEBGL) || '');
+      }
+      return /swiftshader|llvmpipe|softpipe|software|basic render|\bwarp\b/i.test(name);
+    } catch (e) {
+      return false;
+    } finally {
+      try { var lose = gl && gl.getExtension('WEBGL_lose_context'); if (lose) lose.loseContext(); } catch (e) { /* ignore */ }
+    }
+  }
+
   D.createView = function (canvas) {
     var T = window.THREE;
     if (!T) throw new Error('three.js is unavailable');
-    var renderer = new T.WebGLRenderer({ canvas: canvas, antialias: true, powerPreference: 'high-performance' });
-    var ratio = Math.min(window.devicePixelRatio || 1, 1.5);
+    // On a software renderer 4x MSAA and a full-size drawing buffer are about half the cost
+    // of every frame (a 1280x720 title frame in Chromium's SwiftShader: 205 ms of GPU-process
+    // time, 106 ms without MSAA at 0.75 size), and a cold browser spends seconds on its first
+    // frames. There the game draws without MSAA at 0.75 of the size, the floor the slow-frame
+    // fallback below uses. A graphics card keeps both.
+    var software = softwareGL();
+    var renderer = new T.WebGLRenderer({ canvas: canvas, antialias: !software, powerPreference: 'high-performance' });
+    var ratio = software ? 0.75 : Math.min(window.devicePixelRatio || 1, 1.5);
     renderer.setPixelRatio(ratio);
     var scene = new T.Scene(), camera = new T.PerspectiveCamera(48, 16 / 9, 0.1, 400);
     scene.fog = new T.Fog(0xffffff, 30, 110);
@@ -410,6 +439,8 @@
     var shadows = inst(shadowGeo, new T.MeshBasicMaterial({ color: 0x1a1030, transparent: true, opacity: 0.22, depthWrite: false }), 80);
     shadows.renderOrder = 1;
     var PCAP = 260, cubes = inst(new T.BoxGeometry(1, 1, 1), new T.MeshBasicMaterial({ color: 0xffffff }), PCAP);
+    // Coloured from the start, so the shader compileRest builds is the one the first dust uses.
+    cubes.setColorAt(0, C.setHex(0xffffff)); cubes.visible = false;
     var pd = new Float32Array(PCAP * 12), pn = 0;
     var flies = inst(new T.BoxGeometry(0.07, 0.07, 0.07), new T.MeshBasicMaterial({ color: 0xeaff7a, fog: false }), 40);
     var starsAround = inst(model('star', ITEM.star), MATS, 5);
@@ -452,7 +483,7 @@
         put(cubes, i, d[k], d[k + 1], d[k + 2], s, d[k + 10] * d[k + 6], d[k + 10] * 0.5 * d[k + 6]);
         C.setHex(d[k + 11]); cubes.setColorAt(i, C);
       }
-      cubes.count = pn; cubes.instanceMatrix.needsUpdate = true;
+      cubes.count = pn; cubes.instanceMatrix.needsUpdate = true; cubes.visible = pn > 0;
       if (cubes.instanceColor) cubes.instanceColor.needsUpdate = true;
     }
 
@@ -677,6 +708,38 @@
       return false;
     };
     view.ratio = function () { return ratio; };
+
+    /* ------------------------------------------------------------ start-up */
+    // Shaders. Where the browser builds them in the background (KHR_parallel_shader_compile),
+    // every material is built before the first frame, hidden ones included, and the page
+    // keeps answering meanwhile. Elsewhere the first frame builds the ones it shows and the
+    // rest (eggs, fruit, the night sky) are queued once the title is up, so the GPU process
+    // links them while the child looks at the title, not when the first egg comes.
+    var parallel = false;
+    try { parallel = renderer.extensions.has('KHR_parallel_shader_compile'); } catch (e) { parallel = false; }
+    view.prepare = function (done) {
+      if (!parallel) { done(); return; }
+      var called = false, fin = function () { if (!called) { called = true; done(); } };
+      renderer.clear(); // the sky colour, not an empty canvas, while the shaders build
+      renderer.compileAsync(scene, camera).then(fin, fin);
+      setTimeout(fin, 6000);
+    };
+    view.compileRest = function () { if (!parallel) renderer.compile(scene, camera); };
+    // Calls done() once the graphics card has finished every frame drawn so far. A fence is
+    // polled between tasks, so the page answers clicks while a software renderer spends
+    // seconds on a cold browser's first frame. Without fences (WebGL 1), with the context
+    // lost, or after `limit` ms it goes on at once.
+    view.whenDrawn = function (done, limit) {
+      var gl = renderer.getContext(), t0 = performance.now(), sync = null;
+      try { if (gl.fenceSync) { sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0); gl.flush(); } } catch (e) { sync = null; }
+      (function poll() {
+        var finished = !sync || gl.isContextLost() || performance.now() - t0 > limit;
+        if (!finished) { try { finished = gl.getSyncParameter(sync, gl.SYNC_STATUS) === gl.SIGNALED; } catch (e) { finished = true; } }
+        if (!finished) { setTimeout(poll, 16); return; }
+        if (sync) { try { gl.deleteSync(sync); } catch (e) { /* ignore */ } }
+        done();
+      })();
+    };
     view.calm = false;
     view.dispose = function () { renderer.dispose(); };
     view.setBiome(0, true);
