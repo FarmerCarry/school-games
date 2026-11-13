@@ -1166,3 +1166,9 @@ three: about 1 idle match in 20 on the first island earned a star (19 of 400 see
 also failed the browser check «doing nothing loses» on main now and then. A match now earns
 stars, and tells the difficulty anything but a poor result, only if the child pressed a key.
 The Chaos Island page is 150,623 bytes, so its limit is now 151,000.
+
+The classroom check no longer samples Edge's processes through PowerShell on Windows. That
+sampling found the cause above (the graphics process at priority 10 using 3–3.6 of the
+runner's four cores), but each call blocked the test process for up to 20 s on a busy runner,
+and one that timed out was followed by a 12 s stall that failed the Pool Party case. The 3D
+cases still print the test process's longest event-loop delay.

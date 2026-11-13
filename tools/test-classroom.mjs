@@ -7,7 +7,6 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
 import { monitorEventLoopDelay } from 'node:perf_hooks';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { launchChromium } from './browser.mjs';
@@ -124,41 +123,9 @@ function traceSlowFrames() {
   }
 }
 
-// Windows only: CPU seconds and base priority of Edge's processes by type, sampled around the
-// 3D cases, to see which process a slow 3D page keeps busy (KernelModeTime and UserModeTime
-// are in 100 ns units).
-function edgeProcesses() {
-  if (process.platform !== 'win32') return null;
-  try {
-    const out = execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
-      "Get-CimInstance Win32_Process -Filter \"name='msedge.exe'\" | ForEach-Object { '{0}|{1}|{2}|{3}' -f $_.ProcessId, $_.Priority, ([double]$_.KernelModeTime + [double]$_.UserModeTime), $_.CommandLine }"],
-      { encoding: 'utf8', timeout: 20000, windowsHide: true });
-    const byPid = {};
-    for (const line of out.split(/\r?\n/)) {
-      const [pid, priority, time, ...rest] = line.split('|');
-      if (!pid || !time) continue;
-      const command = rest.join('|');
-      const type = (command.match(/--type=([\w-]+)/) || [null, 'browser'])[1]
-        + ((command.match(/--utility-sub-type=([\w.]+)/) || [null, ''])[1] ? ':' + command.match(/--utility-sub-type=([\w.]+)/)[1].split('.').pop() : '');
-      byPid[pid] = { type, priority: Number(priority), seconds: Number(time) / 1e7 };
-    }
-    return byPid;
-  } catch (error) {
-    return { error: String(error.message || error).split('\n')[0] };
-  }
-}
-function describeEdgeUse(before, after, seconds) {
-  if (!before && !after) return null;
-  if (!before || !after || before.error || after.error) return (before && before.error) || (after && after.error) || 'no sample';
-  const types = {};
-  for (const [pid, now] of Object.entries(after)) {
-    const used = now.seconds - (before[pid] ? before[pid].seconds : 0);
-    const entry = types[now.type] || (types[now.type] = { used: 0, priorities: new Set() });
-    entry.used += used; entry.priorities.add(now.priority);
-  }
-  return Object.entries(types).sort((a, b) => b[1].used - a[1].used)
-    .map(([type, entry]) => `${type} ${(entry.used / seconds).toFixed(2)} cores (priority ${[...entry.priorities].join('/')})`).join(', ');
-}
+// The 3D cases print the test process's longest event-loop delay even when they pass: the
+// Windows runner's graphics process runs above normal priority and can starve everything
+// else (docs/PERFORMANCE.md, Dino 3D on software rendering).
 const PROCESS_TRACED = new Set(['dino-3d', 'neon-slope', 'road-hopper']);
 
 try {
@@ -215,8 +182,6 @@ try {
       async function check(caseLabel, action, { processes = false } = {}) {
         const item = { label: caseLabel, ok: false };
         cases.push(item);
-        const before = processes ? edgeProcesses() : null;
-        const started = Date.now();
         // How long this test process itself could not run (a starved machine stalls every
         // browser call, not only the page's).
         const lag = monitorEventLoopDelay({ resolution: 20 });
@@ -246,7 +211,6 @@ try {
           item.error = error.stack || String(error);
         }
         lag.disable();
-        if (processes) item.edge = describeEdgeUse(before, edgeProcesses(), (Date.now() - started) / 1000);
         if (current && !item.ok) {
           // What the page was doing when the check gave up: CI logs are often all there is
           // (the Windows artifacts need a separate download). A page that does not answer
@@ -276,7 +240,6 @@ try {
           if (item.pageState !== undefined) console.log('  page: ' + JSON.stringify(item.pageState));
         }
         if (!item.ok || processes) console.log(`  test process: longest event-loop delay ${Math.round(lag.max / 1e6)} ms`);
-        if (item.edge) console.log(`  edge processes: ${item.edge}`);
       }
 
       await check(label + '-portal', async page => {
