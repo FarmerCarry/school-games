@@ -688,8 +688,9 @@
   // busy for seconds there):
   //  1. now: the menus and the title, no 3D yet (the page's sky colour shows behind it);
   //  2. after that first paint: the 3D view, its shaders and its first frame;
-  //  3. once the graphics card has finished that frame: the frame loop, the test hook and
-  //     Kit.ready, so none of the first frame's cost comes after the game says it is ready.
+  //  3. once the graphics card has finished that frame and the remaining shaders: the frame
+  //     loop, the test hook and Kit.ready, so none of that cost comes after the game says
+  //     it is ready.
   // A title button pressed before step 3 runs then.
   var loop = null, failed = false;
   function fail(error) {
@@ -715,12 +716,15 @@
     loop = Kit.loop(update, render);
     live = true;
     Kit.ready();
-    view.compileRest();
     if (queued) { var press = queued; queued = null; press(); }
   }
   // The portal gives up on a game that is not ready after 20 s, so a frame the graphics
   // card has not finished after 8 s is not waited for any longer.
-  function firstFrame() { render(); view.whenDrawn(guarded(goLive), 8000); }
+  // The shaders the title does not show (eggs, fruit, dust, the night sky) are queued with
+  // the first frame, so the wait below covers them too: without background compiling
+  // (software WebGL) they would otherwise keep the graphics process, and so every frame
+  // after the game said it was ready, busy for seconds.
+  function firstFrame() { render(); view.compileRest(); view.whenDrawn(guarded(goLive), 8000); }
   function start3D() {
     view = D.createView(canvas);
     view.calm = calm();

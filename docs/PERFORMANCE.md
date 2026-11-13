@@ -1120,8 +1120,9 @@ Dino's start-up work (Neon Slope and Road Hopper wait for their first frame befo
 hook can be seen). Now, where WebGL
 is software (SwiftShader, Basic Render Driver, llvmpipe), Dino draws without MSAA at 0.75 of
 the size; it shows the title first, and calls `Kit.ready` only once a fence says the first
-frame is finished. Shaders for eggs, fruit, dust and the night sky are queued when the title
-is up. Graphics cards keep MSAA and the full size.
+frame is finished. Shaders for eggs, fruit, dust and the night sky are queued with that first
+frame, so the same fence covers them: compiled just after `Kit.ready`, they kept the Windows
+runner's page from answering for seconds when Play was pressed. Graphics cards keep MSAA and the full size.
 
 Linux Chromium with SwiftShader, cold browser, median of three runs, before → after:
 

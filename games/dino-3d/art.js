@@ -713,8 +713,9 @@
     // Shaders. Where the browser builds them in the background (KHR_parallel_shader_compile),
     // every material is built before the first frame, hidden ones included, and the page
     // keeps answering meanwhile. Elsewhere the first frame builds the ones it shows and the
-    // rest (eggs, fruit, the night sky) are queued once the title is up, so the GPU process
-    // links them while the child looks at the title, not when the first egg comes.
+    // rest (eggs, fruit, the night sky) are queued with it, before the game says it is ready,
+    // so the GPU process links them while the child looks at the title, not when the first
+    // egg comes or just after a test or a child presses Play.
     var parallel = false;
     try { parallel = renderer.extensions.has('KHR_parallel_shader_compile'); } catch (e) { parallel = false; }
     view.prepare = function (done) {
