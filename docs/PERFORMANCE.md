@@ -1049,9 +1049,10 @@ cache to the next 1,000).
 The Windows runner then showed the cause more directly: while Dino 3D's title was up, the
 test process itself could not run for 10 s. Dino handed the graphics process its next frame
 as soon as the last one was done, so software rendering kept every core busy (Linux, four
-cores: 4.3 cores for the graphics process on the title). On a software renderer each frame
-now waits for a fence on the previous one, and the menus rest as long as a frame took
-(Linux: 3.0 cores, and the title still animates at about 20 frames a second); play only
-waits for the previous frame. A graphics card is not paced. The Dino 3D page is 125,966
-bytes, so its limit is now 126,000; the offline precache, 6,682,821 bytes, stays within
-6,683,000.
+cores: 4.3 cores for the graphics process on the title). On a software renderer the menus
+now wait for a fence on the previous frame and then rest as long as that frame took: on
+Linux the title draws 12 frames a second instead of 34 and the graphics process uses 3.0
+cores. Play is not paced (26 frames a second before and after), and neither is a graphics
+card.
+The Dino 3D page is 125,995 bytes, so its limit is now 126,000; the offline precache,
+6,682,850 bytes, stays within 6,683,000.

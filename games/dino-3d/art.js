@@ -698,13 +698,13 @@
     // Frame pacing on a software renderer. There the processor draws every frame, and a game
     // that hands over its next frame as soon as the last one is done keeps every core busy: on
     // the Windows Edge test runner, where the graphics process runs at a raised priority, the
-    // test process itself could not run for 10 s while the title was up. So after each frame a
-    // fence is set and no frame is drawn until it has passed; on the menus the game then rests
-    // as long as the frame took. A graphics card is never paced.
+    // test process itself could not run for 10 s while the title was up. So on the menus, after
+    // each frame a fence is set, no frame is drawn until it has passed, and the game then rests
+    // as long as the frame took. Play is not paced, and neither is a graphics card.
     var gl0 = renderer.getContext();
     var pace = software && typeof gl0.fenceSync === 'function' ? { sync: null, t0: 0, busy: 0 } : null;
     view.mayDraw = function (now, playing) {
-      if (!pace) return true;
+      if (!pace || playing) return true;
       if (pace.sync) {
         var done = true;
         try { done = gl0.isContextLost() || gl0.getSyncParameter(pace.sync, gl0.SYNC_STATUS) === gl0.SIGNALED; } catch (e) { done = true; }
@@ -713,12 +713,15 @@
         pace.sync = null;
         pace.busy = Math.min(500, now - pace.t0);
       }
-      return playing || now - pace.t0 >= pace.busy * 2;
+      return now - pace.t0 >= pace.busy * 2;
     };
     view.render = function () {
       renderer.render(scene, camera);
       if (!pace) return;
-      try { pace.sync = gl0.fenceSync(gl0.SYNC_GPU_COMMANDS_COMPLETE, 0); gl0.flush(); pace.t0 = performance.now(); } catch (e) { pace = null; }
+      try {
+        if (pace.sync) gl0.deleteSync(pace.sync); // a frame drawn during play, never waited for
+        pace.sync = gl0.fenceSync(gl0.SYNC_GPU_COMMANDS_COMPLETE, 0); gl0.flush(); pace.t0 = performance.now();
+      } catch (e) { pace = null; }
     };
     view.resize = function (w, h) {
       renderer.setSize(w, h, false);
