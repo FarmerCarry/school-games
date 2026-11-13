@@ -136,6 +136,19 @@ try {
           item.ok = false;
           item.error = error.stack || String(error);
         }
+        if (current && !item.ok) {
+          // What the page was doing when the check gave up: CI logs are often all there is
+          // (the Windows artifacts need a separate download). A page that does not answer
+          // within 3 s is reported as such.
+          item.pageState = await Promise.race([
+            current.page.evaluate(() => ({
+              readyState: document.readyState, mode: document.body ? document.body.dataset.mode || document.body.className : null,
+              hook: ['__game', 'Dino3DGame', 'GolfArt'].filter(name => window[name]),
+              buttons: [...document.querySelectorAll('button')].filter(b => b.offsetParent).slice(0, 8).map(b => b.id || b.textContent.trim().slice(0, 20))
+            })),
+            new Promise(resolve => setTimeout(() => resolve('the page did not answer within 3 s'), 3000))
+          ]).catch(error => 'the page could not be read: ' + String(error.message || error).split('\n')[0]);
+        }
         if (current) {
           try { await current.page.screenshot({ path: path.join(artifactDir, caseLabel + '.png'), fullPage: true }); }
           catch (error) { item.screenshotError = error.message; }
@@ -144,6 +157,12 @@ try {
         }
         const retryNote = item.navigationRetry ? ' (retried a file navigation)' : '';
         console.log(`${item.ok ? 'PASS' : 'FAIL'} ${caseLabel}${retryNote}${item.error ? ': ' + item.error.split('\n')[0] : ''}`);
+        if (!item.ok) {
+          // Playwright's call log (what the locator found, and for how long) follows the first line.
+          const detail = String(item.error || '').split('\n').slice(1).filter(line => !/^\s+at /.test(line)).slice(0, 12);
+          for (const line of detail) console.log('  ' + line.replace(/\x1b\[[0-9;]*m/g, ''));
+          if (item.pageState !== undefined) console.log('  page: ' + JSON.stringify(item.pageState));
+        }
       }
 
       await check(label + '-portal', async page => {
