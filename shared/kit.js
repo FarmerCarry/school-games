@@ -85,6 +85,11 @@
   // Window capture listeners run before any game listener can stop the event.
   function listen(type, fn) { window.addEventListener(type, fn, true); }
   function suspend(reason) {
+    // One pause per stop of play: a blur and the hidden page that follows it, or Kit's own
+    // fullscreen exit and the portal's, find play already cut (until 0) and count once.
+    if (roundId && until !== 0) rp++;
+    send(true);
+    cueAt = -1;
     if (Kit.keys) Kit.keys.reset();
     pointerResets.forEach(function (reset) { reset(); });
     lifecycleHandlers.slice().forEach(function (hooks) {
@@ -103,6 +108,7 @@
     if (failed) return;
     ready = true;
     tellPortal({ type: 'sg:ready', version: 1 });
+    tick();
   };
   function errorText(error) {
     return String(error && error.message || error || 'Game failed to initialize').slice(0, 240);
@@ -159,8 +165,123 @@
       if (typeof message.quiet === 'boolean') audio.setMuted(message.quiet);
       if (typeof message.motionPreference === 'string') Kit.motion.setPreference(message.motionPreference);
       else if (typeof message.reducedMotion === 'boolean') Kit.motion.setPreference(message.reducedMotion ? 'reduce' : 'full');
+      // Whether the portal's statistics sender is on: off drops what waits and stops counting.
+      if (typeof message.telemetry === 'boolean' && !(telemetry = message.telemetry)) { tev = []; il = [0, 0, 0, 0, 0, 0]; cueAt = -1; clearTimeout(timer); timer = 0; }
+      tick();
     }
   });
+
+  /* ----------------------------------------------------- play statistics */
+  // Anonymous play statistics for the portal's sender (docs/TELEMETRY.md). Kit only counts
+  // and posts small deltas as sg:telemetry version 2: while embedded, after Kit.ready(), and
+  // only once the portal says its sender is on (sg:preferences telemetry: true). Until the
+  // portal says, Kit keeps at most 400 waiting events in memory; told off (or standalone),
+  // it counts nothing, posts nothing and starts no timer. Kit stores nothing, never uses the
+  // network and never sees who plays. Engaged time: a key press or click starts or extends a
+  // 20 s window; mouse moves, the wheel and Kit.stats.busy() only extend an open one; every
+  // pause and pagehide cuts it. Every Kit.stats and Kit.track call is safe standalone,
+  // before Kit.ready() and with any argument.
+  // Events: ['rs', id, tier]; ['rx', wallMs, inputs, idleLapses, pauses, rtSumMs, rtN,
+  // ddaPermille] right before ['re', code, id, engagedMs, score, tier, hits, misses, rt[6]];
+  // ['tu', 's' | 'd'] for a first-time tutorial's start and end. Histograms: upper bounds in
+  // ms, the last bucket open: rt 300 500 800 1200 2000, il (input latency) 8 16 33 50 100.
+  // Frames: smooth <= 20 ms, ok <= 34 ms, choppy <= 250 ms, stall; only engaged play in a round.
+  var telemetry = window.parent !== window ? null : false, timer = 0, from, until, tn = 0, engaged = 0, roundMs = 0, roundId = '';
+  var frames = [0, 0, 0, 0], il = [0, 0, 0, 0, 0, 0], rt = [0, 0, 0, 0, 0, 0], tev = [], tutorials = {};
+  var tier = 0, hits = 0, misses = 0, cueAt = -1, r0 = 0, ri = 0, rd = 0, rp = 0, rsum = 0, rn = 0, dl = -1;
+  function live() { return telemetry !== false && !failed; }
+  function push() { if (live() && tev.length < 400) tev.push.apply(tev, arguments); }
+  // tn: the time of the last tally, which every mark() follows: a round's wall time and its
+  // engaged time come from the same clock reading, so wall time always covers it.
+  function tally() {
+    var t = tn = clock(), x = t < until ? t : until;
+    if (x > from) { engaged += x - from; if (roundId) roundMs += x - from; from = x; }
+    return t;
+  }
+  // A key press or click in a round after its window lapsed is an idle lapse;
+  // after a pause until is 0, so the press that resumes play is not one.
+  function engage(extendOnly) {
+    var t = tally();
+    if (!extendOnly && roundId && until && t >= until) rd++;
+    if (!extendOnly || t < until) { from = t; until = t + 20000; }
+  }
+  function countFrame(ms) {
+    try { if (ms > 0 && roundId && clock() < until) frames[ms > 20 ? ms > 34 ? ms > 250 ? 3 : 2 : 1 : 0]++; } catch (e) { /* ignore */ }
+  }
+  function send(cut) {
+    tally();
+    if (cut) until = 0;
+    while (telemetry && ready && !failed && (engaged || frames.some(Number) || il.some(Number) || tev.length)) {
+      tellPortal({ type: 'sg:telemetry', version: 2, e: engaged, f: frames, il: il, ev: tev.splice(0, 64) });
+      engaged = 0; frames = [0, 0, 0, 0]; il = [0, 0, 0, 0, 0, 0];
+    }
+  }
+  // One 10 s timer, only while the portal's sender is on and the game is ready.
+  function tick() {
+    if (!timer && telemetry && ready && !failed) timer = setTimeout(function () { timer = 0; send(); tick(); }, 10000);
+  }
+  function put(list, ms, bounds) { for (var i = 0; i < 5 && ms >= bounds[i]; i++); list[i]++; }
+  function timed(ms) { put(rt, ms, [300, 500, 800, 1200, 2000]); rsum += ms; rn++; }
+  // A round start (no code) or the end of the open round. hits, misses, reaction times and
+  // the counters belong to the open round; the tier and the DDA level are state.
+  function mark(code, score) {
+    if (code == null) push(['rs', roundId, tier]);
+    else push(['rx', tn - r0, ri, rd, rp, rsum, rn, dl], ['re', code, roundId, roundMs, fin(score) ? score : -1, tier, hits, misses, rt]);
+    hits = misses = ri = rd = rp = rsum = rn = 0; rt = [0, 0, 0, 0, 0, 0]; cueAt = -1; r0 = tn;
+  }
+  // Every key press and click: engaged time, then (key repeats aside) how long the event
+  // waited for the page and the reaction time to a pending cue. Only a click or a key the
+  // game accepts (Kit.keys.acceptsEvent) answers the cue.
+  function input(e, key) {
+    engage();
+    if (roundId && !e.repeat) ri++;
+    if (live() && !e.repeat) {
+      var t = e.timeStamp;
+      if (perf && typeof t === 'number' && t > 0 && (t = perf.now() - t) >= 0 && t <= 1000) put(il, t, [8, 16, 33, 50, 100]);
+      if (cueAt >= 0 && (!key || acceptsKeyEvent(e))) { timed(clock() - cueAt); cueAt = -1; }
+    }
+  }
+  function text(value) { try { return String(value).slice(0, 24); } catch (e) { return ''; } }
+  // A page that goes away (not kept in the back-forward cache) with a round open quits it.
+  listen('pagehide', function (e) {
+    if (!(e && e.persisted) && roundId) { tally(); mark('q'); roundId = ''; }
+    send(e);
+  });
+  listen('pointermove', engage);
+  listen('wheel', engage);
+  Kit.stats = {
+    // A new round while one is open ends the open one as a quit.
+    round: function (id) {
+      tally();
+      if (roundId) mark('q');
+      roundId = text(id);
+      mark();
+      roundMs = 0;
+      send();
+    },
+    // result: 'win', 'lose', 'draw', 'end' (no winner) or 'quit' (its first letter is sent).
+    end: function (result, score) {
+      if (!roundId) return;
+      tally();
+      mark(text(result).charAt(0), score);
+      roundId = '';
+      send();
+    },
+    tutorial: function (step) {
+      if ((step === 'start' || step === 'done') && !tutorials[step]) { tutorials[step] = 1; push(['tu', step.charAt(0)]); }
+    },
+    busy: function () { engage(1); },
+    frame: countFrame
+  };
+  Kit.track = {
+    hit: function () { if (live()) hits++; },
+    miss: function () { if (live()) misses++; },
+    // A stimulus just appeared: the next click, or key the game accepts, is a reaction time.
+    cue: function () { if (live()) cueAt = clock(); },
+    react: function (ms) { if (live() && fin(ms)) timed(ms); },
+    // The current difficulty tier 0..9 (0 = no DDA); Kit.dda reports its own at every read.
+    tier: function (n) { if (fin(n) && n < 10) tier = n | 0; }
+  };
 
   /* ------------------------------------------------------------- DDA */
   // var dda = Kit.dda('my-game', { id: 'main', target: 0.72, tiers: 5, start });
@@ -193,15 +314,17 @@
       return n ? level : unit(opts.start, 0.35);
     }
     function tierOf(l) { return 1 + Math.floor(l * tiers * 0.9999); }
+    // Every read reports the tier and the level (in thousandths) for the round events.
+    function read() { var l = now(); tier = tierOf(l); dl = Math.round(l * 1000); return l; }
     function save() {
       var all = ddaSaved(store);
       if (n) all[id] = [level, n]; else delete all[id];
       store.set('dda', all);
     }
     var dda = {
-      get level() { return now(); },
-      get tier() { return tierOf(now()); },
-      value: function (easy, hard) { return Kit.lerp(easy, hard, now()); },
+      get level() { return read(); },
+      get tier() { return tierOf(read()); },
+      value: function (easy, hard) { return Kit.lerp(easy, hard, read()); },
       pick: function (list) { return list[Math.min(dda.tier, list.length) - 1]; },
       result: function (outcome) {
         var x = outcome === true ? 1 : outcome === false ? 0 : outcome, l = now();
@@ -376,6 +499,7 @@
     reset: function () { held = {}; hit = {}; }
   };
   listen('keydown', function (e) {
+    input(e, 1);
     // Shift+Tab from the game surface returns to the portal. Native controls keep
     // their ordinary Tab order; standalone game pages keep browser navigation.
     if (e.code === 'Tab' && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && !e.isComposing && !e.defaultPrevented && !nativeKeyTarget(e.target) && window.parent !== window) {
@@ -397,8 +521,8 @@
   window.addEventListener('blur', Kit.keys.reset);
   window.addEventListener('focusin', function (e) { if (nativeKeyTarget(e.target)) Kit.keys.reset(); });
 
-  // Any click/tap unlocks audio and makes sure the game frame has keyboard focus.
-  listen('pointerdown', function () { audio.unlock(); try { window.focus(); } catch (err) { /* ignore */ } });
+  // Any click/tap counts as play, unlocks audio and makes sure the game frame has keyboard focus.
+  listen('pointerdown', function (e) { input(e); audio.unlock(); try { window.focus(); } catch (err) { /* ignore */ } });
   window.addEventListener('contextmenu', function (e) { e.preventDefault(); });
 
   /* ------------------------------------------------------ canvas scaling */
@@ -469,6 +593,7 @@
       var ms = last ? t - last : 0;
       last = t;
       if (document.hidden) return;
+      countFrame(ms);
       acc += Math.min(0.25, ms / 1000);
       var n = 0;
       while (acc >= step && n < 8) { update(step); acc -= step; n++; }

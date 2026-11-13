@@ -255,17 +255,377 @@ test('Kit.dda carries over the newest player\'s level from saves made when the s
   }
 });
 
-test('Kit records no play statistics and sends nothing but readiness, warnings and the portal hand-off', () => {
-  const clock = {now: 0}, raf = [], h = harness({clock, raf});
-  for (const name of ['stats', 'track', 'profile']) assert.equal(name in h.Kit, false, 'Kit.' + name + ' is gone');
+/* ----------------------------------------------------- play statistics */
+// docs/TELEMETRY.md "Kit": Kit.stats, Kit.track and sg:telemetry version 2, posted only
+// while the portal says its anonymous statistics sender is on.
+const telemetryOf = h => h.sent.filter(m => m && m.type === 'sg:telemetry');
+const eventsOf = h => telemetryOf(h).flatMap(m => m.ev);
+const preferences = (h, data, source = h.window.parent) => h.window.emit('message', {source, data: {type: 'sg:preferences', ...data}});
+const zeros = [0, 0, 0, 0, 0, 0];
+// Runs each timer scheduled so far once; timers they schedule wait for the next call.
+function runTimers(h) {
+  h.timers.forEach((fn, i) => { if (fn) { h.timers[i] = null; fn(); } });
+}
+const pending = h => h.timers.filter(Boolean).length;
+// A ready game whose portal says the sender is on.
+function on(options = {}) {
+  const clock = options.clock || {now: 0}, h = harness({clock, ...options});
+  h.Kit.ready(); preferences(h, {telemetry: true});
+  return {h, clock};
+}
+const pauses = {
+  blur: h => h.window.emit('blur'),
+  hidden: h => { h.document.hidden = true; h.document.emit('visibilitychange'); h.document.hidden = false; h.document.emit('visibilitychange'); },
+  'portal-escape': h => h.window.emit('keydown', {code: 'Tab', shiftKey: true}),
+  portal: h => h.window.emit('message', {source: h.window.parent, data: {type: 'sg:pause', reason: 'portal'}}),
+  'fullscreen-exit': h => { h.document.fullscreenElement = {}; h.document.emit('fullscreenchange'); h.document.fullscreenElement = null; h.document.emit('fullscreenchange'); },
+  pagehide: h => h.window.emit('pagehide', {persisted: true})
+};
+
+// One session with every input: presses and clicks with event times, hits, misses, a
+// cue, explicit reaction times, a tier, rounds, a quit, an end, a tutorial and pauses.
+function session(h, clock) {
+  clock.now = 1000; h.window.emit('keydown', {code: 'KeyA', timeStamp: 990});
+  h.Kit.stats.round('L1');
+  h.Kit.track.hit(); h.Kit.track.miss(); h.Kit.track.cue(); h.Kit.track.tier(2);
+  clock.now = 1400; h.window.emit('pointerdown', {button: 0, timeStamp: 1395});
+  h.Kit.track.react(250); h.Kit.stats.frame(16);
+  clock.now = 2000; h.Kit.stats.round('L2');
+  clock.now = 3000; h.Kit.stats.end('win', 5);
+  h.Kit.stats.tutorial('start'); h.Kit.audio.toggleMute();
+  clock.now = 3500; h.window.emit('keydown', {code: 'KeyB', timeStamp: 3499});
+  clock.now = 5000; runTimers(h); h.window.emit('blur'); h.window.emit('pagehide');
+}
+
+test('without the portal\'s telemetry: true Kit sends nothing but readiness, warnings and the portal hand-off, and starts no timer', () => {
+  const run = (setup, options = {}) => {
+    const clock = {now: 0}, raf = [], h = harness({clock, raf, ...options});
+    setup(h);
+    h.Kit.loop(() => {}, () => {});
+    for (let i = 0; i < 5; i++) { clock.now += 16; raf.shift()?.(clock.now); }
+    session(h, clock);
+    h.window.emit('keydown', {code: 'Tab', shiftKey: true});
+    return h;
+  };
+  for (const [name, setup, options] of [
+    ['the portal never says', h => h.Kit.ready()],
+    ['an older portal sends preferences without it', h => { h.Kit.ready(); preferences(h, {quiet: false}); }],
+    ['told false', h => { h.Kit.ready(); preferences(h, {telemetry: false}); }],
+    ['told true by another window', h => { h.Kit.ready(); preferences(h, {telemetry: true}, {}); }],
+    ['told something that is not true', h => { h.Kit.ready(); for (const telemetry of ['true', 1, null, {}]) preferences(h, {telemetry}); }],
+    ['told true before readiness, never ready', h => preferences(h, {telemetry: true})],
+    ['told true, then the game failed', h => { h.Kit.ready(); preferences(h, {telemetry: true}); h.Kit.fail('boom'); }],
+    ['standalone', h => { h.Kit.ready(); preferences(h, {telemetry: true}); }, {embedded: false}]
+  ]) {
+    const h = run(setup, options);
+    assert.deepEqual(telemetryOf(h), [], name + ': no statistics');
+    assert.deepEqual([...new Set(h.sent.map(m => m.type || m))].filter(t => !['sg:ready', 'sg:focus-portal', 'sg:error'].includes(t)), [], name);
+    // A game that failed after its timer started stops the chain at the next tick.
+    if (name.includes('failed')) assert.equal(pending(h), 0, name + ': no timer left');
+    else assert.deepEqual(h.delays, [], name + ': no timers of its own');
+  }
+  // Told off, Kit drops what waited and counts nothing more: telling it on later sends
+  // nothing from before.
+  const clock = {now: 0}, h = harness({clock});
   h.Kit.ready();
-  h.Kit.loop(() => {}, () => {});
-  for (let i = 0; i < 5; i++) { clock.now += 16; raf.shift()?.(clock.now); }
-  h.window.emit('keydown', {code: 'KeyA'}); h.window.emit('pointerdown', {button: 0});
-  h.window.emit('pointermove'); h.window.emit('wheel'); h.window.emit('pagehide', {});
-  h.window.emit('blur');
-  h.window.emit('keydown', {code: 'Tab', shiftKey: true});
-  for (const fn of h.timers) fn?.();
-  assert.deepEqual([...new Set(h.sent.map(m => m.type || m))].sort(), ['sg:focus-portal', 'sg:ready']);
-  assert.deepEqual(h.timers.filter(Boolean), [], 'no timers of its own');
+  h.Kit.stats.round('L1'); h.Kit.track.hit();
+  h.window.emit('keydown', {code: 'KeyA', timeStamp: -1}); clock.now = 10; h.window.emit('keydown', {code: 'KeyA', timeStamp: 5});
+  preferences(h, {telemetry: false}); h.Kit.track.hit(); h.Kit.stats.end('win'); h.Kit.stats.round('L2');
+  preferences(h, {telemetry: true}); runTimers(h);
+  assert.deepEqual(eventsOf(h).filter(ev => ev[0] !== 'rs'), [], 'nothing from while it was off');
+  assert.ok(telemetryOf(h).every(m => m.il.every(n => n === 0)));
+});
+
+test('telemetry: round starts and ends, hits, misses, reaction times, input latency and the counters', () => {
+  const {h, clock} = on();
+  h.Kit.track.tier(3);
+  clock.now = 1000; h.window.emit('keydown', {code: 'KeyA', timeStamp: 995});      // latency 5 ms
+  clock.now = 2000; h.Kit.stats.round('L1');
+  h.Kit.track.hit(); h.Kit.track.hit(); h.Kit.track.miss();
+  h.Kit.track.cue();
+  clock.now = 2450; h.window.emit('keydown', {code: 'Space', timeStamp: 2440});    // reaction 450 ms, latency 10 ms
+  h.Kit.track.cue();
+  clock.now = 2600; h.window.emit('keydown', {code: 'Space', timeStamp: 2600, repeat: true}); // repeats count neither
+  clock.now = 3900; h.window.emit('pointerdown', {button: 0, timeStamp: 3860});     // reaction 1450 ms, latency 40 ms
+  h.window.emit('pointerdown', {button: 0, timeStamp: 3899});                       // no cue left; latency 1 ms
+  for (const ms of [120, 2000, -1, NaN, Infinity, '300', null, undefined, {}]) h.Kit.track.react(ms);
+  h.Kit.track.tier(4);
+  clock.now = 5000; h.Kit.stats.round('L2');                                         // L1 becomes a quit
+  h.Kit.stats.frame(16); h.Kit.stats.frame(40); h.Kit.track.miss();
+  clock.now = 6000; h.Kit.stats.end('lose');
+  h.Kit.stats.round('L3');
+  clock.now = 7000; h.Kit.stats.end('win', 120); h.Kit.stats.end('draw', 3);
+  h.Kit.stats.round('L4');
+  clock.now = 8000; h.Kit.stats.end('draw', -5);
+  runTimers(h);                                                                      // nothing new
+  h.window.emit('keydown', {code: 'KeyA', timeStamp: 7900});                         // only the latency changes
+  runTimers(h);
+  const v2 = (e, il, ev, f = [0, 0, 0, 0]) => ({type: 'sg:telemetry', version: 2, e, f, il, ev});
+  assert.deepEqual(h.sent.slice(1), [
+    v2(1000, [1, 0, 0, 0, 0, 0], [['rs', 'L1', 3]]),
+    // rx before each end: wall ms, inputs (the key repeat aside), idle lapses, pauses,
+    // the reaction-time sum and count (450 + 1450 + 120 + 2000 ms) and the DDA level (none).
+    v2(3000, [1, 1, 0, 1, 0, 0], [['rx', 3000, 3, 0, 0, 4020, 4, -1], ['re', 'q', 'L1', 3000, -1, 4, 2, 1, [1, 1, 0, 0, 1, 1]], ['rs', 'L2', 4]]),
+    v2(1000, zeros, [['rx', 1000, 0, 0, 0, 0, 0, -1], ['re', 'l', 'L2', 1000, -1, 4, 0, 1, zeros]], [1, 0, 1, 0]),
+    v2(0, zeros, [['rs', 'L3', 4]]),
+    v2(1000, zeros, [['rx', 1000, 0, 0, 0, 0, 0, -1], ['re', 'w', 'L3', 1000, 120, 4, 0, 0, zeros]]),
+    v2(0, zeros, [['rs', 'L4', 4]]),
+    v2(1000, zeros, [['rx', 1000, 0, 0, 0, 0, 0, -1], ['re', 'd', 'L4', 1000, -1, 4, 0, 0, zeros]]),
+    v2(0, [0, 0, 0, 0, 0, 1], [])
+  ]);
+  assert.deepEqual(h.clones, h.sent, 'every message survives structured cloning');
+  assert.deepEqual(h.delays, [10000, 10000, 10000], 'one timer chain');
+});
+
+test('telemetry: key presses and clicks open 20 s engaged windows that merge; moves, the wheel and busy() only extend them', () => {
+  const {h, clock} = on({clock: {now: 1000}});
+  const key = () => h.window.emit('keydown', {code: 'KeyA'}), e = () => telemetryOf(h).reduce((sum, m) => sum + m.e, 0);
+  h.window.emit('pointermove'); h.window.emit('wheel'); h.Kit.stats.busy();
+  clock.now = 9000; h.Kit.stats.round('L1');
+  assert.equal(e(), 0, 'moves, the wheel and busy() never open a window');
+  key();                                                          // open until 29 000
+  clock.now = 19000; h.window.emit('pointermove');                // until 39 000
+  clock.now = 30000; h.window.emit('wheel');                      // until 50 000
+  clock.now = 45000; h.Kit.stats.busy();                          // until 65 000
+  clock.now = 90000; h.window.emit('pointermove'); h.Kit.stats.busy(); // closed: no effect
+  clock.now = 100000; h.window.emit('pointerdown', {button: 0});  // a new window until 120 000
+  clock.now = 104000; key();                                      // overlapping windows merge: until 124 000
+  clock.now = 110000; h.Kit.stats.end('win');
+  assert.equal(e(), 56000 + 10000);
+  assert.equal(eventsOf(h).at(-1)[3], 66000, 'the round\'s engaged ms');
+  // A key press or click in the round after its window lapsed is an idle lapse.
+  assert.equal(eventsOf(h).find(ev => ev[0] === 'rx')[3], 1, 'one idle lapse (the click at 100 s)');
+  clock.now = 200000; key();
+  clock.now = 260000; h.Kit.stats.round('L2');
+  assert.equal(e(), 66000 + 14000 + 20000, 'each window ends 20 s after its last input');
+});
+
+test('telemetry: every pause and pagehide cuts the window at once, posts, and disarms until a key press or click', () => {
+  for (const [reason, pause] of Object.entries(pauses)) {
+    const {h, clock} = on({clock: {now: 5000}});
+    h.Kit.stats.round('main'); h.sent.length = 0;
+    h.window.emit('pointerdown', {button: 0});
+    clock.now = 8000; pause(h);
+    assert.deepEqual(telemetryOf(h).map(m => m.e), [3000], reason);
+    clock.now = 9000; h.window.emit('pointermove'); h.window.emit('wheel'); h.Kit.stats.busy(); h.Kit.stats.frame(16);
+    clock.now = 20000; runTimers(h);
+    assert.equal(telemetryOf(h).length, 1, `${reason}: a disarmed game counts nothing for mouse moves, the wheel or busy()`);
+    h.window.emit('keydown', {code: 'Space'});                    // armed again: open until 40 000
+    clock.now = 21000; h.window.emit('pointermove');              // until 41 000
+    clock.now = 30000; h.Kit.stats.end('lose');
+    assert.deepEqual(eventsOf(h).at(-1).slice(0, 4), ['re', 'l', 'main', 13000], reason);
+    assert.equal(telemetryOf(h).at(-1).e, 10000, reason);
+  }
+});
+
+test('telemetry: frames count only while engaged and in a round, never the first frame after start or show', () => {
+  const clock = {now: 1000}, raf = [], {h} = on({clock, raf});
+  let updates = 0;
+  h.Kit.loop(() => updates++, () => {});
+  const frame = ms => { clock.now += ms; raf.splice(0).forEach(fn => fn(clock.now)); };
+  const counted = () => { runTimers(h); return telemetryOf(h).reduce((sum, m) => sum.map((n, i) => n + m.f[i]), [0, 0, 0, 0]); };
+  frame(16); frame(16);                                   // first frame, then not engaged
+  h.window.emit('keydown', {code: 'KeyA'}); frame(16);    // engaged, but no round open
+  assert.deepEqual(counted(), [0, 0, 0, 0]);
+  h.Kit.stats.round('main');
+  for (const ms of [16, 20, 30, 34, 100, 250, 300]) frame(ms);
+  assert.deepEqual(counted(), [2, 2, 2, 1], 'smooth <= 20 ms, ok <= 34 ms, choppy <= 250 ms, stall');
+  h.document.hidden = true; h.document.emit('visibilitychange'); frame(16);
+  h.document.hidden = false; h.document.emit('visibilitychange');
+  h.window.emit('keydown', {code: 'KeyA'}); frame(16); frame(16);
+  assert.deepEqual(counted(), [3, 2, 2, 1], 'hidden frames and the first frame after showing are skipped');
+  h.window.emit('blur'); frame(16); h.window.emit('pointermove'); frame(16); h.Kit.stats.frame(16);
+  assert.deepEqual(counted(), [3, 2, 2, 1], 'a paused game counts no frames');
+  h.window.emit('pointerdown', {button: 0});
+  for (const ms of [16, 0, -5, NaN, undefined, 400]) h.Kit.stats.frame(ms);
+  assert.deepEqual(counted(), [4, 2, 2, 2], 'Kit.stats.frame() uses the same gate and buckets');
+  h.Kit.stats.end('end'); frame(16); h.Kit.stats.frame(16);
+  assert.deepEqual(counted(), [4, 2, 2, 2], 'no frames once the round has ended');
+  assert.ok(updates > 0, 'the loop still runs its updates');
+});
+
+test('telemetry: one 10 s timer chain, only while ready and on, that stops after a failure or when told off', () => {
+  const clock = {now: 0}, h = harness({clock});
+  h.Kit.stats.round('L1');
+  preferences(h, {telemetry: true});
+  assert.equal(h.timers.length, 0, 'no timer at load or before Kit.ready()');
+  h.Kit.ready(); h.Kit.ready();
+  for (let i = 0; i < 3; i++) { h.window.emit('message', {source: h.window.parent, data: {type: 'sg:request-ready'}}); preferences(h, {telemetry: true}); }
+  assert.deepEqual([pending(h), h.delays], [1, [10000]]);
+  assert.deepEqual(telemetryOf(h), [], 'Kit.ready() itself never posts statistics');
+  runTimers(h);
+  assert.deepEqual(eventsOf(h), [['rs', 'L1', 0]], 'the timer posts what waited for readiness');
+  runTimers(h);
+  assert.equal(telemetryOf(h).length, 1, 'no post without unsent data');
+  assert.deepEqual([pending(h), h.delays], [1, [10000, 10000, 10000]], 'each tick schedules exactly one more');
+  h.window.emit('keydown', {code: 'KeyA'}); clock.now = 5000;
+  const before = h.sent.length;
+  h.window.emit('error', {message: 'boom'});
+  assert.deepEqual(h.sent.slice(before).map(m => m.type), ['sg:warn'], 'a runtime warning posts no statistics');
+  assert.equal(pending(h), 1, 'one warning does not stop the timer');
+  h.Kit.fail('boom');
+  assert.equal(h.sent.at(-1).type, 'sg:error', 'Kit.fail posts no statistics');
+  runTimers(h);
+  assert.equal(pending(h), 0, 'the chain stops after a failure');
+  assert.equal(h.sent.at(-1).type, 'sg:error');
+  // Told off: the timer is cleared at once.
+  const off = on().h;
+  assert.equal(pending(off), 1);
+  preferences(off, {telemetry: false});
+  assert.equal(pending(off), 0);
+});
+
+test('telemetry: a round still open when the page goes away ends as a quit, unless the page is kept in the back-forward cache', () => {
+  const {h, clock} = on();
+  h.Kit.track.tier(2);
+  clock.now = 1000; h.Kit.stats.round('L1');
+  h.Kit.track.hit();
+  clock.now = 4000; h.window.emit('pagehide', {persisted: true});                  // kept: no quit yet
+  clock.now = 5000; h.window.emit('keydown', {code: 'KeyA'});
+  h.Kit.track.miss();
+  clock.now = 9000; h.window.emit('pagehide', {persisted: false});                 // gone: a quit
+  assert.deepEqual(eventsOf(h), [['rs', 'L1', 2], ['rx', 8000, 1, 0, 0, 0, 0, -1], ['re', 'q', 'L1', 4000, -1, 2, 1, 1, zeros]]);
+  h.window.emit('pagehide', {persisted: false}); h.Kit.stats.end('win');
+  assert.equal(eventsOf(h).length, 3, 'nothing more for that round');
+});
+
+test('telemetry: input latency is performance.now() minus the event time, only for a valid time within 0..1000 ms', () => {
+  const {h} = on({clock: {now: 5000}});
+  const press = timeStamp => h.window.emit('keydown', {code: 'KeyA', timeStamp});
+  for (const ms of [0, 7.9, 8, 15.9, 16, 32.9, 33, 49.9, 50, 99.9, 100, 1000]) press(5000 - ms);
+  for (const t of [5000.5, 3999.5, 0, -5, NaN, Infinity, -Infinity, undefined, null, '4990', {valueOf() { return 4990; }}]) press(t);
+  h.window.emit('keydown', {code: 'KeyA', timeStamp: 4990, repeat: true});
+  h.window.emit('pointerdown', {button: 0, timeStamp: 4980});
+  runTimers(h);
+  assert.deepEqual(telemetryOf(h).map(m => m.il), [[2, 2, 3, 2, 2, 2]], 'buckets < 8, < 16, < 33, < 50, < 100 and the rest');
+  // Without window.performance there is no latency.
+  const plain = harness();
+  plain.Kit.ready(); preferences(plain, {telemetry: true});
+  plain.window.emit('keydown', {code: 'KeyA', timeStamp: 1}); plain.Kit.stats.round('L1');
+  assert.deepEqual(telemetryOf(plain).map(m => m.il), [zeros]);
+});
+
+test('telemetry: Kit.track keeps the latest valid tier, a pause clears a cue, and a cue is answered only by a click or a key the game accepts', () => {
+  const {h, clock} = on();
+  h.Kit.track.tier(2);
+  h.Kit.stats.round('L1');
+  for (const n of [-1, 10, NaN, Infinity, '3', null, {}, Symbol('t')]) h.Kit.track.tier(n);
+  h.Kit.track.cue(); h.window.emit('blur');
+  clock.now = 900; h.window.emit('keydown', {code: 'KeyA'});
+  h.Kit.track.cue();
+  clock.now = 1000; h.window.emit('keydown', {code: 'KeyB', ctrlKey: true});      // not a game key
+  clock.now = 1100; h.window.emit('keydown', {code: 'KeyC', isComposing: true});  // not a game key
+  clock.now = 1200; h.window.emit('keydown', {code: 'KeyD'});                     // 300 ms
+  clock.now = 1500; h.Kit.track.tier(7.8);
+  h.Kit.stats.end('win');
+  const rx = eventsOf(h).find(ev => ev[0] === 'rx'), re = eventsOf(h).at(-1);
+  assert.deepEqual([rx[5], rx[6], re[5], re[8]], [300, 1, 7, [0, 1, 0, 0, 0, 0]]);
+  for (const call of ['hit', 'miss', 'cue', 'react', 'tier']) assert.doesNotThrow(() => h.Kit.track[call](Symbol('odd')));
+});
+
+test('telemetry: rx counts one pause per stop of play: a blur with the hidden page after it, or both fullscreen exits, are one', () => {
+  const {pagehide, ...each} = pauses;
+  const stops = {
+    ...each,
+    'a tab switch (blur, then hidden)': h => { h.window.emit('blur'); h.document.hidden = true; h.document.emit('visibilitychange'); h.document.hidden = false; },
+    'Shift+Tab, then the blur as the portal takes the focus': h => { each['portal-escape'](h); h.window.emit('blur'); },
+    'leaving fullscreen (Kit\'s own, then the portal\'s sg:pause)': h => {
+      each['fullscreen-exit'](h);
+      h.window.emit('message', {source: h.window.parent, data: {type: 'sg:pause', reason: 'fullscreen-exit'}});
+    }
+  };
+  for (const [name, pause] of Object.entries(stops)) {
+    const {h, clock} = on({clock: {now: 1000}});
+    h.Kit.stats.round('L1');
+    pause(h);                                                     // before any input: play was running
+    clock.now = 2000; h.window.emit('keydown', {code: 'Space'});
+    clock.now = 3000; pause(h);
+    h.window.emit('blur');                                        // already paused: no input since
+    clock.now = 4000; h.window.emit('pointerdown', {button: 0});
+    clock.now = 5000; pause(h);
+    h.Kit.stats.end('win');
+    const rx = eventsOf(h).find(ev => ev[0] === 'rx');
+    assert.equal(rx[4], 3, `${name}: ${JSON.stringify(rx)}`);
+  }
+});
+
+test('telemetry: a round\'s wall time always covers its engaged time, wherever a millisecond turns between two clock reads', () => {
+  for (let step = 0.05; step < 1; step += 0.05) for (let start = 0; start < 1; start += 0.1) {
+    let t = 1000 + start;
+    const h = harness({clock: {get now() { return t += step; }}});
+    preferences(h, {telemetry: true});
+    h.Kit.ready();
+    h.window.emit('pointerdown', {button: 0});
+    h.Kit.stats.round('local');
+    for (let i = 0; i < 4; i++) h.window.emit('pointerdown', {button: 0});
+    h.Kit.stats.end('e');
+    const ev = eventsOf(h), rx = ev.find(e => e[0] === 'rx'), re = ev.find(e => e[0] === 're');
+    assert.ok(rx[1] >= re[3], `step ${step.toFixed(2)}, start ${start.toFixed(1)}: wall ${rx[1]} ms, engaged ${re[3]} ms`);
+  }
+});
+
+test('telemetry: round events made before readiness or before the portal says wait, at most 400, and go out at most 64 to a message', () => {
+  const clock = {now: 0}, h = harness({clock});
+  h.Kit.track.tier(1);
+  for (let i = 0; i < 50; i++) h.Kit.stats.round('L1');
+  h.Kit.stats.end('win', 9);
+  h.Kit.ready();
+  assert.deepEqual(h.sent, [{type: 'sg:ready', version: 1}], 'nothing until the portal says');
+  preferences(h, {telemetry: true});
+  runTimers(h);
+  const expected = [['rs', 'L1', 1]], rx = ['rx', 0, 0, 0, 0, 0, 0, -1];
+  for (let i = 1; i < 50; i++) expected.push(rx, ['re', 'q', 'L1', 0, -1, 1, 0, 0, zeros], ['rs', 'L1', 1]);
+  expected.push(rx, ['re', 'w', 'L1', 0, 9, 1, 0, 0, zeros]);
+  assert.deepEqual(telemetryOf(h).map(m => m.ev.length), [64, 64, 22]);
+  assert.deepEqual(eventsOf(h), expected);
+  // A page whose portal never says keeps at most 400 events.
+  const quiet = harness({clock});
+  quiet.Kit.ready();
+  for (let i = 0; i < 300; i++) quiet.Kit.stats.round('L1');
+  preferences(quiet, {telemetry: true}); runTimers(quiet);
+  const kept = eventsOf(quiet);
+  assert.equal(kept.length, 400);
+  assert.ok(kept.every((ev, i) => ev[0] !== 'rx' || kept[i + 1][0] === 're'), 'an rx and its re go in together');
+});
+
+test('telemetry: every read of a Kit.dda controller reports its tier and level for the round events', () => {
+  const {h} = on();
+  const dda = h.Kit.dda('g', {start: 0.6, tiers: 4});
+  h.Kit.stats.round('a');
+  h.Kit.stats.end('end');
+  assert.deepEqual(eventsOf(h).slice(-2)[0].at(-1), -1, 'no DDA level before the first read');
+  dda.tier;
+  h.Kit.stats.round('b'); h.Kit.stats.end('win');
+  dda.result(true);
+  const low = h.Kit.dda('g', {id: 'low', start: 0.1});
+  low.value(1, 2);
+  h.Kit.stats.round('c'); h.Kit.stats.end('win');
+  const ev = eventsOf(h), starts = ev.filter(e => e[0] === 'rs'), extras = ev.filter(e => e[0] === 'rx');
+  assert.deepEqual(starts.map(e => e[2]), [0, 3, 1], 'the tier of the last read');
+  assert.deepEqual(extras.map(e => e[7]), [-1, 600, 100], 'the level in thousandths of the last read, sticky until the next');
+});
+
+test('telemetry: tutorial start and done go once per page; any other step is ignored', () => {
+  const {h} = on();
+  for (const step of ['start', 'start', 'done', 'middle', 'Start', '', null, {}, 'done']) h.Kit.stats.tutorial(step);
+  runTimers(h);
+  assert.deepEqual(eventsOf(h), [['tu', 's'], ['tu', 'd']]);
+});
+
+test('telemetry: every call is safe with any argument, and every payload survives JSON and structured cloning', () => {
+  const {h, clock} = on();
+  const odd = [undefined, null, true, 0, -1, NaN, Infinity, '', 'L1', 'win', {}, [], [1, 2], Object.create(null), Symbol('s'), () => 1, 10n, {toString() { throw new Error('odd'); }}];
+  const calls = () => {
+    for (const a of odd) for (const b of odd) { h.Kit.stats.round(a); h.Kit.stats.end(a, b); h.Kit.stats.tutorial(a); h.Kit.stats.busy(a); h.Kit.stats.frame(a); }
+  };
+  assert.doesNotThrow(calls);
+  h.window.emit('keydown', {code: 'KeyA'}); clock.now = 500;
+  assert.doesNotThrow(() => { calls(); runTimers(h); h.window.emit('blur'); });
+  assert.ok(telemetryOf(h).length > 1);
+  assert.deepEqual(h.clones, h.sent, 'structured clones match the JSON copies');
+  for (const m of telemetryOf(h)) {
+    assert.deepEqual(Object.keys(m), ['type', 'version', 'e', 'f', 'il', 'ev']);
+    assert.ok(m.ev.length <= 64);
+    assert.ok(m.ev.every(e => ['rs', 'rx', 're', 'tu'].includes(e[0]) && e.slice(1).every(v => typeof v === 'string' ? v.length <= 24 : Array.isArray(v) || Number.isFinite(v))));
+  }
 });
