@@ -489,10 +489,12 @@
   $('shopBack').addEventListener('click', function () { S.click(); showTitle(); });
 
   /* ================================================================= MATCH */
-  // Every real match starts here (quick play, select, ladder, retry, restart);
-  // the demo behind the menus never does.
+  // Play stats: every real match starts here (quick play, select, ladder, retry, restart);
+  // the demo behind the menus never does. Tour ids read cfg.stage: a win moves tour.stage on.
   function startMatch(c) {
     cfg = c;
+    Kit.stats.round(c.mode === 'duo' ? 'duo' : c.mode === 'tour' ? 'tour-' + tour.cup.id + '-' + (c.stage + 1) : 'cpu-' + c.lv);
+    coach();
     result = null;
     match = HH.newMatch({ mode: c.mode, p1: c.p1, p2: c.p2, lv: c.lv, len: c.len, target: c.target });
     state = 'play'; show(null);
@@ -539,6 +541,13 @@
     if (cfg.mode === 'tour') startTourMatch(); else startMatch(cfg);
   }
   function toMenu() { match = null; tour = null; showTitle(); }
+  // The engine's shoot/dunk/steal tips (HH.save.tips) are the first-time coach: done once each
+  // reaches 3. 'done' is only sent after this page load saw the coach unfinished.
+  var coached = 0;
+  function coach() {
+    var t = save.tips;
+    if (!(t.shoot > 2 && t.dunk > 2 && t.steal > 2)) { coached = 1; Kit.stats.tutorial('start'); } else if (coached) Kit.stats.tutorial('done');
+  }
   $('pauseBtn').addEventListener('click', function () { pauseGame(); });
   $('pResume').classList.add('nav'); $('pRestart').classList.add('nav'); $('pMenu').classList.add('nav');
   $('pResume').addEventListener('click', resume);
@@ -570,6 +579,9 @@
   function commitResult() {
     var m = match, c = cfg, a = m.players[0], b = m.players[1];
     var win = m.winner === 0;
+    // once per match (startMatch clears result): two players report no winner
+    if (c.mode === 'duo') Kit.stats.end('end'); else Kit.stats.end(win ? 'win' : 'lose', a.score);
+    coach();
     var before = CH.filter(HH.isUnlocked).map(function (x) { return x.id; });
     var st = save.stats;
     st.games++;

@@ -151,7 +151,7 @@
     // A child who has never played goes straight into the first round.
     if (!SZ.totalStars(save)) startRound(0); else toMap();
   }
-  function leaveRound() { R = null; intro = null; result = null; flyers = []; floats = []; rings = []; fx.clear(); }
+  function leaveRound() { Kit.stats.end('quit'); R = null; intro = null; result = null; flyers = []; floats = []; rings = []; fx.clear(); }
 
   /* ---------------------------------------------------------------- map */
   const worldCards = [];
@@ -229,6 +229,9 @@
     shown = R.list.map(() => 0); bumps = R.list.map(() => 0); trayKey = '';
     hint = { wait: 0, delay: dda.value(7, 20), ready: false, on: 0, it: null, auto: tier <= 2 };
     coach = { drag: !save.coach[0] && R.d.lock === 1, zoom: !save.coach[1] && !R.d.lock, t: 0, panned: 0, z0: cam.z, lockNote: -9 };
+    // Play stats: every round is one (w1-1 ..); the first drag or zoom coach is the tutorial.
+    Kit.stats.round('w' + (w + 1) + '-' + (r + 1));
+    if (coach.drag || coach.zoom) Kit.stats.tutorial('start');
     drag.on = false;
     Kit.keys.reset();
     paintZoom();
@@ -277,8 +280,9 @@
     const h = SZ.click(R, cam, x, y);
     lastClick = { t: now, x, y, miss: h.t === 'miss' || h.t === 'decoy' };
     hint.wait = 0;
-    if (h.t === 'found') found(h);
+    if (h.t === 'found') { Kit.track.hit(); found(h); }
     else if (h.t === 'miss' || h.t === 'decoy') {
+      Kit.track.miss();
       J.error();
       ring(x, y, '#ffffff', 26);
       if (h.it) { h.it.wob = 0.5; }
@@ -312,16 +316,19 @@
   /* ------------------------------------------------------------- result */
   function showResult() {
     const stars = SZ.stars(R), tenths = SZ.tenths(R), res = SZ.applyResult(save, R.i, stars, tenths);
+    if ((coach.drag && coach.panned > 100) || (coach.zoom && !R.d.lock && cam.z !== coach.z0)) Kit.stats.tutorial('done');
     if (coach.panned > 100) save.coach[0] = 1;
     if (!R.d.lock && cam.z !== coach.z0) save.coach[1] = 1;
     persist();
     dda.result(SZ.outcome(R));
+    Kit.stats.end('win', stars);
     result = { stars, tenths, res, timeUp: false, i: R.i };
     openResult();
   }
   function showTimeUp() {
     J.fail();
     dda.result(0.1);
+    Kit.stats.end('lose', R.found);
     result = { stars: 0, tenths: SZ.tenths(R), res: null, timeUp: true, i: R.i };
     openResult();
   }

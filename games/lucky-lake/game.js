@@ -129,6 +129,9 @@
     card = null; result = null; banner = null; duo = null;
     resetPlay();
     coach.idle = 0; coach.next = save.coach ? 5 : 1.4;
+    // Play stats: a trip to a place is a round; the coach until the first fish is the tutorial.
+    Kit.stats.round('place' + (i + 1));
+    if (!save.coach) Kit.stats.tutorial('start');
     $('basketNum').textContent = '0';
     setScreen('play');
     J.whoosh(0.5);
@@ -143,6 +146,7 @@
   function endTrip() {
     if (!trip.open) return;
     trip.open = false;
+    Kit.stats.end('end', trip.catches.length);
     if (card) closeCard(true);
   }
   function finishTrip() {
@@ -173,7 +177,7 @@
   }
   function leaveFromPause() {
     J.back();
-    if (mode === 'duo') { duo = null; toTitle(); return; }
+    if (mode === 'duo') { Kit.stats.end('quit'); duo = null; toTitle(); return; }
     endTrip();
     showResult();
   }
@@ -328,6 +332,8 @@
     duo = { phase: 'intro', t: 0, ready: [false, false], count: 0, over: false };
     duoEnd = null; card = null; trip.open = false;
     resetPlay();
+    // Two children on one PC: the match is a round with no winner reported.
+    Kit.stats.round('duo');
     $('duoP1').classList.remove('ready'); $('duoP2').classList.remove('ready');
     setScreen('play');
   }
@@ -357,6 +363,7 @@
     if (!duo || duo.over) return;
     duo.over = true;
     const win = LL.duoWinner(world);
+    Kit.stats.end('end');
     duoEnd = { win: win, t: 0 };
     $('duoWinner').textContent = win ? 'فاز اللاعب ' + win + '!' : 'تعادل!';
     $('duoWinner').style.color = win === 1 ? '#e07800' : win === 2 ? '#b23fe0' : A.INK;
@@ -504,18 +511,19 @@
           J.impact(0.6); J.pop(0.15); shake.add(3);
           ripple(e.x, surfaceY(), 1, '255,230,90'); splash(e.x, surfaceY(), 8);
           setMood(e.p, 'bite', 1.5);
-          if (solo()) coach.bites++;
+          // A bite asks for a press: the child's next click or key is a reaction time.
+          if (solo()) { coach.bites++; Kit.track.cue(); }
           break;
         case 'spook':
           J.back(); float(p.bob.x, surfaceY() - 60, 'انتظر !', '#ffffff', 30);
           fx.burst(e.x, e.y, { count: 8, colors: ['#ffffff'], speed: 90, life: 0.7, size: 6, gravity: -160 });
-          if (solo()) dda.result(0);
+          if (solo()) { dda.result(0); Kit.track.miss(); }
           break;
         case 'late':
           J.error(); setMood(e.p, 'sad', 1);
           if (!e.junk) {
             float(e.x, e.y - 40, 'فاتتك!', '#ffffff', 30);
-            if (solo()) dda.result(0);
+            if (solo()) { dda.result(0); Kit.track.miss(); }
           }
           break;
         case 'hooked':
@@ -527,7 +535,7 @@
         case 'escape':
           J.back(); ripple(e.x, surfaceY(), 0.7); splash(e.x, surfaceY(), 8); setMood(e.p, 'sad', 1.2);
           float(e.x, surfaceY() - 50, e.junk ? 'أفلتت!' : 'هربت!', '#ffffff', 32);
-          if (solo() && !e.junk) dda.result(LL.outcome('escape', e.peak));
+          if (solo() && !e.junk) { dda.result(LL.outcome('escape', e.peak)); Kit.track.miss(); }
           break;
         case 'back': J.whoosh(0.2); break;
         case 'timeup': finishDuo(); break;
@@ -546,12 +554,12 @@
       float(e.p ? 1060 : 220, surfaceY() - 180, c.junk ? '0 كغ' : '+' + LL.weightText(c.w10) + ' كغ', e.p ? '#f3c4ff' : '#ffd8a8', 34);
       return;
     }
-    if (!c.junk) dda.result(1);
+    if (!c.junk) { dda.result(1); Kit.track.hit(); }
     const res = LL.applyCatch(save, place, c);
     trip.catches.push(c); trip.coins += c.coins;
     if (res.unlocked >= 0) trip.newPlace = res.unlocked;
     pendingGoals = pendingGoals.concat(res.goals);
-    if (!c.junk && !save.coach) save.coach = true;
+    if (!c.junk && !save.coach) { save.coach = true; Kit.stats.tutorial('done'); }
     persist();
     $('basketNum').textContent = String(trip.catches.length);
     if (p.streak >= 2) {

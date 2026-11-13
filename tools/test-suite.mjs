@@ -32,7 +32,7 @@ function main() {
     'asset-optimization.test.mjs', 'harness-regression.test.mjs',
     'balance-replay.test.mjs', 'classroom-files.test.mjs', 'offline-controller.test.mjs',
     'offline-readiness.test.mjs', 'shared-kit.test.mjs', 'level-verifiers.test.mjs',
-    'engine-regressions.test.mjs', 'moto-balance.test.mjs',
+    'engine-regressions.test.mjs', 'moto-balance.test.mjs', 'telemetry-rules.test.mjs',
     'offline-download.test.mjs', 'catalog-precache.test.mjs', 'dino-3d-engine.test.mjs', 'key-runner-engine.test.mjs', 'cake-guards-engine.test.mjs', 'chaos-island-engine.test.mjs', 'egg-rush-engine.test.mjs', 'lucky-lake-engine.test.mjs', 'typing-test-engine.test.mjs', 'word-garden-engine.test.mjs', 'keyboard-obby-engine.test.mjs', 'seek-zoom-engine.test.mjs', 'steady-hand-engine.test.mjs', 'shortcut-factory-engine.test.mjs', 'math-gates-engine.test.mjs', 'pool-position-rules.test.mjs',
     'bubble-bop-rules.test.mjs', 'juice.test.mjs', 'thumb-encoding.test.mjs'
   ]);
