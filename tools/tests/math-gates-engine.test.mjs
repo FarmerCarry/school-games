@@ -317,7 +317,7 @@ test('the number battle: both crowds shrink together, the bigger one wins, a tie
   assert.ok(clashes.length >= 3, 'the battle takes a moment');
   clashes.forEach(e => assert.equal(run.finishCount - e.ours, run.rival - e.theirs, 'both lose the same number'));
   assert.equal(res.left, run.par - run.rival);
-  assert.equal(res.coins, res.runCoins * res.mult);
+  assert.equal(res.coins, (res.runCoins + MG.FINISH_COINS) * res.mult, 'a win pays the finish coins plus the track coins, times the staircase');
   // A crowd exactly as big as the rival: both are gone, no win.
   const tie = MG.create({ level: 0, tier: 1, seed: 2 });
   tie.rival = 6;

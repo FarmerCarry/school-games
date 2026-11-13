@@ -23,6 +23,8 @@
   MG.LANE_W = 4;            // m between lane centres
   MG.FINISH = 30;           // m from the last row to the number battle
   MG.FLOOR = 1;             // the crowd never drops below one runner
+  MG.FINISH_COINS = 5;      // every win pays this before the staircase multiplies, so a
+                            // perfect run on the best gates never ends with no coins
   MG.STEPS = 10;            // the bonus staircase: ×1 .. ×10
   MG.MINUS = '−';      // − (a real minus sign, not a hyphen)
 
@@ -586,7 +588,7 @@
     return {
       level: run.level, won: won, count: count, left: B ? B.ours : 0, rival: run.rival, par: run.par,
       big: won && big, allRight: all, stars: won ? 1 + (big ? 1 : 0) + (all ? 1 : 0) : 0,
-      mult: mult, runCoins: run.runCoins, coins: won ? run.runCoins * mult : run.runCoins,
+      mult: mult, runCoins: run.runCoins, coins: won ? (run.runCoins + MG.FINISH_COINS) * mult : run.runCoins,
       asked: run.asked, right: run.right, picks: run.picks, bestPicks: run.bestPicks, hits: run.hits
     };
   };
