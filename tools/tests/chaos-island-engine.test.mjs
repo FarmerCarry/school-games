@@ -242,6 +242,29 @@ test('an idle child is bonked by most disasters, and they get no stars for doing
   }
 });
 
+test('standing still all match earns no stars, even when the gentle wind and a lucky miss leave the child on the beach', () => {
+  // On the gentlest tier the wind cannot blow a still islander into the sea, so an idle
+  // child survives that round, and a meteor that misses can add a second of three: once a
+  // star, now none. The difficulty hears a poor match too.
+  let lucky = 0;
+  for (let s = 1; s <= 160; s++) {
+    const seed = (s * 2654435761) >>> 0, plan = CI.plan(0, 1, seed), w = CI.create(plan, { humans: 1, seed });
+    const me = play(w, 'idle', seed).me;
+    if (CI.stars(me.survived, plan.rounds.length) > 0) lucky++;
+    assert.equal(me.acted, false);
+    assert.equal(CI.matchStars(w, 0), 0, `seed ${seed}: idle survived ${me.survived} of ${plan.rounds.length}`);
+    assert.equal(CI.outcome(w, 0), 0);
+  }
+  assert.ok(lucky > 0, 'some of these idle matches survive enough rounds for a star by the share alone');
+  // A child who plays keeps every star the share gives.
+  const seed = 905, plan = CI.plan(0, 1, seed), w = CI.create(plan, { humans: 1, seed });
+  const me = play(w, 'smart', seed).me;
+  assert.equal(me.acted, true);
+  assert.equal(CI.matchStars(w, 0), CI.stars(me.survived, plan.rounds.length));
+  assert.equal(CI.matchStars(w, 0), 3);
+  assert.equal(CI.outcome(w, 0), 1);
+});
+
 test('the scripted child also gets through most two-disaster rounds of the top tiers', () => {
   let ok = 0, n = 0;
   for (const [a, b] of CI.COMBOS) for (const island of [0, 3]) {

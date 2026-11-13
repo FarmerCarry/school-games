@@ -193,7 +193,7 @@
   function finishMatch() {
     const w = world, me = w.actors[0], rounds = w.rounds, rank = CI.ranking(w);
     if (!duo) {
-      const stars = CI.stars(me.survived, rounds), prev = save.stars[isle], nextWasOpen = isle < 3 && CI.isOpen(save, isle + 1);
+      const stars = CI.matchStars(w, 0), prev = save.stars[isle], nextWasOpen = isle < 3 && CI.isOpen(save, isle + 1);
       const coins = me.coins, best = save.best[isle];
       if (stars > prev) save.stars[isle] = stars;
       if (coins > best) save.best[isle] = coins;

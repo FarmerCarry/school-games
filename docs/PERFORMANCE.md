@@ -1157,3 +1157,12 @@ The Dino 3D page is 125,995 bytes, so its limit is now 126,000; the offline prec
 
 With the play statistics and the Beat Dash fix, the paced Dino 3D page is 128,360 bytes and
 the offline precache 6,796,210 bytes, so those limits are now 128,500 and 6,797,000 bytes.
+
+## Chaos Island: no stars for standing still, 13 November 2026
+
+On the gentlest tier the wind cannot blow a still islander into the sea, so a child who
+never pressed a key survived that round, and a lucky meteor miss could add a second of
+three: about 1 idle match in 20 on the first island earned a star (19 of 400 seeds), which
+also failed the browser check «doing nothing loses» on main now and then. A match now earns
+stars, and tells the difficulty anything but a poor result, only if the child pressed a key.
+The Chaos Island page is 150,623 bytes, so its limit is now 151,000.
