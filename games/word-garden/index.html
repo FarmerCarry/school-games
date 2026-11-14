@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>حديقة الكلمات</title>
+<link rel="icon" type="image/svg+xml" href="../../favicon.svg">
+<link rel="stylesheet" href="../../shared/game.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<!-- Icons: every button is a picture first, so a child who cannot read yet can play. -->
+<svg class="defs" aria-hidden="true" focusable="false" width="0" height="0">
+  <symbol id="i-play" viewBox="0 0 64 64"><path d="M22 11 Q18 9 18 14 L18 50 Q18 55 22 53 L52 35 Q56 32 52 29 Z"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 64 64"><rect x="15" y="12" width="12" height="40" rx="5"/><rect x="37" y="12" width="12" height="40" rx="5"/></symbol>
+  <symbol id="i-again" viewBox="0 0 64 64"><path d="M50 30 A19 19 0 1 1 41 15" fill="none" stroke="currentColor" stroke-width="9" stroke-linecap="round"/><path d="M33 4 L52 13 L37 27 Z"/></symbol>
+  <symbol id="i-map" viewBox="0 0 64 64"><path d="M6 15 L22 8 L42 15 L58 8 L58 49 L42 56 L22 49 L6 56 Z"/><path d="M22 10 L22 47 M42 17 L42 54" stroke="#1c2250" stroke-width="4" opacity=".35"/><circle cx="32" cy="30" r="6" fill="#ff5d6c"/></symbol>
+  <symbol id="i-home" viewBox="0 0 64 64"><path d="M8 32 L32 10 L56 32 L49 32 L49 54 L37 54 L37 40 L27 40 L27 54 L15 54 L15 32 Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></symbol>
+  <symbol id="i-star" viewBox="0 0 64 64"><path d="M32 5 L39 23.3 L58.6 24.4 L43.4 36.7 L48.5 55.6 L32 45 L15.5 55.6 L20.6 36.7 L5.4 24.4 L25 23.3 Z" stroke-linejoin="round"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 64 64"><path d="M20 28 L20 20 A12 12 0 0 1 44 20 L44 28" fill="none" stroke="currentColor" stroke-width="7"/><rect x="12" y="28" width="40" height="30" rx="7"/></symbol>
+  <symbol id="i-seed" viewBox="0 0 64 64"><path d="M32 6 Q52 22 50 40 Q48 58 32 58 Q16 58 14 40 Q12 22 32 6 Z" fill="#e8b46a" stroke="#1c2250" stroke-width="5" stroke-linejoin="round"/><path d="M26 22 Q22 30 24 38" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" opacity=".7"/></symbol>
+  <symbol id="i-flower" viewBox="0 0 64 64"><path d="M32 36 L32 60" stroke="#3f9e3a" stroke-width="6" stroke-linecap="round"/><g fill="#ff6bab" stroke="#1c2250" stroke-width="3.5"><circle cx="32" cy="12" r="10"/><circle cx="50" cy="24" r="10"/><circle cx="43" cy="44" r="10"/><circle cx="21" cy="44" r="10"/><circle cx="14" cy="24" r="10"/></g><circle cx="32" cy="29" r="9" fill="#ffd43b" stroke="#1c2250" stroke-width="3.5"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 64 64"><circle cx="32" cy="34" r="24" fill="#fff" stroke="#1c2250" stroke-width="6"/><path d="M32 34 L32 20 M32 34 L42 40" stroke="#1c2250" stroke-width="6" stroke-linecap="round"/></symbol>
+  <symbol id="i-oops" viewBox="0 0 64 64"><circle cx="32" cy="32" r="26" fill="#ff8a8a" stroke="#1c2250" stroke-width="5"/><path d="M22 22 L42 42 M42 22 L22 42" stroke="#fff" stroke-width="7" stroke-linecap="round"/></symbol>
+  <symbol id="i-check" viewBox="0 0 64 64"><path d="M12 34 L26 48 L52 16" fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+</svg>
+
+<canvas id="game" tabindex="0" aria-label="حديقة الكلمات"></canvas>
+
+<!-- A 1280x720 layer laid exactly over the canvas (scaled by game.js). -->
+<div id="ui">
+  <div id="hud" hidden>
+    <button type="button" id="btnPause" class="wg-btn wg-round" aria-label="استراحة" title="استراحة (Esc)"><svg aria-hidden="true"><use href="#i-pause"/></svg></button>
+    <div class="chip lvl" id="hudLevel"><b dir="ltr">1-1</b></div>
+    <div class="chip seeds" id="hudSeeds" aria-label="البذور"><svg aria-hidden="true"><use href="#i-seed"/></svg><b>0</b></div>
+    <div class="tip" id="tip"></div>
+    <div id="board"><div id="word"></div></div>
+  </div>
+
+  <section id="scrTitle" class="screen" aria-label="حديقة الكلمات">
+    <h1 class="logo"><span class="l1">حديقة</span><span class="l2">الكلمات</span></h1>
+    <div class="chip" id="titleStars" aria-label="النجوم"><svg aria-hidden="true"><use href="#i-star"/></svg><b>0</b></div>
+    <div class="chip seeds" id="titleSeeds" aria-label="البذور"><svg aria-hidden="true"><use href="#i-seed"/></svg><b>0</b></div>
+    <div class="langs">
+      <button type="button" id="btnAr" data-lang="ar" class="wg-btn lang"><span class="glyph">أ ب ت</span><b>عربي</b></button>
+      <button type="button" id="btnEn" data-lang="en" class="wg-btn lang"><span class="glyph" dir="ltr">a b c</span><b dir="ltr">English</b></button>
+    </div>
+    <div class="howto" aria-label="طريقة اللعب">
+      <div class="step"><canvas id="howPic" width="104" height="86"></canvas><span class="mini" id="howWord"></span></div>
+      <span class="arrow" aria-hidden="true">←</span>
+      <div class="step"><span class="kc" id="howKey"><i class="en" dir="ltr">R</i><i class="ar">ق</i></span><span class="say">اكتب الحرف الناقص</span></div>
+      <span class="arrow" aria-hidden="true">←</span>
+      <div class="step"><svg class="bloom" aria-hidden="true"><use href="#i-flower"/></svg><span class="say">تنبت زهرة!</span></div>
+      <div class="keys"><span dir="ltr"><span class="sg-key">Esc</span></span> استراحة <span class="dotsep">·</span> <span dir="ltr"><span class="sg-key">Enter</span></span> العب</div>
+    </div>
+    <button type="button" id="btnGarden" class="wg-btn side"><svg aria-hidden="true"><use href="#i-flower"/></svg><b>حديقتي</b></button>
+  </section>
+
+  <section id="scrMap" class="screen" aria-label="المراحل" hidden>
+    <button type="button" id="mapHome" class="wg-btn wg-round" aria-label="البداية"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
+    <div class="chip" id="mapStars" aria-label="النجوم"><svg aria-hidden="true"><use href="#i-star"/></svg><b>0</b></div>
+    <div class="chip seeds" id="mapSeeds" aria-label="البذور"><svg aria-hidden="true"><use href="#i-seed"/></svg><b>0</b></div>
+    <div class="maplang" id="mapLang"></div>
+    <button type="button" id="mapGarden" class="wg-btn wg-round" aria-label="حديقتي"><svg aria-hidden="true"><use href="#i-flower"/></svg></button>
+    <div id="worlds"></div>
+  </section>
+
+  <section id="scrPause" class="screen dim" aria-label="استراحة" hidden>
+    <div class="card">
+      <button type="button" id="btnResume" class="wg-btn wg-go ring" aria-label="تابع"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
+      <div class="row">
+        <button type="button" id="btnMap" class="wg-btn wg-round big" aria-label="المراحل"><svg aria-hidden="true"><use href="#i-map"/></svg></button>
+        <button type="button" id="btnRestart" class="wg-btn wg-round big" aria-label="ابدأ من جديد"><svg aria-hidden="true"><use href="#i-again"/></svg></button>
+      </div>
+    </div>
+  </section>
+
+  <section id="scrResult" class="screen" aria-label="النتيجة" hidden>
+    <div class="card result">
+      <div class="newbest" id="resBest" hidden><svg aria-hidden="true"><use href="#i-star"/></svg><span>رقم جديد!</span></div>
+      <h2 id="resTitle">ممتاز!</h2>
+      <div class="stars3" id="resStars" aria-hidden="true"><svg><use href="#i-star"/></svg><svg><use href="#i-star"/></svg><svg><use href="#i-star"/></svg></div>
+      <div class="facts">
+        <span class="fact" aria-label="الوقت"><svg aria-hidden="true"><use href="#i-clock"/></svg><b id="resTime" dir="ltr">0:00</b></span>
+        <span class="fact" aria-label="الأخطاء"><svg aria-hidden="true"><use href="#i-oops"/></svg><b id="resMiss">0</b></span>
+        <span class="fact seeds" aria-label="البذور"><svg aria-hidden="true"><use href="#i-seed"/></svg><b id="resSeeds" dir="ltr">+0</b></span>
+      </div>
+      <div class="row">
+        <button type="button" id="resMap" class="wg-btn wg-round big" aria-label="المراحل"><svg aria-hidden="true"><use href="#i-map"/></svg></button>
+        <button type="button" id="resNext" class="wg-btn wg-go ring" aria-label="المرحلة التالية"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
+        <button type="button" id="resAgain" class="wg-btn wg-round big" aria-label="مرة أخرى"><svg aria-hidden="true"><use href="#i-again"/></svg></button>
+      </div>
+    </div>
+  </section>
+
+  <section id="scrGarden" class="screen" aria-label="حديقتي" hidden>
+    <button type="button" id="gardenBack" class="wg-btn wg-round" aria-label="رجوع"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
+    <div class="chip seeds" id="gardenSeeds" aria-label="البذور"><svg aria-hidden="true"><use href="#i-seed"/></svg><b>0</b></div>
+    <div class="chip" id="gardenPlants" aria-label="النباتات"><svg aria-hidden="true"><use href="#i-flower"/></svg><b>0</b></div>
+    <h2 class="gtitle">حديقتي</h2>
+    <div id="shop"></div>
+  </section>
+</div>
+<div id="live" class="sr" aria-live="polite"></div>
+
+<script src="../../shared/kit.js"></script>
+<script src="../../shared/juice.js"></script>
+<script src="words.js"></script>
+<script src="engine.js"></script>
+<script src="art.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

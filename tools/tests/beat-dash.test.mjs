@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { launchChromium } from '../browser.mjs';
 import { startTestServer } from '../test-server.mjs';
+import { BD, beatPlayer, level1 } from './beat-dash-player.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const root = process.env.SG_ROOT ? path.resolve(repo, process.env.SG_ROOT) : repo;
@@ -186,4 +187,219 @@ test('calm mode keeps the beat as colour only: nothing pulses, the glows still b
   assert.ok(beats.calm.every(b => b.beat === 0), 'calm mode holds the beat-driven bars still');
   const [low, high] = range(beats.calm, 'tint');
   assert.ok(low < 0.2 && high > 0.4, `calm mode still brightens the glows on the beat (${low}..${high})`);
+});
+
+// Real key events through Kit.keys, with the game stepped by __game.ff (no animation frames).
+const DRIVE = () => {
+  window.key = (code, down) => window.dispatchEvent(new KeyboardEvent(down ? 'keydown' : 'keyup', { code }));
+  window.tap = (code, ticks = 6) => { key(code, true); __game.ff(ticks); key(code, false); __game.ff(1); };
+  window.until = (cond, max = 3000) => { for (let i = 0; i < max && !cond(__game.state); i++) __game.ff(1); return cond(__game.state); };
+};
+
+test('level 1\'s tutorial slows down at each step, waits for the jump and ends when its three jumps are done', async t => {
+  const page = await game(t);
+  await page.evaluate(DRIVE);
+  const run = await page.evaluate(() => {
+    const out = { rates: [] };
+    __game.start(0, false);
+    out.start = __game.tutorial;
+    out.opt = __game.difficulty.opt;
+    const spots = out.start.spots;
+    // A child who does nothing: the run crawls in slow motion over the spot to jump from, then crashes.
+    until(s => s.x >= spots[0].a + 0.3);
+    out.crawl = __game.state.rate;
+    until(s => s.dead, 4000);
+    out.crash = { ...__game.state, tutorial: __game.tutorial };
+    // That try had no input, so the next one waits; a press starts it. Then do what it shows.
+    until(s => !s.dead, 100);
+    out.waiting = __game.state.wait;
+    tap('Space');
+    out.startedStill = { wait: __game.state.wait, y: __game.state.y };
+    for (let i = 0; i < 3; i++) {
+      const w = __game.tutorial.spots[__game.tutorial.step];
+      until(s => s.onGround && s.x >= (w.a + w.b) / 2, 4000);
+      out.rates.push(__game.state.rate);
+      tap('Space');
+      until(s => __game.tutorial.step > i || s.dead, 600);
+    }
+    out.end = { ...__game.state, tutorial: __game.tutorial, stored: localStorage.getItem('sg:beat-dash:tut') };
+    __game.ff(90);
+    out.after = __game.state;
+    return out;
+  });
+  assert.deepEqual({ on: run.start.on, steps: run.start.steps, done: run.start.done }, { on: true, steps: 3, done: false });
+  assert.ok(run.crawl <= run.opt.rate * 0.31, `the run slows down at the spot (${run.crawl} of ${run.opt.rate})`);
+  assert.equal(run.crash.deadBy, 'spike');
+  assert.deepEqual({ step: run.crash.tutorial.step, done: run.crash.tutorial.done }, { step: 0, done: false }, 'a crash is no progress');
+  assert.equal(run.waiting, true, 'after a try with no input the next one waits for a press');
+  assert.deepEqual(run.startedStill, { wait: false, y: 0 }, 'the press that starts the run is not a jump');
+  assert.equal(run.rates.length, 3);
+  for (const r of run.rates) assert.ok(r <= run.opt.rate * 0.31, `each step waits in slow motion for the press (${r})`);
+  assert.equal(run.end.dead, false, 'doing what the tutorial shows clears every step');
+  assert.deepEqual({ on: run.end.tutorial.on, step: run.end.tutorial.step, done: run.end.tutorial.done, stored: run.end.stored },
+    { on: false, step: 3, done: true, stored: '1' }, 'the tutorial reaches its end and is saved');
+  assert.equal(run.after.rate, run.opt.rate, 'then the run is back to its normal speed');
+
+  // On this PC the tutorial is done, so the next visit runs at full speed, until a child
+  // crashes twice in a row before its end: then its help comes back.
+  await page.reload();
+  await page.waitForFunction(() => window.__game && window.Kit);
+  await page.evaluate(DRIVE);
+  const again = await page.evaluate(() => {
+    __game.start(0, false);
+    const first = __game.tutorial.on, ons = [];
+    for (let k = 0; k < 3; k++) {
+      tap('Space'); // a jump on the run-up: someone is playing
+      until(s => s.dead, 4000);
+      until(s => !s.dead, 100);
+      ons.push(__game.tutorial.on);
+    }
+    return { first, ons };
+  });
+  assert.deepEqual(again, { first: false, ons: [false, true, true] });
+});
+
+test('practice never ends a try by itself: no trap checkpoints, no jump from a held key, idle respawns wait', async t => {
+  const page = await game(t);
+  await page.evaluate(DRIVE);
+  const run = await page.evaluate(() => {
+    const out = {};
+    __game.save.tut = 1; // the tutorial is done on this PC: no slow motion here
+    __game.start(0, true);
+    const spots = __game.tutorial.spots;
+    // Z (checkpoint) in mid-air over the first spike waits for the landing.
+    until(s => s.x >= (spots[0].a + spots[0].b) / 2); tap('Space');
+    until(s => s.y > 1); tap('KeyZ', 1);
+    out.inAir = __game.state.cps;
+    until(s => s.cps === 1 || s.dead, 300);
+    out.landed = __game.state;
+    // A jump far too early for the second spike, and Z while falling onto it: never placed.
+    until(s => s.x >= spots[1].a - 1.2); tap('Space');
+    until(s => s.y > 1); tap('KeyZ', 1);
+    until(s => s.dead, 600);
+    out.crash = __game.state;
+    // The child holds the jump key through the crash and the respawn.
+    key('Space', true);
+    until(s => !s.dead, 100);
+    out.respawn = __game.state;
+    __game.ff(300);
+    out.held = __game.state;
+    key('Space', false); __game.ff(2);
+    tap('Space', 20); // one long press starts the run; it is not a jump
+    out.started = __game.state;
+    let n = 0;
+    while (!__game.state.dead && n < 2000) { __game.ff(1); n++; }
+    out.alone = { ticks: n, deadBy: __game.state.deadBy };
+    until(s => !s.dead, 100);
+    out.next = __game.state;
+    __game.ff(900);
+    out.later = __game.state;
+    return out;
+  });
+  assert.equal(run.inAir, 0, 'no checkpoint in mid-air');
+  assert.deepEqual({ cps: run.landed.cps, ground: run.landed.onGround, y: run.landed.y, past: run.landed.x > 42.5 },
+    { cps: 1, ground: true, y: 0, past: true }, 'the wanted checkpoint is placed on landing');
+  assert.equal(run.crash.deadBy, 'spike', 'the try ended on a collision');
+  assert.equal(run.crash.cps, 1, 'no checkpoint in front of a spike it cannot avoid');
+  assert.deepEqual({ wait: run.respawn.wait, x: run.respawn.x }, { wait: true, x: run.landed.x }, 'respawned at the checkpoint, waiting');
+  assert.deepEqual({ attempt: run.held.attempt, wait: run.held.wait, dead: run.held.dead, x: run.held.x, y: run.held.y },
+    { attempt: run.respawn.attempt, wait: true, dead: false, x: run.respawn.x, y: 0 }, 'a held key neither starts nor jumps');
+  assert.deepEqual({ wait: run.started.wait, y: run.started.y }, { wait: false, y: 0 }, 'a fresh press starts the run without a jump');
+  assert.ok(run.alone.ticks >= 45, `from a checkpoint the cube runs at least 0.75 s before anything can hit it (${run.alone.ticks} ticks)`);
+  assert.equal(run.alone.deadBy, 'spike');
+  assert.equal(run.next.wait, true, 'every practice respawn waits for the player');
+  assert.deepEqual({ attempt: run.later.attempt, wait: run.later.wait, dead: run.later.dead }, { attempt: run.next.attempt, wait: true, dead: false },
+    'nobody pressing means no new tries and no crashes');
+});
+
+test('quick crashes ease the difficulty; idle tries wait for a press and leave it alone', async t => {
+  const page = await game(t);
+  await page.evaluate(DRIVE);
+  const run = await page.evaluate(() => {
+    const tries = [];
+    __game.start(0, false);
+    for (let k = 0; k < 3; k++) {
+      const d = __game.difficulty;
+      tap('Space'); // a jump on the run-up, then a crash into the first spike
+      until(s => s.dead, 4000);
+      tries.push({ level: d.level, rate: d.opt.rate, haz: d.opt.haz, x: __game.state.x });
+      until(s => !s.dead, 100);
+    }
+    const eased = __game.difficulty;
+    until(s => s.dead, 4000); until(s => !s.dead, 100); // nobody plays this try
+    const idle = __game.state;
+    __game.ff(900);
+    return { tries, eased, idle, later: __game.state, after: __game.difficulty, saved: localStorage.getItem('sg:beat-dash:dda') };
+  });
+  assert.equal(run.tries[0].level, 0.35, 'a PC with no results starts at 0.35');
+  assert.ok(run.tries.every(tr => tr.x < 45), 'each try crashed at the first spike');
+  for (let i = 1; i < 3; i++) {
+    assert.ok(run.tries[i].level < run.tries[i - 1].level, `try ${i + 1} is easier (${run.tries.map(tr => tr.level)})`);
+    assert.ok(run.tries[i].rate < run.tries[i - 1].rate && run.tries[i].haz > run.tries[i - 1].haz, 'slower, with a smaller spike hitbox');
+  }
+  assert.equal(run.eased.level, 0, 'three quick crashes reach the easiest setting');
+  assert.deepEqual(run.eased.opt, JSON.parse(JSON.stringify(BD.forgivingAt(0))));
+  assert.equal(run.idle.wait, true, 'after a try with no input the next one waits');
+  assert.deepEqual({ attempt: run.later.attempt, wait: run.later.wait }, { attempt: run.idle.attempt, wait: true }, 'an unattended game makes no new tries');
+  assert.equal(run.after.level, run.eased.level, 'a try nobody played does not change the difficulty');
+  assert.deepEqual(JSON.parse(run.saved), { main: [0, 3] }, 'the difficulty is saved for this PC');
+});
+
+test('an older save keeps working: its progress, stars and bests stay, and a PC that beat level 1 skips the tutorial', async t => {
+  const page = await game(t);
+  await page.evaluate(() => {
+    const put = (key, value) => localStorage.setItem('sg:beat-dash:' + key, JSON.stringify(value));
+    put('done', { 'neon-steps': true }); put('best', { 'neon-steps': 100, 'pulse-road': 37 }); put('stars', { 'neon-steps': 5 });
+    put('att', { 'neon-steps': 45 }); put('total', { attempts: 45, jumps: 300 }); put('last', 1); put('music', true);
+  });
+  await page.reload();
+  await page.waitForFunction(() => window.__game && window.Kit);
+  const run = await page.evaluate(() => {
+    document.getElementById('b-play').click();
+    const select = { level: document.getElementById('lvl-name').textContent, go: !document.getElementById('b-go').disabled };
+    __game.start(0, false);
+    const tutorial = __game.tutorial;
+    __game.ff(120);
+    return { select, tutorial, state: __game.state, best: __game.save.best, stars: __game.save.stars, attempts: __game.save.total.attempts };
+  });
+  assert.deepEqual(run.select, { level: 'طريق النبض', go: true }, 'level 2 is still open and selected');
+  assert.equal(run.tutorial.on, false, 'a PC that beat level 1 before needs no tutorial');
+  assert.deepEqual(run.best, { 'neon-steps': 100, 'pulse-road': 37 });
+  assert.deepEqual(run.stars, { 'neon-steps': 5 });
+  assert.equal(run.attempts, 46);
+  assert.ok(run.state.x > 5 && !run.state.dead, 'and it plays');
+});
+
+test('a child pressing on the beat with a realistic timing error clears level 1 in the real game', async t => {
+  const page = await game(t);
+  await page.evaluate(DRIVE);
+  // Where level 1 needs a jump: the cube's position at each press when pressing exactly on the beat.
+  const { pressX } = beatPlayer(level1, BD.forgivingAt(1), 0);
+  const run = await page.evaluate(({ pressX, sigma, seed }) => {
+    let a = seed;
+    const random = () => { a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+    const gauss = () => { let u = 0; while (!u) u = random(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * random()); };
+    const speed = __game.levels[0].length / __game.levels[0].seconds, tries = [];
+    __game.start(0, false);
+    while (!__game.state.won && tries.length < 12) {
+      if (__game.state.wait) tap('Space');
+      // this try's timing errors, one per jump, in seconds: early (-) or late (+)
+      const err = pressX.map(() => gauss() * sigma / 1000);
+      let k = pressX.findIndex(x => x > __game.state.x - 0.5), held = 0;
+      for (let n = 0; n < 20000 && !__game.state.dead && !__game.state.won; n++) {
+        const s = __game.state;
+        if (k >= 0 && k < pressX.length && s.x >= pressX[k] + err[k] * speed * s.rate) { key('Space', true); held = 6; k++; }
+        __game.ff(1);
+        if (held && --held === 0) key('Space', false);
+      }
+      if (held) key('Space', false);
+      tries.push({ won: __game.state.won, x: __game.state.x, deadBy: __game.state.deadBy, rate: __game.difficulty.opt.rate });
+      if (!__game.state.won) until(s => !s.dead, 100);
+    }
+    return { tries, tutorial: __game.tutorial };
+  }, { pressX, sigma: 70, seed: 20261110 });
+  assert.equal(run.tries.at(-1).won, true, `level 1 is cleared (${JSON.stringify(run.tries)})`);
+  assert.ok(run.tries.length <= 6, `within a few tries (${run.tries.length})`);
+  assert.ok(run.tries.every(tr => tr.won || tr.deadBy !== 'fall'), 'every lost try ended on an obstacle');
+  assert.equal(run.tutorial.done, true, 'and the tutorial was finished on the way');
 });

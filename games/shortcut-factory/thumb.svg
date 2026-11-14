@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <defs>
+    <g id="duck" stroke="#1c2250" stroke-width="5" stroke-linejoin="round">
+      <path d="M-34 4 Q-40 -16 -24 -14 Q-16 28 4 30 Q34 30 34 10 Q32 -2 16 -2 Z" fill="#ffd23f"/>
+      <ellipse cx="-2" cy="12" rx="32" ry="19" fill="#ffd23f"/>
+      <ellipse cx="-7" cy="12" rx="15" ry="9" fill="#ffb800" stroke-width="3.5"/>
+      <circle cx="14" cy="-14" r="17" fill="#ffd23f"/>
+      <path d="M27 -16 Q43 -14 41 -7 Q34 -2 27 -5 Z" fill="#ff8a1f" stroke-width="3.5"/>
+      <circle cx="17" cy="-19" r="4" fill="#1c2250" stroke="none"/>
+    </g>
+  </defs>
+  <rect width="400" height="400" fill="#ffeaa8"/>
+  <g fill="#ffdc80"><rect x="0" y="0" width="44" height="400"/><rect x="96" y="0" width="44" height="400"/><rect x="192" y="0" width="44" height="400"/><rect x="288" y="0" width="44" height="400"/><rect x="384" y="0" width="44" height="400"/></g>
+  <rect x="0" y="262" width="400" height="138" fill="#ffb757"/>
+  <!-- Ctrl + C keycaps -->
+  <g font-family="Fredoka, 'Segoe UI', Tahoma, sans-serif" font-weight="700" text-anchor="middle">
+    <rect x="34" y="34" width="150" height="96" rx="22" fill="#9aa3c7"/>
+    <rect x="34" y="22" width="150" height="96" rx="22" fill="#ffe14d" stroke="#1c2250" stroke-width="7"/>
+    <text x="109" y="88" font-size="50" fill="#1c2250">Ctrl</text>
+    <text x="216" y="92" font-size="60" fill="#1c2250">+</text>
+    <rect x="252" y="34" width="110" height="96" rx="22" fill="#9aa3c7"/>
+    <rect x="252" y="22" width="110" height="96" rx="22" fill="#ffffff" stroke="#1c2250" stroke-width="7"/>
+    <text x="292" y="78" font-size="50" fill="#1c2250">C</text>
+    <text x="340" y="106" font-size="26" fill="#5a6290">ؤ</text>
+  </g>
+  <!-- the belt and the copied ducks -->
+  <rect x="-10" y="226" width="420" height="34" rx="16" fill="#3b4166" stroke="#1c2250" stroke-width="5"/>
+  <g fill="#4b5383"><path d="M10 232 L24 232 L14 254 L0 254 Z"/><path d="M50 232 L64 232 L54 254 L40 254 Z"/><path d="M90 232 L104 232 L94 254 L80 254 Z"/><path d="M130 232 L144 232 L134 254 L120 254 Z"/><path d="M170 232 L184 232 L174 254 L160 254 Z"/><path d="M210 232 L224 232 L214 254 L200 254 Z"/><path d="M250 232 L264 232 L254 254 L240 254 Z"/><path d="M290 232 L304 232 L294 254 L280 254 Z"/><path d="M330 232 L344 232 L334 254 L320 254 Z"/><path d="M370 232 L384 232 L374 254 L360 254 Z"/></g>
+  <circle cx="300" cy="190" r="50" fill="#ffe14d" fill-opacity="0.6" stroke="#ffb800" stroke-width="5"/>
+  <use href="#duck" transform="translate(300 192)"/>
+  <use href="#duck" transform="translate(186 192)"/>
+  <use href="#duck" transform="translate(74 192)"/>
+  <g fill="#ffffff" stroke="#1c2250" stroke-width="3.5" stroke-linejoin="round">
+    <path d="M128 150 L134 164 L148 166 L136 174 L140 188 L128 180 L116 188 L120 174 L108 166 L122 164 Z"/>
+    <path d="M238 146 L242 156 L252 157 L244 163 L247 173 L238 167 L229 173 L232 163 L224 157 L234 156 Z"/>
+  </g>
+  <!-- logo -->
+  <g font-family="Fredoka, 'Segoe UI', Tahoma, sans-serif" font-weight="700" text-anchor="middle" direction="rtl">
+    <text x="200" y="318" font-size="50" fill="#1c2250" stroke="#1c2250" stroke-width="14" stroke-linejoin="round" paint-order="stroke">مصنع</text>
+    <text x="200" y="318" font-size="50" fill="#ffffff">مصنع</text>
+    <text x="200" y="382" font-size="62" fill="#1c2250" stroke="#1c2250" stroke-width="16" stroke-linejoin="round" paint-order="stroke">الاختصارات</text>
+    <text x="200" y="382" font-size="62" fill="#ffd23f">الاختصارات</text>
+  </g>
+</svg>

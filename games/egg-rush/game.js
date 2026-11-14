@@ -252,6 +252,9 @@
     world = ER.create(plan, (Math.random() * 2147483647) | 0);
     cur = li; duo = false; tries++;
     resetRound();
+    // Play stats: every level try is a round (L1..L20); the coached first level is the tutorial.
+    Kit.stats.round('L' + (li + 1));
+    if (li === 0 && !save.coached) Kit.stats.tutorial('start');
     const lesson = LESSON[li] || '';
     intro = quick ? null : { t: 0, max: lesson ? 14 : 3.2, lesson: lesson, out: 0 };
     setScreen('play');
@@ -266,6 +269,8 @@
     world = ER.create(plan, (Math.random() * 2147483647) | 0);
     cur = -1; duo = true; tries++;
     resetRound();
+    // Two children on one PC: the race is a round with no winner reported.
+    Kit.stats.round('duo');
     intro = { t: 0, max: 14, lesson: 'duo', out: 0 };
     setScreen('play');
     Kit.keys.reset();
@@ -294,6 +299,7 @@
     Kit.keys.reset();
   }
   function quitToMenu() {
+    Kit.stats.end('quit');
     J.back();
     if (duo) toTitle(); else toMap();
   }
@@ -309,6 +315,8 @@
     const nextOpen = li < 19 && ER.isOpen(save, li + 1);
     persist();
     dda.result(ER.outcome(r));
+    if (coach) Kit.stats.tutorial('done');
+    Kit.stats.end('win', stars);
     result = { duo: false, stars: stars, prev: prev, r: r, newBest: prev > 0 && (stars > prev || tenths < prevBest), items: ER.unlocks(before, ER.total(save)), nextOpen: nextOpen };
     ending = { t: 1.9 };
     happy[0] = 2;
@@ -320,6 +328,7 @@
     const r = ER.result(world), win = ER.winner(world);
     save.duo = (save.duo + 1) % 100000;
     persist();
+    Kit.stats.end('end');
     result = { duo: true, win: win, r: r };
     ending = { t: 2.1 };
     if (win >= 0) happy[win] = 2.5; else happy = [2.5, 2.5];
@@ -525,6 +534,7 @@
         // Stood still in its eyes and got away with it: praise.
         if (held[e.g]) { held[e.g] = false; const p = world.players[0]; float(p.x, p.y - 100, 'أحسنت!', '#7fffb0', 40); J.chime(1); ring(p.x, p.y - 20, 20, 70, '127,255,176', 0.5); }
       } else if (e.t === 'caught') {
+        if (!duo) Kit.track.miss();
         SFX.squawk(); shake.add(7);
         streak = 0; held = {};
         feathers(e.gx, e.gy, g.kind);
@@ -539,7 +549,7 @@
         fx.burst(e.x, e.y - 10, { count: 14, colors: e.gold ? ['#ffd23f', '#ffffff', '#fff3b0'] : ['#ffffff', '#fff3b0', '#ffd23f'], speed: 240, life: 0.55, size: 7, gravity: 260 });
         ring(e.x, e.y, 12, 50, e.gold ? '255,210,63' : '255,255,255');
       } else if (e.t === 'lay') { J.pop(0.25); ring(e.x, e.y, 8, 44, '255,236,150'); }
-      else if (e.t === 'hatch') onHatch(e);
+      else if (e.t === 'hatch') { if (!duo) Kit.track.hit(); onHatch(e); }
       else if (e.t === 'steal') { J.impact(0.5); shake.add(4); float(e.x, e.y - 70, '!', '#ff5a5f', 54); ring(e.x, e.y, 16, 70, '255,90,90'); }
       else if (e.t === 'done' || e.t === 'timeup') { if (duo) finishDuo(); else finishLevel(); }
     }

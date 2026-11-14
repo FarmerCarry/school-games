@@ -85,9 +85,10 @@
           if (e.steps > 0 && e.steps % 5 === 0) J.whoosh(Math.min(1, e.steps / w.tune.maxSteps));
           wordDone(L, e);
         }
-        if (real === 'solo') { coach.t = 0; coach.next = coachDelay(); hideHand(); }
+        if (real === 'solo') { coach.t = 0; coach.next = coachDelay(); hideHand(); Kit.track.hit(); }
         if (real === 'solo' && firstCoach && ++tutorialHits >= 3) {
           firstCoach = false;
+          Kit.stats.tutorial('done');
           if (!save.coach) { save.coach = true; persist(); }
         }
       } else if (e.t === 'wrong') {
@@ -95,7 +96,7 @@
         if (s) { const f = stoneFx(L, s); f.shake = 1; f.miss = 0.4; }
         if (real) flash[e.code] = ['miss', 0.4];
         if (!quiet) { boop(); if (w.tune.wrongCost) gaugeBump = -1; }
-        if (real === 'solo') { coach.next = Math.min(coach.next, coach.t + 1.2); }
+        if (real === 'solo') { coach.next = Math.min(coach.next, coach.t + 1.2); Kit.track.miss(); }
       } else if (e.t === 'act') {
         L.sq = e.kind === 'slide' ? 0.6 : -0.45; L.sqv = 0;
         if (!quiet) { if (e.kind === 'slide') J.whoosh(0.5); else J.jump(e.kind === 'climb' ? 0.8 : 0.5); }
@@ -105,6 +106,8 @@
         if (!quiet) J.land(0.25);
         burst(L, e.x, e.y - 2, ['#ffffff', '#f2efe6'], 7, 140, -30);
       } else if (e.t === 'stop') {
+        // The runner waits for the next key: the press that frees it is a reaction time.
+        if (real === 'solo') Kit.track.cue();
         if (!quiet && e.lost >= 3) { gaugeBump = -1; J.land(0.15); }
         L.sq = 0.3;
       } else if (e.t === 'coin') {
@@ -383,6 +386,9 @@
     solo = makeLane(plan, seed, SOLO, save.color, save.hat, w);
     resetPlay();
     firstCoach = !save.coach && w === 0 && l === 0; tutorialHits = 0;
+    // Play stats: every level try is a round (w1-1 .. w6-4); the first coached run is the tutorial.
+    Kit.stats.round('w' + (w + 1) + '-' + (l + 1));
+    if (firstCoach) Kit.stats.tutorial('start');
     // The first run ever is the coached one: the hand shows the key as soon as the runner waits.
     coach.next = coachDelay();
     intro = { t: 0, keys: plan.fresh, w: w, l: l };
@@ -395,6 +401,7 @@
     mode = 'endless'; lanes = null;
     solo = makeLane(plan, seed, SOLO, save.color, save.hat, 6);
     resetPlay();
+    Kit.stats.round('endless');
     firstCoach = false;
     intro = { t: 0, keys: [], endless: true };
     setScreen('play');
@@ -421,6 +428,8 @@
     if (!lanes || screen === 'play') buildLanes();
     mode = 'duo'; solo = null; winner = -1;
     resetPlay();
+    // Two children on one PC: the race is a round with no winner reported.
+    Kit.stats.round('duo');
     countdown = 3.6;
     setScreen('play');
     J.countdown(3);
@@ -444,6 +453,7 @@
     Kit.keys.reset();
   }
   function quitToMenu() {
+    Kit.stats.end('quit');
     J.back();
     if (mode === 'duo') toTitle(); else toMap(-1);
   }
@@ -457,6 +467,7 @@
     if (!prevBest || tenths < prevBest) save.best[cur.w][cur.l] = tenths;
     persist();
     ddaLevels.result(KR.outcome(r));
+    Kit.stats.end('win', stars);
     result = { kind: 'level', stars: stars, r: r, newBest: (prevBest > 0 && tenths < prevBest) || (prev > 0 && stars > prev), items: KR.unlocks(before, KR.total(save)),
       newWorld: cur.w + 1 < KR.WORLD_COUNT && !nextWasOpen && KR.worldOpen(save, cur.w + 1) ? cur.w + 1 : -1, newEndless: !endlessWas && KR.endlessOpen(save) };
     ending = { t: 1.7 };
@@ -468,6 +479,7 @@
     const w = solo.w, r = KR.result(w), best = save.endless, keys = r.hits, isBest = keys > best;
     if (isBest) { save.endless = keys; persist(); }
     ddaEndless.result(KR.outcome(r));
+    Kit.stats.end('end', keys);
     result = { kind: 'endless', keys: keys, best: Math.max(best, keys), isBest: isBest && best > 0, r: r };
     ending = { t: 1.5 };
     J.fail();
@@ -475,6 +487,7 @@
   }
   function finishDuo(win) {
     winner = win;
+    Kit.stats.end('end');
     ending = { t: 1.6 };
     J.levelUp();
     if (win >= 0) celebrate(lanes[win]);

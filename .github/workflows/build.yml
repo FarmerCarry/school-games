@@ -23,13 +23,16 @@ jobs:
     # Pinned: ubuntu-latest becomes Ubuntu 26 from 19 October 2026. Move on deliberately,
     # once Playwright's --with-deps install supports the new image.
     runs-on: ubuntu-24.04
-    # The checks take about 48 minutes. On 22 October 2026 the --with-deps install alone took
-    # 11 minutes instead of 18 seconds on two runs in a row, and both hit a 60-minute limit
-    # in the last test step. 90 leaves room for slow package mirrors.
+    # The checks took about 48 minutes in October. On 22 October 2026 the --with-deps install
+    # alone took 11 minutes instead of 18 seconds on two runs in a row, and both hit a
+    # 60-minute limit in the last test step. With 44 games and the statistics tests they take
+    # 66 to 83 minutes (13 November 2026), and on 14 November main run 43535718530 was
+    # cancelled at the 90-minute limit while its last gameplay step was still passing. 120
+    # leaves room for a slow runner and slow package mirrors.
     # Each step has its own limit as well. On 23 October 2026 the shared-rules step (normally
     # ~41s) was still running after 30 minutes and would only have failed at this job limit,
     # which also blocks the Pages deploy.
-    timeout-minutes: 90
+    timeout-minutes: 120
     permissions:
       contents: read
       pages: read
@@ -97,8 +100,8 @@ jobs:
             node tools/ci-run.mjs node games/block-burst/verify-levels.js
           fi
       - name: Test source gameplay and portal regressions
-        # About 14 to 17 minutes on green runs.
-        timeout-minutes: 45
+        # About 26 to 37 minutes on green runs (44 games, 13 and 14 November 2026).
+        timeout-minutes: 60
         run: node tools/ci-run.mjs npm run test:browser
       - name: Test local board games and computer opponents
         timeout-minutes: 10
@@ -108,6 +111,11 @@ jobs:
       - name: Build the fast site
         timeout-minutes: 10
         run: npm run build
+        env:
+          # The address of the school's anonymous play statistics server (docs/TELEMETRY.md):
+          # the school's Cloudflare Worker, unless the SG_TELEMETRY_URL repository variable
+          # names another server.
+          SG_TELEMETRY_URL: ${{ vars.SG_TELEMETRY_URL || 'https://school-games-telemetry.services-agreement137.workers.dev/v1/batch' }}
       - name: Check built asset performance budgets
         timeout-minutes: 5
         run: npm run perf:assets -- --report artifacts/asset-budgets.json
@@ -145,8 +153,8 @@ jobs:
           SG_ROOT: _site
           SG_ARTIFACT_DIR: .work/smoke-built
       - name: Test optimized gameplay and portal regressions
-        # About 12 to 15 minutes on green runs.
-        timeout-minutes: 45
+        # About 22 to 31 minutes on green runs (44 games, 13 and 14 November 2026).
+        timeout-minutes: 60
         run: node tools/ci-run.mjs npm run test:browser
         env:
           SG_ROOT: _site
@@ -193,6 +201,8 @@ jobs:
           SG_ARTIFACT_DIR: .work/classroom-source
       - name: Build the fast site
         run: npm run build
+        env:
+          SG_TELEMETRY_URL: ${{ vars.SG_TELEMETRY_URL || 'https://school-games-telemetry.services-agreement137.workers.dev/v1/batch' }}
       # Test the teachers' offline download (README) as they get it: unzipped on Windows.
       # tools/tests/offline-download.test.mjs proves it holds the built files byte for byte.
       - name: Unzip the offline download
@@ -226,6 +236,22 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      - name: Check that the statistics server accepts wire version 3
+        # The portal sends wire version 3. A server that does not accept it answers those
+        # batches with 400, and the PCs drop them for good, so the site is published only
+        # once the server's /v1/health says it accepts 3 (docs/TELEMETRY.md "Turning it on").
+        timeout-minutes: 3
+        env:
+          SG_TELEMETRY_URL: ${{ vars.SG_TELEMETRY_URL || 'https://school-games-telemetry.services-agreement137.workers.dev/v1/batch' }}
+        run: |
+          curl -fsS --retry 3 --max-time 20 "${SG_TELEMETRY_URL%/v1/batch}/v1/health" -o health.json
+          node -e '
+            const a = JSON.parse(require("fs").readFileSync("health.json", "utf8")).accepts;
+            if (!Array.isArray(a) || !a.includes(3)) {
+              console.error("The statistics server does not accept wire version 3 yet; deploy it first (docs/TELEMETRY.md).");
+              process.exit(1);
+            }
+            console.log("The statistics server accepts wire versions " + a.join(", ") + ".");'
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v5

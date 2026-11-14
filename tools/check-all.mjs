@@ -17,7 +17,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { svgDataUri } from './lib/svg-data-uri.mjs';
-import { networkUse } from './lib/network-rules.mjs';
+import { SENDER, networkUse, splitSender } from './lib/network-rules.mjs';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 // SG_ROOT=_site tests the fast build made by tools/build.mjs instead of the source files.
@@ -77,15 +77,31 @@ function walk(dir) {
     d.isDirectory() ? walk(path.join(dir, d.name)) : [path.join(dir, d.name)]);
 }
 
-// Nothing on the site goes over the network (tools/lib/network-rules.mjs), so the same
-// static checks cover games, the shared scripts, the root pages and the portal scripts.
+// Nothing on the site goes over the network except the portal's anonymous play statistics
+// sender, js/telemetry.js (tools/lib/network-rules.mjs), so the same static checks cover
+// games, the shared scripts, the root pages and the portal scripts. The fast build inlines
+// the sender into the portal: only an exact copy of js/telemetry.js, inlined as
+// tools/build.mjs does it, is checked as the sender.
+let senderCopies;
+function inlinedSender() {
+  if (senderCopies) return senderCopies;
+  const source = fs.readFileSync(path.join(REPO, SENDER), 'utf8');
+  senderCopies = [source];
+  try {
+    // The same options as jsFor() in tools/build.mjs.
+    senderCopies.unshift(createRequire(import.meta.url)('esbuild').transformSync(source,
+      { loader: 'js', minify: true, target: 'chrome100', legalComments: 'none', charset: 'utf8' }).code);
+  } catch { /* without esbuild only a --no-minify build matches */ }
+  return senderCopies = senderCopies.map(code => code.replace(/<\/(script)/gi, '<\\/$1').replace(/<!--/g, '<\\!--'));
+}
 function staticChecks(label, file) {
   const src = fs.readFileSync(file, 'utf8');
   const rel = path.relative(ROOT, file);
   const site = rel.split(path.sep).join('/');
   if (/type\s*=\s*["']module["']/.test(src)) add(label, `${rel}: uses ES modules`);
   if (/^\s*import\s[\w{*]/m.test(src)) add(label, `${rel}: import statement`);
-  const network = networkUse(src);
+  const { rest, sender } = built && site === 'index.html' ? splitSender(src, inlinedSender()) : { rest: src, sender: '' };
+  const network = [...networkUse(site, rest), ...networkUse(SENDER, sender)];
   if (network.length) add(label, `${rel}: network API (${network[0]})`);
   const urls = src.match(/(?:src|href)\s*=\s*["']https?:\/\/[^"']+/g);
   if (urls) add(label, `${rel}: external URL ${urls[0]}`);

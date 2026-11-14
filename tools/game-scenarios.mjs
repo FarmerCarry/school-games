@@ -71,6 +71,16 @@ export const scenarios = {
       await page.waitForTimeout(120);
     }
   }, '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.hits === 0 && ${g}.state.next === 1`),
+  // Keyboard Obby: a first visit starts world 1, level 1, with the hero on the space bar.
+  // Only the real key the next glowing key shows hops the hero (a wrong key only wobbles it).
+  'keyboard-obby': defaults(['#btnPlay'], `${g}.state.screen === 'play' && ${g}.state.id === 'w1l1'`, `[${g}.state.time,${g}.state.hops,${g}.state.hero,${g}.state.jelly]`, async page => {
+    const before = await page.evaluate(() => window.__game.state.hops);
+    for (let i = 0; i < 40 && await page.evaluate(hops => window.__game.state.hops <= hops, before); i++) {
+      const key = await page.evaluate(() => window.__game.state.target);
+      if (key) await page.keyboard.press(key);
+      await page.waitForTimeout(150);
+    }
+  }, '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.hops === 0 && ${g}.state.next === 0 && !${g}.state.started`),
   'rail-rush': defaults(['#playBtn'], `${g}.state.mode === 'play'`, select(`${g}.state`, ['x','y','dist','score','lane']), hold('ArrowRight'), '#pauseBtn', `${g}.state.mode === 'pause' || ${g}.state.mode === 'paused'`, '#restartBtn', `${g}.state.dist < 15`),
   'neon-slope': defaults(['#btnPlay'], `${g}.state.mode === 'play'`, select(`${g}.state`, ['x','y','dist','gemsRun']), holdUntilChanged('ArrowRight', `${g}.state.x`), '#btnPause', `${g}.state.mode === 'paused'`, '#btnRestart', `${g}.state.dist < 15`),
   'tunnel-blitz': defaults(['#playBtn'], `${g}.info().state === 'play'`, select(`${g}.info()`, ['rot','D','score','orbsRun']), hold('ArrowRight'), '#pauseBtn', `${g}.info().state === 'paused'`, '#restartBtn', `${g}.info().D < 15`),
@@ -219,9 +229,58 @@ export const scenarios = {
     await page.waitForFunction(() => !!window.__game.state.next, null, { timeout: 15000, polling: 40 });
     await page.keyboard.type(await page.evaluate(() => window.__game.state.next));
   }, '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.keys === 0 && ${g}.state.done === 0`),
+  // Word Garden in English (Playwright types non-US letters without key events): the first
+  // level's word waits with its first letter missing. The input is the real key of that
+  // letter (the hook only reads it); the hint timer runs by itself, so the input check
+  // watches the right letters typed alone. Restart begins the level again with no letter typed.
+  'word-garden': defaults(['[data-lang="en"]', '.lvl-btn.next'], `${g}.state.screen === 'play'`, `[${g}.state.t,${g}.state.keys,${g}.state.errors,${g}.state.item,${g}.state.pos,${g}.state.lit]`, async page => {
+    await page.waitForFunction(() => !!window.__game.state.need, null, { timeout: 15000, polling: 40 });
+    await page.keyboard.press(await page.evaluate(() => window.__game.state.need));
+  }, '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.keys === 0 && ${g}.state.done === 0 && ${g}.state.item === 0`),
   // The first yard opens behind a picture card; a held arrow closes it and walks the kid.
   // Restart puts the kid back on the doorstep with no egg hatched.
-  'egg-rush': defaults(['#btnPlay'], `${g}.screen==='play'`, `[${g}.px,${g}.py,${g}.time,${g}.hatched,${g}.guards]`, hold('ArrowRight'), '#btnPause', `${g}.screen==='pause'`, '#btnRestart', `${g}.screen==='play' && ${g}.atStart && ${g}.hatched===0 && !${g}.intro`)
+  'egg-rush': defaults(['#btnPlay'], `${g}.screen==='play'`, `[${g}.px,${g}.py,${g}.time,${g}.hatched,${g}.guards]`, hold('ArrowRight'), '#btnPause', `${g}.screen==='pause'`, '#btnRestart', `${g}.screen==='play' && ${g}.atStart && ${g}.hatched===0 && !${g}.intro`),
+  // Seek and Zoom: a first visit opens the park's first round, where the zoom is still
+  // locked and the scene is moved by dragging it (or by holding an arrow key). Only the
+  // child's own drag, arrows, wheel or zoom buttons move the camera; Restart starts the
+  // round again with nothing found and no pan or zoom yet.
+  'seek-zoom': defaults(['#btnPlay'], `${g}.state.screen === 'play'`, `[${g}.state.time,${g}.state.cam,${g}.state.found,${g}.state.movers]`, async page => {
+    const from = await page.evaluate(() => window.__game.point(760, 380));
+    const to = await page.evaluate(() => window.__game.point(500, 300));
+    await page.mouse.move(from.x, from.y);
+    await page.mouse.down();
+    await page.mouse.move(to.x, to.y, { steps: 8 });
+    await page.mouse.up();
+  }, '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.found === 0 && ${g}.state.moves === 0`),
+  // Steady Hand: a first visit goes straight to the first wire. The spark moves only when
+  // the child presses on it and drags it along the track with the real mouse; Restart puts
+  // it back on its start with no touch and nothing dragged.
+  'steady-hand': defaults(['#btnPlay'], `${g}.state.screen === 'play' && ${g}.state.id === '1-1'`, `[${g}.state.time,${g}.state.spark,${g}.state.touches,${g}.state.dragged]`, async page => {
+    const pts = await page.evaluate(() => {
+      const game = window.__game, from = game.state.best;
+      return [0, 30, 60, 90, 120, 150].map(d => { const p = game.at(from + d); return game.point(p.x, p.y); });
+    });
+    await page.mouse.move(pts[0].x, pts[0].y);
+    await page.mouse.down();
+    for (const p of pts.slice(1)) await page.mouse.move(p.x, p.y, { steps: 4 });
+    await page.mouse.up();
+  }, '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.atStart`),
+  // Shortcut Factory: a first visit starts level 1-1 behind its Ctrl+C / Ctrl+V demo card
+  // (Enter closes it, or it closes by itself). The belt carries the duck by itself; only the
+  // child's click on the duck, then real Ctrl+C and Ctrl+V, put a duck into the box.
+  // Restart begins the level again: an empty box and an empty copy machine.
+  'shortcut-factory': defaults(['#btnPlay', async page => { await page.waitForTimeout(500); await page.keyboard.press('Enter'); }],
+    `${g}.state.screen === 'play' && ${g}.state.level === 0`, `[${g}.state.time,${g}.state.offset,${g}.state.boxes,${g}.state.clip,${g}.state.sel]`, async page => {
+      const toy = await page.evaluate(() => window.__game.state.belts[0].items.find(t => t.visible));
+      const point = await page.evaluate(id => window.__game.toyPoint(id), toy.id);
+      await page.mouse.click(point.x, point.y);
+      await page.keyboard.press('Control+KeyC');
+      await page.keyboard.press('Control+KeyV');
+    }, '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.boxes[0].items.length === 0 && !${g}.state.clip`,
+    { settle: `!${g}.state.demo`, settleTimeout: 15000 }),
+  // Math Gates: a first visit starts level 1-1 in the middle lane. The crowd runs by itself;
+  // only the child's keys (or mouse) change its lane. Restart begins the level again.
+  'math-gates': defaults(['#btnPlay'], `${g}.state.screen === 'play'`, `[${g}.state.d,${g}.state.lane,${g}.state.count,${g}.state.t]`, hold('ArrowLeft'), '#btnPause', `${g}.state.screen === 'paused'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.attempt > 1 && ${g}.state.passed === 0 && ${g}.state.lane === 1`)
 };
 for (const slug of ['connect-four','tic-tac-toe']) scenarios[slug] = {
   start: [click('#localButton')], active: `document.getElementById('boardApp').dataset.mode === 'local' && document.getElementById('gameBoard').dataset.winner === '0' && document.getElementById('gameBoard').dataset.draw !== 'true'`,
@@ -242,14 +301,19 @@ const inputSnapshots = {
   'air-hockey': `${g}.state().mallets[0]`, 'hoop-heads': `${g}.info().p[0].x`,
   'wacky-soccer': `${g}.world.players.filter(p => p.side === 0).map(p => p.kickT)`,
   'pool-party': `${g}.aim`, 'critter-mart': `${g}.state().player`, 'cake-guards': `${g}.state.towers`,
-  'lucky-lake': `${g}.state.p1.casts`, 'typing-test': `${g}.state.keys`,
+  'lucky-lake': `${g}.state.p1.casts`, 'typing-test': `${g}.state.keys`, 'word-garden': `${g}.state.keys`,
   'bubble-bop': `[${g}.state.hits,${g}.state.travel]`,
-  'key-runner': `${g}.state.hits`,
+  'key-runner': `${g}.state.hits`, 'keyboard-obby': `${g}.state.hops`,
+  'shortcut-factory': `${g}.state.boxes[0].items.length`,
   'block-world': `${g}.player.x`, 'candy-rope': `${g}.world().ropes.filter(r => r.alive).length`,
   'maze-dash': `[${g}.state.px,${g}.state.py,${g}.state.dots]`,
   // Paint Grab's blob keeps moving; only the arrow keys or pointer set its steering target.
   'paint-grab': `${g}.player.target`, 'snake-arena': `SA.game.kb`, 'egg-rush': `${g}.px`,
-  'blob-battle': `${g}.info().player`, 'splat-strike': `[${g}.state.player.x,${g}.state.player.z]`
+  'blob-battle': `${g}.info().player`, 'splat-strike': `[${g}.state.player.x,${g}.state.player.z]`,
+  // Only the child's drag, keys, wheel or zoom buttons move Seek and Zoom's camera.
+  'seek-zoom': `${g}.state.cam`,
+  'steady-hand': `${g}.state.dragged`,
+  'math-gates': `${g}.state.lane`
 };
 for (const [slug, expr] of Object.entries(inputSnapshots)) scenarios[slug].inputSnapshot = expr;
 
@@ -284,7 +348,18 @@ const inputSeen = {
   'bubble-bop': `${g}.state.hits > sgInput.before[0] && ${g}.state.travel > sgInput.before[1] + 40`,
   // The runner runs to the first edge by itself and waits there; only the key its next
   // stone shows counts as a hit (any other key is a miss, nothing at all is nothing).
-  'key-runner': `${g}.state.hits > sgInput.before`
+  'key-runner': `${g}.state.hits > sgInput.before`,
+  // The key glows by itself after a while; only the child's right letter fills the gap.
+  'word-garden': `${g}.state.keys > sgInput.before`,
+  // The jelly, the sinking keys and the bumper bars move by themselves; only the key the
+  // glowing key shows makes the hero hop.
+  'keyboard-obby': `${g}.state.hops > sgInput.before`,
+  // A spark sent home after a touch moves too; only a real drag adds to how far it was dragged.
+  'steady-hand': `${g}.state.dragged > sgInput.before + 20`,
+  // The belt moves the toys by itself; only a pasted copy puts a toy into the box.
+  'shortcut-factory': `${g}.state.boxes[0].items.length > sgInput.before`,
+  // The crowd runs forward by itself; only the child's keys or mouse move it to another lane.
+  'math-gates': `${g}.state.lane !== sgInput.before`
 };
 for (const [slug, expr] of Object.entries(inputSeen)) scenarios[slug].inputSeen = expr;
 
@@ -299,7 +374,10 @@ const heldKeys = {
   'fire-and-ice': 'ArrowRight', 'tank-splat': 'KeyD', 'hoop-heads': 'ArrowRight', 'critter-mart': 'ArrowRight',
   'block-world': 'ArrowRight', 'troll-level': 'ArrowRight', 'chaos-island': 'ArrowRight', 'splat-strike': 'KeyW',
   'paint-grab': 'ArrowRight', 'snake-arena': 'ArrowRight', 'egg-rush': 'ArrowRight',
-  'lucky-lake': 'Space'
+  'lucky-lake': 'Space', 'seek-zoom': 'ArrowRight', 'math-gates': 'ArrowLeft',
+  // Level 1-1 always starts with F: the key goes down once (the hero hops) and stays down
+  // until the hop is seen, so a slow software-rendered frame cannot miss it.
+  'keyboard-obby': 'KeyF'
 };
 for (const [slug, key] of Object.entries(heldKeys)) scenarios[slug].heldKey = key;
 

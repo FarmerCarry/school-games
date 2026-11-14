@@ -417,6 +417,7 @@
   function showTip(kind) {
     if (save.tipRuns >= 3 || tipsSeen[kind]) return;
     tipsSeen[kind] = 1;
+    if (!save.tipRuns) Kit.stats.tutorial('start');
     var h = $('hint');
     h.textContent = TIPS[kind]; h.hidden = false; tipT = 3;
   }
@@ -606,6 +607,7 @@
         if (LL.type === 'river') { runStats.rivers++; missionEvent('rivers', 1); }
         else if (LL.type === 'road') { runStats.roads++; missionEvent('roads', 1); }
         else if (LL.type === 'rail') { runStats.rails++; missionEvent('rails', 1); }
+        if (LL.type !== 'grass') Kit.track.hit(); // a road, river or rail safely crossed
       }
       maxRow = P.row; score = maxRow;
       missionEvent('score', score, true);
@@ -719,6 +721,7 @@
   var REASONS = { car: 'صرت فطيرة مسطّحة!', train: 'القطار كان أسرع منك!', water: 'سقطت في الماء!', drift: 'جرفك النهر بعيدًا!', eagle: 'خطفك النسر!' };
   function die(kind, L) {
     if (P.dead) return;
+    Kit.track.miss();
     P.dead = true; P.kind = kind; deathT = 0; state = 'dying'; P.queue = null; nearRec = null;
     setWarn(false);
     var cc = charColor();
@@ -850,6 +853,7 @@
         var rate = (0.3 + diffAt(maxRow) * 0.3) * T.eagle;
         autoRow += dt * (rate + Math.max(0, P.row - autoRow) * 1.2);
         var eff = P.hop ? Math.max(P.hop.row0, P.hop.row1) : P.row, behind = autoRow - eff, warn = behind > T.warnAt;
+        if (warn && !warnOn) Kit.track.cue(); // the eagle warning asks for a hop forward: time it
         setWarn(warn);
         if (warn) { warnT -= dt; if (warnT <= 0) { warnT = 0.45; S.warn(); } }
         if (behind > T.reach && !godMode) die('eagle');
@@ -1021,6 +1025,7 @@
     // is made again.
     if (Lanes.tier(dda.tier) !== T) resetWorld(base);
     state = 'play';
+    Kit.stats.round('endless');
     if (!P.hop && !P.log) { P.y = 0; P.jump = 0; } // the title idle-hop could leave the critter floating
     showScreen(null);
     $('hud').hidden = false;
@@ -1047,10 +1052,11 @@
     if (state !== 'dying') return;
     state = 'over'; overT = 0;
     save.stats.games++;
-    save.tipRuns++;
+    if (++save.tipRuns === 3) Kit.stats.tutorial('done');
     // Difficulty: the share of this tier's par distance reached. Runs that end early
     // ease the next worlds off; runs that reach the par make them harder.
     dda.result(Math.min(1, Math.max(0, score - base) / T.par));
+    Kit.stats.end('end', score);
     missionEvent('games', 1);
     missionEvent('score', score, true);
     missionEvent('coinsRun', runCoins, true);
@@ -1415,6 +1421,7 @@
       var ms = last && t - last, dt = last ? Math.min(0.1, ms / 1000) : 1 / 60;
       last = t;
       if (document.hidden || dt <= 0) return;
+      if (state === 'play') Kit.stats.frame(ms); // raw frame time (0 on the first frame)
       var n = Math.max(1, Math.ceil(dt * 60 - 0.05)), h = dt / n;
       for (var i = 0; i < n; i++) update(h);
       render();

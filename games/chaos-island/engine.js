@@ -307,7 +307,7 @@
       i: i, human: human, look: look, x: 640, y: GROUND, vx: 0, vy: 0, kx: 0, face: 1, ground: null, coyote: 0, buffer: 0,
       upPrev: false, downPrev: false, cut: false, dropT: 0, dropP: null, hearts: 3, ghost: false, inv: 0, bonk: 0,
       survived: 0, coins: 0, walk: 0, inside: false, push: 0, blown: false, inJelly: false, under: false, land: 0, air: 0,
-      jumps: 0, sea: 0, results: [], still: 0,
+      jumps: 0, sea: 0, results: [], still: 0, acted: false,
       mind: human ? null : CI.mind(w.T.react, w.T.slip, (seed * 31 + i * 7919) >>> 0, { coins: true, bot: true })
     };
   }
@@ -981,6 +981,7 @@
     for (var i = 0; i < w.actors.length; i++) {
       var a = w.actors[i];
       var inp = a.human ? (inputs && inputs[i]) || NONE : CI.think(w, a, a.mind);
+      if (a.human && (inp.l || inp.r || inp.up || inp.down)) a.acted = true;
       stepActor(w, a, inp, dt);
     }
     stepCoins(w, dt);
@@ -992,8 +993,13 @@
   CI.ranking = function (w) {
     return w.actors.slice().sort(function (a, b) { return b.survived - a.survived || b.coins - a.coins || a.i - b.i; });
   };
-  // The share of rounds the child survived (the difficulty outcome).
-  CI.outcome = function (w, i) { var a = w.actors[i || 0]; return w.rounds ? a.survived / w.rounds : 0; };
+  // The share of rounds the child survived (the difficulty outcome). A child who never
+  // pressed a key did not play: on the gentlest tier the wind can leave a still islander
+  // on the beach, and a lucky meteor miss can follow, so standing still would otherwise
+  // earn a star now and then and tell the difficulty the match went well.
+  CI.outcome = function (w, i) { var a = w.actors[i || 0]; return w.rounds && a.acted ? a.survived / w.rounds : 0; };
+  // The stars a match earns the child: none for doing nothing.
+  CI.matchStars = function (w, i) { var a = w.actors[i || 0]; return a.acted ? CI.stars(a.survived, w.rounds) : 0; };
 
   /* ------------------------------------------------------------ the brains */
   // Computer islanders (and the coach that shows a child the move) look at the same

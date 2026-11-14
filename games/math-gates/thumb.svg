@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+<defs>
+<linearGradient id="s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5ec4ff"/><stop offset=".7" stop-color="#c9ecff"/><stop offset="1" stop-color="#ffe3f1"/></linearGradient>
+<linearGradient id="t" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffd6e8"/><stop offset="1" stop-color="#ffaed2"/></linearGradient>
+<radialGradient id="b" cx=".38" cy=".32" r=".7"><stop offset="0" stop-color="#ffb3d4"/><stop offset="1" stop-color="#ff5aa0"/></radialGradient>
+<radialGradient id="b2" cx=".38" cy=".32" r=".7"><stop offset="0" stop-color="#a8dcff"/><stop offset="1" stop-color="#3f9cff"/></radialGradient>
+<radialGradient id="b3" cx=".38" cy=".32" r=".7"><stop offset="0" stop-color="#fff0a0"/><stop offset="1" stop-color="#ffc21a"/></radialGradient>
+</defs>
+<rect width="400" height="400" fill="url(#s)"/>
+<g fill="#fff" opacity=".9"><ellipse cx="62" cy="150" rx="38" ry="13"/><ellipse cx="80" cy="140" rx="22" ry="13"/><ellipse cx="338" cy="136" rx="34" ry="12"/><ellipse cx="322" cy="127" rx="18" ry="11"/></g>
+<path d="M0 214 Q50 186 104 206 T206 198 T310 204 T400 196 V400 H0 Z" fill="#8fe39a" stroke="#2a2140" stroke-width="4"/>
+<g stroke="#2a2140" stroke-width="3.5">
+<path d="M34 200 V150" stroke-width="6"/><circle cx="34" cy="140" r="20" fill="#ff4f9a"/><path d="M34 140 m-12 0 a12 12 0 0 1 24 0 a8 8 0 0 1 -16 0" fill="none" stroke="#fff" stroke-width="5"/>
+<path d="M368 196 V146" stroke-width="6"/><circle cx="368" cy="136" r="20" fill="#3f9cff"/><path d="M368 136 m-12 0 a12 12 0 0 1 24 0 a8 8 0 0 1 -16 0" fill="none" stroke="#fff" stroke-width="5"/>
+<path d="M88 214 q0-22 18-22 t18 22 z" fill="#ffd23f"/><path d="M286 210 q0-20 16-20 t16 20 z" fill="#5be38f"/>
+</g>
+<path d="M156 186 H244 L396 400 H4 Z" fill="url(#t)" stroke="#2a2140" stroke-width="5" stroke-linejoin="round"/>
+<path d="M186 186 L136 400 M214 186 L264 400" stroke="#fff" stroke-width="6" stroke-dasharray="16 12"/>
+<g stroke="#2a2140" stroke-width="4" stroke-linejoin="round">
+<rect x="50" y="160" width="14" height="140" rx="7" fill="#fff"/><rect x="144" y="160" width="14" height="140" rx="7" fill="#fff"/><rect x="242" y="160" width="14" height="140" rx="7" fill="#fff"/><rect x="336" y="160" width="14" height="140" rx="7" fill="#fff"/>
+<g fill="#ff4f9a" stroke="none"><rect x="52" y="180" width="10" height="12"/><rect x="52" y="214" width="10" height="12"/><rect x="52" y="248" width="10" height="12"/><rect x="146" y="180" width="10" height="12"/><rect x="146" y="214" width="10" height="12"/><rect x="146" y="248" width="10" height="12"/><rect x="244" y="180" width="10" height="12"/><rect x="244" y="214" width="10" height="12"/><rect x="244" y="248" width="10" height="12"/><rect x="338" y="180" width="10" height="12"/><rect x="338" y="214" width="10" height="12"/><rect x="338" y="248" width="10" height="12"/></g>
+<rect x="44" y="150" width="312" height="18" rx="9" fill="#ff6fae"/>
+<rect x="66" y="174" width="76" height="92" rx="10" fill="#45cf6a" fill-opacity=".92"/>
+<rect x="161" y="174" width="78" height="92" rx="10" fill="#3f9cff" fill-opacity=".92"/>
+<rect x="258" y="174" width="76" height="92" rx="10" fill="#ff6464" fill-opacity=".92"/>
+<circle cx="57" cy="152" r="11" fill="#ffd23f"/><circle cx="151" cy="152" r="11" fill="#ffd23f"/><circle cx="249" cy="152" r="11" fill="#ffd23f"/><circle cx="343" cy="152" r="11" fill="#ffd23f"/>
+</g>
+<g font-family="Fredoka, 'Segoe UI', Tahoma, Arial, sans-serif" font-weight="700" text-anchor="middle" font-size="52" fill="#fff" stroke="#2a2140" stroke-width="10" stroke-linejoin="round" paint-order="stroke">
+<text x="104" y="238" direction="ltr">+5</text><text x="200" y="238" direction="ltr">×2</text><text x="296" y="238" direction="ltr">−3</text>
+</g>
+<g stroke="#2a2140" stroke-width="4">
+<ellipse cx="200" cy="388" rx="92" ry="14" fill="#2a2140" fill-opacity=".18" stroke="none"/>
+<ellipse cx="150" cy="352" rx="22" ry="24" fill="url(#b3)"/><ellipse cx="250" cy="352" rx="22" ry="24" fill="url(#b2)"/>
+<ellipse cx="176" cy="340" rx="22" ry="24" fill="url(#b2)"/><ellipse cx="224" cy="340" rx="22" ry="24" fill="url(#b)"/>
+<ellipse cx="200" cy="330" rx="23" ry="25" fill="url(#b3)"/>
+<ellipse cx="128" cy="374" rx="22" ry="24" fill="url(#b)"/><ellipse cx="272" cy="374" rx="22" ry="24" fill="url(#b3)"/>
+<ellipse cx="174" cy="372" rx="23" ry="25" fill="url(#b)"/><ellipse cx="226" cy="372" rx="23" ry="25" fill="url(#b2)"/>
+<ellipse cx="200" cy="384" rx="22" ry="22" fill="url(#b3)"/>
+<g fill="#fff"><circle cx="128" cy="392" r="6"/><circle cx="174" cy="392" r="6"/><circle cx="226" cy="392" r="6"/><circle cx="272" cy="392" r="6"/><circle cx="200" cy="400" r="6"/></g>
+<path d="M190 307 L200 288 L210 307 Z" fill="#7a5cff" stroke-width="3"/>
+</g>
+<g stroke="#2a2140" stroke-width="5"><rect x="160" y="270" width="80" height="44" rx="22" fill="#3fbf6a"/></g>
+<text x="200" y="305" font-family="Fredoka, 'Segoe UI', Tahoma, Arial, sans-serif" font-weight="700" text-anchor="middle" font-size="36" fill="#fff" stroke="#2a2140" stroke-width="7" stroke-linejoin="round" paint-order="stroke" direction="ltr">12</text>
+<g font-family="Fredoka, 'Segoe UI', Tahoma, Arial, sans-serif" font-weight="700" text-anchor="middle" direction="rtl">
+<text x="200" y="82" font-size="64" fill="#ffd23f" stroke="#2a2140" stroke-width="14" stroke-linejoin="round" paint-order="stroke">بوابات الحساب</text>
+</g>
+<g fill="#ffd23f" stroke="#2a2140" stroke-width="3"><path d="M32 30 l5 10 l11 1 l-8 7 l3 11 l-11 -6 l-10 6 l3 -11 l-8 -7 l11 -1 z"/><path d="M362 96 l4 8 l9 1 l-6 6 l2 9 l-9 -5 l-8 5 l2 -9 l-7 -6 l9 -1 z"/></g>
+</svg>

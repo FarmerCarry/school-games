@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4fc3ff"/>
+      <stop offset="1" stop-color="#d8f6ff"/>
+    </linearGradient>
+    <linearGradient id="grass" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7ad85f"/>
+      <stop offset="1" stop-color="#46ad4b"/>
+    </linearGradient>
+    <radialGradient id="glow">
+      <stop offset="0" stop-color="#fff27a" stop-opacity="0.95"/>
+      <stop offset="1" stop-color="#fff27a" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="400" height="400" fill="url(#sky)"/>
+  <g fill="#ffffff" opacity="0.6">
+    <circle cx="44" cy="70" r="20"/><circle cx="68" cy="62" r="24"/><circle cx="92" cy="72" r="16"/>
+    <circle cx="300" cy="44" r="16"/><circle cx="322" cy="38" r="20"/><circle cx="344" cy="46" r="14"/>
+  </g>
+  <path d="M0 214 Q70 184 140 204 T280 196 T400 206 L400 400 L0 400 Z" fill="#a6e27c" stroke="#1c2250" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M0 246 Q100 226 200 240 T400 236 L400 400 L0 400 Z" fill="url(#grass)" stroke="#1c2250" stroke-width="5" stroke-linejoin="round"/>
+  <!-- the garden bed -->
+  <rect x="18" y="284" width="364" height="34" rx="17" fill="#8b5a2b" stroke="#1c2250" stroke-width="5"/>
+  <!-- the word card with its glowing gap -->
+  <g transform="rotate(-4 120 92)">
+    <rect x="22" y="40" width="200" height="104" rx="22" fill="#1c2250" opacity="0.3" transform="translate(0 7)"/>
+    <rect x="22" y="40" width="200" height="104" rx="22" fill="#fffdf5" stroke="#1c2250" stroke-width="6"/>
+    <circle cx="170" cy="92" r="44" fill="url(#glow)"/>
+    <rect x="150" y="60" width="44" height="62" rx="10" fill="#fff5c2" stroke="#ff9f1c" stroke-width="5"/>
+    <text x="146" y="114" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-weight="bold" font-size="60" direction="rtl" text-anchor="start" fill="#1c2250">&#x200D;طة</text>
+  </g>
+  <!-- the key that flies into the gap -->
+  <g transform="rotate(8 318 108)">
+    <path d="M246 150 Q266 140 280 126" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="round" opacity="0.85"/>
+    <path d="M252 168 Q272 162 286 148" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="round" opacity="0.7"/>
+    <rect x="282" y="76" width="74" height="74" rx="14" fill="#e0a400" stroke="#1c2250" stroke-width="6" transform="translate(0 7)"/>
+    <rect x="282" y="76" width="74" height="74" rx="14" fill="#ffd23f" stroke="#1c2250" stroke-width="6"/>
+    <g font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-weight="bold" fill="#1c2250">
+      <text x="292" y="102" font-size="22">R</text>
+      <text x="346" y="138" font-size="48" direction="rtl" text-anchor="start">ق</text>
+    </g>
+  </g>
+  <!-- the plants that grew -->
+  <g stroke="#1c2250" stroke-width="4" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M200 290 Q196 240 200 200" fill="none" stroke-width="13"/>
+    <path d="M200 290 Q196 240 200 200" fill="none" stroke="#3f9e3a" stroke-width="6"/>
+    <path d="M198 262 Q164 252 156 230 Q182 232 198 262 Z" fill="#5ccf4a"/>
+    <path d="M201 248 Q236 236 244 214 Q218 216 201 248 Z" fill="#5ccf4a"/>
+    <g fill="#ff6bab">
+      <circle cx="200" cy="164" r="22"/><circle cx="232" cy="182" r="22"/><circle cx="222" cy="216" r="22"/>
+      <circle cx="178" cy="216" r="22"/><circle cx="168" cy="182" r="22"/>
+    </g>
+    <circle cx="200" cy="192" r="20" fill="#ffd43b"/>
+    <path d="M70 292 L70 230" fill="none" stroke-width="10"/><path d="M70 292 L70 230" fill="none" stroke="#3f9e3a" stroke-width="4"/>
+    <path d="M70 236 Q50 232 52 204 L62 214 L70 198 L78 214 L88 204 Q90 232 70 236 Z" fill="#ff4d6d"/>
+    <path d="M330 292 L330 214" fill="none" stroke-width="10"/><path d="M330 292 L330 214" fill="none" stroke="#3f9e3a" stroke-width="4"/>
+    <g fill="#ffd43b">
+      <ellipse cx="330" cy="188" rx="9" ry="15"/><ellipse cx="330" cy="240" rx="9" ry="15"/>
+      <ellipse cx="304" cy="214" rx="15" ry="9"/><ellipse cx="356" cy="214" rx="15" ry="9"/>
+      <ellipse cx="312" cy="196" rx="9" ry="14" transform="rotate(-45 312 196)"/><ellipse cx="348" cy="196" rx="9" ry="14" transform="rotate(45 348 196)"/>
+      <ellipse cx="312" cy="232" rx="9" ry="14" transform="rotate(45 312 232)"/><ellipse cx="348" cy="232" rx="9" ry="14" transform="rotate(-45 348 232)"/>
+    </g>
+    <circle cx="330" cy="214" r="14" fill="#8a5a2b"/>
+  </g>
+  <g fill="#1c2250">
+    <circle cx="193" cy="188" r="3.5"/><circle cx="207" cy="188" r="3.5"/>
+  </g>
+  <path d="M192 198 Q200 206 208 198" fill="none" stroke="#1c2250" stroke-width="3.5" stroke-linecap="round"/>
+  <!-- a bee and a butterfly -->
+  <g stroke="#1c2250" stroke-width="3.5">
+    <ellipse cx="114" cy="178" rx="11" ry="14" fill="#e6f6ff" transform="rotate(-25 114 178)"/>
+    <ellipse cx="128" cy="178" rx="11" ry="14" fill="#e6f6ff" transform="rotate(25 128 178)"/>
+    <ellipse cx="120" cy="196" rx="20" ry="14" fill="#ffd43b"/>
+  </g>
+  <g fill="#1c2250"><rect x="113" y="183" width="5" height="26"/><rect x="124" y="183" width="5" height="26"/><circle cx="107" cy="193" r="2.5"/></g>
+  <ellipse cx="120" cy="196" rx="20" ry="14" fill="none" stroke="#1c2250" stroke-width="3.5"/>
+  <g stroke="#1c2250" stroke-width="3.5">
+    <ellipse cx="262" cy="244" rx="13" ry="10" fill="#b48cff" transform="rotate(-30 262 244)"/>
+    <ellipse cx="284" cy="244" rx="13" ry="10" fill="#b48cff" transform="rotate(30 284 244)"/>
+    <ellipse cx="273" cy="250" rx="3" ry="11" fill="#1c2250"/>
+  </g>
+  <!-- the name -->
+  <g font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-weight="bold" text-anchor="middle" direction="rtl">
+    <text x="200" y="381" font-size="56" fill="#1c2250" stroke="#1c2250" stroke-width="16" stroke-linejoin="round">حديقة الكلمات</text>
+    <text x="200" y="374" font-size="56" fill="#ffffff" stroke="#1c2250" stroke-width="8" stroke-linejoin="round" paint-order="stroke">حديقة <tspan fill="#8ff07a">الكلمات</tspan></text>
+  </g>
+</svg>

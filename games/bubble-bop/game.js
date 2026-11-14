@@ -1,6 +1,7 @@
 /* Bubble Bop (فقاعات بوب): screens, mouse and keyboard, the ghost-hand coach, saves
  * and sound. rules.js simulates the worlds; art.js draws them.
- * This is the UI layer: it reads Kit.dda at every level start. */
+ * This is the UI layer: it reads Kit.dda at every level start and reports Kit.stats
+ * rounds and Kit.track hits, misses and cues. */
 (function () {
   'use strict';
   const BB = window.BB, A = BB.art, J = Kit.juice, W = BB.W, H = BB.H, KEYS = BB.KEYS;
@@ -28,7 +29,7 @@
 
   /* --------------------------------------------------------------- state */
   let screen = 'title', world = null, cur = { w: 0, l: 0 }, time = 0, ending = null, result = null, resultT = 0, resultLock = 0;
-  let closetFrom = 'title', gripCard = 0, gripThen = '', gripAt = 0, menuIdle = 0, menuNext = 4, unlockFx = null;
+  let closetFrom = 'title', gripCard = 0, gripThen = '', gripAt = 0, menuIdle = 0, menuNext = 4, busyT = 0, lastMissT = -9, unlockFx = null;
   const ptr = { x: W / 2, y: H / 2, known: false, travel: 0, movedAt: -9 };
   const menuBop = { x: 640, y: 364, vx: 0, vy: 0 };
   let clicks = [], jumpPress = false, holdDir = 0, keyDir = 0, anyKey = '';
@@ -90,6 +91,7 @@
     gripThen = then; gripCard = 0;
     paintGrip();
     setScreen('grip');
+    Kit.stats.tutorial('start');
     const warm = new Image(); warm.src = 'grip-keys.webp';
   }
   function paintGrip() {
@@ -107,11 +109,13 @@
   function gripNext() {
     if (screen !== 'grip') return;
     if (gripCard === 0) { J.tap(); gripCard = 1; paintGrip(); }
-    else { J.select(); gripDone(); }
+    else { J.select(); gripDone(true); }
   }
-  // The last card, the X or Esc: the cards are seen and not shown again.
-  function gripDone() {
+  // The last card, the X or Esc: the cards are seen and not shown again. Only the
+  // last card (last) finishes the tutorial for the statistics; skipping does not.
+  function gripDone(last) {
     if (screen !== 'grip') return;
+    if (last) Kit.stats.tutorial('done');
     if (!save.grip) { save.grip = true; persist(); }
     const then = gripThen; gripThen = '';
     if (then === 'play') afterGrip(); else toTitle();
@@ -265,6 +269,8 @@
     world = BB.create(plan, (Math.random() * 2147483647) | 0);
     if (ptr.known) { world.bop.x = BB.clamp(ptr.x, 0, W); world.bop.y = BB.clamp(ptr.y, 0, H); }
     cur = { w: w, l: l };
+    // Play stats: every level or party try is a round, e.g. w3L2 or w11P.
+    Kit.stats.round('w' + (w + 1) + (l === 'P' ? 'P' : 'L' + (l + 1)));
     ending = null; result = null;
     clicks = []; jumpPress = false; holdDir = 0; keyDir = 0;
     mouseEvs = []; btnDown = false; letters = []; steerDx = 0; steerDy = 0; steerClick = ''; cancelNext = false;
@@ -294,6 +300,7 @@
     Kit.keys.reset();
   }
   function quitToMap() {
+    Kit.stats.end('quit');
     J.back();
     toMap(-1, cur.w);
   }
@@ -305,6 +312,7 @@
     if (stars > prev) save.stars[cur.w][cur.l] = stars;
     persist();
     dda[cur.w].result(BB.outcome(r));
+    Kit.stats.end('win', stars);
     result = { party: false, stars: stars, prev: prev, items: BB.unlocks(before, BB.total(save)),
       newWorld: cur.w < BB.N - 1 && !nextWasOpen && BB.worldOpen(save, cur.w + 1) ? cur.w + 1 : -1, newParty: !partyWasOpen && BB.isOpen(save, cur.w, 'P') };
     ending = { t: 1.5 };
@@ -318,6 +326,7 @@
     const r = BB.result(world), best = save.best[cur.w], isBest = r.score > best;
     if (isBest) { save.best[cur.w] = r.score; persist(); }
     dda[cur.w].result(BB.outcome(r));
+    Kit.stats.end('end', r.score);
     result = { party: true, score: r.score, best: Math.max(best, r.score), isBest: isBest && r.score > 0, items: [] };
     ending = { t: 1.2 };
     happy = 1.2;
@@ -737,6 +746,8 @@
   function anim(a) { a.t = 0; anims.push(a); if (anims.length > 12) anims.shift(); }
   function onPop(e) {
     const col = popColor(e), k = e.kind, r = k === 'wand' ? e.br : e.r;
+    Kit.track.hit();
+    if (k === 'bubble') Kit.track.react(Math.round(e.age * 1000));
     if (k === 'bubble') { J.pop(Math.min(1, e.r / 70)); shake.add(2); }
     else if (k === 'balloon' || k === 'kballoon') { J.impact(0.3); J.pop(0.85); shake.add(4); }
     else if (k === 'fly' || k === 'star') { J.coin(Math.min(5, e.combo)); shake.add(2); }
@@ -762,11 +773,18 @@
   const byId = id => world.targets.find(o => o.id === id && !o.dead);
   function handleEvents() {
     for (const e of world.ev) {
-      if (e.t === 'pop') onPop(e);
-      else if (e.t === 'escape') {
+      // A reaction time counts from the moment there is something to press: a balloon,
+      // a fruit, a clam or a letter balloon appears. Touching or steering needs no press.
+      if (e.t === 'spawn') { if (/^(?:tap|catch|dbl|keys)$/.test(world.mode)) Kit.track.cue(); }
+      else if (e.t === 'pop') onPop(e);
+      else if (e.t === 'escape' || e.t === 'slip') {
+        Kit.track.miss(); // a slip shows through its own 'wrong' or 'drop' event
+        if (e.t === 'slip') continue;
         if (e.kind === 'fruit') { J.land(0.2); fx.burst(e.x, BB.BASKET.ground - 6, { count: 8, colors: ['#ffffff', '#c8f0a0'], speed: 160, life: 0.4, size: 6, gravity: 500 }); }
         else if (e.kind === 'clam') fx.burst(e.x, e.y + 30, { count: 8, colors: ['#ffe39a', '#ffffff'], speed: 120, life: 0.4, size: 6, gravity: 300 });
       } else if (e.t === 'missClick') {
+        if (time - lastMissT > 0.3) Kit.track.miss();
+        lastMissT = time;
         ripple(e.x, e.y, true); J.tap();
       } else if (e.t === 'jump') J.jump(0.7);
       else if (e.t === 'land') { J.land(0.3); frogLand = 1; }
@@ -793,6 +811,8 @@
         wallWig[e.wall] = 1;
         fx.burst(e.x, e.y, { count: 5, colors: ['#ffffff', '#bff0ff'], speed: 90, life: 0.5, size: 6, gravity: -60 });
       } else if (e.t === 'wrongKey') {
+        if (time - lastMissT > 0.3) Kit.track.miss();
+        lastMissT = time;
         J.tap(); keyFx.wrong[e.code] = 1; flash.keyGlow = 1;
       }
     }
@@ -867,6 +887,9 @@
       }
     } else {
       ending.t -= dt;
+      // The celebration is a passive moment the child watches.
+      busyT += dt;
+      if (busyT >= 1) { busyT = 0; Kit.stats.busy(); }
       if (ending.t <= 0) showResult();
     }
   }

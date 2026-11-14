@@ -27,6 +27,7 @@
   var mode = 'title', world = null, cur = { level: 0, endless: false, code: '' }, view = null, time = 0, viewTime = 0;
   var inputJumps = 0, pointerJump = false, pointerTap = false, ending = null, result = null, resultT = 0, resultLock = 0, wardFrom = 'title';
   var menuIdle = 0, menuNext = 4, dirty = true, contextLost = false, snap = true, spin = 0, lastFrame = 0;
+  var live = false, queued = null; // live: the 3D view has drawn its first frame (see init)
   var coach = { id: 0, t: 0, seen: {}, bumped: {}, intro: 0 }, streak = 0, bannerT = 0, ghostT = 0;
   var hud = { hp: -1, eggs: -1, trip: -1, roar: -1, m: -1 };
   var show = { x: 0, y: 0, ground: true, running: false, hop: true, idle: true, speed: 0 };
@@ -93,12 +94,12 @@
   }
   function stars() { return D.totalStars(save); }
   function newItems() { return D.unlocks(save.seen, save.bank).length > 0; }
-  function toTitle() {
-    menuScene(D.LEVEL[D.nextLevel(save)].biome);
+  function titleScreen() {
     $('title-stars').textContent = String(stars());
     $('btn-wardrobe').classList.toggle('ring', newItems());
     setMode('title');
   }
+  function toTitle() { menuScene(D.LEVEL[D.nextLevel(save)].biome); titleScreen(); }
   function play() {
     J.select();
     if (!stars()) startLevel(0); else toMap();
@@ -217,6 +218,9 @@
     resetRound();
     $('trip').hidden = false; $('meters').hidden = true; $('code-tag').hidden = true;
     coach.intro = !save.coach && i === 0 ? 7 : 0;
+    // Play stats: every level try is a round; the first coached level is the tutorial.
+    Kit.stats.round('L' + (i + 1));
+    if (coach.intro) Kit.stats.tutorial('start');
     if (coach.intro) showIntro(); else $('intro').hidden = true;
     showBanner(L, !!coach.intro);
     setMode('playing');
@@ -232,6 +236,7 @@
     $('trip').hidden = true; $('meters').hidden = false; $('hud-far').textContent = String(save.far);
     $('code-tag').hidden = !shared; $('code-now').textContent = shared ? code : '';
     $('intro').hidden = true; coach.intro = 0;
+    Kit.stats.round(shared ? 'code' : 'endless');
     showBanner(null);
     setMode('playing');
     J.whoosh(0.5);
@@ -249,6 +254,7 @@
     setMode('playing');
   }
   function quit() {
+    Kit.stats.end('quit');
     J.back();
     if (cur.endless) toTitle(); else toMap();
   }
@@ -262,14 +268,16 @@
       if (best) save.far = r.distance;
       persist();
       if (!cur.code) ddaRun.result(D.outcome(r));
+      Kit.stats.end('end', r.distance);
       result = { endless: true, won: false, r: r, best: best && far > 0, distance: r.distance, items: D.unlocks(before, save.bank) };
     } else {
       var i = cur.level, st = D.stars(r), prev = save.stars[i], prevBest = save.best[i];
       if (st > prev) save.stars[i] = st;
       if (r.finished && r.eggs > prevBest) save.best[i] = r.eggs;
-      if (r.finished && i === 0 && !save.coach) save.coach = true;
+      if (r.finished && i === 0 && !save.coach) { save.coach = true; Kit.stats.tutorial('done'); }
       persist();
       ddaMain.result(D.outcome(r));
+      Kit.stats.end(r.finished ? 'win' : 'lose', r.eggs);
       result = { endless: false, won: r.finished, r: r, stars: st, best: r.finished && prevBest > 0 && r.eggs > prevBest, items: D.unlocks(before, save.bank),
         next: i < 14 && D.isOpen(save, i + 1) };
     }
@@ -446,6 +454,7 @@
         case 'jump': inputJumps++; J.jump(0.6); view.kick('jump'); view.burst(world.x - 0.2, 0.05, 0, { count: 5, colors: [0xffffff, 0xf0e0c0], speed: 1.6, up: 0.2, life: 0.4, size: 0.13, gravity: 2 }); break;
         case 'land': J.land(e.power * 0.7); view.kick('land', e.power); if (e.power > 0.35) view.burst(world.x, 0.05, 0, { count: 8, colors: [0xffffff, 0xf0e0c0], speed: 2, up: 0.15, life: 0.45, size: 0.14, gravity: 2 }); break;
         case 'cue':
+          Kit.track.cue(); // an obstacle comes: the next jump, duck or dash is a reaction time
           coach.seen[e.kind] = (coach.seen[e.kind] || 0) + 1;
           if (e.kind === 'crate' && p.roar >= 1) showCoach('dash', e.id);
           else if (wantsCoach(e.kind)) { showCoach(e.kind === 'vine' || e.form === 'mid' ? 'duck' : 'jump', e.id); if (coach.bumped[e.kind]) coach.bumped[e.kind]--; }
@@ -453,11 +462,13 @@
           break;
         case 'clear':
           if (e.id === coach.id) hideCoach();
+          Kit.track.hit();
           streak++;
           if (streak % 6 === 0) { callout(PRAISE[Math.min(3, streak / 6 - 1)], world.x, p.y + 2.2); J.streak(Math.min(8, streak / 6 + 1)); }
           break;
         case 'smash':
           if (e.id === coach.id) hideCoach();
+          Kit.track.hit();
           o = obsById(e.id);
           J.impact(0.8); J.pop(1); view.shake(0.35);
           if (o) view.burst(o.x + o.w / 2, 0.6, 0, { count: 26, colors: e.kind === 'crate' ? [0xf2b248, 0xa45f22, 0xffe14d] : [0xffffff, 0xffd23f, 0x9a6236], speed: 5.5, up: 0.6, life: 0.9, size: 0.2, gravity: 12, vx: 3 });
@@ -466,11 +477,13 @@
           break;
         case 'bump':
           if (e.id === coach.id) hideCoach();
+          Kit.track.miss();
           coach.bumped[e.kind] = 2; streak = 0;
           J.impact(0.5); view.kick('bump'); view.shake(0.5);
           view.burst(world.x + 0.4, p.y + 1, 0, { count: 12, colors: BIT, speed: 3, life: 0.7, size: 0.12, gravity: 4 });
           break;
         case 'splash':
+          Kit.track.miss();
           coach.bumped.gap = 2; streak = 0; hideCoach();
           J.pop(0.9); J.land(0.8); view.kick('bump'); view.shake(0.4);
           view.burst(world.x, -0.1, 0, { count: 22, colors: [view.BIO[D.biomeAt(world, world.x)].goo, 0xffffff], speed: 4.5, up: 1.2, life: 0.8, size: 0.16, gravity: 10 });
@@ -497,8 +510,12 @@
   /* -------------------------------------------------------------- input */
   // A mouse click hands the keyboard back to the game; keyboard activation keeps focus.
   // The second click of a double click is dropped (it would land on the next screen).
+  // Until the 3D view is up (see init) the title's buttons only remember the press.
   function on(el, fn) {
-    el.addEventListener('click', function (e) { e.stopPropagation(); if (e.detail > 1) return; Kit.audio.unlock(); if (e.detail > 0) { el.blur(); focusGame(); } fn(e); });
+    el.addEventListener('click', function (e) {
+      e.stopPropagation(); if (e.detail > 1) return; Kit.audio.unlock(); if (e.detail > 0) { el.blur(); focusGame(); }
+      if (live) fn(e); else queued = function () { fn(e); };
+    });
   }
   on($('play'), play);
   on($('btn-endless'), function () { J.select(); openEndless(); });
@@ -539,7 +556,7 @@
 
   canvas.addEventListener('pointerdown', function (e) {
     focusGame();
-    if (e.button !== 0) return;
+    if (e.button !== 0 || !live) return;
     menuIdle = 0; hideGhost();
     if (mode === 'playing') { pointerJump = pointerTap = true; try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ } e.preventDefault(); }
     else if (mode === 'title' || mode === 'map' || mode === 'wardrobe' || mode === 'endless') { view.kick('hop'); J.jump(0.4); }
@@ -624,6 +641,9 @@
   function render() {
     if (!view || contextLost || (!dirty && mode === 'paused')) return;
     var now = performance.now();
+    // Software rendering paces its frames (view.mayDraw in art.js); the game itself keeps
+    // running at 60 steps a second.
+    if (!view.mayDraw(now, mode === 'playing')) return;
     if (mode === 'playing' && lastFrame && view.frameTime(now - lastFrame)) layout();
     lastFrame = now;
     if (mode !== 'paused' || snap) {
@@ -666,12 +686,27 @@
   canvas.addEventListener('webglcontextlost', function (e) { e.preventDefault(); contextLost = true; pause(false); $('context-notice').hidden = false; });
   canvas.addEventListener('webglcontextrestored', function () { contextLost = false; $('context-notice').hidden = true; snap = true; dirty = true; layout(); });
   if (document.fonts && document.fonts.load) document.fonts.load('700 40px Fredoka', 'رائع 5').then(function () { dirty = true; }, function () { /* fallback fonts */ });
-  var loop = null;
-  try {
-    view = D.createView(canvas);
-    view.calm = calm();
-    buildMap(); buildWardrobe(); dress();
-    layout(); toTitle(); render();
+  // Start-up runs in three steps, so the title is on screen and the page keeps answering
+  // while a software renderer works (a cold browser's first frames can keep the processor
+  // busy for seconds there):
+  //  1. now: the menus and the title, no 3D yet (the page's sky colour shows behind it);
+  //  2. after that first paint: the 3D view, its shaders and its first frame;
+  //  3. once the graphics card has finished that frame and the remaining shaders: the frame
+  //     loop, the test hook and Kit.ready, so none of that cost comes after the game says
+  //     it is ready.
+  // A title button pressed before step 3 runs then.
+  var loop = null, failed = false;
+  function fail(error) {
+    if (failed) return;
+    failed = true; live = false; queued = null;
+    if (loop) loop.stop();
+    for (var k in SCREENS) $(SCREENS[k]).hidden = true;
+    $('error-screen').hidden = false;
+    body.dataset.mode = 'error';
+    Kit.fail(error);
+  }
+  function guarded(fn) { return function () { if (failed) return; try { fn(); } catch (error) { fail(error); } }; }
+  function goLive() {
     window.Dino3DGame = {
       get mode() { return mode; },
       get state() { return snapshot(); },
@@ -682,12 +717,30 @@
       point: function (x, y, z) { var p = view.project(x, y, z || 0); return { x: p.x * window.innerWidth, y: p.y * window.innerHeight }; }
     };
     loop = Kit.loop(update, render);
+    live = true;
     Kit.ready();
+    if (queued) { var press = queued; queued = null; press(); }
+  }
+  // The portal gives up on a game that is not ready after 20 s, so a frame the graphics
+  // card has not finished after 8 s is not waited for any longer.
+  // The shaders the title does not show (eggs, fruit, dust, the night sky) are queued with
+  // the first frame, so the wait below covers them too: without background compiling
+  // (software WebGL) they would otherwise keep the graphics process, and so every frame
+  // after the game said it was ready, busy for seconds.
+  function firstFrame() { render(); view.compileRest(); view.whenDrawn(guarded(goLive), 8000); }
+  function start3D() {
+    view = D.createView(canvas);
+    view.calm = calm();
+    dress(); layout(); menuScene(D.LEVEL[D.nextLevel(save)].biome);
+    view.prepare(guarded(firstFrame));
+  }
+  try {
+    buildMap(); buildWardrobe(); layout(); titleScreen();
+    // After the next paint where frames are drawn; a hidden page gets no animation
+    // frames, so a timer starts it there.
+    var begun = false, begin = function () { if (!begun) { begun = true; setTimeout(guarded(start3D), 0); } };
+    requestAnimationFrame(begin); setTimeout(begin, 100);
   } catch (error) {
-    if (loop) loop.stop();
-    for (var k in SCREENS) $(SCREENS[k]).hidden = true;
-    $('error-screen').hidden = false;
-    body.dataset.mode = 'error';
-    Kit.fail(error);
+    fail(error);
   }
 })();

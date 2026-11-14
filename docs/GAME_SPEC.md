@@ -4,7 +4,7 @@ Players are **children aged 6–11** (1st to 5th grade) on **old Windows school 
 and keyboard**, at school, as a reward. A 6-year-old who has barely used a mouse and an 11-year-old
 expert play the same games, so every game scales (see "Kit v2 for game authors"). Every game is
 **original and written from scratch** for this site: no copied code or art, no ads, no network
-calls, no links to other sites. The platform contract is [`ARCHITECTURE.md`](ARCHITECTURE.md);
+calls from games, no links to other sites. The platform contract is [`ARCHITECTURE.md`](ARCHITECTURE.md);
 where the two disagree, it wins.
 
 **Board games:** Connect 4 (`connect-four`) and tic-tac-toe (`tic-tac-toe`) offer
@@ -74,8 +74,12 @@ not loaded by other games.
    The whole site has to work when someone double-clicks `index.html` from a folder (`file://`).
    Put level data in JS files or inline.
 2. **Nothing external.** No CDNs, web fonts from the internet, online or third-party analytics,
-   iframes or links out. **Nothing on the site uses the network, and nothing records how
-   children play:** no statistics, telemetry, analytics or reporting of any kind.
+   iframes or links out. **The one exception is anonymous play statistics**
+   ([`TELEMETRY.md`](TELEMETRY.md)): the portal's sender (`js/telemetry.js`) may send what is
+   played on a PC, never who plays it, to the school's own statistics server, and only when the
+   fast build sets that server's address (`SG_TELEMETRY_URL`). Never names, accounts,
+   profiles, ages or age bands, and nothing typed. Nothing else on the site uses the network:
+   games report only to the portal, through `Kit.stats` and `Kit.track` (below).
    All art is drawn in code (canvas, SVG, CSS, three.js geometry). Sound is synthesized with
    WebAudio (`Kit.juice`, `Kit.sfx` / `Kit.audio.tone` / `Kit.audio.noise`, or your own synth code).
 3. **Kid-safe.** Cartoon only: no blood, gore, realistic guns, scary horror, bad words, romance or chat.
@@ -232,6 +236,33 @@ fine: repeats within 25 ms are dropped and at most 14 voices sound at once):
 `jump(h 0..1)`, `land(power 0..1)`, `star(1..3)`, `levelUp()`, `fail()`, `countdown(3, 2, 1, 0)`.
 It has no music API (rule 11).
 
+**Play statistics: `Kit.stats` and `Kit.track`.** Every game reports its rounds, in the UI
+layer only (engines, levels and simulations never report; their Node tests load a stub Kit).
+Kit keeps the numbers in memory and posts them to the portal only while the portal says its
+anonymous statistics sender is on; everything is safe standalone, before `Kit.ready()` and
+with odd arguments.
+
+```js
+Kit.stats.round('L' + (level + 1));   // every real try starts a round: Play, Again, Restart, Next
+Kit.stats.end('win', stars);          // 'win', 'lose', 'draw', 'end' (no winner: endless runs and
+                                      // two children on one PC) or 'quit'; the score is optional
+Kit.stats.tutorial('start');          // a first-time coach shows; 'done' once the child has done it
+Kit.track.hit(); Kit.track.miss();    // what the game naturally counts as a success or a mistake
+Kit.track.cue();                      // something to press just appeared: the next key or click is a reaction time
+```
+
+* A round id names the try from the game's own list (`L3`, `w2-4`, `endless`, `cpu-easy`,
+  `duo`): letters, digits and `_ : . -`, at most 24 characters, never three digits in a row,
+  never typed text. A new `round()` while one is open quits the open one, and so does the page
+  going away; call `end('quit')` when the child leaves a round for a menu.
+* Never report demo, attract or replay modes or bots. `Kit.stats.busy()` keeps the engaged
+  time going while the child watches play (a wave, a celebration); games with their own frame
+  loop pass each frame time to `Kit.stats.frame(ms)`.
+* `tools/tests/telemetry-rules.test.mjs` checks that every catalog game reports its rounds and
+  that round ids are never typed text; `tools/tests/telemetry-catalog.test.mjs` plays each game
+  in the portal and expects a visit and a round.
+
 **Network.** Games never use the network: no `fetch`, beacons, sockets or remote addresses.
-Kit only talks to the portal (ready, warnings, failures and the Shift+Tab hand-off), and the
-portal sends nothing anywhere.
+Kit only talks to the portal (ready, warnings, failures, the Shift+Tab hand-off and the play
+statistics above). The portal's anonymous statistics sender is the only part of the site that
+sends anything, and only when the fast build gives it the school server's address.

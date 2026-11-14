@@ -396,7 +396,7 @@
     var points = (t.gold ? 5 : 1) * w.mult;
     w.score += points;
     w.ev.push({ t: 'pop', kind: t.kind, id: t.id, x: t.x, y: t.y, r: t.r, gold: t.gold, color: t.color, combo: w.combo,
-      mult: w.mult, points: points, by: by, big: !!t.big, type: t.type, br: t.br, critter: t.critter, home: t.home, code: t.code, cap: t.cap });
+      mult: w.mult, points: points, by: by, age: t.age, big: !!t.big, type: t.type, br: t.br, critter: t.critter, home: t.home, code: t.code, cap: t.cap });
     // A big bubble bursts into three little ones.
     if (t.big) {
       for (var i = 0; i < 3; i++) {
