@@ -1172,3 +1172,13 @@ sampling found the cause above (the graphics process at priority 10 using 3–3.
 runner's four cores), but each call blocked the test process for up to 20 s on a busy runner,
 and one that timed out was followed by a 12 s stall that failed the Pool Party case. The 3D
 cases still print the test process's longest event-loop delay.
+
+## Windows classroom check: Edge's graphics process below normal priority, 14 November 2026
+
+With Dino 3D's menus paced, `main` run 43535718530 still failed once in play: a Space press
+never reached the game while the test process was blocked for 4.6 s. The runner has no
+graphics card, so Edge draws WebGL on the processor in a graphics process at above-normal
+priority (10), while Edge's browser process, which delivers input and the test's commands,
+runs below normal (6). The classroom check now lowers the graphics process of its own Edge to
+below normal, once per browser after the WebGL warm-up, with an asynchronous PowerShell call
+that logs its result. The games are unchanged: on a classroom PC nothing competes with them.
