@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { execFile } from 'node:child_process';
 import { monitorEventLoopDelay } from 'node:perf_hooks';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { launchChromium } from './browser.mjs';
@@ -123,6 +124,31 @@ function traceSlowFrames() {
   }
 }
 
+// The Windows runner has no graphics card, so Edge draws WebGL on the processor (SwiftShader)
+// in a graphics process that runs above normal priority (10), while Edge's browser process,
+// which delivers key presses and this test's commands, runs below normal (6). A busy 3D game
+// then starved the browser process and this one for seconds: Dino 3D's title before its
+// menus were paced, and a Space press in play that never reached the game (main run
+// 43535718530, the test process blocked for 4.6 s). On a classroom PC nothing competes with
+// the game, so this lowers only the test's own Edge, once per browser after the WebGL warm-up
+// started its graphics process, to below normal: the same as the browser process. It does not
+// block this process (an asynchronous call with its own time limit), and a failure is logged,
+// not fatal.
+function lowerEdgeGraphicsPriority() {
+  if (process.platform !== 'win32') return Promise.resolve();
+  const script = "$n = 0; Get-CimInstance Win32_Process -Filter \"name='msedge.exe'\" | " +
+    "Where-Object { $_.CommandLine -like '*--type=gpu-process*' } | " +
+    "ForEach-Object { (Get-Process -Id $_.ProcessId).PriorityClass = 'BelowNormal'; $n++ }; " +
+    "'Edge graphics processes set to below normal priority: ' + $n";
+  return new Promise(resolve => {
+    execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { timeout: 60000, windowsHide: true },
+      (error, stdout) => {
+        console.log(error ? 'Edge graphics priority unchanged: ' + String(error.message || error).split('\n')[0] : String(stdout).trim());
+        resolve();
+      });
+  });
+}
+
 // The 3D cases print the test process's longest event-loop delay even when they pass: the
 // Windows runner's graphics process runs above normal priority and can starve everything
 // else (docs/PERFORMANCE.md, Dino 3D on software rendering).
@@ -137,6 +163,7 @@ try {
     const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, serviceWorkers: 'block', reducedMotion: 'reduce', offline: true });
     try {
       await warmUpWebGL(context);
+      await lowerEdgeGraphicsPriority();
       await context.addInitScript(traceSlowFrames);
       if (deniedStorage) {
         await context.addInitScript(() => {
