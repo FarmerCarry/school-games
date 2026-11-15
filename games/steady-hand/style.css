@@ -4,6 +4,7 @@
 html, body { background: #0b1240; }
 .defs { position: absolute; width: 0; height: 0; overflow: hidden; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+#bg { pointer-events: none; }
 #game { touch-action: none; }
 #game.grab { cursor: grab; }
 #game.held { cursor: none; }

@@ -489,6 +489,34 @@ test('telemetry: a round still open when the page goes away ends as a quit, unle
   assert.equal(eventsOf(h).length, 3, 'nothing more for that round');
 });
 
+test('telemetry: Kit._flush drains unacknowledged posts and fresh deltas synchronously without duplicate posts or pause skew', () => {
+  const flush = (x, q) => JSON.parse(JSON.stringify(x.Kit._flush(q)));
+  const {h, clock} = on({clock: {now: 1000}});
+  h.Kit.stats.round('L1');
+  h.window.emit('pointerdown', {button: 0, timeStamp: 990});
+  clock.now = 2000; runTimers(h); telemetryOf(h).forEach(() => h.Kit._ack());          // delivered postMessages are acknowledged
+  clock.now = 3500; h.Kit.stats.frame(16);
+  const before = telemetryOf(h).length;
+  const [inFlight0, hidden] = flush(h, false);
+  assert.equal(telemetryOf(h).length, before, 'synchronous drain does not also postMessage');
+  assert.deepEqual([inFlight0.length, hidden.length, hidden[0].e, hidden[0].f], [0, 1, 1500, [1, 0, 0, 0]]);
+  // The child's own visibilitychange still sees the open window and counts the pause once.
+  h.document.hidden = true; h.document.emit('visibilitychange'); h.document.hidden = false;
+  h.Kit._ack();
+  // A child blur right before parent unload posts asynchronously; _flush(true) captures that unacked post + the quit.
+  clock.now = 5000; h.window.emit('keydown', {code: 'Space'});
+  clock.now = 7000; h.Kit.stats.frame(16); h.window.emit('blur');
+  const [inFlight1, unloaded] = flush(h, true);
+  const postedAfterBlur = telemetryOf(h).length;
+  h.window.emit('pagehide', {persisted: false});
+  assert.equal(telemetryOf(h).length, postedAfterBlur, 'child pagehide after synchronous drain sends no duplicate');
+  assert.deepEqual([inFlight1.length, inFlight1[0].e, inFlight1[0].f], [1, 2000, [1, 0, 0, 0]]);
+  assert.deepEqual(unloaded.flatMap(m => m.ev), [['rx', 6000, 2, 0, 2, 0, 0, -1], ['re', 'q', 'L1', 4500, -1, 0, 0, 0, zeros]]);
+  const off = harness({clock});
+  off.Kit.ready(); preferences(off, {telemetry: false}); off.Kit.stats.round('L1');
+  assert.deepEqual(flush(off, true), [[], []], 'telemetry: false returns empty');
+});
+
 test('telemetry: input latency is performance.now() minus the event time, only for a valid time within 0..1000 ms', () => {
   const {h} = on({clock: {now: 5000}});
   const press = timeStamp => h.window.emit('keydown', {code: 'KeyA', timeStamp});

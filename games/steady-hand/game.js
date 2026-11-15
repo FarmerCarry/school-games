@@ -6,13 +6,14 @@
   'use strict';
   const A = SH.art, J = Kit.juice, W = SH.W, H = SH.H;
   const $ = id => document.getElementById(id);
-  const canvas = $('game'), ui = $('ui');
+  const bg = $('bg'), bgCtx = bg.getContext('2d', { alpha: false }), canvas = $('game'), ui = $('ui');
   const calm = () => Kit.motion.reduced();
   const clamp = Kit.clamp;
-  let dirty = true;
+  let dirty = true, bgSrc = null, shOn = false;
   const ptr = { x: W / 2, y: H / 2, inside: false, down: false, l: 0, t: 0, s: 1, r: [], h: 0 };
   const view = Kit.fit(canvas, W, H, { maxDpr: 1.5, onResize: v => {
     ptr.l = parseInt(canvas.style.left) || 0; ptr.t = parseInt(canvas.style.top) || 0; ptr.s = 1 / v.scale;
+    bg.style.cssText = canvas.style.cssText; bg.width = canvas.width; bg.height = canvas.height; bgSrc = null;
     ui.style.left = canvas.style.left; ui.style.top = canvas.style.top; ui.style.transform = 'scale(' + v.scale + ')'; dirty = true;
   } });
   const fx = Kit.particles(), shake = Kit.shake();
@@ -54,7 +55,8 @@
   }
   const focusGame = () => { try { canvas.focus({ preventScroll: true }); } catch (e) { /* ignore */ } };
   const say = t => { $('live').textContent = t; };
-  const chip = (id, n) => { $(id).querySelector('b').textContent = String(n); };
+  const mk = t => document.createElement(t), cls = (el, c, v) => el.classList.toggle(c, v), aria = (el, s) => el.setAttribute('aria-label', s), qB = id => $(id).querySelector('b');
+  const chip = (id, n) => { qB(id).textContent = String(n); };
   let cursorNow = '';
   const cursor = c => { if (c !== cursorNow) { cursorNow = c; canvas.className = c; } };
   const wiggle = el => { el.classList.remove('wiggle'); void el.offsetWidth; el.classList.add('wiggle'); setTimeout(() => el.classList.remove('wiggle'), 500); };
@@ -76,11 +78,11 @@
   function buildMap() {
     const box = $('worlds');
     SH.WORLDS.forEach((wd, wi) => {
-      const row = document.createElement('div');
+      const row = mk('div');
       row.className = 'wrow'; row.style.setProperty('--wc', wd.color);
       row.innerHTML = '<div class="wname"><i>العالم ' + (wi + 1) + '</i><b>' + wd.name + '</b></div>';
       for (let k = 0; k < 6; k++) {
-        const i = wi * 6 + k, b = document.createElement('button');
+        const i = wi * 6 + k, b = mk('button');
         b.type = 'button'; b.className = 'sh-btn lvl';
         b.innerHTML = '<b>' + (k + 1) + '</b><span class="st">' + '<svg><use href="#i-star"/></svg>'.repeat(3) + '</span><svg class="lk" aria-hidden="true"><use href="#i-lock"/></svg>';
         on(b, () => pickLevel(i, b));
@@ -94,12 +96,12 @@
     const next = SH.nextLevel(save);
     levelBtns.forEach((b, i) => {
       const open = SH.isOpen(save, i), st = save.lv[i].s, R = SH.LEVELS[i];
-      b.classList.toggle('locked', !open);
-      b.classList.toggle('next', open && i === next);
-      b.querySelectorAll('.st svg').forEach((s, k) => s.classList.toggle('on', k < st));
-      b.setAttribute('aria-label', R.id + ' ' + R.name + (open ? '، ' + st + ' من 3 نجوم' : ' (مقفلة)'));
+      cls(b, 'locked', !open);
+      cls(b, 'next', open && i === next);
+      b.querySelectorAll('.st svg').forEach((s, k) => cls(s, 'on', k < st));
+      aria(b, R.id + ' ' + R.name + (open ? '، ' + st + ' من 3 نجوم' : ' (مقفلة)'));
     });
-    rows.forEach((r, wi) => r.classList.toggle('locked', !SH.isOpen(save, wi * 6)));
+    rows.forEach((r, wi) => cls(r, 'locked', !SH.isOpen(save, wi * 6)));
     chip('mapStars', SH.totalStars(save) + '/' + SH.LEVELS.length * 3);
   }
   function toMap() {
@@ -118,7 +120,7 @@
   function buildShop() {
     [['color', SH.COLORS, 'shelfColors'], ['trail', SH.TRAILS, 'shelfTrails']].forEach(([kind, list, id]) => {
       list.forEach((item, k) => {
-        const b = document.createElement('button');
+        const b = mk('button');
         b.type = 'button'; b.className = 'sh-btn tile';
         b.innerHTML = '<canvas width="232" height="232"></canvas><b>' + item.name + '</b><span class="price"><i class="coin"></i><em>' + item.price + '</em></span>';
         on(b, () => buy(kind, k, b));
@@ -142,10 +144,10 @@
       const own = kind === 'trail' ? save.trails : save.colors, wear = kind === 'trail' ? save.trail : save.color, list = kind === 'trail' ? SH.TRAILS : SH.COLORS;
       tiles[kind].forEach((b, k) => {
         drawTile(kind, k, b.querySelector('canvas'));
-        b.classList.toggle('own', !!own[k]);
-        b.classList.toggle('wear', wear === k);
-        b.classList.toggle('poor', !own[k] && save.coins < list[k].price);
-        b.setAttribute('aria-label', list[k].name + (wear === k ? ' (تلبسه الشرارة)' : own[k] ? '' : '، السعر ' + list[k].price));
+        cls(b, 'own', !!own[k]);
+        cls(b, 'wear', wear === k);
+        cls(b, 'poor', !own[k] && save.coins < list[k].price);
+        aria(b, list[k].name + (wear === k ? ' (تلبسه الشرارة)' : own[k] ? '' : '، السعر ' + list[k].price));
       });
     });
     chip('shopCoins', save.coins);
@@ -525,9 +527,11 @@
     if (world.held && !still) A.glow(ctx, p.x, p.y, 50, col.glow, 0.55);
     A.spark(ctx, p.x, p.y - hop, { col: col, face: face, lx: vx / 300, ly: vy / 300, t: time, still: still, blink: blink > 0 && !world.held, scale: scale });
   }
+  const setBg = src => { if (bgSrc !== src) { bgSrc = src; bgCtx.drawImage(src, 0, 0, bg.width, bg.height); } }, pic = A.pic;
+  let doorC = null, doorPs = 0, hudC = null, hudKey = '', introC = null, introKey = '';
   function drawWorld(ctx) {
-    const L = world.L, still = calm(), t = world.t;
-    ctx.drawImage(A.track(L, pixelScale()), 0, 0, W, H);
+    const L = world.L, still = calm(), t = world.t, ps = pixelScale();
+    setBg(A.track(L, ps));
     A.pulses(ctx, L, t);
     L.cps.forEach((cp, i) => A.lantern(ctx, cp, i <= world.cp, time, still, cpPop[i]));
     L.coins.forEach((c, i) => { if (!world.coins[i]) A.coin(ctx, c.x, c.y, time, still); });
@@ -535,7 +539,7 @@
     L.gates.forEach((d, i) => {
       const a = world.gates[i].a;
       A.door(ctx, d, a, time, still);
-      if (a < 0.5 && doorIcons[i]) doorHint(ctx, doorIcons[i], hint && hint.kind === 'door' && hint.i === i ? 1.25 : 1, still);
+      if (a < 0.5 && doorIcons[i]) doorHint(ctx, doorIcons[i], hint && hint.kind === 'door' && hint.i === i ? 1.25 : 1, still, ps);
     });
     L.obs.forEach(o => { if (o.k === 'slide') A.slide(ctx, o, t); else A.spin(ctx, o, t); });
     A.bulb(ctx, L.end.x, L.end.y, Math.max(24, L.end.hw * 0.62), L.end.tx, L.end.ty, world.done, time, still);
@@ -543,15 +547,18 @@
     if (coach.on) drawCoach(ctx, still);
     drawSpark(ctx, still);
     drawFx(ctx, still);
-    drawHud(ctx, still);
+    drawHud(ctx, still, ps);
   }
-  function doorHint(ctx, p, k, still) {
+  function doorHint(ctx, p, k, still, ps) {
+    if (!doorC || doorPs !== ps) {
+      let g; [doorC, g] = pic(doorC, 148, 76, doorPs = ps);
+      g.translate(74, 38);
+      A.rr(g, -70, -34, 140, 68, 22); g.fillStyle = 'rgba(10,14,44,0.82)'; g.fill(); g.lineWidth = 3; g.strokeStyle = '#ff9f1c'; g.stroke();
+      A.mouseIcon(g, -40, 4, 0.5, true, '#ff9f1c');
+      A.keycap(g, 24, 6, 'مسافة', 78);
+    }
     const b = still ? 0 : Math.sin(time * 5) * 3;
-    ctx.save(); ctx.translate(p.x, p.y + b); ctx.scale(k, k);
-    A.rr(ctx, -70, -34, 140, 68, 22); ctx.fillStyle = 'rgba(10,14,44,0.82)'; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = '#ff9f1c'; ctx.stroke();
-    A.mouseIcon(ctx, -40, 4, 0.5, true, '#ff9f1c');
-    A.keycap(ctx, 24, 6, 'مسافة', 78);
-    ctx.restore();
+    ctx.drawImage(doorC, p.x - 74 * k, p.y + b - 38 * k, 148 * k, 76 * k);
   }
   function drawFx(ctx, still) {
     fx.draw(ctx);
@@ -600,42 +607,51 @@
     A.hand(ctx, x, y + 6, press, alpha * 0.95);
   }
   const hudFont = n => '700 ' + n + 'px Fredoka';
-  function drawHud(ctx, still) {
+  function drawHud(ctx, still, ps) {
     const L = world.L, wd = SH.WORLDS[L.world], mode = L.mode === 'drag' ? 'اضغط واسحب' : 'بلا ضغط', par = '/' + L.par;
     const mW = (n, s) => (ctx.font = hudFont(n), ctx.measureText(s).width);
     if (!hudW) hudW = [mW(20, par), mW(34, L.R.name), mW(26, mode)];
     // The pill at the top, read right to left: the level, the touches, the coins, the
-    // clock (green while the time star can still be won). Each icon has its number on its left.
-    const x0 = 404, w = 472, R = x0 + w;
-    A.rr(ctx, x0, 10, w, 58, 29); ctx.fillStyle = 'rgba(10,14,44,0.82)'; ctx.fill(); ctx.lineWidth = 4; ctx.strokeStyle = wd.color; ctx.stroke();
-    A.rr(ctx, R - 92, 16, 84, 46, 23); ctx.fillStyle = wd.color; ctx.fill();
-    A.text(ctx, L.R.id, R - 50, 40, 30, A.INK, { stroke: false });
-    ctx.save(); ctx.translate(R - 116, 39); ctx.scale(0.55, 0.55);
-    ctx.beginPath(); ctx.moveTo(6, -28); ctx.lineTo(-20, 4); ctx.lineTo(-3, 4); ctx.lineTo(-10, 28); ctx.lineTo(20, -8); ctx.lineTo(2, -8); ctx.closePath();
-    ctx.fillStyle = world.touches ? A.HOT : '#ffd23f'; ctx.fill(); ctx.lineWidth = 5; ctx.strokeStyle = '#fff'; ctx.stroke();
-    ctx.restore();
-    A.text(ctx, String(world.touches), R - 134, 40, 30, world.touches ? '#ffb3c6' : '#fff', { align: 'right', stroke: false });
-    if (L.coins.length) {
-      A.coin(ctx, R - 214, 39, 0, true);
-      A.text(ctx, world.got + '/' + L.coins.length, R - 236, 40, 28, '#ffe98a', { align: 'right', stroke: false });
+    // clock (green while the time star can still be won). Cached between whole-second ticks.
+    const x0 = 404, w = 472, R = x0 + w, late = world.clock > L.par, tx = R - 330, sec = Math.floor(world.clock);
+    const hk = ps + '|' + L.i + '|' + world.touches + '|' + world.got + '|' + sec + '|' + (late ? 1 : 0);
+    if (hudKey !== hk) {
+      let g; [hudC, g] = pic(hudC, 480, 66, ps); hudKey = hk;
+      g.translate(-400, -6);
+      A.rr(g, x0, 10, w, 58, 29); g.fillStyle = 'rgba(10,14,44,0.82)'; g.fill(); g.lineWidth = 4; g.strokeStyle = wd.color; g.stroke();
+      A.rr(g, R - 92, 16, 84, 46, 23); g.fillStyle = wd.color; g.fill();
+      A.text(g, L.R.id, R - 50, 40, 30, A.INK, { stroke: false });
+      g.save(); g.translate(R - 116, 39); g.scale(0.55, 0.55);
+      g.beginPath(); g.moveTo(6, -28); g.lineTo(-20, 4); g.lineTo(-3, 4); g.lineTo(-10, 28); g.lineTo(20, -8); g.lineTo(2, -8); g.closePath();
+      g.fillStyle = world.touches ? A.HOT : '#ffd23f'; g.fill(); g.lineWidth = 5; g.strokeStyle = '#fff'; g.stroke();
+      g.restore();
+      A.text(g, String(world.touches), R - 134, 40, 30, world.touches ? '#ffb3c6' : '#fff', { align: 'right', stroke: false });
+      if (L.coins.length) {
+        A.coin(g, R - 214, 39, 0, true);
+        A.text(g, world.got + '/' + L.coins.length, R - 236, 40, 28, '#ffe98a', { align: 'right', stroke: false });
+      }
+      A.circle(g, tx, 39, 15); g.fillStyle = late ? '#8a90b8' : '#3ddc84'; g.fill(); g.lineWidth = 3; g.strokeStyle = '#fff'; g.stroke();
+      g.textAlign = 'right'; g.textBaseline = 'middle'; g.direction = 'ltr';
+      g.font = hudFont(20); g.fillStyle = 'rgba(255,255,255,0.55)'; g.fillText(par, tx - 22, 44);
+      g.font = hudFont(28); g.fillStyle = late ? '#9aa0c8' : '#fff'; g.fillText(String(sec), tx - 24 - hudW[0], 41);
     }
-    const late = world.clock > L.par, tx = R - 330;
-    A.circle(ctx, tx, 39, 15); ctx.fillStyle = late ? '#8a90b8' : '#3ddc84'; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = '#fff'; ctx.stroke();
+    ctx.drawImage(hudC, 400, 6, 480, 66);
     const ang = -Math.PI / 2 + Math.min(1, world.clock / L.par) * Math.PI * 2;
     ctx.beginPath(); ctx.moveTo(tx, 39); ctx.lineTo(tx + Math.cos(ang) * 10, 39 + Math.sin(ang) * 10); ctx.lineWidth = 3; ctx.strokeStyle = A.INK; ctx.stroke();
-    ctx.textAlign = 'right'; ctx.textBaseline = 'middle'; ctx.direction = 'ltr';
-    ctx.font = hudFont(20); ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.fillText(par, tx - 22, 44);
-    ctx.font = hudFont(28); ctx.fillStyle = late ? '#9aa0c8' : '#fff'; ctx.fillText(String(Math.floor(world.clock)), tx - 24 - hudW[0], 41);
     // The level's name and how it is played, for a moment at the start.
     if (intro > 0 && !world.done) {
+      const bw = Math.ceil(hudW[1] + hudW[2] + 130), bx = 640 - bw / 2, ik = ps + '|' + L.i + '|' + bw;
+      if (introKey !== ik) {
+        let g; [introC, g] = pic(introC, bw + 8, 76, ps); introKey = ik;
+        g.translate(4 - bx, 38);
+        A.rr(g, bx, -34, bw, 68, 34); g.fillStyle = 'rgba(10,14,44,0.86)'; g.fill(); g.lineWidth = 4; g.strokeStyle = wd.color; g.stroke();
+        A.text(g, L.R.name, bx + bw - 32, 1, 34, '#fff', { stroke: false, align: 'right' });
+        A.text(g, mode, bx + bw - 66 - hudW[1], 1, 26, L.mode === 'drag' ? '#ffd23f' : '#8dff5a', { stroke: false, align: 'right' });
+        A.mouseIcon(g, bx + 40, 4, 0.55, L.mode === 'drag', '#ffd23f');
+      }
       const a = Math.min(1, intro / 0.5, (2.6 - intro) / 0.25 + 0.2);
       ctx.globalAlpha = clamp(a, 0, 1);
-      const y = 112 + (still ? 0 : Math.max(0, intro - 2.3) * 60);
-      const bw = hudW[1] + hudW[2] + 130, bx = 640 - bw / 2;
-      A.rr(ctx, bx, y - 34, bw, 68, 34); ctx.fillStyle = 'rgba(10,14,44,0.86)'; ctx.fill(); ctx.lineWidth = 4; ctx.strokeStyle = wd.color; ctx.stroke();
-      A.text(ctx, L.R.name, bx + bw - 32, y + 1, 34, '#fff', { stroke: false, align: 'right' });
-      A.text(ctx, mode, bx + bw - 66 - hudW[1], y + 1, 26, L.mode === 'drag' ? '#ffd23f' : '#8dff5a', { stroke: false, align: 'right' });
-      A.mouseIcon(ctx, bx + 40, y + 4, 0.55, L.mode === 'drag', '#ffd23f');
+      ctx.drawImage(introC, bx - 4, 74 + (still ? 0 : Math.max(0, intro - 2.3) * 60), bw + 8, 76);
       ctx.globalAlpha = 1;
     }
     // "Hold the button here", after the spark stopped at a carry stretch.
@@ -651,31 +667,30 @@
   function drawMenu(ctx) {
     const still = calm(), ps = pixelScale();
     if (screen === 'title') {
-      ctx.drawImage(A.track(titleL, ps), 0, 0, W, H);
+      setBg(A.track(titleL, ps));
       const s = still ? titleL.len * 0.45 : (time * 170) % (titleL.len + 300) - 150, p = SH.at(titleL, clamp(s, 20, titleL.len - 20));
       A.bulb(ctx, titleL.end.x, titleL.end.y, 22, titleL.end.tx, titleL.end.ty, s >= titleL.len - 25, time, still);
       A.spark(ctx, p.x, p.y, { col: SH.COLORS[save.color], t: time, still: still, face: 'happy', lx: 1 });
-    } else {
-      const wd = screen === 'map' ? Math.floor(SH.nextLevel(save) / 6) : 3;
-      ctx.drawImage(A.backdrop(wd, ps), 0, 0, W, H);
-    }
+    } else setBg(A.backdrop(screen === 'map' ? Math.floor(SH.nextLevel(save) / 6) : 3, ps));
     fx.draw(ctx);
   }
   function render() {
     if (!dirty && (screen === 'pause' || screen === 'map' || screen === 'shop' || (screen === 'title' && calm()))) return;
     dirty = false;
-    const ctx = view.ctx;
-    ctx.save();
-    ctx.translate(shake.x, shake.y);
+    const ctx = view.ctx, sh = shake.power > 0;
+    if (sh || shOn) { shOn = sh; bg.style.translate = sh ? (shake.x * view.scale).toFixed(1) + 'px ' + (shake.y * view.scale).toFixed(1) + 'px' : ''; }
+    ctx.clearRect(0, 0, W, H);
+    if (sh) { ctx.save(); ctx.translate(shake.x, shake.y); }
     if (world && (screen === 'play' || screen === 'pause' || screen === 'result')) drawWorld(ctx);
     else drawMenu(ctx);
-    ctx.restore();
+    if (sh) ctx.restore();
   }
 
-  canvas.addEventListener('contextrestored', () => { A.reset(); hudW = null; dirty = true; if (screen === 'shop') refreshShop(); });
+  const flushPics = () => { hudW = doorC = null; hudKey = introKey = ''; dirty = true; if (screen === 'shop') refreshShop(); };
+  [canvas, bg].forEach(el => el.addEventListener('contextrestored', () => { A.reset(); bgSrc = null; flushPics(); }));
   if (document.fonts && document.fonts.load) {
     // Text drawn into cached pictures is drawn again once the font is there.
-    document.fonts.load('700 40px Fredoka', 'سلك 5').then(() => { hudW = null; dirty = true; if (screen === 'shop') refreshShop(); }, () => { /* fallback fonts */ });
+    document.fonts.load('700 40px Fredoka', 'سلك 5').then(flushPics, () => { /* fallback fonts */ });
   }
 
   /* --------------------------------------------------- test and debug hook */
