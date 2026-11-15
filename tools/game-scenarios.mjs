@@ -241,14 +241,15 @@ export const scenarios = {
   // Restart puts the kid back on the doorstep with no egg hatched.
   'egg-rush': defaults(['#btnPlay'], `${g}.screen==='play'`, `[${g}.px,${g}.py,${g}.time,${g}.hatched,${g}.guards]`, hold('ArrowRight'), '#btnPause', `${g}.screen==='pause'`, '#btnRestart', `${g}.screen==='play' && ${g}.atStart && ${g}.hatched===0 && !${g}.intro`),
   // Seek and Zoom: a first visit opens the park's first round with the whole scene fixed
-  // on screen. Holding an arrow key (or clicking #btnLens / turning the wheel) brings out
-  // and moves the magnifying glass lens; Restart starts the round again with the lens off.
+  // on screen and the magnifying glass always visible. Holding an arrow key (or moving the
+  // pointer / turning the wheel) moves and zooms the lens; Restart starts the round again
+  // with the lens at zmin.
   'seek-zoom': defaults(['#btnPlay'], `${g}.state.screen === 'play'`, `[${g}.state.time,${g}.state.lens,${g}.state.found,${g}.state.movers]`, async page => {
-    if (!(await page.evaluate(() => window.__game.state.lens.on))) await click('#btnLens')(page);
     const t = Date.now() / 400, x = Math.round(660 + Math.cos(t) * 300), y = Math.round(330 + Math.sin(t * 1.3) * 150);
     const p = await page.evaluate(([lx, ly]) => window.__game.point(lx, ly), [x, y]);
     await page.mouse.move(p.x, p.y, { steps: 5 });
-  }, '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.found === 0 && ${g}.state.moves === 0 && !${g}.state.lens.on`),
+    await page.mouse.wheel(0, -80);
+  }, '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.found === 0 && ${g}.state.moves === 0 && ${g}.state.lens.on && ${g}.state.lens.z === ${g}.state.zmin`),
   // Steady Hand: a first visit goes straight to the first wire. The spark moves only when
   // the child presses on it and drags it along the track with the real mouse; Restart puts
   // it back on its start with no touch and nothing dragged.

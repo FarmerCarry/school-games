@@ -197,14 +197,13 @@ stamp the day. Each new shortcut gets a short demo with big keycaps; five worlds
 with timed rushes. Shortcuts work by key position, so Ctrl+C works with Arabic input; browser keys
 such as Ctrl+W are never used.
 
-**ابحث وكبّر (Seek & Zoom)** is a hidden-object game with a movable magnifying glass over a fixed
-full-screen world. Five busy scenes drawn in code (park, market, beach, toy room, space station)
-list things to find as pictures with short words: toggle the magnifying glass or scroll the wheel to
-magnify under the pointer, move the lens to inspect, and click to find. The first rounds have large
-targets on the full scene, later ones tiny things in crowds, moving animals, and toy boxes and
-hatches that open inside the lens; the space station has timed rounds. The wheel never scrolls or
-zooms the page; L, + / − and arrow keys work too, a lightbulb button gives instant hints, and
-stickers go into a sticker book.
+**ابحث وكبّر (Seek & Zoom)** is a hidden-object game with an always-visible movable magnifying glass
+over a fixed full-screen world. Five busy scenes drawn in code (park, market, beach, toy room, space
+station) list things to find as pictures with short words: move the magnifying glass to inspect,
+scroll the wheel to magnify under the pointer, and click to find. The first rounds have large targets
+on the full scene, later ones tiny things in crowds, moving animals, and toy boxes and hatches that
+open inside the lens; the space station has timed rounds. The wheel never scrolls or zooms the page;
++ / − and arrow keys work too, a lightbulb button gives instant hints, and stickers go into a sticker book.
 
 **سلك الشرارة (Steady Hand)** trains careful mouse control: press on a glowing spark and drag it
 along neon wire tracks to light a lamp. Touching the edge gives a funny "bzzt" and sends it back to
