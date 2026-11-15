@@ -1197,7 +1197,8 @@ Measured with the Linux minified build, against the previous commit built the sa
 | Measurement | Before bytes | After bytes | Before limit | New limit |
 | --- | ---: | ---: | ---: | ---: |
 | Shortcut Factory page | 124,454 | 125,909 | 124,500 | 126,000 |
-| Offline precache | 6,797,579 | 6,799,034 | 6,798,000 | 6,800,000 |
+| Offline precache | 6,799,827 | 6,801,282 | 6,801,000 | 6,802,000 |
 
+The cache is measured after merging the Seek & Zoom update (#97), whose cache limit it shares.
 Both limits are the measured size rounded up (the game to the next 500 bytes, the cache to the
 next 1,000).

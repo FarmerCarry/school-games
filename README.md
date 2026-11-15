@@ -33,7 +33,7 @@ nothing. Details, the exact fields and how to turn it off: [`docs/TELEMETRY.md`]
 | Game | English name | Players | Type |
 |---|---|---|---|
 | فقاعات بوب | Bubble Bop (first game for new mouse users) | 1 | نقطة البداية، أركيد |
-| ابحث وكبّر | Seek & Zoom (hidden objects: zoom with the mouse wheel, drag, click) | 1 | ألغاز |
+| ابحث وكبّر | Seek & Zoom (hidden objects: movable magnifying glass, mouse wheel, click) | 1 | ألغاز |
 | سلك الشرارة | Steady Hand (guide a spark along wires with the mouse) | 1 | تحديات، أركيد |
 | أربعة على التوالي | Connect 4 | 1-2 | ألغاز، لاعبان على نفس الجهاز |
 | إكس أو | Tic-tac-toe | 1-2 | ألغاز، لاعبان على نفس الجهاز |
@@ -201,13 +201,14 @@ of toy at a time with one box on the floor, and Ctrl+S waits for its last day. T
 worlds end with timed rushes. Shortcuts work by key position, so Ctrl+C works with Arabic input;
 browser keys such as Ctrl+W are never used.
 
-**ابحث وكبّر (Seek & Zoom)** is a hidden-object game for the mouse wheel and dragging. Five big
-scenes drawn in code (park, market, beach, toy room, space station) list things to find as pictures
-with short words: scroll the wheel to zoom around the pointer, drag to look around, click to find.
-The first rounds need only dragging, later ones tiny things in crowds, moving animals, and toy boxes
-and hatches that open when you zoom in; the space station has timed rounds. The wheel never scrolls
-or zooms the page; + / − buttons and keys work too, and a magnifying-glass hint helps. Stickers go
-into a sticker book.
+**ابحث وكبّر (Seek & Zoom)** is a hidden-object game with a movable magnifying glass over a fixed
+full-screen world. Five busy scenes drawn in code (park, market, beach, toy room, space station)
+list things to find as pictures with short words: toggle the magnifying glass or scroll the wheel to
+magnify under the pointer, move the lens to inspect, and click to find. The first rounds have large
+targets on the full scene, later ones tiny things in crowds, moving animals, and toy boxes and
+hatches that open inside the lens; the space station has timed rounds. The wheel never scrolls or
+zooms the page; L, + / − and arrow keys work too, a lightbulb button gives instant hints, and
+stickers go into a sticker book.
 
 **سلك الشرارة (Steady Hand)** trains careful mouse control: press on a glowing spark and drag it
 along neon wire tracks to light a lamp. Touching the edge gives a funny "bzzt" and sends it back to

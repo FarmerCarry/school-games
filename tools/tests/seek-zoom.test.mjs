@@ -1,7 +1,7 @@
-// Seek and Zoom in real Chromium: the real mouse wheel (and Ctrl+wheel) zooms the game
-// around the pointer and never the page; drags pan; clicks find things (or count as
-// wrong clicks); whole rounds, the result, stickers, hints, timed rounds, pause, restart,
-// saves (and a full disk), reduced motion and the smaller portal frame.
+// Seek and Zoom in real Chromium: the world stays fixed full-screen (never dragged);
+// the magnifying glass button, keys and mouse wheel (and Ctrl+wheel) control the movable
+// lens without scrolling or zooming the page; clicks find things through or outside the
+// lens; whole rounds, stickers, instant lightbulb hints, timed rounds, pause, saves and fit.
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import path from 'node:path';
@@ -88,8 +88,14 @@ const run = (page, n) => page.evaluate(n => sz.run(n), n);
 // Page coordinates of a logical (1280x720) point, and of a scene point right now.
 const at = (page, x, y) => page.evaluate(([x, y]) => __game.point(x, y), [x, y]);
 const sceneAt = (page, x, y) => page.evaluate(([x, y]) => __game.world(x, y), [x, y]);
-// The scene point under logical screen point (x, y), from the camera the game reports.
-const under = (s, x, y) => ({ x: s.cam.x + (x - 640) / s.cam.z, y: s.cam.y + (y - 360) / s.cam.z });
+// The scene point under logical screen point (x, y), accounting for an active lens.
+const under = (s, x, y) => {
+  if (s.lens && s.lens.on && Math.hypot(x - s.lens.x, y - s.lens.y) <= s.lens.r) {
+    const wx = s.cam.x + (s.lens.x - 640) / s.cam.z, wy = s.cam.y + (s.lens.y - 360) / s.cam.z;
+    return { x: wx + (x - s.lens.x) / s.lens.z, y: wy + (y - s.lens.y) / s.lens.z };
+  }
+  return { x: s.cam.x + (x - 640) / s.cam.z, y: s.cam.y + (y - 360) / s.cam.z };
+};
 async function dragBy(page, x, y, dx, dy) {
   const a = await at(page, x, y), b = await at(page, x + dx, y + dy);
   await page.mouse.move(a.x, a.y);
@@ -114,27 +120,21 @@ async function openRound(page, i) {
   assert.equal(s.screen, 'play'); assert.equal(s.index, i);
 }
 const skipIntro = async page => { await page.keyboard.press('Enter'); await step(page, 2); };
-// Drags the scene until a scene point is in the free middle of the screen.
-async function bring(page, x, y) {
-  for (let i = 0; i < 10; i++) {
-    const s = await state(page), sx = 640 + (x - s.cam.x) * s.cam.z, sy = 360 + (y - s.cam.y) * s.cam.z;
-    if (sx > 170 && sx < 1150 && sy > 120 && sy < 560) return true;
-    await dragBy(page, 660, 330, Math.max(-420, Math.min(420, 660 - sx)), Math.max(-240, Math.min(240, 330 - sy)));
-  }
-  return false;
-}
-// Finds one thing like a child: drags it into view, zooms in on it with the wheel, clicks.
+// Finds one thing like a child: moves over its spot on the fixed scene, magnifies if needed, clicks.
 async function find(page, it) {
-  assert.ok(await bring(page, it.x, it.y), `${it.k} brought into view`);
-  for (let i = 0; i < 12; i++) {
-    const s = await state(page);
-    if (s.cam.z >= it.need + 0.02 || s.cam.z >= s.zmax) break;
-    const p = 640 + (it.x - s.cam.x) * s.cam.z, q = 360 + (it.y - s.cam.y) * s.cam.z;
-    await wheelAt(page, p, q, -100);
+  for (let i = 0; i < 14; i++) {
+    const s = await state(page), cur = (await items(page)).find(x => x.id === it.id);
+    const z = s.lens.on ? s.lens.z : s.cam.z;
+    if (z >= cur.need + 0.02 || z >= s.zmax) break;
+    const sx = 640 + (cur.x - s.cam.x) * s.cam.z, sy = 360 + (cur.y - s.cam.y) * s.cam.z;
+    await wheelAt(page, sx, sy, -100);
     await step(page, 2);
   }
-  const now = (await items(page)).find(x => x.id === it.id);
-  const p = await sceneAt(page, now.x, now.y);
+  const s = await state(page), now = (await items(page)).find(x => x.id === it.id);
+  const sx = 640 + (now.x - s.cam.x) * s.cam.z, sy = 360 + (now.y - s.cam.y) * s.cam.z;
+  const p = await at(page, sx, sy);
+  await page.mouse.move(p.x, p.y);
+  await step(page);
   await page.mouse.click(p.x, p.y);
   await step(page);
 }
@@ -146,94 +146,113 @@ async function findAll(page) {
   }
 }
 
-test('the title waits; Play opens the park\'s first round, where the zoom is locked and a real drag pans', async t => {
+test('the title waits; Play opens the full fixed park, dragging never moves the world, and the magnifier and hint buttons work right away', async t => {
   const page = await game(t, { dda: TIER[1] });
   await step(page, 30);
   let s = await state(page);
   assert.equal(s.screen, 'title');
   assert.equal(await page.locator('#titleStars b').textContent(), '0/75');
+  assert.equal(await page.locator('#howLens').isVisible(), true);
+  assert.equal(await page.locator('#howClick').isVisible(), true);
   // On the title the wheel changes the magnifying glass, and the page never scrolls.
   await wheelAt(page, 900, 300, -100, 2);
   assert.ok((await state(page)).lensZ > 2.4 + 0.5);
   await page.locator('#btnPlay').click();
   await step(page);
   s = await state(page);
-  assert.equal(s.screen, 'play'); assert.equal(s.index, 0); assert.equal(s.locked, true);
-  assert.equal(s.cam.z, 1); assert.equal(s.intro, true); assert.equal(s.coach, 'drag');
-  assert.equal(s.tier, 1);
-  assert.equal(await page.locator('#zoomBox').isVisible(), false, 'no zoom buttons yet');
+  assert.equal(s.screen, 'play'); assert.equal(s.index, 0);
+  assert.deepEqual(s.cam, { x: 1280, y: 720, z: 0.5 }, 'the entire park stays fixed on screen');
+  assert.equal(s.intro, true); assert.equal(s.tier, 1);
+  assert.equal(await page.locator('#zoomBox').isVisible(), true);
+  assert.equal(await page.locator('#btnLens').isVisible(), true);
+  assert.equal(await page.locator('#btnHint').isVisible(), true);
   // The list shows big first; the clock waits for it.
   await step(page, 60);
   assert.equal((await state(page)).time, 0);
-  const before = (await state(page)).cam;
+  // Pressing the magnifier button immediately dismisses the intro and opens the movable lens.
+  await page.locator('#btnLens').click();
+  await step(page);
+  s = await state(page);
+  assert.equal(s.intro, false);
+  assert.equal(s.lens.on, true, 'the magnifying glass appears right away');
+  assert.ok(s.lens.z > s.zmin);
+  assert.equal(await page.locator('#btnLens').getAttribute('aria-pressed'), 'true');
+  await page.locator('#btnLens').click();
+  await step(page);
+  assert.equal((await state(page)).lens.on, false, 'pressing it again hides the lens');
+  assert.equal(await page.locator('#btnLens').getAttribute('aria-pressed'), 'false');
+  // Dragging across the scene never pans the world or counts a wrong click.
   await dragBy(page, 760, 380, -260, -80);
   s = await state(page);
-  assert.equal(s.intro, false, 'the drag closes the list and moves the scene at once');
-  assert.ok(Math.abs(s.cam.x - (before.x + 260)) < 1 && Math.abs(s.cam.y - (before.y + 80)) < 1, JSON.stringify([before, s.cam]));
-  assert.equal(s.moves, 1);
-  assert.equal(s.coach, '', 'the dragging hand goes once the child drags');
-  // The wheel does nothing to a locked round's zoom (it shows the dragging hand instead).
-  await wheelAt(page, 640, 360, -100, 3);
-  await step(page, 10);
-  assert.equal((await state(page)).cam.z, 1);
+  assert.deepEqual(s.cam, { x: 1280, y: 720, z: 0.5 }, 'the world never moves when dragged');
+  assert.equal(s.wrong, 0);
+  // Pressing the lightbulb button shows a hint immediately without waiting.
+  await page.locator('#btnHint').click();
+  await step(page);
+  assert.equal((await state(page)).hint, true, 'the lightbulb shows a hint immediately');
   assert.equal(await page.evaluate(() => scrollX + scrollY + document.scrollingElement.scrollTop + document.scrollingElement.scrollLeft), 0);
   // The clock runs now.
   await step(page, 60);
   assert.ok((await state(page)).time > 0.9);
 });
 
-test('the real mouse wheel zooms around the pointer, eased, and never scrolls the page; lines and tiny trackpad steps too', async t => {
+test('the real mouse wheel opens and zooms the magnifying glass over the pointer, eased, while the world stays fixed', async t => {
   const page = await game(t, { save: SAVE(2), dda: TIER[1], reducedMotion: 'no-preference' });
   await openRound(page, 2);
   await skipIntro(page);
   let s = await state(page);
-  assert.equal(s.locked, false); assert.equal(s.cam.z, s.zmin);
+  const fixedCam = s.cam;
+  assert.equal(s.cam.z, s.zmin); assert.equal(s.lens.on, false);
   // Zoom in on a spot in the middle of the screen, notch by notch.
-  const spot = [820, 300], w0 = under(s, ...spot), z0 = s.cam.z;
+  const spot = [820, 300], w0 = under(s, ...spot), z0 = s.zmin;
   await wheelAt(page, ...spot, -100);
   s = await state(page);
-  assert.ok(s.cam.z > z0 && s.cam.z < s.tz, `eases: ${s.cam.z} on the way to ${s.tz}`);
+  assert.equal(s.lens.on, true);
+  assert.deepEqual(s.cam, fixedCam, 'the world camera stays fixed');
+  assert.ok(s.lens.z > z0 && s.lens.z < s.tz, `eases: ${s.lens.z} on the way to ${s.tz}`);
   let w = under(s, ...spot);
-  assert.ok(Math.hypot(w.x - w0.x, w.y - w0.y) < 0.6, 'the point under the pointer stays put while easing');
+  assert.ok(Math.hypot(w.x - w0.x, w.y - w0.y) < 0.6, 'the point under the lens center stays put while easing');
   await step(page, 40);
   s = await state(page);
-  assert.ok(Math.abs(s.cam.z / z0 - Math.exp(100 * 0.0022)) < 0.01, `one notch is about x1.25: ${s.cam.z}`);
+  assert.ok(Math.abs(s.lens.z / z0 - Math.exp(100 * 0.0022)) < 0.01, `one notch is about x1.25: ${s.lens.z}`);
   w = under(s, ...spot);
   assert.ok(Math.hypot(w.x - w0.x, w.y - w0.y) < 0.6, 'and after');
   await wheelAt(page, ...spot, -100, 3);
   await step(page, 40);
   s = await state(page);
   w = under(s, ...spot);
-  assert.ok(s.cam.z > z0 * 2, 'four notches');
+  assert.ok(s.lens.z > z0 * 2, 'four notches');
   assert.ok(Math.hypot(w.x - w0.x, w.y - w0.y) < 0.6);
   assert.equal(await page.evaluate(() => scrollX + scrollY + document.scrollingElement.scrollTop + document.scrollingElement.scrollLeft), 0, 'the page never scrolls');
   assert.ok(Number.parseFloat(await page.locator('#zoomFill').evaluate(el => el.style.height)) > 30, 'the zoom bar fills');
   // A wheel that reports lines (three per notch) and 25 tiny trackpad steps zoom like a notch.
-  const z1 = s.cam.z;
+  const z1 = s.lens.z;
   await page.evaluate(([x, y]) => window.dispatchEvent(new WheelEvent('wheel', { deltaY: -3, deltaMode: 1, clientX: x, clientY: y, bubbles: true, cancelable: true })), [(await at(page, 640, 360)).x, (await at(page, 640, 360)).y]);
   await step(page, 40);
   s = await state(page);
-  assert.ok(Math.abs(s.cam.z / z1 - Math.exp(120 * 0.0022)) < 0.01, 'three lines');
-  const z2 = s.cam.z, mid = await at(page, 640, 360);
+  assert.ok(Math.abs(s.lens.z / z1 - Math.exp(120 * 0.0022)) < 0.01, 'three lines');
+  const z2 = s.lens.z, mid = await at(page, 640, 360);
   for (let i = 0; i < 25; i++) await page.evaluate(([x, y]) => window.dispatchEvent(new WheelEvent('wheel', { deltaY: 4, deltaMode: 0, clientX: x, clientY: y, bubbles: true, cancelable: true })), [mid.x, mid.y]);
   await step(page, 40);
   s = await state(page);
-  assert.ok(Math.abs(z2 / s.cam.z - Math.exp(100 * 0.0022)) < 0.01, 'tiny steps add up to a notch out');
-  // Far out: never past the whole scene; far in: never past the top zoom.
+  assert.ok(Math.abs(z2 / s.lens.z - Math.exp(100 * 0.0022)) < 0.01, 'tiny steps add up to a notch out');
+  // Far out: closes the lens back to the whole scene; far in: never past the top zoom.
   await wheelAt(page, 640, 360, 100, 30); await step(page, 60);
-  assert.equal((await state(page)).cam.z, s.zmin);
+  s = await state(page);
+  assert.equal(s.lens.z, s.zmin); assert.equal(s.lens.on, false);
   await wheelAt(page, 640, 360, -100, 30); await step(page, 60);
-  assert.equal((await state(page)).cam.z, s.zmax);
-  assert.ok((await state(page)).moves >= 6);
+  s = await state(page);
+  assert.equal(s.lens.z, s.zmax); assert.deepEqual(s.cam, fixedCam);
+  assert.ok(s.moves >= 6);
 });
 
-test('Ctrl+wheel zooms the game, not the browser: the event is cancelled and the page scale stays 1', async t => {
+test('Ctrl+wheel zooms the magnifying glass, not the browser: the event is cancelled and the page scale stays 1', async t => {
   const page = await game(t, { save: SAVE(2), dda: TIER[1] });
   await openRound(page, 2);
   await skipIntro(page);
   // Listen after the game, so the listener sees what the game did with the event.
   await page.evaluate(() => { window.wheels = []; window.addEventListener('wheel', e => wheels.push({ ctrl: e.ctrlKey, prevented: e.defaultPrevented }), { passive: true }); });
-  const dpr = await page.evaluate(() => devicePixelRatio), z0 = (await state(page)).cam.z;
+  const dpr = await page.evaluate(() => devicePixelRatio), z0 = (await state(page)).zmin;
   const p = await at(page, 700, 330);
   await page.mouse.move(p.x, p.y);
   await page.keyboard.down('Control');
@@ -244,7 +263,8 @@ test('Ctrl+wheel zooms the game, not the browser: the event is cancelled and the
   const wheels = await page.evaluate(() => window.wheels);
   assert.equal(wheels.length, 2);
   assert.ok(wheels.every(w => w.ctrl && w.prevented), JSON.stringify(wheels));
-  assert.ok((await state(page)).cam.z > z0 * 1.4, 'the game zoomed in');
+  assert.ok((await state(page)).lens.z > z0 * 1.4, 'the magnifying glass zoomed in');
+  assert.equal((await state(page)).cam.z, z0, 'the world stayed fixed');
   assert.equal(await page.evaluate(() => devicePixelRatio), dpr, 'the browser did not zoom');
   assert.equal(await page.evaluate(() => window.visualViewport ? visualViewport.scale : 1), 1);
   // A plain wheel is cancelled too (no page scroll), on every screen.
@@ -262,12 +282,12 @@ test('a click on a thing finds it and it flies to the list; empty ground and loo
   assert.ok(s.tier >= 3);
   const all = await items(page), target = all.find(i => i.e >= 0), decoy = all.find(i => i.e < 0 && i.k);
   assert.ok(decoy, 'there are look-alikes at this difficulty');
-  // Too small to pick at the lowest zoom: no find, no wrong click.
+  // Too small to pick without the magnifying glass: no find, no wrong click.
   const p0 = await sceneAt(page, target.x, target.y);
   await page.mouse.click(p0.x, p0.y); await step(page);
   s = await state(page);
   assert.equal(s.found, 0); assert.equal(s.wrong, 0);
-  // Zoom in on it and click.
+  // Magnify it with the lens and click.
   await find(page, target);
   s = await state(page);
   assert.equal(s.found, 1); assert.equal(s.wrong, 0);
@@ -282,10 +302,11 @@ test('a click on a thing finds it and it flies to the list; empty ground and loo
   await find(page, decoy);
   s = await state(page);
   assert.equal(s.found, 1); assert.equal(s.wrong, 1);
-  // Empty ground is a wrong click.
-  const near = (await items(page)), cs = await state(page);
+  // Turn the lens off and click empty ground: one wrong click; double click is still one.
+  if ((await state(page)).lens.on) { await page.locator('#btnLens').click(); await step(page); }
+  const near = await items(page), cs = await state(page);
   let empty = null;
-  for (let x = 200; x < 1100 && !empty; x += 53) for (let y = 120; y < 560 && !empty; y += 47) {
+  for (let x = 200; x < 1100 && !empty; x += 53) for (let y = 120; y < 540 && !empty; y += 47) {
     const w = under(cs, x, y);
     if (near.every(i => Math.hypot(i.x - w.x, i.y - w.y) > i.r * 2 + 40 / cs.cam.z)) empty = [x, y];
   }
@@ -293,7 +314,6 @@ test('a click on a thing finds it and it flies to the list; empty ground and loo
   await page.mouse.click(pe.x, pe.y); await step(page, 30);
   s = await state(page);
   assert.equal(s.found, 1); assert.equal(s.wrong, 2);
-  // A double click on the ground is one wrong click, not two.
   await page.mouse.dblclick(pe.x, pe.y); await step(page);
   assert.equal((await state(page)).wrong, 3);
 });
@@ -302,6 +322,8 @@ test('finishing a round: everything found, the result with stars and a new stick
   const page = await game(t, { dda: TIER[1] });
   await page.locator('#btnPlay').click(); await step(page);
   await skipIntro(page);
+  await page.locator('#btnLens').click(); await step(page);
+  await page.locator('#btnLens').click(); await step(page);
   await findAll(page);
   let s = await state(page);
   assert.equal(s.done, true); assert.equal(s.found, s.total);
@@ -315,7 +337,7 @@ test('finishing a round: everything found, the result with stars and a new stick
   assert.match(await page.locator('#resTime').textContent(), /^\d+:\d\d$/);
   const saved = await stored(page);
   assert.equal(saved.r[0][0], s.stars); assert.ok(saved.r[0][1] > 0);
-  assert.deepEqual(saved.coach, [1, 0], 'the first drag is remembered');
+  assert.deepEqual(saved.coach, [0, 1], 'the first lens zoom is remembered');
   assert.equal((await page.evaluate(() => sz.results)).length, 1, 'one result for the difficulty');
   await step(page, 60);
   assert.equal(await page.locator('#resStars svg.on').count(), s.stars);
@@ -352,22 +374,20 @@ test('finishing a round: everything found, the result with stars and a new stick
   assert.equal(await page.locator('#bookCount b').textContent(), '1/25');
 });
 
-test('a round with covers and moving things: a shut toy box says zoom, zooming opens it, a moving thing is found where it is', async t => {
+test('a round with covers and moving things: a shut toy box says zoom, magnifying opens it, a moving thing is found where it is', async t => {
   const page = await game(t, { save: SAVE(16), dda: TIER[1] });
   await openRound(page, 16);
   await skipIntro(page);
   const all = await items(page), hidden = all.find(i => i.e >= 0 && i.cover), mover = all.find(i => i.e >= 0 && i.moving);
   assert.ok(hidden && mover);
-  // At a zoom where it is big enough but the box is still shut.
-  assert.ok(await bring(page, hidden.x, hidden.y));
-  let s = await state(page);
+  // Without the magnifying glass the box is shut.
   const p = await sceneAt(page, hidden.x, hidden.y);
   await page.mouse.click(p.x, p.y); await step(page);
-  s = await state(page);
+  let s = await state(page);
   assert.equal(s.found, 0); assert.equal(s.wrong, 0, 'a shut box is not a wrong click');
   await find(page, hidden);
   s = await state(page);
-  assert.equal(s.found, 1, 'zoomed in, the box is open and the thing is found');
+  assert.equal(s.found, 1, 'magnified inside the lens, the box is open and the thing is found');
   // Moving things move with the clock and are found where they are now.
   const a = (await state(page)).movers;
   await step(page, 30);
@@ -381,7 +401,7 @@ test('P, Esc, the button and a lost focus pause; nothing moves while paused, and
   await openRound(page, 10);
   await skipIntro(page);
   await step(page, 30);
-  const snap = () => page.evaluate(() => JSON.stringify([__game.state.time, __game.state.cam, __game.state.movers, __game.state.found]));
+  const snap = () => page.evaluate(() => JSON.stringify([__game.state.time, __game.state.cam, __game.state.lens, __game.state.movers, __game.state.found]));
   for (const how of ['KeyP', 'Escape', 'button', 'blur']) {
     if (how === 'button') await page.locator('#btnPause').click();
     else if (how === 'blur') await page.evaluate(() => window.dispatchEvent(new Event('blur')));
@@ -408,66 +428,77 @@ test('P, Esc, the button and a lost focus pause; nothing moves while paused, and
   }
 });
 
-test('Restart from the pause starts the round again: nothing found, no moves, the camera back at the start', async t => {
+test('Restart from the pause starts the round again: nothing found, no moves, the magnifying glass off again', async t => {
   const page = await game(t, { save: SAVE(3), dda: TIER[1] });
   await openRound(page, 3);
   await skipIntro(page);
-  const start = (await state(page)).cam;
-  await find(page, (await items(page)).find(i => i.e >= 0));
+  const s0 = await state(page), start = s0.cam;
+  await find(page, (await items(page)).find(i => i.e >= 0 && i.need > s0.zmin));
   let s = await state(page);
-  assert.equal(s.found, 1); assert.notDeepEqual(s.cam, start);
+  assert.equal(s.found, 1); assert.equal(s.lens.on, true); assert.ok(s.moves > 0);
   await page.keyboard.press('Escape'); await step(page);
   await page.locator('#btnRestart').click(); await step(page);
   s = await state(page);
   assert.equal(s.screen, 'play'); assert.equal(s.found, 0); assert.equal(s.moves, 0); assert.equal(s.time, 0);
-  assert.deepEqual(s.cam, start); assert.equal(s.intro, true);
+  assert.deepEqual(s.cam, start); assert.equal(s.lens.on, false); assert.equal(s.lens.z, s.zmin); assert.equal(s.intro, true);
   // R in the pause restarts too.
-  await skipIntro(page); await dragBy(page, 600, 300, 200, 0);
+  await skipIntro(page); await page.locator('#btnLens').click(); await step(page);
+  assert.equal((await state(page)).lens.on, true);
   await page.keyboard.press('KeyP'); await step(page);
   await page.keyboard.press('KeyR'); await step(page);
   s = await state(page);
-  assert.equal(s.screen, 'play'); assert.equal(s.moves, 0);
+  assert.equal(s.screen, 'play'); assert.equal(s.moves, 0); assert.equal(s.lens.on, false);
 });
 
-test('the keys and the on-screen buttons: + and − zoom around the middle, the arrows move the scene', async t => {
+test('the keys and the on-screen buttons: L toggles the lens, + and − zoom it, the arrows move the lens while the world stays fixed', async t => {
   const page = await game(t, { save: SAVE(6), dda: TIER[1] });
   await openRound(page, 6);
   await skipIntro(page);
   let s = await state(page);
-  const z0 = s.cam.z;
+  const fixedCam = s.cam, z0 = s.zmin;
+  await page.keyboard.press('KeyL'); await step(page);
+  assert.equal((await state(page)).lens.on, true);
+  await page.keyboard.press('KeyL'); await step(page);
+  assert.equal((await state(page)).lens.on, false);
   await page.keyboard.down('Equal'); await step(page, 30); await page.keyboard.up('Equal');
   s = await state(page);
-  assert.ok(s.cam.z > z0 * 2, '+ zooms in while held');
-  const x0 = s.cam.x, y0 = s.cam.y;
+  assert.ok(s.lens.on && s.lens.z > z0 * 2, '+ opens and zooms in while held');
+  assert.deepEqual(s.cam, fixedCam, 'world stays fixed');
+  const x0 = s.lens.x, y0 = s.lens.y;
   await page.keyboard.down('ArrowRight'); await step(page, 20); await page.keyboard.up('ArrowRight');
   await page.keyboard.down('ArrowDown'); await step(page, 10); await page.keyboard.up('ArrowDown');
   s = await state(page);
-  assert.ok(s.cam.x > x0 + 50 && s.cam.y > y0 + 20, '→ and ↓ show what is to the right and below');
-  const z1 = s.cam.z;
+  assert.ok(s.lens.x > x0 + 50 && s.lens.y > y0 + 20, '→ and ↓ move the magnifying glass right and down');
+  assert.deepEqual(s.cam, fixedCam, 'world never pans');
+  const z1 = s.lens.z;
   await page.keyboard.down('Minus'); await step(page, 15); await page.keyboard.up('Minus');
-  assert.ok((await state(page)).cam.z < z1 * 0.8, '− zooms out');
-  const z2 = (await state(page)).cam.z;
+  assert.ok((await state(page)).lens.z < z1 * 0.8, '− zooms out');
+  const z2 = (await state(page)).lens.z;
   await page.locator('#btnIn').click(); await step(page, 2);
-  assert.ok(Math.abs((await state(page)).cam.z / z2 - 1.45) < 0.01, 'the + button');
+  assert.ok(Math.abs((await state(page)).lens.z / z2 - 1.45) < 0.01, 'the + button');
   await page.locator('#btnOut').click(); await step(page, 2);
-  assert.ok(Math.abs((await state(page)).cam.z - z2) < 0.01, 'the − button');
-  await page.locator('#btnOut').click(); await page.locator('#btnOut').click(); await page.locator('#btnOut').click(); await page.locator('#btnOut').click(); await step(page, 2);
-  assert.equal((await state(page)).cam.z, s.zmin);
+  assert.ok(Math.abs((await state(page)).lens.z - z2) < 0.01, 'the − button');
+  for (let i = 0; i < 6; i++) await page.locator('#btnOut').click();
+  await step(page, 2);
+  s = await state(page);
+  assert.equal(s.lens.z, s.zmin); assert.equal(s.lens.on, false);
   assert.match(await page.locator('#btnOut').getAttribute('class'), /off/, 'the − button greys out at the end');
 });
 
-test('the hint: after a wait the magnifying glass glows and points at a thing still to find (by itself for the youngest)', async t => {
+test('the hint: pressing H or the lightbulb works right away; after an idle wait the lightbulb glows (and shows by itself for the youngest)', async t => {
   const page = await game(t, { save: SAVE(7), dda: TIER[3] });
   await openRound(page, 7);
   await skipIntro(page);
   await page.keyboard.press('KeyH'); await step(page);
-  assert.equal((await state(page)).hint, false, 'not before the wait');
+  assert.equal((await state(page)).hint, true, 'H shows the hint immediately without waiting');
+  assert.ok(await until(page, '!s.hint', 60 * 6, 15), 'it fades after a few seconds');
   assert.ok(await until(page, 's.hintReady', 60 * 25, 15));
   assert.match(await page.locator('#btnHint').getAttribute('class'), /ready/);
   await run(page, 60 * 6);
   assert.equal((await state(page)).hint, false, 'an older player presses it themselves');
   await page.locator('#btnHint').click(); await step(page);
   assert.equal((await state(page)).hint, true);
+  assert.doesNotMatch(await page.locator('#btnHint').getAttribute('class'), /ready/);
   assert.ok(await until(page, '!s.hint', 60 * 6, 15), 'it shows for a few seconds');
   // The youngest players get it by themselves.
   const young = await game(t, { save: SAVE(7), dda: TIER[1] });
@@ -485,7 +516,7 @@ test('a timed round: wrong clicks in a row cost seconds at higher difficulty; ti
   // Three clicks in a row on empty ground.
   const near = await items(page), cs = await state(page);
   let empty = null;
-  for (let x = 200; x < 1100 && !empty; x += 53) for (let y = 120; y < 560 && !empty; y += 47) {
+  for (let x = 200; x < 1100 && !empty; x += 53) for (let y = 120; y < 540 && !empty; y += 47) {
     const w = under(cs, x, y);
     if (near.every(i => Math.hypot(i.x - w.x, i.y - w.y) > i.r * 2 + 40 / cs.cam.z)) empty = [x, y];
   }
@@ -545,31 +576,25 @@ test('saves come back after a reload; old or broken saves open a fresh game; a f
   assert.ok((await stored(full)).r[0][0] >= 1);
 });
 
-test('reduced motion: the zoom jumps at once and a flick does not glide; with motion the flick glides', async t => {
+test('reduced motion: the lens zoom jumps at once vs eases; a flick never moves or glides the fixed world', async t => {
   for (const motion of ['reduce', 'no-preference']) {
     const page = await game(t, { save: SAVE(3), dda: TIER[1], reducedMotion: motion });
     assert.equal(await page.evaluate(() => Kit.motion.reduced()), motion === 'reduce');
     await openRound(page, 3);
     await skipIntro(page);
-    const z0 = (await state(page)).cam.z;
+    const s0 = await state(page), z0 = s0.zmin, fixedCam = s0.cam;
     const p = await at(page, 640, 360);
     await page.mouse.move(p.x, p.y);
     await page.mouse.wheel(0, -100);
     await step(page);
-    const z1 = (await state(page)).cam.z;
+    const z1 = (await state(page)).lens.z;
     if (motion === 'reduce') assert.ok(Math.abs(z1 / z0 - Math.exp(0.22)) < 1e-3, 'at once');
-    else assert.ok(z1 < z0 * Math.exp(0.22) - 1e-3, 'eased');
-    // Zoom in more, so the view has room to glide (not against the scene's edge).
-    await page.mouse.wheel(0, -100); await page.mouse.wheel(0, -100);
-    await step(page, 40);
-    // A quick flick: the mouse lets go while still moving.
+    else assert.ok(z1 > z0 && z1 < z0 * Math.exp(0.22) - 1e-3, 'eased');
+    // A quick flick never drags or glides the fixed world in either mode.
     const a = await at(page, 760, 360), b = await at(page, 560, 360);
     await page.mouse.move(a.x, a.y); await page.mouse.down(); await page.mouse.move(b.x, b.y, { steps: 3 }); await page.mouse.up();
-    const after = (await state(page)).cam.x;
     await step(page, 20);
-    const glide = (await state(page)).cam.x - after;
-    if (motion === 'reduce') assert.equal(glide, 0, 'no glide');
-    else assert.ok(glide > 5, `glides on: ${glide}`);
+    assert.deepEqual((await state(page)).cam, fixedCam, 'fixed world never moves');
   }
 });
 
@@ -588,10 +613,13 @@ test('fits the smaller portal frame; a click on a thing finds it at this size to
   const it = (await items(page)).find(i => i.e >= 0);
   await find(page, it);
   assert.equal((await state(page)).found, 1);
-  for (const sel of ['#btnPause', '#btnHint']) {
+  const boxes = [];
+  for (const sel of ['#btnPause', '#zoomBox', '#btnLens', '#btnHint']) {
     const b = await page.locator(sel).boundingBox();
     assert.ok(b.x >= canvas.x && b.y + b.height <= canvas.y + canvas.height + 1, sel);
+    boxes.push(b);
   }
+  for (let i = 1; i < boxes.length; i++) assert.ok(boxes[i].y >= boxes[i - 1].y + boxes[i - 1].height - 1, 'HUD controls do not overlap');
   // Mute.
   assert.equal(await page.evaluate(() => Kit.audio.muted), false);
   await page.locator('.sg-mute').click();

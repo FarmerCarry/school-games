@@ -990,10 +990,34 @@
     g.restore();
   };
   A.hand = function (g, x, y, s, press) {
-    g.save(); g.translate(x, y); g.scale(s, s); g.translate(0, press * 4);
-    g.lineJoin = 'round';
-    [[-6, -40, 12, 34], [6, -18, 11, 22], [16, -14, 10, 20], [-18, -10, 10, 18]].forEach(function (f) { rr(g, f[0], f[1], f[2], f[3], 5); fs(g, WH, 3.5); });
-    rr(g, -18, -4, 44, 34, 14); fs(g, WH, 3.5);
+    g.save(); g.translate(x, y); g.scale(s, s); g.translate(0, (press || 0) * 3);
+    g.lineCap = 'round'; g.lineJoin = 'round';
+    if (press) {
+      [[-23, -39, -30, -44], [-8, -47, -8, -55], [7, -39, 14, -44]].forEach(function (r) {
+        line(g, r[0], r[1], r[2], r[3], INK, 6); line(g, r[0], r[1], r[2], r[3], YEL, 3);
+      });
+    }
+    g.beginPath();
+    g.moveTo(-9, 25);
+    g.lineTo(-13, 15);
+    g.lineTo(-25, 4);
+    g.quadraticCurveTo(-31, -1, -26, -7);
+    g.quadraticCurveTo(-21, -12, -14, -4);
+    g.lineTo(-14, -33.5);
+    g.arc(-7.5, -33.5, 6.5, PI, 0);
+    g.lineTo(-1, -14);
+    g.arc(4.5, -14, 5.5, PI, 0);
+    g.lineTo(10, -11);
+    g.arc(15, -11, 5, PI, 0);
+    g.lineTo(20, -7);
+    g.arc(24.5, -7, 4.5, PI, 0);
+    g.lineTo(29, 7);
+    g.quadraticCurveTo(29, 25, 13, 25);
+    g.closePath();
+    fs(g, WH, 3.5);
+    line(g, -1, -14, -1, -5, INK, 3);
+    line(g, 10, -11, 10, -4, INK, 3);
+    line(g, 20, -7, 20, -1, INK, 3);
     g.restore();
   };
   A.glass = function (g, x, y, s, rot) {
