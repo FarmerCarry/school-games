@@ -240,18 +240,15 @@ export const scenarios = {
   // The first yard opens behind a picture card; a held arrow closes it and walks the kid.
   // Restart puts the kid back on the doorstep with no egg hatched.
   'egg-rush': defaults(['#btnPlay'], `${g}.screen==='play'`, `[${g}.px,${g}.py,${g}.time,${g}.hatched,${g}.guards]`, hold('ArrowRight'), '#btnPause', `${g}.screen==='pause'`, '#btnRestart', `${g}.screen==='play' && ${g}.atStart && ${g}.hatched===0 && !${g}.intro`),
-  // Seek and Zoom: a first visit opens the park's first round, where the zoom is still
-  // locked and the scene is moved by dragging it (or by holding an arrow key). Only the
-  // child's own drag, arrows, wheel or zoom buttons move the camera; Restart starts the
-  // round again with nothing found and no pan or zoom yet.
-  'seek-zoom': defaults(['#btnPlay'], `${g}.state.screen === 'play'`, `[${g}.state.time,${g}.state.cam,${g}.state.found,${g}.state.movers]`, async page => {
-    const from = await page.evaluate(() => window.__game.point(760, 380));
-    const to = await page.evaluate(() => window.__game.point(500, 300));
-    await page.mouse.move(from.x, from.y);
-    await page.mouse.down();
-    await page.mouse.move(to.x, to.y, { steps: 8 });
-    await page.mouse.up();
-  }, '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.found === 0 && ${g}.state.moves === 0`),
+  // Seek and Zoom: a first visit opens the park's first round with the whole scene fixed
+  // on screen. Holding an arrow key (or clicking #btnLens / turning the wheel) brings out
+  // and moves the magnifying glass lens; Restart starts the round again with the lens off.
+  'seek-zoom': defaults(['#btnPlay'], `${g}.state.screen === 'play'`, `[${g}.state.time,${g}.state.lens,${g}.state.found,${g}.state.movers]`, async page => {
+    if (!(await page.evaluate(() => window.__game.state.lens.on))) await click('#btnLens')(page);
+    const t = Date.now() / 400, x = Math.round(660 + Math.cos(t) * 300), y = Math.round(330 + Math.sin(t * 1.3) * 150);
+    const p = await page.evaluate(([lx, ly]) => window.__game.point(lx, ly), [x, y]);
+    await page.mouse.move(p.x, p.y, { steps: 5 });
+  }, '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.found === 0 && ${g}.state.moves === 0 && !${g}.state.lens.on`),
   // Steady Hand: a first visit goes straight to the first wire. The spark moves only when
   // the child presses on it and drags it along the track with the real mouse; Restart puts
   // it back on its start with no touch and nothing dragged.
@@ -310,8 +307,8 @@ const inputSnapshots = {
   // Paint Grab's blob keeps moving; only the arrow keys or pointer set its steering target.
   'paint-grab': `${g}.player.target`, 'snake-arena': `SA.game.kb`, 'egg-rush': `${g}.px`,
   'blob-battle': `${g}.info().player`, 'splat-strike': `[${g}.state.player.x,${g}.state.player.z]`,
-  // Only the child's drag, keys, wheel or zoom buttons move Seek and Zoom's camera.
-  'seek-zoom': `${g}.state.cam`,
+  // Only the child's lens button, keys, wheel or pointer move Seek and Zoom's magnifying glass.
+  'seek-zoom': `${g}.state.lens`,
   'steady-hand': `${g}.state.dragged`,
   'math-gates': `${g}.state.lane`
 };

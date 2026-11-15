@@ -1,18 +1,19 @@
 /* Seek and Zoom (ابحث وكبّر) engine: the five places, the things to find, each scene's
- * crowd of little things, the rounds, the camera (zoom around the pointer, pan, clamp),
- * clicks, stars and saves.
+ * crowd of little things, the rounds, the fixed full-scene camera and movable magnifying
+ * glass lens, clicks, stars and saves.
  * Pure: no DOM, no Kit, no timers and no Math.random (everything is seeded), so
  * tools/tests/seek-zoom-engine.test.mjs loads it with { window: {} }. game.js reads the
- * DDA, feeds the child's wheel, drags and clicks in and turns the results into pictures
+ * DDA, feeds the child's wheel, lens moves and clicks in and turns the results into pictures
  * and sound; art.js draws what this file places. */
 (function () {
   'use strict';
   var SZ = window.SZ = window.SZ || {};
   var W = 1280, H = 720;
   SZ.W = W; SZ.H = H;
-  // Screen edges covered by the HUD (the zoom column, the timer, the list of things to
-  // find): the view may be panned this far past the scene so nothing stays under them.
-  SZ.PAD = { l: 92, r: 0, t: 70, b: 118 };
+  // Screen regions covered by the HUD (the left button column, the timer, the mute button,
+  // and the list of things to find): nothing in the fixed scene is placed behind them.
+  SZ.PAD = { l: 94, r: 16, t: 74, b: 126 };
+  SZ.LENS_R = 132;     // radius of the movable magnifying glass on screen (px)
   SZ.MIN_R = 11;       // a thing counts once it is at least this big on screen (radius, px)
   SZ.Z_MAX = 3;
   SZ.WRONG_OK = 3;     // at most this many wrong clicks for the accuracy star
@@ -22,6 +23,18 @@
   function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
   function num(v, a, b, d) { return typeof v === 'number' && v === v ? clamp(v, a, b) : d; }
   SZ.clamp = clamp;
+  SZ.trayBox = function (n) {
+    var w = n * 118 + (n - 1) * 10 + 24;
+    return { x: Math.round((W - w) / 2), y: H - 126, w: w, h: 120 };
+  };
+  SZ.inHud = function (sx, sy, rx, ry, n) {
+    rx = rx || 0; ry = ry === undefined ? rx : ry;
+    if (sx - rx < SZ.PAD.l || sx + rx > W - SZ.PAD.r || sy - ry < 16 || sy + ry > H - 16) return true;
+    if (sx + rx > 548 && sx - rx < 732 && sy - ry < SZ.PAD.t) return true;
+    if (sx + rx > W - 70 && sy - ry < 70) return true;
+    var T = SZ.trayBox(n || 5);
+    return sx + rx > T.x - 8 && sx - rx < T.x + T.w + 8 && sy + ry > T.y - 8;
+  };
   // mulberry32: a tiny seeded generator, so a scene is the same every time.
   function rng(seed) {
     var s = seed >>> 0;
@@ -116,8 +129,8 @@
         grass: [R0(80, 520, 1360, 470), R0(2300, 520, 200, 470), R0(80, 1278, 2400, 128)] },
       home: { kite: 'sky', balloon: 'sky', duck: 'pond', cat: 'grass', dog: 'grass', icecream: 'grass', butterfly: 'grass', ball: 'grass' },
       rounds: [
-        { f: [['kite', 'red', 1], ['duck', 'yellow', 2], ['cat', 'sleep', 1]], sc: 1.7, lock: 1, par: 40, x: 2 },
-        { f: [['balloon', 'red', 2], ['dog', 'brown', 1], ['icecream', 'pink', 1], ['kite', 'blue', 1]], sc: 1.6, lock: 1, par: 45, x: 3 },
+        { f: [['kite', 'red', 1], ['duck', 'yellow', 2], ['cat', 'sleep', 1]], sc: 1.7, zmax: 2, par: 40, x: 2 },
+        { f: [['balloon', 'red', 2], ['dog', 'brown', 1], ['icecream', 'pink', 1], ['kite', 'blue', 1]], sc: 1.6, zmax: 2, par: 45, x: 3 },
         { f: [['duck', 'yellow', 3], ['ball', 'beach', 1], ['cat', 'sleep', 1]], sc: 0.7, zmax: 2, par: 55, x: 4 },
         { f: [['kite', 'green', 1], ['balloon', 'yellow', 2], ['dog', 'spotted', 1], ['icecream', 'pink', 2]], sc: 0.62, zmax: 2.5, par: 65, x: 5 },
         { f: [['butterfly', 'blue', 2], ['duck', 'yellow', 3], ['cat', 'sleep', 1], ['kite', 'red', 1]], sc: 0.55, mv: 1, zmax: 2.5, par: 80, x: 5 }
@@ -338,11 +351,10 @@
   // The zoom a thing needs before it can be picked.
   SZ.needZoom = function (it) { return Math.max(SZ.MIN_R / it.r, it.cv ? it.cv.zo + 0.35 * SZ.OPEN_AT : 0); };
 
-  // The zoom range of a round in place wi.
+  // The zoom range of a round in place wi: full fixed scene up to top lens zoom.
   SZ.zoomRange = function (wi, d) {
     var Wd = SZ.WORLDS[wi];
-    if (d.lock) return [1, 1];
-    return [Math.max(W / Wd.w, H / Wd.h), d.zmax || SZ.Z_MAX];
+    return [Math.min(W / Wd.w, H / Wd.h), d.zmax || SZ.Z_MAX];
   };
 
   // Builds round ri of place wi with the difficulty the UI read from Kit.dda:
@@ -386,6 +398,7 @@
         }
         var big = Math.max(it.r, it.cv ? it.cv.r : 0), ex = big * 1.25 + (it.m ? it.m.ax : 0), ey = big * 1.25 + (it.m ? it.m.ay : 0);
         if (!inShape(s, it.x, it.y, ex, ey)) continue;
+        if (SZ.inHud(W / 2 + (it.x - Wd.w / 2) * zr[0], H / 2 + (it.y - Wd.h / 2) * zr[0], ex * zr[0], ey * zr[0], d.f.length)) continue;
         if (clear(it)) { R.items.push(it); return true; }
       }
       return false;
@@ -434,69 +447,70 @@
   };
   SZ.left = function (R) { return R.limit ? Math.max(0, R.limit - R.t - R.pen) : 0; };
 
-  /* ------------------------------------------------------------ camera */
-  // The camera's centre (x, y) in the scene, its zoom z and the zoom it eases to (tz).
-  // A zoom keeps one scene point (wx, wy) under one screen point (ax, ay): the pointer.
+  /* --------------------------------------------------- camera and lens */
+  // The world camera stays fixed showing the whole scene on screen; zooming uses a
+  // movable magnifying glass lens over screen point (lens.x, lens.y).
   SZ.camera = function (S, R) {
-    var z0 = R.d.lock ? 1 : R.zmin;
-    var cam = { x: S.w / 2, y: S.h / 2, z: z0, tz: z0, zmin: R.zmin, zmax: R.zmax, sw: S.w, sh: S.h, an: false, ax: 0, ay: 0, wx: 0, wy: 0, vx: 0, vy: 0 };
-    SZ.clampCam(cam);
-    return cam;
+    return { x: S.w / 2, y: S.h / 2, z: R.zmin, zmin: R.zmin, zmax: R.zmax, sw: S.w, sh: S.h };
   };
   SZ.toWorld = function (cam, sx, sy, out) { out = out || {}; out.x = cam.x + (sx - W / 2) / cam.z; out.y = cam.y + (sy - H / 2) / cam.z; return out; };
   SZ.toScreen = function (cam, wx, wy, out) { out = out || {}; out.x = W / 2 + (wx - cam.x) * cam.z; out.y = H / 2 + (wy - cam.y) * cam.z; return out; };
-  // The view never leaves the scene, except just enough to bring its edges out from
-  // under the HUD (pad: other room, such as none once the HUD is gone).
-  SZ.clampCam = function (cam, pad) {
-    var z = cam.z, P = pad || SZ.PAD;
-    var lo = (W / 2 - P.l) / z, hi = cam.sw - (W / 2 - P.r) / z;
-    cam.x = lo > hi ? cam.sw / 2 : clamp(cam.x, lo, hi);
-    lo = (H / 2 - P.t) / z; hi = cam.sh - (H / 2 - P.b) / z;
-    cam.y = lo > hi ? cam.sh / 2 : clamp(cam.y, lo, hi);
-    return cam;
+
+  SZ.lens = function (R) {
+    var def = clamp(2, R.zmin * 1.6, R.zmax);
+    return { on: false, x: W / 2, y: H / 2, r: SZ.LENS_R, z: R.zmin, tz: R.zmin, zmin: R.zmin, zmax: R.zmax, saved: def };
   };
-  // Zoom by factor f around screen point (sx, sy). instant: no easing (reduced motion).
-  SZ.zoomAt = function (cam, sx, sy, f, instant) {
-    if (!(f > 0) || cam.zmax <= cam.zmin) return false;
-    var w = SZ.toWorld(cam, sx, sy), tz = clamp(cam.tz * f, cam.zmin, cam.zmax);
-    if (tz === cam.tz && tz === cam.z) return false;
-    cam.tz = tz; cam.an = true; cam.ax = sx; cam.ay = sy; cam.wx = w.x; cam.wy = w.y;
-    cam.vx = cam.vy = 0;
-    if (instant) SZ.stepCam(cam, 1, true);
+  SZ.moveLens = function (lens, sx, sy) {
+    var x = clamp(sx, 24, W - 24), y = clamp(sy, 24, H - 24);
+    if (x === lens.x && y === lens.y) return false;
+    lens.x = x; lens.y = y;
     return true;
   };
-  // Move the view by a drag of (dsx, dsy) screen pixels: the scene follows the pointer.
-  SZ.pan = function (cam, dsx, dsy) {
-    var x = cam.x, y = cam.y;
-    cam.x -= dsx / cam.z; cam.y -= dsy / cam.z;
-    SZ.clampCam(cam);
-    if (cam.an) { cam.wx += cam.x - x; cam.wy += cam.y - y; }
-    return cam.x !== x || cam.y !== y;
+  SZ.toggleLens = function (lens, instant) {
+    if (lens.on) {
+      if (lens.tz > lens.zmin * 1.2) lens.saved = lens.tz;
+      lens.on = false; lens.z = lens.tz = lens.zmin;
+    } else {
+      lens.on = true;
+      lens.tz = clamp(lens.saved || 2, lens.zmin * 1.5, lens.zmax);
+      if (instant) lens.z = lens.tz;
+    }
+    return lens.on;
   };
-  // Eases the zoom (in log space, so every step feels the same) and glides a flung view.
-  // still: reduced motion, the zoom and the glide stop at once. Returns true if it moved.
-  SZ.stepCam = function (cam, dt, still) {
-    var moved = false;
-    if (cam.z !== cam.tz) {
-      var lz = Math.log(cam.z), lt = Math.log(cam.tz), k = still ? 1 : 1 - Math.exp(-dt * 14);
-      lz += (lt - lz) * k;
-      cam.z = Math.abs(lt - lz) < 0.002 ? cam.tz : Math.exp(lz);
-      moved = true;
+  SZ.zoomLens = function (lens, f, instant) {
+    if (!(f > 0) || lens.zmax <= lens.zmin) return false;
+    if (!lens.on && f <= 1) return false;
+    var tz = clamp((lens.on ? lens.tz : lens.zmin) * f, lens.zmin, lens.zmax);
+    if (tz === lens.tz && (!lens.on || tz === lens.z)) return false;
+    lens.on = true;
+    lens.tz = tz;
+    if (tz >= lens.zmin * 1.4) lens.saved = tz;
+    if (instant) { lens.z = tz; if (tz <= lens.zmin) lens.on = false; }
+    return true;
+  };
+  // Eases the lens zoom (in log space, so every step feels the same).
+  // still: reduced motion, the zoom jumps at once. Returns true if it changed.
+  SZ.stepLens = function (lens, dt, still) {
+    if (lens.z === lens.tz) {
+      if (lens.on && lens.tz <= lens.zmin) { lens.on = false; return true; }
+      return false;
     }
-    if (cam.an) {
-      cam.x = cam.wx - (cam.ax - W / 2) / cam.z; cam.y = cam.wy - (cam.ay - H / 2) / cam.z;
-      SZ.clampCam(cam);
-      if (cam.z === cam.tz) cam.an = false;
-      moved = true;
-    }
-    if (still) { cam.vx = cam.vy = 0; }
-    else if (cam.vx || cam.vy) {
-      moved = SZ.pan(cam, cam.vx * dt, cam.vy * dt) || moved;
-      var f = Math.exp(-dt * 5);
-      cam.vx *= f; cam.vy *= f;
-      if (Math.abs(cam.vx) + Math.abs(cam.vy) < 20) cam.vx = cam.vy = 0;
-    }
-    return moved;
+    var lz = Math.log(lens.z), lt = Math.log(lens.tz), k = still ? 1 : 1 - Math.exp(-dt * 14);
+    lz += (lt - lz) * k;
+    lens.z = Math.abs(lt - lz) < 0.002 ? lens.tz : Math.exp(lz);
+    if (lens.z === lens.zmin && lens.tz <= lens.zmin) lens.on = false;
+    return true;
+  };
+  SZ.inLens = function (lens, sx, sy) {
+    return !!(lens && lens.on && Math.hypot(sx - lens.x, sy - lens.y) <= lens.r);
+  };
+  SZ.lensCam = function (cam, lens, out) {
+    out = out || {};
+    var wx = cam.x + (lens.x - W / 2) / cam.z, wy = cam.y + (lens.y - H / 2) / cam.z, z = lens.z;
+    out.x = wx - (lens.x - W / 2) / z;
+    out.y = wy - (lens.y - H / 2) / z;
+    out.z = z;
+    return out;
   };
   // One wheel event's zoom factor. Browsers report pixels (mode 0), lines (1) or pages (2);
   // a notch is about 100 px (zoom x1.25). Trackpads send many tiny deltas; huge notches are
@@ -508,23 +522,24 @@
   };
 
   /* ------------------------------------------------------------ clicks */
-  // What is under screen point (sx, sy): { t: 'found' | 'again' (already found) |
-  // 'small' (too small yet: zoom in) | 'closed' (a shut cover: zoom in) | 'decoy' | 'miss', it }.
-  var tmp = {};
-  SZ.hit = function (R, cam, sx, sy) {
-    var w = SZ.toWorld(cam, sx, sy), best = null, bd = Infinity;
+  // What is under screen point (sx, sy) (through the magnifying glass when it covers that
+  // spot): { t: 'found' | 'again' | 'small' | 'closed' | 'decoy' | 'miss', it }.
+  var tmp = {}, tmpW = {}, lcam = {};
+  SZ.hit = function (R, cam, sx, sy, lens) {
+    var view = SZ.inLens(lens, sx, sy) ? SZ.lensCam(cam, lens, lcam) : cam;
+    var w = SZ.toWorld(view, sx, sy, tmpW), best = null, bd = Infinity;
     for (var i = 0; i < R.items.length; i++) {
-      var it = R.items[i], p = SZ.pos(it, R.t, tmp), hr = SZ.hitR(it, cam.z), dd = Math.hypot(p.x - w.x, p.y - w.y) / hr;
+      var it = R.items[i], p = SZ.pos(it, R.t, tmp), hr = SZ.hitR(it, view.z), dd = Math.hypot(p.x - w.x, p.y - w.y) / hr;
       if (dd <= 1 && dd < bd) { bd = dd; best = it; }
     }
     if (!best) return { t: 'miss', it: null, x: w.x, y: w.y };
-    var t = best.got ? 'again' : best.cv && SZ.coverOpen(best, cam.z) < SZ.OPEN_AT ? 'closed' : best.r * cam.z < SZ.MIN_R ? 'small' : best.e < 0 ? 'decoy' : 'found';
+    var t = best.got ? 'again' : best.cv && SZ.coverOpen(best, view.z) < SZ.OPEN_AT ? 'closed' : best.r * view.z < SZ.MIN_R ? 'small' : best.e < 0 ? 'decoy' : 'found';
     return { t: t, it: best, x: w.x, y: w.y };
   };
   // A click in play. Finds the thing, or counts a wrong click (and, when the penalty is
   // on, wrong clicks in a row add seconds). 'small' and 'closed' are free: they say zoom.
-  SZ.click = function (R, cam, sx, sy) {
-    var h = SZ.hit(R, cam, sx, sy);
+  SZ.click = function (R, cam, sx, sy, lens) {
+    var h = SZ.hit(R, cam, sx, sy, lens);
     if (R.done || R.over) { h.t = 'over'; return h; }
     if (h.t === 'found') {
       h.it.got = true; R.list[h.it.e].got++; R.found++; R.row = 0;
