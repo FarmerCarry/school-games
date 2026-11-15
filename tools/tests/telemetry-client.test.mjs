@@ -114,11 +114,12 @@ async function setup(t, { telemetry = ON, copy = telemetry, gpc = false, clock =
   state.page = await context.newPage();
   state.page.on('pageerror', error => state.errors.push(error.message));
   // Chromium itself logs a failed request (a 4xx or 5xx answer, or no answer) to the
-  // console; the site never does. Only that line, and only for the statistics server, is allowed.
+  // console; the site never does. Only that line, and only for the statistics server (or
+  // the captive portal its refused redirect names, which is never requested), is allowed.
   state.page.on('console', message => {
     if (message.type() !== 'error') return;
     if (/^Failed to load resource: (?:the server responded with a status of (?:4|5)\d\d\b|net::ERR_FAILED$)/.test(message.text()) &&
-      message.location().url.startsWith('https://ingest.test/')) return;
+      /^https:\/\/(?:ingest|portal)\.test\//.test(message.location().url)) return;
     state.errors.push(message.text());
   });
   t.after(() => {
@@ -130,9 +131,10 @@ async function setup(t, { telemetry = ON, copy = telemetry, gpc = false, clock =
 
 /* ------------------------------------------------------------- helpers */
 const batches = state => state.posts.map(post => JSON.parse(post.body));
+// Every session's events as the server keeps them: each batch once, at its first arrival.
 function bySession(list) {
-  const out = new Map();
-  for (const b of list) out.set(b.s, [...(out.get(b.s) || []), ...b.ev]);
+  const out = new Map(), seen = new Set();
+  for (const b of list) if (!seen.has(b.b)) { seen.add(b.b); out.set(b.s, [...(out.get(b.s) || []), ...b.ev]); }
   return out;
 }
 const allEvents = state => batches(state).flatMap(b => b.ev);
@@ -568,7 +570,7 @@ test('the queue survives a reload, sends oldest first, and keeps at most 128 KB 
   serverKeeps(batches(state).filter(b => b.s !== '0123456789ab'));
 });
 
-test('a hidden page sends what waits by fetch with keepalive, unloading ends the session, offline keeps the queue, and no cookie goes', async t => {
+test('a hidden page sends what waits by fetch with keepalive, keeps it until the answer, unloading ends the session, offline keeps the queue, and no cookie goes', async t => {
   const state = await setup(t), { page } = state;
   await state.context.addCookies([COOKIE]);
   await page.goto(origin + '/');
@@ -578,7 +580,8 @@ test('a hidden page sends what waits by fetch with keepalive, unloading ends the
   assert.match(state.posts[0].headers['content-type'], /^text\/plain/);
   const first = JSON.parse(state.posts[0].body);
   like(first.ev, [['ss', 0]]);
-  assert.equal(await queue(page), null, 'a batch handed to fetch is not kept');
+  await page.waitForFunction(() => window.fetched === 1);
+  assert.equal(await queue(page), null, 'the server\'s 204 removes the batch');
   await setHidden(page, false);
 
   // A game, then the page unloads: the open game closes and the session ends at once.
@@ -594,7 +597,17 @@ test('a hidden page sends what waits by fetch with keepalive, unloading ends the
   assert.equal(last.s, first.s, 'the same session');
   like(last.ev.slice(-2), [['gx', int, 1, 'air-hockey', int, hist(6), hist(4)], ['se', int, int, 'u']]);
   assert.ok(allEvents(state).some(ev => ev[0] === 'go' && ev[3] === 'air-hockey'));
-  assert.equal(await queue(page), null);
+  // The unloaded page never saw the answer, so its batches wait for the next page.
+  const left = (await queue(page)).map(x => x.e.b);
+  assert.ok(left.includes(last.b), 'an unloading page keeps what it handed to fetch');
+  await page.goto(origin + '/');
+  await setHidden(page, true);
+  await until(() => left.every(b => batches(state).slice(unload.length + before).some(x => x.b === b)), 'the next page sends them again');
+  await page.waitForFunction(n => window.fetched >= n, left.length);
+  assert.ok(!((await queue(page)) || []).some(x => left.includes(x.e.b)), 'answered, so gone');
+  // This page's own unload leaves its last batch too: start the offline check empty.
+  await page.goto(origin + '/seed.html');
+  await page.evaluate(key => localStorage.removeItem(key), qKey(INGEST));
 
   // Offline: nothing goes and the batch waits in the queue.
   const sent = state.posts.length;
@@ -606,6 +619,35 @@ test('a hidden page sends what waits by fetch with keepalive, unloading ends the
   for (const p of state.posts) assert.equal(p.headers.cookie, undefined, 'no cookie, neither while the page lives nor as it unloads');
   await checkBatches(page, batches(state));
 });
+
+for (const [kind, blocked] of [['a failed request', 'abort'], ['a block page (a 200)', 200],
+  ['a redirect to a captive portal', { status: 302, headers: { Location: 'https://portal.test/login' } }]]) {
+  test(`behind a school filter (${kind}), what a hidden or closing page sends stays until the server's own 204`, async t => {
+    let down = true;
+    const state = await setup(t, { answer: () => down ? blocked : 204 }), { page } = state;
+    await page.goto(origin + '/');
+    await setHidden(page, true);
+    await until(() => state.posts.length === 1, 'the hidden page\'s send');
+    await page.waitForFunction(() => window.fetched === 1);
+    const first = JSON.parse(state.posts[0].body).b;
+    assert.deepEqual((await queue(page)).map(x => x.e.b), [first], 'the hidden page keeps the batch');
+    // The page closes: its end waits beside the first batch, neither of them lost.
+    await page.goto(origin + '/seed.html');
+    const kept = (await queue(page)).map(x => x.e.b);
+    assert.equal(kept[0], first);
+    like((await queue(page)).at(-1).e.ev, [['se', int, 0, 'u']]);
+    // The network lets the server through again: the next page delivers both, once each.
+    down = false;
+    const before = state.posts.length;
+    await page.goto(origin + '/');
+    await setHidden(page, true);
+    await until(() => kept.every(b => batches(state).slice(before).some(x => x.b === b)), 'the next page sends both again');
+    await page.waitForFunction(n => window.fetched >= n, kept.length);
+    assert.ok(!((await queue(page)) || []).some(x => kept.includes(x.e.b)), 'both delivered, so gone');
+    assert.ok(state.posts.every(p => p.url === INGEST), 'the redirect is never followed');
+    await checkBatches(page, batches(state));
+  });
+}
 
 test('a hidden page hands fetch only what fits in 60 KB of keepalive bodies in flight, oldest first, and keeps the rest', async t => {
   const state = await setup(t, { clock: true, answer: n => n === 1 ? 'hang' : 204 }), { page } = state;
@@ -635,6 +677,8 @@ test('a hidden page hands fetch only what fits in 60 KB of keepalive bodies in f
   await setHidden(page, true);
   await until(() => state.posts.length === 3, 'the next hidden page\'s send');
   assert.equal(JSON.parse(state.posts[2].body).b, ids[2]);
+  // The batch leaves the queue on its answer, not when it is handed to fetch.
+  await page.waitForFunction(() => window.fetched === 2);
   stored = await queue(page);
   assert.deepEqual(stored.map(x => x.e.b).slice(0, -1), [ids[0], ids[3]]);
 });

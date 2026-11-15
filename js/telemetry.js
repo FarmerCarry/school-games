@@ -27,12 +27,14 @@
  * Delivery: events wait in memory; batches of at most 200 events and 32 KB go when a game
  * closes, 60 s after the first waiting event (or what the server last asked for in
  * X-Batch-Every, 20 to 600 s), and when the page is hidden, each by fetch without cookies,
- * with keepalive while the bodies in flight fit in 60 KB. Unsent batches wait in
+ * with keepalive while the bodies in flight fit in 60 KB. A batch leaves the queue only on
+ * the server's answer, never because it was handed to fetch. Unsent batches wait in
  * localStorage sg:site:tm:anon:<hash of the address>, so another copy of the site on this
  * origin that sends elsewhere never sends them (oldest first, at most 128 KB and 7 days).
  * The queues of builds that had player profiles (sg:site:tm:q:, sg:site:tm:q3:) hold
  * children's codes and ages: this build never sends them and removes them, with their
- * sharing note, once active. A 2xx or a 4xx other than 429 is final; 429, 5xx and network
+ * sharing note, once active. Only the server's 204, or a 4xx other than 429, is final;
+ * any other answer, a redirect (a school filter or captive portal), 429, 5xx and network
  * errors back off 20, 40, 80, 160, 300 s; a request with no answer after a minute is sent
  * again. Every storage call is guarded, nothing is logged, every promise is caught and no
  * call into this file throws.
@@ -65,7 +67,7 @@
   } catch (e) { ready = false; }
 
   var sess, game = 0, cur = 0, gone = [], closing = [], pend = [], mine = Object.create(null);
-  var tag = 0, timer = 0, timerAt = 0, busy = 0, busyAt = 0, fly = 0, fails = 0, retryAt = 0, mq = [], temp = false, every = 60;
+  var hand = Object.create(null), tag = 0, timer = 0, timerAt = 0, busy = 0, busyAt = 0, fly = 0, fails = 0, retryAt = 0, mq = [], temp = false, every = 60;
 
   function now() { return Date.now(); }
   function safe(fn) {
@@ -270,24 +272,31 @@
     w = floor((t === undefined ? now() - x.w0 : perf.now() - t) / 1000);
     return str(e).slice(0, -1) + ',"w":' + min(w > m ? w : m, 691200) + '}';
   }
-  // One POST, never with cookies. keepalive lets it outlive the page, but the browser
-  // refuses keepalive bodies beyond 64 KB in flight together: ours stay within 60 KB.
+  // One POST, never with cookies or redirects: a filter or captive portal that redirects
+  // the request makes it a network failure. keepalive lets it outlive the page, but the
+  // browser refuses keepalive bodies beyond 64 KB in flight together: ours stay within 60 KB.
   function room(json) { return fly + json.length <= 6e4; }
   function post(json) {
     var n = room(json) ? json.length : 0, p = fetch(url, { method: 'POST', body: json, headers: { 'Content-Type': 'text/plain' },
-      credentials: 'omit', mode: 'cors', keepalive: n > 0 });
+      credentials: 'omit', mode: 'cors', redirect: 'error', keepalive: n > 0 });
     fly += n;
     p.then(free, free);
     function free() { fly -= n; }
     return p;
   }
-  // Sends the oldest batch; the next one follows its answer.
+  // A batch a hidden page handed to fetch in the last minute, still waiting for its answer.
+  function handed(b) { return hand[b] > now() - 6e4; }
+  // Sends the oldest batch not already on its way; the next one follows its answer.
   function send() {
     clearTimeout(timer);
     timer = 0;
     seal();
-    var x = load()[0], b;
-    if (!x) return;
+    var x, b, wait = 0;
+    load().some(function (y) {
+      if (!handed(y.e.b)) return x = y;
+      wait = wait || hand[y.e.b] + 6e4 - now();
+    });
+    if (!x) return wait && arm(wait);
     // A request with no answer after a minute no longer holds the queue back: its batch
     // goes again (the server keeps it once), with no new event needed to wake the sender.
     if (busy && now() - busyAt < 6e4) return arm(busyAt + 6e4 - now());
@@ -298,13 +307,15 @@
     busyAt = now();
     arm(6e4);
   }
-  // A 2xx is delivered and a 4xx other than 429 is malformed: both are final.
-  // 429, 5xx and network errors keep the batch and back off. A 2xx may ask for timed
-  // sends less often (X-Batch-Every, whole seconds 20..600); without it they go after 60 s.
+  // The server's 204 is delivered and a 4xx other than 429 is malformed: both are final.
+  // Any other answer (a filter's or portal's page), 429, 5xx and network errors keep the
+  // batch and back off. A 204 may ask for timed sends less often (X-Batch-Every, whole
+  // seconds 20..600); without it they go after 60 s.
   function done(b, status, asked) {
     if (busy === b) busy = 0;
-    if (status > 199 && status < 300 || status > 399 && status < 500 && status !== 429) {
-      if (status < 300) {
+    delete hand[b];
+    if (status === 204 || status > 399 && status < 500 && status !== 429) {
+      if (status === 204) {
         fails = 0;
         every = asked == null ? 60 : /^\d+$/.test(asked) && asked >= 20 && asked <= 600 ? +asked : every;
       }
@@ -316,22 +327,21 @@
     }
   }
   // The page is hidden or going away: what waits goes at once with keepalive, unless the
-  // server has been failing or the PC is offline (the queue keeps it for later). Oldest
-  // first while the bodies fit in 60 KB; the batch already on its way stays where it is,
-  // and the queue keeps every batch not handed to fetch.
+  // server has been failing or the PC is offline. Oldest first while the bodies fit in
+  // 60 KB, skipping batches already on their way. Every batch stays in the queue until
+  // its answer: a page that lives to see it removes the batch, and a page that is gone
+  // leaves it for the next page to send again (the server keeps each batch once).
   function beacon() {
     seal();
     if (fails || nav.onLine === false) return;
-    var sent = {};
     load().every(function (x) {
-      var json;
-      if (x.e.b === busy) return true;
+      var json, b = x.e.b;
+      if (b === busy || handed(b)) return true;
       if (!room(json = body(x))) return false;
-      post(json).then(null, function () { /* kept nowhere */ });
-      return sent[x.e.b] = true;
+      hand[b] = now();
+      post(json).then(safe(function (r) { done(b, r.status, r.headers.get('X-Batch-Every')); }), safe(function () { done(b, 0); }));
+      return true;
     });
-    save(load().filter(function (x) { return !sent[x.e.b]; }));
-    if (!mq.length) { clearTimeout(timer); timer = 0; }
   }
 
   /* --------------------------------------------------------------- API */

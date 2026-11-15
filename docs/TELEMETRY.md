@@ -162,14 +162,20 @@ cues and tutorials where it has them (the table in [`ARCHITECTURE.md`](ARCHITECT
   unloads**. A 2xx answer may carry **`X-Batch-Every`**: a whole number of seconds from 20 to
   600 that replaces the 60 for later timed sends. Anything else in the header is ignored; a
   2xx without it goes back to 60.
-* Every send is `fetch(url, { method: 'POST', credentials: 'omit', mode: 'cors', keepalive })`,
+* Every send is `fetch(url, { method: 'POST', credentials: 'omit', mode: 'cors', redirect: 'error', keepalive })`,
   **never with cookies** (which is why the sender does not use `navigator.sendBeacon`).
   Normal sends go one at a time, oldest first.
 * The browser refuses keepalive bodies beyond 64 KB in flight together, so the sender keeps its
   own within **60 KB**. A hidden or unloading page hands `fetch` what waits at once, oldest
-  first, while it fits; the rest stays in the queue.
-* A **2xx** removes the batch. A **4xx other than 429** removes it as malformed. **429, 5xx
-  and network errors** keep it and back off **20, 40, 80, 160, then 300 s**. A request with no
+  first, while it fits, and skips batches already on their way.
+* **A batch leaves the queue only on the server's answer**, never because it was handed to
+  `fetch`. A page that unloads before the answer leaves its batches for the next page, which
+  sends them again (the server keeps each batch once). On a school network that blocks the
+  server, nothing is lost: the batches wait, up to the 128 KB and 7-day limits below.
+* The server's **204** removes the batch. A **4xx other than 429** removes it as malformed.
+  **Any other answer** (another 2xx or 3xx, which is what a filter or captive portal sends),
+  a **redirect** (a network failure, by `redirect: 'error'`), **429, 5xx and network errors**
+  keep it and back off **20, 40, 80, 160, then 300 s**. A request with no
   answer after a minute no longer holds the queue back: its batch goes again (the server keeps
   it once). While the server is failing, or the PC is offline, a hidden page sends nothing.
 * Unsent batches wait in `localStorage` **`sg:site:tm:anon:<hash>`** (an array of
@@ -236,7 +242,8 @@ Privacy Control in the browser turns it off.
   sends and stores nothing and games get `telemetry: false`; back-off 20, 40, 80, 160, 300 s
   with a fake clock; 400 and 429; a request never answered goes again after a minute; the
   queue across a reload, its 128 KB and 7-day rules; keepalive sends on a hidden page and at
-  unload with no cookie, the 60 KB budget, offline; two copies of the site on one origin; every
+  unload with no cookie, kept until answered; a school filter (a failed request, a block page,
+  a redirect) loses nothing, the 60 KB budget, offline; two copies of the site on one origin; every
   launch source; field-by-field checks of `sg:telemetry` and late frames; load failures; the
   60-second timer and `X-Batch-Every`; `w` for retries, split and queued batches. With
   `SG_SERVER_SCHEMA` naming the server's `schema.mjs` (with `clock.mjs` beside it), every batch
