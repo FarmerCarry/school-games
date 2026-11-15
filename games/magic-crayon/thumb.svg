@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <defs>
+    <linearGradient id="paper" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fffdf5"/>
+      <stop offset="1" stop-color="#f7efe0"/>
+    </linearGradient>
+    <linearGradient id="rainbow" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#ff5964"/>
+      <stop offset="0.35" stop-color="#ffbe0b"/>
+      <stop offset="0.7" stop-color="#10b981"/>
+      <stop offset="1" stop-color="#00b4d8"/>
+    </linearGradient>
+    <radialGradient id="cupGlow">
+      <stop offset="0" stop-color="#fde68a" stop-opacity="0.95"/>
+      <stop offset="0.55" stop-color="#ffd166" stop-opacity="0.32"/>
+      <stop offset="1" stop-color="#ffd166" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="marble" cx="0.35" cy="0.32">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.3" stop-color="#ffd166"/>
+      <stop offset="1" stop-color="#fb5607"/>
+    </radialGradient>
+    <linearGradient id="goldCup" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#f59e0b"/>
+      <stop offset="0.4" stop-color="#fef08a"/>
+      <stop offset="0.8" stop-color="#fbbf24"/>
+      <stop offset="1" stop-color="#d97706"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Desk & Notebook Sheet -->
+  <rect width="400" height="400" fill="#2d2863"/>
+  <rect x="14" y="14" width="372" height="372" rx="22" fill="url(#paper)" stroke="#1e1b4b" stroke-width="5"/>
+
+  <!-- Notebook Rulings & RTL Margin -->
+  <g stroke="#cbe2f6" stroke-width="2">
+    <line x1="20" y1="74" x2="380" y2="74"/><line x1="20" y1="118" x2="380" y2="118"/>
+    <line x1="20" y1="162" x2="380" y2="162"/><line x1="20" y1="206" x2="380" y2="206"/>
+    <line x1="20" y1="250" x2="380" y2="250"/><line x1="20" y1="294" x2="380" y2="294"/>
+  </g>
+  <line x1="352" y1="18" x2="352" y2="382" stroke="#ff5964" stroke-opacity="0.38" stroke-width="2.5"/>
+
+  <!-- Wooden Ruler Platforms -->
+  <g stroke="#1e1b4b" stroke-width="4.5" stroke-linejoin="round">
+    <rect x="24" y="218" width="90" height="18" rx="9" transform="rotate(8 69 227)" fill="#ffd166"/>
+    <rect x="282" y="236" width="92" height="18" rx="9" transform="rotate(4 328 245)" fill="#ffd166"/>
+  </g>
+
+  <!-- Glowing Magic Rainbow Crayon Bridge -->
+  <g fill="none" stroke-linecap="round">
+    <path d="M98 232 Q194 176 286 238" stroke="#1e1b4b" stroke-width="22"/>
+    <path d="M98 232 Q194 176 286 238" stroke="url(#rainbow)" stroke-width="14"/>
+    <path d="M98 232 Q194 176 286 238" stroke="#ffffff" stroke-opacity="0.65" stroke-width="3.5" stroke-dasharray="6 10"/>
+  </g>
+
+  <!-- Collectible Floating Stars -->
+  <g fill="#ffd166" stroke="#1e1b4b" stroke-width="3.5" stroke-linejoin="round">
+    <polygon transform="translate(198 134) scale(0.9)" points="0,-20 6,-7 20,-6 9,4 13,18 0,10 -13,18 -9,4 -20,-6 -6,-7"/>
+    <polygon transform="translate(254 156) rotate(12) scale(0.76)" points="0,-20 6,-7 20,-6 9,4 13,18 0,10 -13,18 -9,4 -20,-6 -6,-7"/>
+  </g>
+
+  <!-- Golden Star Cup -->
+  <circle cx="332" cy="196" r="62" fill="url(#cupGlow)"/>
+  <g transform="translate(332 204)" stroke="#1e1b4b" stroke-width="4" stroke-linejoin="round">
+    <path d="M-26 -18 H-36 Q-42 -18 -40 -6 Q-38 6 -24 6" fill="none" stroke-linecap="round"/>
+    <path d="M26 -18 H36 Q42 -18 40 -6 Q38 6 24 6" fill="none" stroke-linecap="round"/>
+    <ellipse cx="0" cy="-24" rx="28" ry="6" fill="#92400e"/>
+    <path d="M-28 -24 L-20 22 H20 L28 -24 Z" fill="url(#goldCup)"/>
+    <rect x="-18" y="22" width="36" height="9" rx="4.5" fill="#d97706"/>
+    <polygon points="0,-11 3.5,-3 12,-2 5.5,3.5 7.5,12 0,7.5 -7.5,12 -5.5,3.5 -12,-2 -3.5,-3" fill="#fffbeb" stroke-width="2.5"/>
+  </g>
+
+  <!-- Smiling Karroum Marble Rolling on the Bridge -->
+  <g transform="translate(148 178)">
+    <circle cx="-26" cy="14" r="6" fill="#ffd166" opacity="0.55"/>
+    <circle cx="-42" cy="22" r="4" fill="#ffd166" opacity="0.35"/>
+    <circle cx="0" cy="0" r="30" fill="url(#marble)" stroke="#1e1b4b" stroke-width="4.5"/>
+    <path d="M-16 -14 A20 20 0 0 1 12 -18" fill="none" stroke="#ffffff" stroke-opacity="0.7" stroke-width="4.5" stroke-linecap="round"/>
+    <circle cx="-9" cy="-4" r="8" fill="#ffffff" stroke="#1e1b4b" stroke-width="3"/>
+    <circle cx="9" cy="-4" r="8" fill="#ffffff" stroke="#1e1b4b" stroke-width="3"/>
+    <circle cx="-7" cy="-4" r="4" fill="#1e1b4b"/><circle cx="11" cy="-4" r="4" fill="#1e1b4b"/>
+    <circle cx="-8.5" cy="-5.5" r="1.5" fill="#ffffff"/><circle cx="9.5" cy="-5.5" r="1.5" fill="#ffffff"/>
+    <circle cx="-17" cy="6" r="4.5" fill="#ff5964" opacity="0.55"/><circle cx="17" cy="6" r="4.5" fill="#ff5964" opacity="0.55"/>
+    <path d="M-9 7 Q0 16 9 7" fill="none" stroke="#1e1b4b" stroke-width="4" stroke-linecap="round"/>
+  </g>
+
+  <!-- Glowing Red Magic Crayon Drawing the Bridge -->
+  <g transform="translate(286 238) rotate(-36)">
+    <polygon points="0,0 -13,-26 13,-26" fill="#ff3b47" stroke="#1e1b4b" stroke-width="4" stroke-linejoin="round"/>
+    <rect x="-13" y="-92" width="26" height="66" rx="6" fill="#ff5964" stroke="#1e1b4b" stroke-width="4"/>
+    <rect x="-11" y="-80" width="22" height="8" fill="#ffffff" opacity="0.88"/>
+    <rect x="-11" y="-44" width="22" height="8" fill="#ffffff" opacity="0.88"/>
+  </g>
+
+  <!-- Arabic Title Banner -->
+  <g font-family="Fredoka, 'Segoe UI', Tahoma, sans-serif" font-weight="700" text-anchor="middle" direction="rtl">
+    <text x="200" y="362" font-size="56" fill="#1e1b4b" stroke="#1e1b4b" stroke-width="15" stroke-linejoin="round" paint-order="stroke">القلم السحري</text>
+    <text x="200" y="362" font-size="56" fill="#ff5964" stroke="#ffffff" stroke-width="6" stroke-linejoin="round" paint-order="stroke">القلم السحري</text>
+  </g>
+</svg>

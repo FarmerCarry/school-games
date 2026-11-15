@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2eb5ff"/>
+      <stop offset="1" stop-color="#c9f6ff"/>
+    </linearGradient>
+    <radialGradient id="sunGlow">
+      <stop offset="0" stop-color="#fff4a3" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#ffd23f" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="pinkB" cx="0.35" cy="0.32">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.38" stop-color="#ff7ab6"/>
+      <stop offset="1" stop-color="#e11d74"/>
+    </radialGradient>
+    <radialGradient id="botBody" cx="0.36" cy="0.34">
+      <stop offset="0" stop-color="#d9ffe7"/>
+      <stop offset="0.5" stop-color="#6ef29a"/>
+      <stop offset="1" stop-color="#1db954"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Sunny Meadow Sky & Hills -->
+  <rect width="400" height="400" fill="url(#sky)"/>
+  <circle cx="88" cy="76" r="68" fill="url(#sunGlow)"/>
+  <circle cx="88" cy="76" r="30" fill="#ffe45e"/>
+  <g fill="#ffffff" opacity="0.88">
+    <circle cx="176" cy="64" r="18"/><circle cx="198" cy="58" r="22"/><circle cx="220" cy="66" r="16"/>
+    <circle cx="322" cy="82" r="14"/><circle cx="340" cy="76" r="18"/><circle cx="358" cy="84" r="13"/>
+  </g>
+  <path d="M0 304 Q95 232 206 274 T400 248 V400 H0 Z" fill="#5ce38a"/>
+  <path d="M0 318 Q120 278 240 308 T400 292 V400 H0 Z" fill="#28b865"/>
+  <rect y="312" width="400" height="88" fill="#7d4925"/>
+  <rect y="312" width="400" height="20" fill="#209c50"/>
+  <line x1="0" y1="312" x2="400" y2="312" stroke="#18163a" stroke-width="5"/>
+
+  <!-- Bouncy Jelly Pad in Valley -->
+  <g transform="translate(196 302)">
+    <rect x="-34" y="-10" width="68" height="20" rx="10" fill="#ff5db1" stroke="#18163a" stroke-width="4"/>
+    <rect x="-24" y="-6" width="48" height="6" rx="3" fill="#ffffff" opacity="0.65"/>
+  </g>
+
+  <!-- Jelly & Ice Fort on the Right + Cute Paint-Bot -->
+  <g stroke="#18163a" stroke-width="4" stroke-linejoin="round">
+    <rect x="278" y="236" width="22" height="76" rx="5" fill="#7ce8ff"/>
+    <rect x="348" y="236" width="22" height="76" rx="5" fill="#7ce8ff"/>
+    <rect x="268" y="216" width="112" height="20" rx="6" fill="#ff6bb5"/>
+    <rect x="292" y="168" width="20" height="48" rx="5" fill="#d88c46"/>
+    <rect x="336" y="168" width="20" height="48" rx="5" fill="#d88c46"/>
+    <rect x="284" y="150" width="80" height="18" rx="6" fill="#ffd23f"/>
+  </g>
+  <g fill="#ffffff" opacity="0.55">
+    <rect x="283" y="242" width="6" height="58" rx="3"/>
+    <rect x="353" y="242" width="6" height="58" rx="3"/>
+    <rect x="276" y="220" width="96" height="5" rx="2.5"/>
+  </g>
+
+  <!-- Rainbow Paint Splats on Fort -->
+  <g opacity="0.9">
+    <circle cx="288" cy="222" r="15" fill="#ff4d8d"/>
+    <circle cx="272" cy="212" r="6" fill="#ff4d8d"/>
+    <circle cx="358" cy="162" r="12" fill="#24c8ff"/>
+    <circle cx="372" cy="174" r="5" fill="#ffd23f"/>
+  </g>
+
+  <!-- Silly Surprised Paint-Bot on Fort Roof -->
+  <g transform="translate(324 123)">
+    <line x1="0" y1="-24" x2="0" y2="-36" stroke="#18163a" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="0" cy="-40" r="6" fill="#ff4d8d" stroke="#18163a" stroke-width="3.5"/>
+    <circle cx="0" cy="0" r="25" fill="url(#botBody)" stroke="#18163a" stroke-width="4"/>
+    <circle cx="-8" cy="-4" r="6.5" fill="#ffffff" stroke="#18163a" stroke-width="3"/>
+    <circle cx="8" cy="-4" r="6.5" fill="#ffffff" stroke="#18163a" stroke-width="3"/>
+    <circle cx="-10" cy="-4" r="3" fill="#18163a"/><circle cx="6" cy="-4" r="3" fill="#18163a"/>
+    <circle cx="0" cy="10" r="5.5" fill="#18163a"/>
+  </g>
+
+  <!-- Giant Wooden Slingshot on the Left -->
+  <g stroke-linecap="round" stroke-linejoin="round">
+    <path d="M84 242 L106 188" stroke="#18163a" stroke-width="22"/>
+    <path d="M84 242 L106 188" stroke="#8c4b1f" stroke-width="13"/>
+    <path d="M106 192 L138 158" stroke="#ff4d8d" stroke-width="7"/>
+    <rect x="56" y="298" width="56" height="18" rx="8" fill="#8c4b1f" stroke="#18163a" stroke-width="4"/>
+    <path d="M84 300 L84 238 L62 186" fill="none" stroke="#18163a" stroke-width="24"/>
+    <path d="M84 300 L84 238 L62 186" fill="none" stroke="#c97a3d" stroke-width="15"/>
+    <path d="M62 190 L134 158" stroke="#ff4d8d" stroke-width="7"/>
+  </g>
+
+  <!-- Trajectory Dots & Flying Pink Paint Balloon -->
+  <g fill="#ffffff" stroke="#18163a" stroke-width="3">
+    <circle cx="118" cy="170" r="5"/>
+    <circle cx="138" cy="150" r="6"/>
+    <circle cx="242" cy="106" r="5.5"/>
+    <circle cx="272" cy="112" r="4.5"/>
+  </g>
+  <g transform="translate(190 116) rotate(-18)">
+    <circle cx="-38" cy="12" r="10" fill="#ff4d8d" opacity="0.55"/>
+    <circle cx="-56" cy="20" r="6" fill="#ffd23f" opacity="0.65"/>
+    <path d="M-6 35 L6 35 L10 45 L-10 45 Z" fill="#e11d74" stroke="#18163a" stroke-width="3.5" stroke-linejoin="round"/>
+    <circle cx="0" cy="0" r="36" fill="url(#pinkB)" stroke="#18163a" stroke-width="5"/>
+    <ellipse cx="-12" cy="-13" rx="8" ry="12" transform="rotate(-25 -12 -13)" fill="#ffffff" opacity="0.72"/>
+    <circle cx="-8" cy="-2" r="4" fill="#18163a"/><circle cx="10" cy="-2" r="4" fill="#18163a"/>
+    <path d="M-6 8 Q1 16 8 8" fill="none" stroke="#18163a" stroke-width="3.5" stroke-linecap="round"/>
+  </g>
+
+  <!-- Arabic Game Title -->
+  <g font-family="Fredoka, 'Segoe UI', Tahoma, sans-serif" font-weight="700" text-anchor="middle" direction="rtl">
+    <text x="200" y="376" font-size="56" fill="#18163a" stroke="#18163a" stroke-width="15" stroke-linejoin="round" paint-order="stroke">مقلاع الألوان</text>
+    <text x="200" y="376" font-size="56" fill="#ffffff">مقلاع الألوان</text>
+  </g>
+</svg>

@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>القلم السحري</title>
+<link rel="icon" type="image/svg+xml" href="../../favicon.svg">
+<link rel="stylesheet" href="../../shared/game.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<svg class="defs" aria-hidden="true" focusable="false" width="0" height="0">
+  <symbol id="i-play" viewBox="0 0 64 64"><path d="M22 11 Q18 9 18 14 L18 50 Q18 55 22 53 L52 35 Q56 32 52 29 Z"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 64 64"><rect x="15" y="12" width="12" height="40" rx="5"/><rect x="37" y="12" width="12" height="40" rx="5"/></symbol>
+  <symbol id="i-again" viewBox="0 0 64 64"><path d="M50 30 A19 19 0 1 1 41 15" fill="none" stroke="currentColor" stroke-width="9" stroke-linecap="round"/><path d="M33 4 L52 13 L37 27 Z"/></symbol>
+  <symbol id="i-undo" viewBox="0 0 64 64"><path d="M24 22 L10 33 L24 44" fill="none" stroke="currentColor" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/><path d="M13 33 H38 A14 14 0 0 1 38 55 H28" fill="none" stroke="currentColor" stroke-width="8" stroke-linecap="round"/></symbol>
+  <symbol id="i-levels" viewBox="0 0 64 64"><rect x="6" y="10" width="15" height="15" rx="4"/><rect x="25" y="10" width="15" height="15" rx="4"/><rect x="44" y="10" width="15" height="15" rx="4"/><rect x="6" y="36" width="15" height="15" rx="4"/><rect x="25" y="36" width="15" height="15" rx="4"/><rect x="44" y="36" width="15" height="15" rx="4" opacity=".45"/></symbol>
+  <symbol id="i-home" viewBox="0 0 64 64"><path d="M8 32 L32 10 L56 32 L49 32 L49 54 L37 54 L37 40 L27 40 L27 54 L15 54 L15 32 Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></symbol>
+  <symbol id="i-star" viewBox="0 0 64 64"><path d="M32 5 L39 23.3 L58.6 24.4 L43.4 36.7 L48.5 55.6 L32 45 L15.5 55.6 L20.6 36.7 L5.4 24.4 L25 23.3 Z" stroke-linejoin="round"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 64 64"><path d="M20 28 L20 20 A12 12 0 0 1 44 20 L44 28" fill="none" stroke="currentColor" stroke-width="7"/><rect x="12" y="28" width="40" height="30" rx="7"/></symbol>
+  <symbol id="i-check" viewBox="0 0 64 64"><path d="M12 34 L26 48 L52 18" fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-palette" viewBox="0 0 64 64"><path d="M32 6 C12 6 4 22 6 34 C8 46 18 56 30 56 C36 56 36 50 33 47 C30 44 32 40 37 40 L46 40 C54 40 59 34 58 26 C56 14 46 6 32 6 Z" fill="#fff" stroke="#1e1b4b" stroke-width="4"/><circle cx="20" cy="30" r="5" fill="#ff5964"/><circle cx="26" cy="18" r="5" fill="#ffbe0b"/><circle cx="40" cy="16" r="5" fill="#00d9f5"/><circle cx="49" cy="27" r="5" fill="#10b981"/></symbol>
+  <symbol id="i-crayon" viewBox="0 0 64 64"><g transform="translate(32 32) rotate(-38)"><rect x="-9" y="-18" width="18" height="36" rx="4" fill="#ff5964" stroke="#1e1b4b" stroke-width="4"/><path d="M-9 -18 L0 -32 L9 -18 Z" fill="#ff3b47" stroke="#1e1b4b" stroke-width="4" stroke-linejoin="round"/><rect x="-9" y="-10" width="18" height="6" fill="#fff" opacity=".85"/><rect x="-9" y="6" width="18" height="6" fill="#fff" opacity=".85"/></g></symbol>
+  <symbol id="i-karroum" viewBox="0 0 64 64"><circle cx="32" cy="32" r="22" fill="#ffbe0b" stroke="#1e1b4b" stroke-width="4"/><circle cx="25" cy="28" r="5.5" fill="#fff" stroke="#1e1b4b" stroke-width="2.5"/><circle cx="39" cy="28" r="5.5" fill="#fff" stroke="#1e1b4b" stroke-width="2.5"/><circle cx="26.5" cy="28.5" r="2.6" fill="#1e1b4b"/><circle cx="40.5" cy="28.5" r="2.6" fill="#1e1b4b"/><path d="M24 38 Q32 45 40 38" fill="none" stroke="#1e1b4b" stroke-width="3.6" stroke-linecap="round"/></symbol>
+  <symbol id="i-cup" viewBox="0 0 64 64"><path d="M16 14 H48 L44 42 Q43 48 36 48 H28 Q21 48 20 42 Z" fill="#ffd166" stroke="#1e1b4b" stroke-width="4" stroke-linejoin="round"/><path d="M16 20 H10 Q7 20 8 27 Q9 34 18 34" fill="none" stroke="#1e1b4b" stroke-width="4" stroke-linecap="round"/><path d="M48 20 H54 Q57 20 56 27 Q55 34 46 34" fill="none" stroke="#1e1b4b" stroke-width="4" stroke-linecap="round"/><rect x="22" y="48" width="20" height="8" rx="4" fill="#f59e0b" stroke="#1e1b4b" stroke-width="4"/></symbol>
+</svg>
+
+<canvas id="game" tabindex="0" aria-label="القلم السحري"></canvas>
+
+<div id="ui">
+<div id="hud" hidden>
+  <button type="button" id="btnPause" class="mc-btn mc-round" aria-label="استراحة" title="استراحة (P)"><svg aria-hidden="true"><use href="#i-pause"/></svg></button>
+  <button type="button" id="btnRetry" class="mc-btn mc-round" aria-label="إعادة" title="إعادة (R)"><svg aria-hidden="true"><use href="#i-again"/></svg></button>
+  <button type="button" id="btnUndo" class="mc-btn mc-round" aria-label="ممحاة" title="ممحاة (Z)"><svg aria-hidden="true"><use href="#i-undo"/></svg></button>
+  <button type="button" id="btnRoll" class="mc-btn mc-roll ring" aria-label="انطلق" title="انطلق (Space)"><svg aria-hidden="true"><use href="#i-play"/></svg><span>انطلق!</span></button>
+</div>
+
+<section id="scrTitle" class="screen" aria-label="القلم السحري">
+  <h1 class="logo">القلم السحري</h1>
+  <div class="chips">
+    <div class="chip" id="titleStars" aria-label="النجوم"><svg aria-hidden="true"><use href="#i-star"/></svg><b>0/60</b></div>
+    <div class="chip" id="titleCoins" aria-label="العملات"><i class="coin"></i><b>0</b></div>
+  </div>
+  <div class="howto" aria-label="طريقة اللعب">
+    <figure class="card">
+      <svg viewBox="0 0 200 124" aria-hidden="true">
+        <path d="M26 88 Q96 52 164 84" fill="none" stroke="#ff5964" stroke-width="14" stroke-linecap="round"/>
+        <path d="M26 88 Q96 52 164 84" fill="none" stroke="#ffd166" stroke-width="5" stroke-dasharray="6 10" stroke-linecap="round"/>
+        <use href="#i-crayon" x="122" y="14" width="68" height="68"/>
+      </svg>
+      <figcaption>ارسم جسرًا</figcaption>
+    </figure>
+    <figure class="card">
+      <svg viewBox="0 0 200 124" aria-hidden="true">
+        <rect x="34" y="34" width="132" height="56" rx="28" fill="#10b981" stroke="#1e1b4b" stroke-width="5"/>
+        <polygon points="88,48 88,76 116,62" fill="#fff"/>
+        <use href="#i-karroum" x="14" y="8" width="52" height="52"/>
+      </svg>
+      <figcaption>اضغط انطلق</figcaption>
+    </figure>
+    <figure class="card">
+      <svg viewBox="0 0 200 124" aria-hidden="true">
+        <path d="M20 92 Q100 72 180 92" fill="none" stroke="#00b4d8" stroke-width="12" stroke-linecap="round"/>
+        <use href="#i-karroum" x="28" y="36" width="56" height="56"/>
+        <use href="#i-star" x="92" y="24" width="44" height="44" fill="#ffd166" stroke="#1e1b4b" stroke-width="3"/>
+        <use href="#i-star" x="138" y="34" width="44" height="44" fill="#ffd166" stroke="#1e1b4b" stroke-width="3"/>
+      </svg>
+      <figcaption>اجمع النجوم</figcaption>
+    </figure>
+    <figure class="card">
+      <svg viewBox="0 0 200 124" aria-hidden="true">
+        <circle cx="118" cy="64" r="44" fill="#fde68a" opacity=".6"/>
+        <use href="#i-cup" x="82" y="32" width="76" height="76"/>
+        <use href="#i-karroum" x="50" y="12" width="52" height="52"/>
+      </svg>
+      <figcaption>الكأس الذهبية</figcaption>
+    </figure>
+  </div>
+  <button type="button" id="btnPlay" class="mc-btn mc-play ring" aria-label="العب" title="العب (Enter)"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
+  <button type="button" id="btnLevels" class="mc-btn mc-side" aria-label="المراحل"><svg aria-hidden="true"><use href="#i-levels"/></svg><span>المراحل</span></button>
+  <button type="button" id="btnShop" class="mc-btn mc-side" aria-label="المتجر"><svg aria-hidden="true"><use href="#i-palette"/></svg><span>الألوان</span></button>
+</section>
+
+<section id="scrMap" class="screen" aria-label="المراحل" hidden>
+  <button type="button" id="mapHome" class="mc-btn mc-round" aria-label="البداية" title="البداية (Esc)"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
+  <div class="chip" id="mapStars" aria-label="النجوم"><svg aria-hidden="true"><use href="#i-star"/></svg><b>0/60</b></div>
+  <div id="worlds"></div>
+</section>
+
+<section id="scrPause" class="screen dim" aria-label="استراحة" hidden>
+  <div class="card panel">
+    <h2>استراحة</h2>
+    <button type="button" id="btnResume" class="mc-btn mc-go" aria-label="تابع" title="تابع (P)"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
+    <div class="row">
+      <button type="button" id="btnMap" class="mc-btn mc-round big" aria-label="المراحل"><svg aria-hidden="true"><use href="#i-levels"/></svg></button>
+      <button type="button" id="btnRestart" class="mc-btn mc-round big" aria-label="ابدأ من جديد" title="ابدأ من جديد (R)"><svg aria-hidden="true"><use href="#i-again"/></svg></button>
+    </div>
+  </div>
+</section>
+
+<section id="scrResult" class="screen dim" aria-label="النتيجة" hidden>
+  <div class="card panel result">
+    <div class="ribbon" id="resBest" hidden>رقم جديد!</div>
+    <h2 id="resTitle">أحسنت!</h2>
+    <div class="stars3" id="resStars" aria-hidden="true"><svg><use href="#i-star"/></svg><svg><use href="#i-star"/></svg><svg><use href="#i-star"/></svg></div>
+    <div class="facts">
+      <span class="fact" id="resPicked"><svg class="st-ico" aria-hidden="true"><use href="#i-star"/></svg><b dir="ltr">0/3</b><svg class="ok" aria-hidden="true"><use href="#i-check"/></svg></span>
+      <span class="fact" id="resInk"><svg aria-hidden="true"><use href="#i-crayon"/></svg><b dir="ltr">0</b><svg class="ok" aria-hidden="true"><use href="#i-check"/></svg></span>
+      <span class="fact" id="resCoins"><i class="coin"></i><b dir="ltr">+0</b></span>
+    </div>
+    <div class="newworld" id="resWorld" hidden>دفتر جديد!</div>
+    <div class="row">
+      <button type="button" id="resMap" class="mc-btn mc-round big" aria-label="المراحل" title="المراحل (Esc)"><svg aria-hidden="true"><use href="#i-levels"/></svg></button>
+      <button type="button" id="resNext" class="mc-btn mc-go ring" aria-label="المرحلة التالية" title="التالي (Enter)"><svg aria-hidden="true"><use href="#i-play"/></svg><span class="sg-key cap" aria-hidden="true">Enter</span></button>
+      <button type="button" id="resAgain" class="mc-btn mc-round big" aria-label="مرة أخرى" title="مرة أخرى (R)"><svg aria-hidden="true"><use href="#i-again"/></svg><span class="sg-key cap" aria-hidden="true">R</span></button>
+    </div>
+  </div>
+</section>
+
+<section id="scrShop" class="screen" aria-label="المتجر" hidden>
+  <button type="button" id="shopBack" class="mc-btn mc-round" aria-label="رجوع" title="رجوع (Esc)"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
+  <div class="chip" id="shopCoins" aria-label="العملات"><i class="coin"></i><b>0</b></div>
+  <h2 class="shop-title">ألوان القلم السحري</h2>
+  <div class="shelf" id="shelfColors"></div>
+  <h2 class="shop-title small">أزياء كرّوم</h2>
+  <div class="shelf" id="shelfSkins"></div>
+</section>
+</div>
+<div id="live" class="sr" aria-live="polite"></div>
+
+<script src="../../shared/kit.js"></script>
+<script src="../../shared/juice.js"></script>
+<script src="engine.js"></script>
+<script src="art.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

@@ -28,7 +28,7 @@ Only `js/telemetry.js` sends, and only when the fast build is given the server's
 the address, the offline ZIP run from a folder and a browser with Global Privacy Control send
 nothing. Details, the exact fields and how to turn it off: [`docs/TELEMETRY.md`](docs/TELEMETRY.md).
 
-## The games (44)
+## The games (50)
 
 | Game | English name | Players | Type |
 |---|---|---|---|
@@ -43,6 +43,7 @@ nothing. Details, the exact fields and how to turn it off: [`docs/TELEMETRY.md`]
 | حديقة الكلمات | Word Garden (type the missing letter, Arabic + English) | 1 | ألغاز، تحديات |
 | مصنع الاختصارات | Shortcut Factory (Ctrl+C, V, X, Z and other shortcuts) | 1 | ألغاز، تحديات |
 | ضربة الطلاء | Splat Strike (3D paint-blaster arena vs bots) | 1 | تصويب، تحدي الروبوتات |
+| مقلاع الألوان | Splat Catapult (slingshot paint forts + 2-player duel) | 1-2 | تصويب، ألغاز، لاعبان |
 | عدّاء السكة | Rail Rush | 1 | جري |
 | الديناصور ثلاثي الأبعاد | Dino 3D (voxel dinosaur journey) | 1 | جري، أركيد |
 | بوابات الحساب | Math Gates (three-lane crowd runner for practising math) | 1 | جري، ألغاز |
@@ -52,6 +53,7 @@ nothing. Details, the exact fields and how to turn it off: [`docs/TELEMETRY.md`]
 | الخطّاف الطائر | Swing Hook | 1 | أركيد |
 | جنون الدراجات | Moto Madness | 1 | سباقات |
 | ملك الانزلاق | Drift King | 1 | سباقات |
+| سباق المكاتب | Desk Karts (top-down school desk micro-kart racing) | 1-2 | سباقات، لاعبان، أركيد |
 | النار والجليد | Fire & Ice | 1-2 | لاعبان، ألغاز |
 | دبابات الألوان | Paint Tanks | 1-3 | لاعبان، تحدي الروبوتات |
 | مصارعة السومو | Sumo Bonk | 1-2 | لاعبان، رياضة |
@@ -62,14 +64,18 @@ nothing. Details, the exact fields and how to turn it off: [`docs/TELEMETRY.md`]
 | ضربة إلى الفضاء | Skybound Golf | 1 | رياضة، أركيد |
 | سوق الحيوانات | Critter Mart | 1 | بناء وإدارة |
 | إمبراطورية البيتزا | Pizza Empire | 1 | بناء وإدارة |
+| مطبخ الفسحة | Recess Kitchen (co-op school canteen rush) | 1-2 | لاعبان، أركيد، بناء وإدارة |
 | سباق البيض | Egg Rush (sneak and freeze in the farmyard) | 1-2 | لاعبان، أركيد |
 | بحيرة الحظ | Lucky Lake (fishing) | 1-2 | لاعبان، أركيد |
 | عالم المكعبات | Block World | 1 | بناء وإدارة، أركيد |
 | حرّاس الكعكة | Cake Guards (tower defense) | 1 | استراتيجية |
+| قلعة الألعاب | Toy Castle Clash (tug-of-war toy strategy + 2-player battle) | 1-2 | استراتيجية، لاعبان، تحدي الروبوتات |
 | انفجار المكعبات | Block Burst | 1 | ألغاز |
 | دمج 2048 | 2048 | 1 | ألغاز |
+| سلّة الفواكه | Juicy Drop (one-button physics fruit-merge jar) | 1 | ألغاز، أركيد، تحديات |
 | جزيرة الفوضى | Chaos Island (survive the island's silly disasters) | 1-2 | لاعبان، أركيد |
 | حبل الحلوى | Munch Rope | 1 | ألغاز |
+| القلم السحري | Magic Crayon (draw physics bridges and ramps in a notebook) | 1 | ألغاز، أركيد |
 | اندفاع المتاهة | Maze Dash | 1 | أركيد |
 | عبور الطريق | Road Hopper | 1 | أركيد |
 | المراحل الماكرة | Sneaky Levels | 1 | أركيد |
@@ -231,6 +237,48 @@ anything violent. Free-for-all or 5 v 5 teams against bots (easy / normal / hard
 with coins to unlock colours and hats. Click the game to capture the mouse; Esc gives it back
 and pauses.
 
+**مقلاع الألوان (Splat Catapult)** is a physics slingshot game. Pull back a water-paint balloon with
+the mouse (or aim with the arrows and hold Space) to topple cardboard, wood and stone forts and
+splat the cheeky paint-gremlins inside; click or press Space in mid-air to trigger special trick
+balloons (three-way split, heavy drop, bouncy rubber and rainbow splash). Four worlds of four levels
+scale trajectory guide length and fort sturdiness to the PC (`Kit.dda`), and two classmates can take
+turns in a hotseat fort duel on the same PC. Coins buy balloon skins and slingshot frames.
+
+**مطبخ الفسحة (Recess Kitchen)** is a cooperative school-canteen rush for one or two players.
+Hungry classmates line up at the window with picture bubbles (cheese sandwiches, toasted subs,
+fresh juice and fruit cups): grab ingredients, chop, toast or blend them without letting the toaster
+smoke, and serve orders in streak combos before the recess bell rings. Twelve levels across four
+school canteens can be played solo (arrows, WASD or click-to-walk) or by two chefs sharing one
+keyboard (WASD + Space/E and Arrows + Enter/Shift). Coins unlock aprons and funny chef hats.
+
+**سباق المكاتب (Desk Karts)** is a top-down micro-kart racer across giant school desks. Race toy
+eraser and ruler karts around pencil barriers, ruler ramps, glue puddles, bouncy erasers and turbo
+tape strips across eight 3-lap tracks in four classrooms. One player races three bots (arrows, WASD
+or holding the mouse button to steer), or two players share the whole-track camera on WASD + Q and
+Arrows + Enter with rubber-banded bots and playful item pickups. Coins unlock kart paints and toppers.
+
+**قلعة الألعاب (Toy Castle Clash)** is a tug-of-war toy strategy game. Two cardboard castles face
+each other across a playroom rug while wind-up energy ticks up: summon rubber ducks, shield bears,
+paper planes, spring frogs and toy trains with 1–5 or clicks, pop floating star bubbles for bonus
+energy, upgrade your wind-up key (`6` or `U`) and fire the castle's confetti cannon (`Space`) to push
+back crowds. Twelve campaign levels across four playrooms adapt with `Kit.dda`, and two players can
+duel symmetrically on one keyboard (`1–5` or `Q–T`, `F`, `Space` vs `6–0` or `U–[`, `H`, `Enter`).
+
+**القلم السحري (Magic Crayon)** is a freehand physics puzzle in a school notebook. Draw ramps,
+bridges, hooks and seesaws with the mouse (or arrows + Shift) using washable crayon wax, then press
+Space so «كرّوم», a smiling marble, rolls across gaps, trampoline erasers, desk-fan gusts and purple
+slime puddles into the golden star cup. Undo (`Z` or right-click) and instant retry (`R`, keeping a
+faint ghost trace of your last try) encourage experimenting across 20 levels in four notebooks, and
+stars reward thrifty ink use.
+
+**سلّة الفواكه (Juicy Drop)** is a one-button Suika-style physics merge puzzle. Move the little
+helper cloud with the mouse or ← → and click or press Space to drop smiling berries, plums, oranges
+and melons into a glass jar: matching fruits pop together into the next bigger fruit up to the
+golden watermelon, and quick chains charge a jar shake (`S` or `↓`) that nudges stuck pieces
+together. Twelve stage goals across three worlds (including ice cubes melted by nearby merges and
+floating bubbles) sit alongside an open Endless high-score jar, with jar themes and fruit faces in
+the shop.
+
 ## Putting it online (GitHub Pages, free)
 
 1. Push the changes to `main`.
@@ -287,7 +335,7 @@ If the school web filter blocks it, ask IT to allow that address. The site conta
 
 ### Running it without the internet
 
-Download the fast version as one ZIP file (under 2 MB):
+Download the fast version as one ZIP file (under 3 MB):
 **<https://farmercarry.github.io/school-games/school-games-offline.zip>**
 (a copy of the site published from your own account has it at
 `https://<your-username>.github.io/school-games/school-games-offline.zip`).

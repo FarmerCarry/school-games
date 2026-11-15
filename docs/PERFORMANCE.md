@@ -1202,3 +1202,34 @@ Measured with the Linux minified build, against the previous commit built the sa
 The cache is measured after merging the Seek & Zoom update (#97), whose cache limit it shares.
 Both limits are the measured size rounded up (the game to the next 500 bytes, the cache to the
 next 1,000).
+
+## Six new games, 15 November 2026
+
+Six 2D canvas games join the catalog: «مقلاع الألوان» (Splat Catapult), «مطبخ الفسحة»
+(Recess Kitchen), «سباق المكاتب» (Desk Karts), «قلعة الألعاب» (Toy Castle Clash),
+«القلم السحري» (Magic Crayon) and «سلّة الفواكه» (Juicy Drop). Each is one inlined page like
+the other 2D games, pauses its simulation and stops redrawing when paused or blurred, and
+scales with `Kit.dda`. The portal grows by each game's catalog entry and inlined thumbnail
+(about 7.4 KB a game), and the offline cache by six pages (`57 → 63` files).
+
+Measured with the Linux minified build as CI builds it (with the default statistics address,
+which adds 103 bytes to the portal and to the cache; without an address the portal is
+472,040 bytes, the cache 7,488,708 bytes, and the offline ZIP 2,622,161 bytes), against
+`ca1eeab` (after Seek & Zoom #98 and Shortcut Factory #96).
+
+| Measurement | Before bytes | After bytes | Before limit | New limit |
+| --- | ---: | ---: | ---: | ---: |
+| Portal | 427,561 | 472,143 | 428,000 | 473,000 |
+| Splat Catapult page | — | 112,956 | — | 113,000 |
+| Toy Castle Clash page | — | 111,781 | — | 112,000 |
+| Desk Karts page | — | 108,262 | — | 108,500 |
+| Juicy Drop page | — | 104,722 | — | 105,000 |
+| Recess Kitchen page | — | 104,143 | — | 104,500 |
+| Magic Crayon page | — | 102,072 | — | 102,500 |
+| Offline precache, 57 → 63 files | 6,800,293 | 7,488,811 | 6,802,000 | 7,489,000 |
+| Offline ZIP | 2,393,752 | 2,622,243 | — | — |
+
+Every limit is again the measured size rounded up (the games to the next 500 bytes, the portal
+and the cache to the next 1,000). Measure frame rates on the school's weakest PC with
+`npm run perf -- --native-gpu --headed --seconds 30 splat-catapult recess-kitchen desk-karts
+toy-castle magic-crayon juicy-drop`.

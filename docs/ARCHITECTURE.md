@@ -81,8 +81,8 @@ Kit is inlined into every game page, so every minified byte in `shared/kit.js` c
 ~38 bytes of offline cache.
 
 * The play statistics in `shared/kit.js` (`Kit.stats`, `Kit.track`, `sg:telemetry`):
-  **about 2,060 minified bytes** (measured with the build's esbuild options), about 90 KB of
-  offline cache over the 44 game pages. Further growth needs a budget decision.
+  **about 2,060 minified bytes** (measured with the build's esbuild options), about 103 KB of
+  offline cache over the 50 game pages. Further growth needs a budget decision.
 * `shared/juice.js`: **≤ 4,500 minified bytes**, loaded only by pages that use it
   (`<script src="../../shared/juice.js">` after `kit.js`; the portal loads
   `shared/juice.js` before `js/site.js`).
@@ -201,8 +201,8 @@ ranges. The full contract is [`TELEMETRY.md`](TELEMETRY.md).
 
 | Reports | Games |
 |---|---|
-| rounds, outcome and score | all 44 (connect-four and tic-tac-toe through `shared/board-game.js`); no score: block-world, critter-mart, pizza-clicker, tank-splat, the board games and two-player rounds |
-| hits and misses | bubble-bop, chaos-island, dino-3d, egg-rush, key-runner, keyboard-obby, lucky-lake, math-gates, road-hopper, seek-zoom, shortcut-factory, steady-hand, typing-test, word-garden |
+| rounds, outcome and score | all 50 (connect-four and tic-tac-toe through `shared/board-game.js`); no score: block-world, critter-mart, pizza-clicker, tank-splat, the board games and two-player rounds |
+| hits and misses | bubble-bop, chaos-island, desk-karts, dino-3d, egg-rush, juicy-drop, key-runner, keyboard-obby, lucky-lake, magic-crayon, math-gates, recess-kitchen, road-hopper, seek-zoom, shortcut-factory, splat-catapult, steady-hand, toy-castle, typing-test, word-garden |
 | reaction times (`Kit.track.cue` / `react`) | bubble-bop, chaos-island, dino-3d, key-runner, keyboard-obby, lucky-lake, road-hopper, shortcut-factory, typing-test, word-garden |
 | difficulty tier and level | every game that uses `Kit.dda` (reported by Kit at each read) |
 | tutorial start and done | the games with a first-time coach |

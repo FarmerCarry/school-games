@@ -1,0 +1,125 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff7ed"/>
+      <stop offset="0.72" stop-color="#fde2c8"/>
+      <stop offset="0.72" stop-color="#d99b56"/>
+      <stop offset="1" stop-color="#b87638"/>
+    </linearGradient>
+    <radialGradient id="bub" cx="0.35" cy="0.35">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.9"/>
+      <stop offset="0.6" stop-color="#7dd3fc" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#f472b6" stop-opacity="0.75"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="400" height="400" fill="url(#sky)"/>
+
+  <!-- Soft clouds & playroom stars -->
+  <g fill="#ffffff" fill-opacity="0.82">
+    <circle cx="248" cy="64" r="18"/><circle cx="268" cy="58" r="23"/><circle cx="290" cy="65" r="16"/>
+  </g>
+  <polygon points="190,26 194,36 205,37 197,44 199,55 190,49 181,55 183,44 175,37 186,36" fill="#ffd23f" opacity="0.5"/>
+
+  <!-- Playroom Rug Lane -->
+  <rect x="14" y="274" width="372" height="48" rx="22" fill="#ffd23f" stroke="#1e1b4b" stroke-width="5"/>
+  <rect x="24" y="281" width="352" height="34" rx="16" fill="#38bdf8"/>
+  <line x1="56" y1="298" x2="346" y2="298" stroke="#ffffff" stroke-opacity="0.6" stroke-width="4" stroke-dasharray="12 12" stroke-linecap="round"/>
+
+  <!-- Floating Sky Star-Bubble -->
+  <g transform="translate(332 76)">
+    <circle r="30" fill="url(#bub)" stroke="#ffffff" stroke-width="3.5"/>
+    <polygon points="0,-16 5,-5 17,-4 8,4 11,15 0,9 -11,15 -8,4 -17,-4 -5,-5" fill="#ffd23f" stroke="#1e1b4b" stroke-width="3.5" stroke-linejoin="round"/>
+    <circle cx="-10" cy="-11" r="5" fill="#ffffff" opacity="0.9"/>
+  </g>
+
+  <!-- Paper Glider Overhead -->
+  <g transform="translate(232 108) rotate(8)" stroke="#1e1b4b" stroke-width="4" stroke-linejoin="round">
+    <path d="M-22 -4 Q-36 -12 -46 -3" fill="none" stroke="#38bdf8" stroke-width="5" stroke-linecap="round"/>
+    <polygon points="30,-4 -24,-20 -15,-2" fill="#ffffff"/>
+    <polygon points="30,-4 -15,-2 -18,11" fill="#cbd5e1"/>
+    <polygon points="30,-4 -20,-26 -12,-14" fill="#38bdf8"/>
+  </g>
+
+  <!-- Left Toy-Block Castle -->
+  <g transform="translate(88 286)" stroke="#1e1b4b" stroke-width="5" stroke-linejoin="round">
+    <!-- Golden Wind-Up Key -->
+    <rect x="-74" y="-92" width="22" height="12" rx="4" fill="#f59e0b"/>
+    <circle cx="-78" cy="-98" r="11" fill="#ffd23f"/>
+    <circle cx="-78" cy="-74" r="11" fill="#ffd23f"/>
+
+    <!-- Castle Blocks & Roofs -->
+    <rect x="-56" y="-128" width="36" height="128" rx="8" fill="#4ea8ff"/>
+    <rect x="20" y="-128" width="36" height="128" rx="8" fill="#4ea8ff"/>
+    <rect x="-40" y="-154" width="80" height="154" rx="10" fill="#4ea8ff"/>
+    <rect x="-42" y="-104" width="84" height="16" rx="6" fill="#ffd23f"/>
+    <rect x="-38" y="-172" width="20" height="20" rx="5" fill="#ffd23f"/>
+    <rect x="-10" y="-172" width="20" height="20" rx="5" fill="#ffd23f"/>
+    <rect x="18" y="-172" width="20" height="20" rx="5" fill="#ffd23f"/>
+    <polygon points="-60,-126 -38,-172 -16,-126" fill="#ff5d73"/>
+    <polygon points="16,-126 38,-172 60,-126" fill="#ff5d73"/>
+    <polygon points="-36,-170 0,-212 36,-170" fill="#ff5d73"/>
+
+    <!-- Golden Crown Topper -->
+    <polygon points="-22,-210 -26,-234 -11,-222 0,-240 11,-222 26,-234 22,-210" fill="#ffd23f"/>
+    <circle cx="0" cy="-222" r="4.5" fill="#ff5d73" stroke="none"/>
+
+    <!-- Rooftop Confetti Cannon -->
+    <g transform="translate(36 -144) rotate(-22)">
+      <rect x="-6" y="-10" width="32" height="20" rx="7" fill="#fde047" stroke-width="4.5"/>
+      <rect x="18" y="-12" width="11" height="24" rx="4" fill="#ff5d73" stroke-width="4.5"/>
+    </g>
+
+    <!-- Window & Arched Gate -->
+    <rect x="-12" y="-142" width="24" height="28" rx="12" fill="#fef9c3" stroke-width="4"/>
+    <path d="M-6 0 V-40 A20 20 0 0 1 34 -40 V0 Z" fill="#6d4aff"/>
+  </g>
+
+  <!-- Confetti Sparks from Cannon -->
+  <circle cx="164" cy="118" r="7" fill="#ff5d73" stroke="#1e1b4b" stroke-width="3"/>
+  <circle cx="188" cy="132" r="6" fill="#34d399" stroke="#1e1b4b" stroke-width="3"/>
+  <circle cx="176" cy="98" r="6" fill="#ffd23f" stroke="#1e1b4b" stroke-width="3"/>
+
+  <!-- Chubby Plush Pillow Bear -->
+  <g transform="translate(222 288)" stroke="#1e1b4b" stroke-width="4.5" stroke-linejoin="round">
+    <circle cx="-11" cy="-64" r="10" fill="#b45309"/>
+    <circle cx="9" cy="-64" r="10" fill="#b45309"/>
+    <rect x="-25" y="-46" width="46" height="44" rx="20" fill="#d97706"/>
+    <circle cx="-2" cy="-24" r="14" fill="#fde68a" stroke="none"/>
+    <circle cx="0" cy="-50" r="19" fill="#d97706"/>
+    <circle cx="7" cy="-47" r="8.5" fill="#fef3c7" stroke="none"/>
+    <circle cx="10" cy="-49" r="3.5" fill="#1e1b4b" stroke="none"/>
+    <circle cx="4" cy="-55" r="3.5" fill="#1e1b4b" stroke="none"/>
+    <!-- Fluffy Pillow Shield -->
+    <g transform="translate(22 -27) rotate(6)">
+      <rect x="-12" y="-24" width="26" height="46" rx="11" fill="#ffffff"/>
+      <rect x="-6" y="-18" width="14" height="34" rx="7" fill="#bae6fd" stroke="none"/>
+      <polygon points="1,-8 3,-2 9,-2 4,2 6,8 1,4 -4,8 -2,2 -7,-2 -1,-2" fill="#0284c7" stroke="none"/>
+    </g>
+  </g>
+
+  <!-- Speedy Wind-Up Rubber Duck -->
+  <g transform="translate(322 292)" stroke="#1e1b4b" stroke-width="4.5" stroke-linejoin="round">
+    <!-- Wind-up key -->
+    <rect x="-32" y="-33" width="14" height="6" rx="2" fill="#e2e8f0" stroke-width="3.5"/>
+    <circle cx="-35" cy="-37" r="7" fill="#ffd23f" stroke-width="3.5"/>
+    <circle cx="-35" cy="-23" r="7" fill="#ffd23f" stroke-width="3.5"/>
+    <!-- Wheels -->
+    <circle cx="-11" cy="-5" r="7" fill="#38bdf8" stroke-width="4"/>
+    <circle cx="11" cy="-5" r="7" fill="#38bdf8" stroke-width="4"/>
+    <!-- Duck body & head -->
+    <rect x="-24" y="-36" width="46" height="29" rx="14" fill="#ffd23f"/>
+    <rect x="-5" y="-34" width="19" height="9" rx="4" fill="#38bdf8" stroke-width="3.5"/>
+    <ellipse cx="-5" cy="-21" rx="11" ry="7" fill="#f59e0b" stroke-width="3.5"/>
+    <circle cx="12" cy="-44" r="16" fill="#ffd23f"/>
+    <rect x="23" y="-48" width="16" height="10" rx="5" fill="#fb923c" stroke-width="4"/>
+    <circle cx="15" cy="-47" r="3.8" fill="#1e1b4b" stroke="none"/>
+    <circle cx="16.5" cy="-48.5" r="1.5" fill="#ffffff" stroke="none"/>
+  </g>
+
+  <!-- Arabic Game Title -->
+  <g font-family="Fredoka, 'Segoe UI', Tahoma, sans-serif" font-weight="700" text-anchor="middle" direction="rtl">
+    <text x="200" y="376" font-size="60" fill="#1e1b4b" stroke="#1e1b4b" stroke-width="16" stroke-linejoin="round" paint-order="stroke">قلعة الألعاب</text>
+    <text x="200" y="376" font-size="60" fill="#ffffff">قلعة الألعاب</text>
+  </g>
+</svg>

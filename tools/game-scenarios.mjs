@@ -278,7 +278,25 @@ export const scenarios = {
     { settle: `!${g}.state.demo`, settleTimeout: 15000 }),
   // Math Gates: a first visit starts level 1-1 in the middle lane. The crowd runs by itself;
   // only the child's keys (or mouse) change its lane. Restart begins the level again.
-  'math-gates': defaults(['#btnPlay'], `${g}.state.screen === 'play'`, `[${g}.state.d,${g}.state.lane,${g}.state.count,${g}.state.t]`, hold('ArrowLeft'), '#btnPause', `${g}.state.screen === 'paused'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.attempt > 1 && ${g}.state.passed === 0 && ${g}.state.lane === 1`)
+  'math-gates': defaults(['#btnPlay'], `${g}.state.screen === 'play'`, `[${g}.state.d,${g}.state.lane,${g}.state.count,${g}.state.t]`, hold('ArrowLeft'), '#btnPause', `${g}.state.screen === 'paused'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.attempt > 1 && ${g}.state.passed === 0 && ${g}.state.lane === 1`),
+  // Splat Catapult: a first visit opens level 1-1 at the slingshot. Aim changes only when
+  // the player drags or presses the aim keys; Restart returns to a fresh round with 0 shots.
+  'splat-catapult': defaults(['#btnPlay'], `${g}.state.screen === 'play'`, `[${g}.state.time,${g}.state.aimAngle,${g}.state.shots,${g}.state.activeProjectile]`, hold('ArrowUp'), '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.shots === 0 && ${g}.state.time < 0.5`),
+  // Recess Kitchen: a first visit opens kitchen 1-1. Customers arrive by themselves, while
+  // Chef 1 moves only when the child presses a direction or clicks; Restart resets positions.
+  'recess-kitchen': defaults(['#btnPlay'], `${g}.state.screen === 'play' && ${g}.state.id === '1-1'`, `[${g}.state.time,${g}.state.timeLeft,${g}.state.chefs,${g}.state.orders]`, hold('ArrowRight'), '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.atStart && ${g}.state.served === 0`),
+  // Desk Karts: a first visit starts track 1-1. Rival karts race by themselves; Player 1's
+  // kart accelerates from the grid only when the child holds gas or steers.
+  'desk-karts': defaults(['#btnPlay'], `${g}.state.screen === 'play' && ${g}.state.id === '1-1'`, `[${g}.state.worldTime,${g}.state.p1Dist,${g}.state.karts]`, hold('ArrowUp'), '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.p1Dist === 0 && ${g}.state.time === 0`),
+  // Toy Castle: a first visit opens playroom 1-1 with 30 starting energy. Energy ticks up
+  // and rival toys march by themselves; only the child's summon spawns a left-castle unit.
+  'toy-castle': defaults(['#btnPlay'], `${g}.state.screen === 'play' && ${g}.state.id === '1-1'`, `[${g}.state.time,${g}.state.energy,${g}.state.p1Spawned,${g}.state.units]`, hold('Digit1'), '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.p1Spawned === 0 && ${g}.state.time < 1`),
+  // Magic Crayon: a first visit opens notebook 1-1 with Karroum waiting on his pedestal.
+  // Only the child's drag (or Shift+arrows) draws crayon ink, and Space launches the marble.
+  'magic-crayon': defaults(['#btnPlay'], `${g}.state.screen === 'play' && ${g}.state.id === '1-1'`, `[${g}.state.time,${g}.state.rolling,${g}.state.inkUsed,${g}.state.ball]`, hold('Space'), '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.inkUsed === 0 && !${g}.state.rolling && ${g}.state.strokes === 0`),
+  // Juicy Drop: a first visit opens stage 1-1 with the helper cloud waiting above the jar.
+  // Nothing drops until the child clicks or presses Space; Restart clears the jar.
+  'juicy-drop': defaults(['#btnPlay'], `${g}.state.screen === 'play'`, `[${g}.state.time,${g}.state.cloudX,${g}.state.drops,${g}.state.fruits]`, hold('Space'), '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.drops === 0 && ${g}.state.score === 0`)
 };
 for (const slug of ['connect-four','tic-tac-toe']) scenarios[slug] = {
   start: [click('#localButton')], active: `document.getElementById('boardApp').dataset.mode === 'local' && document.getElementById('gameBoard').dataset.winner === '0' && document.getElementById('gameBoard').dataset.draw !== 'true'`,
@@ -311,7 +329,13 @@ const inputSnapshots = {
   // Only the child's lens button, keys, wheel or pointer move Seek and Zoom's magnifying glass.
   'seek-zoom': `${g}.state.lens`,
   'steady-hand': `${g}.state.dragged`,
-  'math-gates': `${g}.state.lane`
+  'math-gates': `${g}.state.lane`,
+  'splat-catapult': `${g}.state.aimAngle`,
+  'recess-kitchen': `${g}.state.chefs[0].x`,
+  'desk-karts': `${g}.state.p1Dist`,
+  'toy-castle': `${g}.state.p1Spawned`,
+  'magic-crayon': `${g}.state.rolling`,
+  'juicy-drop': `${g}.state.drops`
 };
 for (const [slug, expr] of Object.entries(inputSnapshots)) scenarios[slug].inputSnapshot = expr;
 
@@ -357,7 +381,13 @@ const inputSeen = {
   // The belt moves the toys by itself; only a pasted copy puts a toy into the box.
   'shortcut-factory': `${g}.state.boxes[0].items.length > sgInput.before`,
   // The crowd runs forward by itself; only the child's keys or mouse move it to another lane.
-  'math-gates': `${g}.state.lane !== sgInput.before`
+  'math-gates': `${g}.state.lane !== sgInput.before`,
+  'splat-catapult': `${g}.state.aimAngle > sgInput.before`,
+  'recess-kitchen': `${g}.state.chefs[0].x > sgInput.before`,
+  'desk-karts': `${g}.state.p1Dist > sgInput.before`,
+  'toy-castle': `${g}.state.p1Spawned > sgInput.before`,
+  'magic-crayon': `${g}.state.rolling === true`,
+  'juicy-drop': `${g}.state.drops > sgInput.before`
 };
 for (const [slug, expr] of Object.entries(inputSeen)) scenarios[slug].inputSeen = expr;
 
@@ -375,7 +405,9 @@ const heldKeys = {
   'lucky-lake': 'Space', 'seek-zoom': 'ArrowRight', 'math-gates': 'ArrowLeft',
   // Level 1-1 always starts with F: the key goes down once (the hero hops) and stays down
   // until the hop is seen, so a slow software-rendered frame cannot miss it.
-  'keyboard-obby': 'KeyF'
+  'keyboard-obby': 'KeyF',
+  'splat-catapult': 'ArrowUp', 'recess-kitchen': 'ArrowRight', 'desk-karts': 'ArrowUp',
+  'toy-castle': 'Digit1', 'magic-crayon': 'Space', 'juicy-drop': 'Space'
 };
 for (const [slug, key] of Object.entries(heldKeys)) scenarios[slug].heldKey = key;
 

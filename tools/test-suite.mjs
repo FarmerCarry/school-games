@@ -36,7 +36,9 @@ function main() {
     'offline-download.test.mjs', 'catalog-precache.test.mjs', 'dino-3d-engine.test.mjs', 'key-runner-engine.test.mjs', 'cake-guards-engine.test.mjs', 'chaos-island-engine.test.mjs', 'egg-rush-engine.test.mjs', 'lucky-lake-engine.test.mjs', 'typing-test-engine.test.mjs', 'word-garden-engine.test.mjs', 'keyboard-obby-engine.test.mjs', 'seek-zoom-engine.test.mjs', 'steady-hand-engine.test.mjs', 'shortcut-factory-engine.test.mjs', 'math-gates-engine.test.mjs', 'pool-position-rules.test.mjs',
     'engine-regressions.test.mjs', 'moto-balance.test.mjs',
     'offline-download.test.mjs', 'catalog-precache.test.mjs', 'beat-dash-engine.test.mjs', 'dino-3d-engine.test.mjs', 'key-runner-engine.test.mjs', 'cake-guards-engine.test.mjs', 'chaos-island-engine.test.mjs', 'egg-rush-engine.test.mjs', 'lucky-lake-engine.test.mjs', 'typing-test-engine.test.mjs', 'pool-position-rules.test.mjs',
-    'bubble-bop-rules.test.mjs', 'fire-and-ice-engine.test.mjs', 'juice.test.mjs', 'thumb-encoding.test.mjs'
+    'bubble-bop-rules.test.mjs', 'fire-and-ice-engine.test.mjs', 'juice.test.mjs', 'thumb-encoding.test.mjs',
+    'splat-catapult-engine.test.mjs', 'recess-kitchen-engine.test.mjs', 'desk-karts-engine.test.mjs',
+    'toy-castle-engine.test.mjs', 'magic-crayon-engine.test.mjs', 'juicy-drop-engine.test.mjs'
   ]);
   const files = fs.readdirSync(path.join(repo, 'tools/tests')).filter(file => file.endsWith('.test.mjs')).sort();
   for (const file of shared) {
