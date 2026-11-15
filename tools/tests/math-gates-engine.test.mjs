@@ -83,7 +83,8 @@ test('every tuning knob moves one way from tier 1 to tier 5, in the direction th
     assert.notEqual(row[0], row[row.length - 1], key + ' changes');
   }
   // Tier 1 is gentle for a six-year-old: slow, few questions, decoys a third worse.
-  assert.ok(MG.TUNE.speed[0] <= 5 && MG.TUNE.gap[0] / MG.TUNE.speed[0] >= 6, 'six seconds or more to read each row');
+  assert.deepEqual(plain(MG.TUNE.speed), [6.25, 7.25, 8.25, 9.25, 10.25]);
+  assert.ok(MG.TUNE.speed[0] <= 6.25 && MG.TUNE.gap[0] / MG.TUNE.speed[0] >= 5, 'five seconds or more to read each row');
   assert.ok(MG.TUNE.margin[0] >= 0.3 && MG.TUNE.marginMin[0] >= 3);
   assert.ok(MG.TUNE.quiz[0] === 1 && MG.TUNE.rocks[0] === 0);
 });
