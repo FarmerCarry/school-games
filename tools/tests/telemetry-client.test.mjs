@@ -372,8 +372,10 @@ test('real rounds reach the statistics server as the contract says, with nothing
     assert.ok(!text.includes(secret), 'the batches never contain ' + secret);
   }
   assert.doesNotMatch(text, /\d{4}-\d{2}-\d{2}|\d{2}:\d{2}/, 'no dates or times of day');
-  const numbers = JSON.stringify(list.map(b => b.ev)).match(/-?\d+(\.\d+)?/g).map(Number);
-  assert.ok(numbers.every(n => Number.isInteger(n) && n >= -1 && n < 1e8), 'whole numbers, none like a timestamp');
+  const flat = list.flatMap(b => b.ev).flat(Infinity);
+  const numbers = flat.filter(v => typeof v === 'number');
+  assert.ok(numbers.length > 0 && numbers.every(n => Number.isInteger(n) && n >= -1 && n < 1e8), 'whole numbers, none like a timestamp');
+  assert.ok(flat.every(v => typeof v !== 'string' || !/\d{8,}/.test(v)), 'no timestamp digits inside strings');
   assert.ok(list.every(b => b.w < 3600), 'w counts seconds since the session started');
   assert.deepEqual(await queue(page), null, 'everything was delivered');
 });
