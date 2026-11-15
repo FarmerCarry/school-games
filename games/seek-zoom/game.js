@@ -1,8 +1,8 @@
-/* Seek and Zoom (ابحث وكبّر): screens, the mouse wheel, drags and clicks, the tile
- * cache that keeps the huge scenes fast on old PCs, hints, the coach, saves and sound.
- * engine.js places everything and does the camera maths; art.js draws.
+/* Seek and Zoom (ابحث وكبّر): screens, the movable magnifying glass lens, the mouse wheel,
+ * clicks, the tile cache that keeps the scenes fast on old PCs, instant hints, saves and sound.
+ * engine.js places everything on the fixed full-screen scene and does the lens maths; art.js draws.
  * This is the UI layer: it reads Kit.dda at every round start (thing size, look-alikes,
- * hint delay, speed of moving things, the time limit and whether wrong clicks in a row
+ * hint glow delay, speed of moving things, the time limit and whether wrong clicks in a row
  * cost seconds) and reports each finished or timed-out round back to it. */
 (function () {
   'use strict';
@@ -15,15 +15,15 @@
 
   /* --------------------------------------------------------------- state */
   let dirty = true, trayKey = '', time = 0;
-  let screen = 'title', wi = 0, ri = 0, R = null, S = null, cam = null;
+  let screen = 'title', wi = 0, ri = 0, R = null, S = null, cam = null, lens = null;
   let intro = null, celebrate = 0, result = null, resultT = 0, resultLock = 0, moves = 0;
   let floats = [], flyers = [], rings = [], shown = [], bumps = [], lastFind = -9, streak = 0, lastClick = null;
   let hint = { wait: 0, delay: 10, ready: false, on: 0, it: null, auto: false };
-  let coach = { drag: false, zoom: false, t: 0, panned: 0, z0: 1, lockNote: -9 };
+  let coach = { zoom: false, t: 0, keyMove: false };
   let lastTick = -1, wheelSound = 0, tier = 1, lastSec = -1, idle = 0;
   const plays = {};
   const ptr = { x: W / 2, y: H / 2, known: false };
-  const drag = { on: false, id: -1, x0: 0, y0: 0, x: 0, y: 0, moved: false, vx: 0, vy: 0, lt: 0 };
+  const drag = { on: false, id: -1, placeOnly: false, x0: 0, y0: 0, moved: false };
   const menu = { cam: { x: 1280, y: 720, z: 0.62 }, lensZ: 2.4, lens: { x: 1000, y: 330 }, R: null };
   const view = Kit.fit(canvas, W, H, { maxDpr: 1, onResize: v => {
     ui.style.left = canvas.style.left; ui.style.top = canvas.style.top; ui.style.transform = 'scale(' + v.scale + ')';
@@ -138,7 +138,7 @@
   }
   function focusGame() { try { canvas.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }
   function say(text) { $('live').textContent = text; }
-  function setCursor() { canvas.style.cursor = screen === 'play' ? (drag.on && drag.moved ? 'grabbing' : 'grab') : 'default'; }
+  function setCursor() { canvas.style.cursor = 'default'; }
   function chip(id, text) { $(id).querySelector('b').textContent = text; }
 
   function toTitle() {
@@ -209,6 +209,9 @@
     J.select(); startRound(i);
   }
 
+  // The middle of the free part of the screen (beside the left buttons, above the list).
+  const MID = { x: Math.round((SZ.PAD.l + W - SZ.PAD.r) / 2), y: Math.round((SZ.PAD.t + H - SZ.PAD.b) / 2) };
+
   /* -------------------------------------------------------------- rounds */
   function startRound(i) {
     const w = Math.floor(i / SZ.PER), r = i % SZ.PER;
@@ -223,19 +226,22 @@
     R = SZ.makeRound(w, r, p);
     R.moving = R.items.some(it => it.m);
     cam = SZ.camera(S, R);
+    lens = SZ.lens(R);
+    SZ.moveLens(lens, ptr.known && ptr.x >= SZ.PAD.l ? ptr.x : MID.x, ptr.known && ptr.x >= SZ.PAD.l ? ptr.y : MID.y);
     intro = { t: 0, out: false, o: 0 };
     celebrate = 0; result = null; moves = 0; lastFind = -9; streak = 0; lastClick = null; lastTick = -1;
     floats = []; flyers = []; rings = []; fx.clear();
     shown = R.list.map(() => 0); bumps = R.list.map(() => 0); trayKey = '';
     hint = { wait: 0, delay: dda.value(7, 20), ready: false, on: 0, it: null, auto: tier <= 2 };
-    coach = { drag: !save.coach[0] && R.d.lock === 1, zoom: !save.coach[1] && !R.d.lock, t: 0, panned: 0, z0: cam.z, lockNote: -9 };
-    // Play stats: every round is one (w1-1 ..); the first drag or zoom coach is the tutorial.
+    const needsLens = R.items.some(it => it.e >= 0 && SZ.needZoom(it) > R.zmin);
+    coach = { zoom: !save.coach[1] && needsLens, t: 0, keyMove: false };
+    // Play stats: every round is one (w1-1 ..); the first zoom coach is the tutorial.
     Kit.stats.round('w' + (w + 1) + '-' + (r + 1));
-    if (coach.drag || coach.zoom) Kit.stats.tutorial('start');
+    if (coach.zoom) Kit.stats.tutorial('start');
     drag.on = false;
     Kit.keys.reset();
     paintZoom();
-    $('zoomBox').hidden = !!R.d.lock;
+    $('zoomBox').hidden = false;
     $('btnHint').classList.remove('ready');
     setScreen('play');
     say(SZ.WORLDS[w].name + '، المرحلة ' + (r + 1));
@@ -250,7 +256,7 @@
   function restart() { if (!R) return; J.select(); startRound(R.i); }
   function pause(own) {
     if (screen !== 'play') return;
-    drag.on = false; cam.vx = cam.vy = 0;
+    drag.on = false;
     setScreen('pause');
     if (own) J.back();
   }
@@ -262,8 +268,17 @@
   }
 
   /* ------------------------------------------------------------- clicks */
-  const tmp = {};
-  function screenOf(it, out) { const p = SZ.pos(it, R.t, tmp); return SZ.toScreen(cam, p.x, p.y, out || {}); }
+  const tmp = {}, lcam = {};
+  function screenOf(it, out) {
+    const p = SZ.pos(it, R.t, tmp);
+    if (lens && lens.on) {
+      const lc = SZ.lensCam(cam, lens, lcam), ls = SZ.toScreen(lc, p.x, p.y, out || {});
+      if (Math.hypot(ls.x - lens.x, ls.y - lens.y) <= lens.r) { ls.z = lc.z; return ls; }
+    }
+    const s = SZ.toScreen(cam, p.x, p.y, out || {});
+    s.z = cam.z;
+    return s;
+  }
   function overHud(x, y) {
     const T = trayGeo(R.list.length);
     return (y >= T.y && x >= T.x && x <= T.x + T.w) || (y < 66 && x > 540 && x < 740);
@@ -277,7 +292,7 @@
     // The second click of a double click on the same spot is not a second try.
     const now = time;
     if (lastClick && now - lastClick.t < 0.4 && Math.hypot(x - lastClick.x, y - lastClick.y) < 14 && lastClick.miss) return;
-    const h = SZ.click(R, cam, x, y);
+    const h = SZ.click(R, cam, x, y, lens);
     lastClick = { t: now, x, y, miss: h.t === 'miss' || h.t === 'decoy' };
     hint.wait = 0;
     if (h.t === 'found') { Kit.track.hit(); found(h); }
@@ -296,7 +311,7 @@
     }
   }
   function found(h) {
-    const it = h.it, p = screenOf(it, {}), rs = it.r * cam.z;
+    const it = h.it, p = screenOf(it, {}), rs = it.r * p.z;
     streak = time - lastFind < 4 ? streak + 1 : 1;
     lastFind = time;
     J.pop(0.6); J.streak(Math.min(8, R.found));
@@ -316,9 +331,7 @@
   /* ------------------------------------------------------------- result */
   function showResult() {
     const stars = SZ.stars(R), tenths = SZ.tenths(R), res = SZ.applyResult(save, R.i, stars, tenths);
-    if ((coach.drag && coach.panned > 100) || (coach.zoom && !R.d.lock && cam.z !== coach.z0)) Kit.stats.tutorial('done');
-    if (coach.panned > 100) save.coach[0] = 1;
-    if (!R.d.lock && cam.z !== coach.z0) save.coach[1] = 1;
+    if (coach.zoom && save.coach[1]) Kit.stats.tutorial('done');
     persist();
     dda.result(SZ.outcome(R));
     Kit.stats.end('win', stars);
@@ -335,9 +348,7 @@
   const fmt = s => { s = Math.max(0, Math.round(s)); return Math.floor(s / 60) + ':' + (s % 60 < 10 ? '0' : '') + (s % 60); };
   function openResult() {
     resultT = 0; resultLock = 0.6;
-    // Without the HUD the scene fills the screen behind the card.
-    cam.an = false; cam.vx = cam.vy = 0; cam.tz = cam.z;
-    SZ.clampCam(cam, { l: 0, r: 0, t: 0, b: 0 });
+    if (lens) { lens.on = false; lens.z = lens.tz = lens.zmin; }
     const r = result, Wd = SZ.WORLDS[wi];
     $('resPlace').textContent = r.timeUp ? 'انتهى الوقت!' : Wd.name + ' · ' + (ri + 1);
     $('resStars').hidden = r.timeUp;
@@ -408,34 +419,39 @@
     setScreen('book');
   }
 
-  /* ------------------------------------------------------------- camera */
+  /* --------------------------------------------------------------- lens */
+  function markZoomUsed() {
+    if (!save.coach[1]) {
+      save.coach[1] = 1;
+      if (coach.zoom) { coach.zoom = false; Kit.stats.tutorial('done'); }
+    }
+  }
   function paintZoom() {
-    if (!cam) return;
-    const k = cam.zmax > cam.zmin ? (Math.log(cam.tz) - Math.log(cam.zmin)) / (Math.log(cam.zmax) - Math.log(cam.zmin)) : 0;
+    if (!lens) return;
+    const z = lens.on ? lens.tz : lens.zmin;
+    const k = lens.zmax > lens.zmin ? (Math.log(z) - Math.log(lens.zmin)) / (Math.log(lens.zmax) - Math.log(lens.zmin)) : 0;
     $('zoomFill').style.height = Math.round(k * 100) + '%';
-    $('btnIn').classList.toggle('off', cam.tz >= cam.zmax);
-    $('btnOut').classList.toggle('off', cam.tz <= cam.zmin);
+    $('btnIn').classList.toggle('off', lens.on && lens.tz >= lens.zmax);
+    $('btnOut').classList.toggle('off', !lens.on || lens.tz <= lens.zmin);
+    $('btnLens').classList.toggle('on', lens.on);
+    $('btnLens').setAttribute('aria-pressed', lens.on ? 'true' : 'false');
   }
-  // The middle of the free part of the screen (beside the zoom column, above the list).
-  const MID = { x: (SZ.PAD.l + W) / 2, y: (SZ.PAD.t + H - SZ.PAD.b) / 2 };
-  function zoomBy(x, y, f) {
-    if (!R || !cam) return false;
-    if (R.d.lock) { lockNote(x, y); return false; }
+  function toggleLens() {
+    if (!R || !lens || screen !== 'play' || R.done || R.over) return;
     if (intro) endIntro();
-    const ok = SZ.zoomAt(cam, x, y, f, calm());
-    if (ok) { moves++; dirty = true; paintZoom(); }
+    if (ptr.known && ptr.x >= SZ.PAD.l) SZ.moveLens(lens, ptr.x, ptr.y);
+    const on = SZ.toggleLens(lens, calm());
+    if (on) markZoomUsed();
+    moves++; dirty = true; paintZoom();
+    if (on) J.pop(0.45); else J.tap();
+  }
+  function zoomBy(x, y, f, movePtr) {
+    if (!R || !lens || R.done || R.over) return false;
+    if (intro) endIntro();
+    if (movePtr) SZ.moveLens(lens, x, y);
+    const ok = SZ.zoomLens(lens, f, calm());
+    if (ok) { if (lens.on) markZoomUsed(); moves++; dirty = true; paintZoom(); }
     return ok;
-  }
-  function panBy(dx, dy) {
-    if (!cam) return;
-    if (intro) endIntro();
-    if (SZ.pan(cam, dx, dy)) { coach.panned += Math.abs(dx) + Math.abs(dy); dirty = true; }
-  }
-  // In the first rounds the zoom is still locked: the wheel shows the dragging hand instead.
-  function lockNote(x, y) {
-    if (time - coach.lockNote < 2) return;
-    coach.lockNote = time;
-    floats.push({ x, y: y - 30, hand: true, t: 0, life: 1.8 });
   }
 
   /* --------------------------------------------------------------- input */
@@ -451,14 +467,15 @@
   on($('btnResume'), resume);
   on($('btnRestart'), restart);
   on($('btnMenu'), () => { J.back(); toMap(); });
-  on($('btnIn'), () => { if (zoomBy(MID.x, MID.y, 1.45)) J.tap(); });
-  on($('btnOut'), () => { if (zoomBy(MID.x, MID.y, 1 / 1.45)) J.tap(); });
+  on($('btnIn'), () => { if (zoomBy(lens ? lens.x : MID.x, lens ? lens.y : MID.y, 1.45, false)) J.tap(); });
+  on($('btnOut'), () => { if (zoomBy(lens ? lens.x : MID.x, lens ? lens.y : MID.y, 1 / 1.45, false)) J.tap(); });
+  on($('btnLens'), toggleLens);
   on($('btnHint'), () => showHint(true));
   on($('resNext'), resultNext);
   on($('resAgain'), resultAgain);
   on($('resMap'), () => { if (resultLock <= 0) { J.back(); toMap(); } });
 
-  // The wheel zooms the game and never the page: not scrolling, not Ctrl+wheel browser zoom.
+  // The wheel zooms the magnifying glass and never the page: not scrolling, not Ctrl+wheel browser zoom.
   window.addEventListener('wheel', e => {
     e.preventDefault();
     const p = view.toLogical(e.clientX, e.clientY);
@@ -466,8 +483,7 @@
     const f = SZ.wheelFactor(e.deltaY, e.deltaMode);
     if (screen === 'title') { menu.lensZ = SZ.clamp(menu.lensZ * f, 1.4, 4); dirty = true; return; }
     if (screen !== 'play' || !R) return;
-    if (e.deltaX && Math.abs(e.deltaX) > Math.abs(e.deltaY)) { panBy(-e.deltaX * (e.deltaMode === 1 ? 40 : 1), 0); return; }
-    if (f !== 1 && zoomBy(p.x, p.y, f) && time - wheelSound > 0.09) { wheelSound = time; J.hover(); }
+    if (f !== 1 && zoomBy(p.x, p.y, f, !(e.target && e.target.closest && e.target.closest('#hud button'))) && time - wheelSound > 0.09) { wheelSound = time; J.hover(); }
   }, { passive: false });
 
   canvas.addEventListener('pointerdown', e => {
@@ -475,37 +491,32 @@
     const p = view.toLogical(e.clientX, e.clientY);
     ptr.x = p.x; ptr.y = p.y; ptr.known = true;
     if (e.button !== 0 || screen !== 'play' || !R) return;
-    drag.on = true; drag.id = e.pointerId; drag.x0 = drag.x = p.x; drag.y0 = drag.y = p.y; drag.moved = false; drag.vx = drag.vy = 0; drag.lt = performance.now();
-    cam.vx = cam.vy = 0;
+    const isTouch = e.pointerType === 'touch';
+    let placeOnly = false;
+    if (isTouch && lens.on && !SZ.inLens(lens, p.x, p.y) && SZ.hit(R, cam, p.x, p.y, null).t !== 'found') {
+      SZ.moveLens(lens, p.x, p.y); dirty = true; placeOnly = true;
+    } else if (!isTouch) {
+      if (SZ.moveLens(lens, p.x, p.y) && lens.on) dirty = true;
+    }
+    drag.on = true; drag.id = e.pointerId; drag.placeOnly = placeOnly; drag.x0 = p.x; drag.y0 = p.y; drag.moved = false;
     try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* old browsers */ }
   });
   window.addEventListener('pointermove', e => {
     const p = view.toLogical(e.clientX, e.clientY);
-    ptr.x = p.x; ptr.y = p.y; ptr.known = true;
+    const overBtn = !!(e.target && e.target.closest && e.target.closest('#hud button'));
+    if (!overBtn) { ptr.x = p.x; ptr.y = p.y; ptr.known = true; }
     if (screen === 'title') dirty = true;
+    if (screen === 'play' && R && lens && !overBtn) {
+      if (SZ.moveLens(lens, p.x, p.y) && lens.on) dirty = true;
+    }
     if (!drag.on) return;
-    // A button let go where the page could not see it ends the drag here.
-    if (e.buttons === 0) { endDrag(false); return; }
-    const dx = p.x - drag.x, dy = p.y - drag.y, now = performance.now();
-    drag.x = p.x; drag.y = p.y;
-    if (!drag.moved) {
-      if (Math.hypot(p.x - drag.x0, p.y - drag.y0) < 8) return;
-      drag.moved = true; moves++; setCursor();
-      panBy(p.x - drag.x0, p.y - drag.y0);
-    } else panBy(dx, dy);
-    const dt = Math.max(4, now - drag.lt) / 1000;
-    drag.vx = drag.vx * 0.5 + (dx / dt) * 0.5; drag.vy = drag.vy * 0.5 + (dy / dt) * 0.5; drag.lt = now;
+    if (e.buttons === 0 && e.pointerType !== 'touch') { endDrag(false); return; }
+    if (!drag.moved && Math.hypot(p.x - drag.x0, p.y - drag.y0) >= 10) drag.moved = true;
   });
   function endDrag(cancel) {
     if (!drag.on) return;
     drag.on = false;
-    if (screen === 'play' && R) {
-      if (drag.moved) {
-        // A flick glides on a little (never with reduced motion, never after holding still).
-        if (!calm() && performance.now() - drag.lt < 90) { cam.vx = SZ.clamp(drag.vx, -2400, 2400); cam.vy = SZ.clamp(drag.vy, -2400, 2400); }
-      } else if (!cancel) doClick(drag.x0, drag.y0);
-    }
-    setCursor();
+    if (screen === 'play' && R && !drag.moved && !drag.placeOnly && !cancel) doClick(drag.x0, drag.y0);
   }
   window.addEventListener('pointerup', () => endDrag(false));
   window.addEventListener('pointercancel', () => endDrag(true));
@@ -523,37 +534,46 @@
     } else if (screen === 'play' && R) {
       if (K.anyPressed(['KeyP', 'Escape'])) { pause(true); return; }
       if (intro && go) endIntro();
+      if (K.pressed('KeyL')) toggleLens();
       if (K.pressed('KeyH')) showHint(true);
-      // Arrows (or WASD) move the view; + and − zoom around the middle.
+      // Arrows (or WASD) move the magnifying glass across the fixed scene; + and − adjust its zoom.
       const mx = (K.anyDown(['ArrowRight', 'KeyD']) ? 1 : 0) - (K.anyDown(['ArrowLeft', 'KeyA']) ? 1 : 0);
       const my = (K.anyDown(['ArrowDown', 'KeyS']) ? 1 : 0) - (K.anyDown(['ArrowUp', 'KeyW']) ? 1 : 0);
-      if (mx || my) { const v = 620 * dt; if (!coach.keyPan) { coach.keyPan = true; moves++; } panBy(-mx * v, -my * v); }
-      else coach.keyPan = false;
+      if (mx || my) {
+        if (intro) endIntro();
+        if (!lens.on) { SZ.toggleLens(lens, calm()); markZoomUsed(); paintZoom(); }
+        const v = 540 * dt;
+        if (!coach.keyMove) { coach.keyMove = true; moves++; }
+        if (SZ.moveLens(lens, lens.x + mx * v, lens.y + my * v)) dirty = true;
+      } else coach.keyMove = false;
       const zi = K.anyDown(['Equal', 'NumpadAdd']), zo = K.anyDown(['Minus', 'NumpadSubtract']);
-      if (zi !== zo) zoomBy(MID.x, MID.y, Math.exp((zi ? 1.7 : -1.7) * dt));
+      if (zi !== zo) zoomBy(lens.x, lens.y, Math.exp((zi ? 1.7 : -1.7) * dt), false);
     }
   }
 
   /* -------------------------------------------------------------- hints */
-  // After a wait without finding anything the magnifying glass glows; pressed (or by itself
-  // for the youngest players) it points to the nearest thing still to find.
+  // Pressing the lightbulb (or H) immediately rings a thing still to find; after a wait
+  // without finding anything the lightbulb glows (and shows by itself for the youngest).
   function hintTarget() {
     let best = null, bd = Infinity;
+    const ref = lens && lens.on ? lens : MID;
     for (const it of R.items) {
       if (it.e < 0 || it.got) continue;
-      const p = SZ.pos(it, R.t, tmp), d = Math.hypot(p.x - cam.x, p.y - cam.y);
+      const p = SZ.pos(it, R.t, tmp), s = SZ.toScreen(cam, p.x, p.y, {});
+      const d = Math.hypot(s.x - ref.x, s.y - ref.y);
       if (d < bd) { bd = d; best = it; }
     }
     return best;
   }
-  function showHint(own) {
-    if (!R || screen !== 'play' || R.done || R.over || intro) return;
-    if (own && !hint.ready) { J.tap(); wiggle($('btnHint')); return; }
+  function showHint() {
+    if (!R || screen !== 'play' || R.done || R.over) return;
+    if (intro) endIntro();
     hint.it = hintTarget();
     if (!hint.it) return;
     hint.on = 4.5; hint.ready = false; hint.wait = 0;
     $('btnHint').classList.remove('ready');
     J.chime(1);
+    dirty = true;
   }
   function hintStep(dt) {
     if (hint.on > 0) { hint.on -= dt; if (hint.on <= 0 || !hint.it || hint.it.got) { hint.on = 0; hint.it = null; } return; }
@@ -586,11 +606,9 @@
       else { intro.o += dt / 0.35; if (intro.o >= 1) intro = null; }
     }
     if (!intro || intro.out) SZ.tick(R, dt);
-    if (SZ.stepCam(cam, dt, calm())) { paintZoom(); dirty = true; }
+    if (SZ.stepLens(lens, dt, calm())) { paintZoom(); dirty = true; }
     if (!intro && !R.done && !R.over) hintStep(dt);
     coach.t += dt;
-    if (coach.drag && coach.panned > 160) coach.drag = false;
-    if (coach.zoom && cam.z > coach.z0 * 1.35) coach.zoom = false;
     // The last seconds of a timed round tick.
     if (R.limit && !R.done && !R.over) {
       const left = Math.ceil(SZ.left(R));
@@ -599,16 +617,13 @@
     if (R.done) { celebrate += dt; if (celebrate > 1.25 && !flyers.length) showResult(); }
     else if (R.over && R.timeUp) showTimeUp();
   }
-  // Redraw every frame while something moves (the camera, moving things, effects, the
-  // hint, the coach, the list's intro); a still view only needs its clock and the things'
-  // gentle idle motion, so it is drawn every third frame (or once a second with reduced motion).
   function busy() {
     const sec = Math.floor(R.limit ? SZ.left(R) : R.t + R.pen);
     if (sec !== lastSec) { lastSec = sec; return true; }
-    if (intro || R.done || hint.on > 0 || coach.drag || coach.zoom || R.moving || flyers.length || bumps.some(b => b > 0) || floats.length || rings.length || fx.list.length || R.items.some(it => it.wob > 0)) return true;
+    if (intro || R.done || hint.on > 0 || coach.zoom || R.moving || flyers.length || bumps.some(b => b > 0) || floats.length || rings.length || fx.list.length || R.items.some(it => it.wob > 0)) return true;
     return !calm() && ++idle % 3 === 0;
   }
-  function menuStep(dt) {
+  function menuStep() {
     if (calm()) return;
     const c = menu.cam;
     c.x = 1280 + Math.sin(time * 0.045) * 240; c.y = 720 + Math.sin(time * 0.07) * 130;
@@ -650,20 +665,43 @@
     }
     return tray.c;
   }
-  function drawItems(ctx) {
-    const d = D(), z = cam.z, still = calm();
-    ctx.setTransform(z * d, 0, 0, z * d, (W / 2 - cam.x * z) * d, (H / 2 - cam.y * z) * d);
-    const x0 = cam.x - W / 2 / z, x1 = cam.x + W / 2 / z, y0 = cam.y - H / 2 / z, y1 = cam.y + H / 2 / z;
+  function drawItems(ctx, c, sb) {
+    c = c || cam;
+    const d = D(), z = c.z, still = calm();
+    ctx.setTransform(z * d, 0, 0, z * d, (W / 2 - c.x * z) * d, (H / 2 - c.y * z) * d);
+    const b0 = sb ? sb[0] : 0, b1 = sb ? sb[1] : 0, b2 = sb ? sb[2] : W, b3 = sb ? sb[3] : H;
+    const x0 = c.x + (b0 - W / 2) / z, x1 = c.x + (b2 - W / 2) / z, y0 = c.y + (b1 - H / 2) / z, y1 = c.y + (b3 - H / 2) / z;
     for (const it of R.items) {
       if (it.got && !it.cv) continue;
-      const p = SZ.pos(it, R.t, tmp), m = it.r * 2;
+      const p = SZ.pos(it, R.t, tmp), m = Math.max(it.r, it.cv ? it.cv.r : 0) * 2.2;
       if (p.x + m < x0 || p.x - m > x1 || p.y + m < y0 || p.y - m > y1) continue;
       const wob = it.wob > 0 && !still ? Math.sin(it.wob * 40) * it.wob * 0.6 : 0;
-      const wig = it.cv && !still && SZ.coverOpen(it, z) < 0.05 ? Math.max(0, Math.sin(time * 2.2 + it.id)) * Math.sin(time * 30) * 0.06 : 0;
+      const open = SZ.coverOpen(it, z);
+      const wig = it.cv && !still && open < 0.05 ? Math.max(0, Math.sin(time * 2.2 + it.id)) * Math.sin(time * 30) * 0.06 : 0;
       ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(wob);
-      A.item(ctx, it.got ? '' : it.k, it.v, 0, 0, it.r, time, { d: p.d, still, ph: it.id, cv: it.cv, open: SZ.coverOpen(it, z), wig: wig + wob });
+      A.item(ctx, it.got ? '' : it.k, it.v, 0, 0, it.r, time, { d: p.d, still, ph: it.id, cv: it.cv, open, wig: wig + wob });
       ctx.restore();
     }
+  }
+  function drawPlayLens(ctx) {
+    if (!lens || !lens.on) return;
+    const d = D(), r = lens.r, L = lens, lc = SZ.lensCam(cam, L, lcam);
+    const sb = [L.x - r, L.y - r, L.x + r, L.y + r];
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.beginPath(); ctx.arc(L.x * d, L.y * d, r * d, 0, Math.PI * 2); ctx.clip();
+    drawScene(ctx, wi, lc, sb);
+    drawItems(ctx, lc, sb);
+    ctx.restore();
+    ctx.setTransform(d, 0, 0, d, 0, 0);
+    A.circ(ctx, L.x, L.y, r); ctx.fillStyle = 'rgba(214,244,255,0.08)'; ctx.fill();
+    const ang = L.x > W - 220 ? (L.y > H - 220 ? -2.35 : 2.35) : (L.y > H - 220 ? -0.75 : 0.75);
+    ctx.save(); ctx.translate(L.x, L.y); ctx.rotate(ang);
+    ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(r + 8, 0); ctx.lineTo(r + 92, 0); A.st(ctx, 32, A.INK); A.st(ctx, 22, '#c98a4a');
+    ctx.restore();
+    A.circ(ctx, L.x, L.y, r); A.st(ctx, 18, A.INK); A.st(ctx, 11, '#ffd23f');
+    ctx.beginPath(); ctx.arc(L.x, L.y, r - 20, Math.PI * 1.1, Math.PI * 1.42); A.st(ctx, 6, 'rgba(255,255,255,0.82)');
   }
   function drawFx(ctx) {
     const still = calm();
@@ -682,54 +720,33 @@
     for (const f of floats) {
       const a = Math.min(1, (f.life - f.t) / 0.4), up = still ? 0 : f.t * 30;
       ctx.globalAlpha = Math.max(0, a);
-      if (f.wheel) { A.mouse(ctx, f.x, f.y - up + 20, 0.7, still ? 0 : Math.sin(f.t * 10), '#ffd23f'); A.text(ctx, 'كبّر!', f.x, f.y - up - 50, 30, '#ffffff'); }
-      else if (f.hand) { A.hand(ctx, f.x + (still ? 0 : Math.sin(f.t * 6) * 30), f.y - up + 20, 1, 0); A.text(ctx, 'اسحب', f.x, f.y - up - 34, 30, '#ffffff'); }
+      if (f.wheel) { A.glass(ctx, f.x, f.y - up + 14, 1.05, still ? 0 : Math.sin(f.t * 8) * 0.15); A.text(ctx, 'كبّر!', f.x, f.y - up - 42, 30, '#ffffff'); }
       else A.text(ctx, f.text, f.x, f.y - up, f.size, f.color);
     }
     ctx.globalAlpha = 1;
   }
-  // The hint: an arrow at the edge towards a thing off screen, or a ring around it.
+  // The hint: a glowing golden ring around a thing still to find on the fixed scene.
   function drawHint(ctx) {
     if (!(hint.on > 0) || !hint.it) return;
     const still = calm(), p = screenOf(hint.it, {}), a = Math.min(1, hint.on / 0.5, (4.5 - hint.on) / 0.3);
-    const L = SZ.PAD.l + 40, Rr = W - 50, T = SZ.PAD.t + 40, B = H - SZ.PAD.b - 40;
     ctx.globalAlpha = Math.max(0, a);
-    if (p.x < L || p.x > Rr || p.y < T || p.y > B) {
-      const cx = MID.x, cy = MID.y, dx = p.x - cx, dy = p.y - cy, s = Math.min(dx ? Math.abs(((dx > 0 ? Rr : L) - cx) / dx) : 9, dy ? Math.abs(((dy > 0 ? B : T) - cy) / dy) : 9);
-      const ex = cx + dx * s, ey = cy + dy * s, ang = Math.atan2(dy, dx), bob = still ? 0 : Math.sin(time * 8) * 10;
-      ctx.save(); ctx.translate(ex - Math.cos(ang) * bob, ey - Math.sin(ang) * bob); ctx.rotate(ang);
-      ctx.beginPath(); ctx.moveTo(34, 0); ctx.lineTo(-10, -30); ctx.lineTo(-10, -13); ctx.lineTo(-44, -13); ctx.lineTo(-44, 13); ctx.lineTo(-10, 13); ctx.lineTo(-10, 30); ctx.closePath();
-      A.fill(ctx, '#ffd23f'); ctx.lineWidth = 6; ctx.strokeStyle = A.INK; ctx.lineJoin = 'round'; ctx.stroke();
-      ctx.restore();
-      A.glass(ctx, ex - Math.cos(ang) * 90, ey - Math.sin(ang) * 90, 1.4, 0);
-    } else {
-      const rad = Math.max(46, hint.it.r * cam.z * 1.9) + (still ? 0 : Math.sin(time * 7) * 6);
-      A.circ(ctx, p.x, p.y, rad); A.st(ctx, 9, A.INK); A.st(ctx, 5, '#ffd23f');
-      const small = hint.it.r * cam.z < SZ.MIN_R || (hint.it.cv && SZ.coverOpen(hint.it, cam.z) < SZ.OPEN_AT);
-      if (small) { A.mouse(ctx, p.x + rad + 40, p.y, 0.8, still ? 0 : Math.sin(time * 8), '#ffd23f'); A.text(ctx, 'كبّر!', p.x + rad + 40, p.y - 76, 30, '#ffffff'); }
-      else A.glass(ctx, p.x + rad * 0.75, p.y - rad * 0.75, 1.3, still ? 0 : Math.sin(time * 5) * 0.2);
-    }
+    const rad = Math.max(42, hint.it.r * p.z * 1.9) + (still ? 0 : Math.sin(time * 7) * 6);
+    A.circ(ctx, p.x, p.y, rad); A.st(ctx, 9, A.INK); A.st(ctx, 5, '#ffd23f');
+    const small = hint.it.r * p.z < SZ.MIN_R || (hint.it.cv && SZ.coverOpen(hint.it, p.z) < SZ.OPEN_AT);
+    const gx = p.x > W - 150 ? p.x - rad - 42 : p.x + rad + 42;
+    if (small) { A.glass(ctx, gx, p.y, 1.15, still ? 0 : Math.sin(time * 6) * 0.18); A.text(ctx, 'كبّر!', gx, p.y - 54, 28, '#ffffff'); }
     ctx.globalAlpha = 1;
   }
-  // The coach: a wordless hand that drags (first round) and the mouse wheel (first zoom).
+  // The coach: in the first round with tiny items, shows how to zoom with the lens or wheel.
   function drawCoach(ctx) {
-    if (intro || R.done) return;
-    const still = calm();
-    if (coach.drag && coach.t > 1.2 && coach.panned < 160) {
-      const k = still ? 0.5 : (coach.t * 0.7) % 1, x = MID.x + 120 - k * 240, y = MID.y + 40;
-      ctx.globalAlpha = 0.95;
-      A.rr(ctx, MID.x - 190, y - 120, 380, 190, 40); A.fill(ctx, 'rgba(43,36,82,0.55)');
-      for (let i = -1; i <= 1; i += 2) { ctx.beginPath(); ctx.moveTo(MID.x + i * 160, y); ctx.lineTo(MID.x + i * 130, y - 22); ctx.lineTo(MID.x + i * 130, y + 22); ctx.closePath(); A.fs(ctx, '#ffd23f', 4); }
-      A.hand(ctx, x, y, 1.4, 1);
-      A.text(ctx, 'اسحب', MID.x, y - 86, 40, '#ffffff');
-      ctx.globalAlpha = 1;
-    }
-    if (coach.zoom && coach.t > 0.8) {
-      const bob = still ? 0 : Math.sin(time * 6) * 0.8, x = ptr.known && !drag.on ? Math.min(W - 90, Math.max(SZ.PAD.l + 90, ptr.x + 70)) : MID.x, y = ptr.known && !drag.on ? Math.min(H - SZ.PAD.b - 70, Math.max(150, ptr.y)) : MID.y;
-      A.rr(ctx, x - 70, y - 120, 140, 170, 30); A.fill(ctx, 'rgba(43,36,82,0.6)');
-      A.mouse(ctx, x, y + 6, 1, bob, '#ffd23f');
-      A.text(ctx, 'كبّر', x, y - 92, 32, '#ffffff');
-    }
+    if (intro || R.done || !coach.zoom || coach.t <= 0.8) return;
+    const still = calm(), bob = still ? 0 : Math.sin(time * 6) * 0.8;
+    const x = ptr.known && ptr.x >= SZ.PAD.l ? Math.min(W - 110, Math.max(SZ.PAD.l + 110, ptr.x + 80)) : MID.x;
+    const y = ptr.known && ptr.x >= SZ.PAD.l ? Math.min(H - SZ.PAD.b - 70, Math.max(150, ptr.y)) : MID.y;
+    A.rr(ctx, x - 90, y - 120, 180, 174, 30); A.fill(ctx, 'rgba(43,36,82,0.62)');
+    A.mouse(ctx, x - 34, y + 8, 0.88, bob, '#ffd23f');
+    A.glass(ctx, x + 38, y + 6, 1.05, still ? 0 : bob * 0.2);
+    A.text(ctx, 'كبّر', x, y - 92, 32, '#ffffff');
   }
   function drawHud(ctx) {
     const T = trayGeo(R.list.length);
@@ -815,13 +832,14 @@
     if ((screen === 'play' || screen === 'pause' || screen === 'result') && R) {
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       drawScene(ctx, wi, cam);
-      drawItems(ctx);
+      drawItems(ctx, cam);
       ctx.setTransform(d, 0, 0, d, 0, 0);
       if (screen === 'result') {
         ctx.fillStyle = 'rgba(30,24,70,0.4)'; ctx.fillRect(0, 0, W, H);
         fx.draw(ctx);
         return;
       }
+      if (lens && lens.on) drawPlayLens(ctx);
       drawHint(ctx);
       drawCoach(ctx);
       drawHud(ctx);
@@ -832,14 +850,19 @@
 
   /* ---------------------------------------------- the how-to pictures */
   function howTo() {
-    const g1 = $('howWheel').getContext('2d'), g2 = $('howDrag').getContext('2d'), g3 = $('howClick').getContext('2d');
+    const g1 = $('howWheel').getContext('2d'), g2 = $('howLens').getContext('2d'), g3 = $('howClick').getContext('2d');
     [g1, g2, g3].forEach(g => g.clearRect(0, 0, 150, 110));
-    A.mouse(g1, 75, 74, 0.95, 0.4, '#ffd23f');
-    A.glass(g1, 122, 34, 0.75, 0);
-    A.hand(g2, 80, 60, 1.25, 0);
-    [[-1, 22], [1, 128]].forEach(a => { g2.beginPath(); g2.moveTo(a[1] + a[0] * 14, 60); g2.lineTo(a[1] - a[0] * 6, 44); g2.lineTo(a[1] - a[0] * 6, 76); g2.closePath(); g2.fillStyle = '#ffd23f'; g2.fill(); g2.lineWidth = 4; g2.strokeStyle = A.INK; g2.stroke(); });
-    A.icon(g3, 'kite', 'red', 52, 50, 34);
-    A.hand(g3, 98, 84, 1, 1);
+    A.mouse(g1, 52, 74, 0.88, 0.4, '#ffd23f');
+    A.glass(g1, 108, 44, 0.92, 0);
+    g2.lineCap = 'round';
+    g2.beginPath(); g2.moveTo(98, 74); g2.lineTo(126, 98); g2.lineWidth = 14; g2.strokeStyle = A.INK; g2.stroke();
+    g2.beginPath(); g2.moveTo(98, 74); g2.lineTo(126, 98); g2.lineWidth = 8; g2.strokeStyle = '#c98a4a'; g2.stroke();
+    A.circ(g2, 72, 50, 35); A.fill(g2, '#d6f4ff');
+    A.icon(g2, 'duck', 'yellow', 72, 53, 24);
+    A.circ(g2, 72, 50, 35); A.st(g2, 8, A.INK); A.st(g2, 4.5, '#ffd23f');
+    g2.beginPath(); g2.arc(72, 50, 26, Math.PI * 1.1, Math.PI * 1.45); A.st(g2, 3.5, '#ffffff');
+    A.icon(g3, 'kite', 'red', 50, 50, 32);
+    A.hand(g3, 98, 82, 0.95, 1);
   }
 
   canvas.addEventListener('contextrestored', () => { resetTiles(); thumbsDrawn = false; trayKey = ''; howTo(); });
@@ -856,10 +879,12 @@
       const g = R;
       return {
         screen, world: wi, round: ri, index: g ? g.i : -1, tier, paused: screen === 'pause', intro: !!intro,
-        cam: cam && g ? { x: r1(cam.x), y: r1(cam.y), z: r3(cam.z) } : null, tz: cam ? r3(cam.tz) : 0, zmin: g ? g.zmin : 0, zmax: g ? g.zmax : 0,
-        locked: !!(g && g.d.lock), time: g ? r3(g.t) : 0, found: g ? g.found : 0, total: g ? g.total : 0, wrong: g ? g.wrong : 0, pen: g ? g.pen : 0,
+        cam: cam && g ? { x: r1(cam.x), y: r1(cam.y), z: r3(cam.z) } : null,
+        lens: lens && g ? { on: lens.on, x: r1(lens.x), y: r1(lens.y), r: lens.r, z: r3(lens.z), tz: r3(lens.tz) } : null,
+        tz: lens ? r3(lens.tz) : 0, zmin: g ? g.zmin : 0, zmax: g ? g.zmax : 0,
+        time: g ? r3(g.t) : 0, found: g ? g.found : 0, total: g ? g.total : 0, wrong: g ? g.wrong : 0, pen: g ? g.pen : 0,
         limit: g ? g.limit : 0, left: g ? r1(SZ.left(g)) : 0, done: !!(g && g.done), over: !!(g && g.over), timeUp: !!(g && g.timeUp), moves,
-        hint: hint.on > 0, hintReady: hint.ready, coach: coach.drag ? 'drag' : coach.zoom ? 'zoom' : '', lensZ: r3(menu.lensZ),
+        hint: hint.on > 0, hintReady: hint.ready, coach: coach.zoom ? 'zoom' : '', lensZ: r3(menu.lensZ),
         list: g ? g.list.map((e, i) => ({ k: e.k, v: e.v, n: e.n, got: e.got, shown: shown[i] })) : [],
         movers: g ? g.items.filter(it => it.m).map(it => { const p = SZ.pos(it, g.t, {}); return [r1(p.x), r1(p.y)]; }) : [],
         stars: result ? result.stars : 0, result: !!result && screen === 'result', best: !!(result && result.res && result.res.best)
@@ -869,7 +894,14 @@
     // Where a logical point is on the page, for tests that move the real mouse there.
     point: page,
     // Where a scene point is on the page right now, and the things (still) to find.
-    world: (x, y) => { const s = SZ.toScreen(cam, x, y, {}); return page(s.x, s.y); },
+    world: (x, y) => {
+      if (lens && lens.on) {
+        const lc = SZ.lensCam(cam, lens, {}), ls = SZ.toScreen(lc, x, y, {});
+        if (Math.hypot(ls.x - lens.x, ls.y - lens.y) <= lens.r) return page(ls.x, ls.y);
+      }
+      const s = SZ.toScreen(cam, x, y, {});
+      return page(s.x, s.y);
+    },
     items: () => R ? R.items.map(it => { const p = SZ.pos(it, R.t, {}); return { id: it.id, k: it.k, v: it.v, e: it.e, got: it.got, x: r1(p.x), y: r1(p.y), r: it.r, cover: !!it.cv, need: r3(SZ.needZoom(it)), moving: !!it.m }; }) : []
   };
 
@@ -877,7 +909,7 @@
   buildBook();
   howTo();
   Kit.muteButton();
-  Kit.lifecycle({ pause: () => pause(false), reset: () => { drag.on = false; if (cam) cam.vx = cam.vy = 0; } });
+  Kit.lifecycle({ pause: () => pause(false), reset: () => { drag.on = false; } });
   ensureBase(0);
   toTitle();
   Kit.loop(update, render);

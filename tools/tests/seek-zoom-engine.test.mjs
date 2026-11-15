@@ -1,6 +1,6 @@
 // Seek and Zoom engine (games/seek-zoom/engine.js): the scenes, every round's things to
-// find at every difficulty, the camera (zoom around the pointer, pan, clamp, glide), the
-// wheel, clicks, stars and saves. Node only, no browser.
+// find at every difficulty, the fixed full-scene camera, the movable magnifying glass lens,
+// the wheel, clicks, stars and saves. Node only, no browser.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -13,7 +13,7 @@ const source = fs.readFileSync(path.join(repo, 'games/seek-zoom/engine.js'), 'ut
 const load = () => { const sandbox = { window: {} }; vm.runInNewContext(source, sandbox); return sandbox.window.SZ; };
 const SZ = load();
 const plain = v => JSON.parse(JSON.stringify(v));
-const W = SZ.W, H = SZ.H, P = SZ.PAD;
+const W = SZ.W, H = SZ.H;
 const ARABIC = /^[؀-ۿ ]+$/;
 // What Kit.dda can hand the engine (game.js: size 1.2..0.85, 0..4 look-alikes, speed
 // 0.75..1.25, a penalty from tier 3, the time factor 1.3..0.85, three arrangements).
@@ -29,15 +29,17 @@ function gap(a, b) {
   return Math.hypot(Math.max(0, Math.abs(a.x - b.x) - ax - bx), Math.max(0, Math.abs(a.y - b.y) - ay - by));
 }
 function zoneShapes(Wd, names) { return names.split(' ').flatMap(n => Wd.zones[n] || []); }
-// A camera on round R at zoom z looking at scene point (x, y) (clamped like the game's).
-function look(S, R, x, y, z) {
-  const cam = SZ.camera(S, R);
-  cam.z = cam.tz = z; cam.x = x; cam.y = y;
-  return SZ.clampCam(cam);
+// A magnifying glass on round R over screen point (sx, sy) at zoom z.
+function lensAt(R, sx, sy, z) {
+  const lens = SZ.lens(R);
+  lens.on = true;
+  SZ.moveLens(lens, sx, sy);
+  lens.z = lens.tz = z;
+  return lens;
 }
 
 test('the engine is pure: no Kit, no page, no timers, no unseeded randomness', () => {
-  assert.ok(SZ && SZ.makeRound && SZ.camera && SZ.hit, 'loads with only { window: {} }');
+  assert.ok(SZ && SZ.makeRound && SZ.camera && SZ.lens && SZ.lensCam && SZ.hit, 'loads with only { window: {} }');
   const code = source.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
   assert.doesNotMatch(code, /\bKit\b|\bdocument\b|setTimeout|setInterval|requestAnimationFrame|Math\.random|localStorage|performance\./);
 });
@@ -59,8 +61,9 @@ test('every scene is the same every time, busy, and every filler thing has a box
       const a = S.objs[i - 1], b = S.objs[i];
       assert.ok(a.l < b.l || (a.l === b.l && a.y <= b.y), 'painter order');
     }
-    // The scene is a whole number of screens wider than the view at the lowest zoom.
+    // Every scene is 16:9 and at least 2x screen size, filling the fixed view edge to edge.
     assert.ok(S.w >= 2 * W && S.h >= 2 * H);
+    assert.equal(S.w / W, S.h / H, `${Wd.id} matches the 16:9 screen`);
   }
 });
 
@@ -84,15 +87,19 @@ test('every thing to find has an Arabic name, and every round lists things its p
   assert.equal(SZ.label('balloon', 'red'), 'بالون أحمر');
 });
 
-test('the teaching ramp: drag only, then zoom, tiny things, moving things, covers that open when zooming, timed rounds', () => {
+test('the teaching ramp: big things on the full fixed scene first, then magnifying glass needed, moving things, covers, timed rounds', () => {
   const R = (w, r) => SZ.makeRound(w, r, { size: 1, decoys: 1 });
-  assert.deepEqual([R(0, 0).zmin, R(0, 0).zmax, R(0, 1).zmax], [1, 1, 1], 'the first two rounds only need dragging');
-  assert.ok(R(0, 2).zmax > R(0, 2).zmin, 'then the zoom opens');
+  assert.deepEqual([R(0, 0).zmin, R(0, 1).zmin, R(1, 0).zmin], [0.5, 0.5, 0.4], 'every round starts showing the entire scene');
+  for (const [w, r] of ROUNDS) assert.ok(R(w, r).zmax > R(w, r).zmin, 'the magnifying glass is available in every round');
   for (const p of PARAMS) {
+    for (const r of [0, 1]) {
+      const E = SZ.makeRound(0, r, p);
+      assert.ok(E.items.filter(i => i.e >= 0).every(i => SZ.needZoom(i) <= E.zmin), 'the first two rounds can be clicked directly on the full scene');
+    }
     const Z = SZ.makeRound(0, 2, p);
-    assert.ok(Z.items.filter(i => i.e >= 0).every(i => SZ.needZoom(i) > Z.zmin), 'the first zoom round needs the wheel for every thing, even at the biggest size');
+    assert.ok(Z.items.filter(i => i.e >= 0).every(i => SZ.needZoom(i) > Z.zmin), 'the third round needs the magnifying glass for every thing, even at the biggest size');
   }
-  assert.ok(R(0, 0).items.filter(i => i.e >= 0).every(i => i.r >= SZ.MIN_R * 2), 'the first things are big');
+  assert.ok(R(0, 0).items.filter(i => i.e >= 0).every(i => i.r * R(0, 0).zmin >= SZ.MIN_R * 1.5), 'the first things are big on the full scene');
   const need = w => { let n = 0, s = 0; for (let r = 0; r < SZ.PER; r++) for (const it of R(w, r).items) if (it.e >= 0) { s += SZ.needZoom(it); n++; } return s / n; };
   assert.ok(need(1) > need(0) && need(2) > need(1), 'things get smaller');
   assert.ok(R(2, 0).items.some(i => i.e >= 0 && i.m), 'the beach has moving things');
@@ -101,11 +108,11 @@ test('the teaching ramp: drag only, then zoom, tiny things, moving things, cover
   for (const [w, r] of ROUNDS.slice(0, 20)) assert.equal(R(w, r).limit, 0, 'only the last place is timed');
 });
 
-test('every round at every difficulty: each thing exists, in its zone, inside the scene, apart from all others', () => {
+test('every round at every difficulty: each thing exists, in its zone, inside the scene, clear of the HUD, apart from all others', () => {
   for (const [w, r] of ROUNDS) {
     const Wd = SZ.WORLDS[w], S = SZ.scene(w);
     for (const p of PARAMS) {
-      const R = SZ.makeRound(w, r, p), label = `${Wd.id} round ${r + 1} ${JSON.stringify(p)}`;
+      const R = SZ.makeRound(w, r, p), cam = SZ.camera(S, R), label = `${Wd.id} round ${r + 1} ${JSON.stringify(p)}`;
       assert.equal(R.failed, 0, label + ': every thing was placed');
       assert.equal(R.list.length, R.d.f.length);
       R.list.forEach((e, i) => assert.equal(R.items.filter(it => it.e === i).length, e.n, `${label}: ${e.n} × ${e.k}`));
@@ -115,6 +122,8 @@ test('every round at every difficulty: each thing exists, in its zone, inside th
         const ex = big * 1.25 + (it.m ? it.m.ax : 0), ey = big * 1.25 + (it.m ? it.m.ay : 0);
         assert.ok(shapes.some(s => SZ.inShape(s, it.x, it.y, ex, ey)), `${label}: ${it.k || 'cover'} at ${it.x},${it.y} is in its zone`);
         assert.ok(it.x - ex >= 0 && it.x + ex <= S.w && it.y - ey >= 0 && it.y + ey <= S.h, label + ': inside the scene');
+        const cs = SZ.toScreen(cam, it.x, it.y);
+        assert.equal(SZ.inHud(cs.x, cs.y, ex * cam.z, ey * cam.z, R.list.length), false, `${label}: ${it.k || 'cover'} stays clear of the HUD`);
         if (it.e < 0 && it.k) assert.ok(!R.list.some(e => e.k === it.k && e.v === it.v), label + ': a look-alike is never a thing on the list');
       }
       for (const t of R.items) {
@@ -128,31 +137,30 @@ test('every round at every difficulty: each thing exists, in its zone, inside th
   }
 });
 
-test('every thing to find can be seen big enough within the zoom range, and reached clear of the HUD', () => {
+test('every thing to find can be seen big enough under the magnifying glass on the fixed scene and picked cleanly', () => {
   for (const [w, r] of ROUNDS) {
     const S = SZ.scene(w);
     for (const p of [PARAMS[0], PARAMS[PARAMS.length - 1]]) {
-      const R = SZ.makeRound(w, r, p);
+      const R = SZ.makeRound(w, r, p), cam = SZ.camera(S, R);
+      assert.deepEqual(plain(SZ.toScreen(cam, 0, 0)), { x: 0, y: 0 });
+      assert.deepEqual(plain(SZ.toScreen(cam, S.w, S.h)), { x: W, y: H });
       for (const it of R.items) {
         if (it.e < 0) continue;
         const need = SZ.needZoom(it), label = `${SZ.WORLDS[w].id} ${r + 1}: ${it.k}`;
         assert.ok(need <= R.zmax - 0.1, `${label} needs zoom ${need.toFixed(2)} of ${R.zmax}`);
         assert.ok(it.r * R.zmax >= SZ.MIN_R * 1.4, `${label} is at least ${SZ.MIN_R * 1.4}px at the top zoom`);
         if (it.cv) assert.ok(it.cv.zo >= R.zmin, label + ': its cover is shut at the start');
-        // Some camera in the range shows it whole in the free middle of the screen.
-        let ok = false;
-        for (let z = Math.max(need, R.zmin); z <= R.zmax + 1e-9 && !ok; z += 0.05) {
-          for (let t = 0; t < 4 && !ok; t++) {
-            const pos = SZ.pos(it, t * 3), cam = look(S, R, pos.x, pos.y, z), s = SZ.toScreen(cam, pos.x, pos.y), rr = Math.max(it.r, it.cv ? it.cv.r : 0) * 1.3 * z;
-            ok = s.x - rr >= P.l && s.x + rr <= W - P.r - 20 && s.y - rr >= P.t && s.y + rr <= H - P.b;
-          }
+        for (let t = 0; t < 4; t++) {
+          const pos = SZ.pos(it, t * 3), s = SZ.toScreen(cam, pos.x, pos.y);
+          assert.equal(SZ.inHud(s.x, s.y, 4, 4, R.list.length), false, label + ' stays clear of the HUD while moving');
         }
-        assert.ok(ok, label + ' can be brought clear of the HUD');
-        // A click on it there finds that very thing.
-        const pos = SZ.pos(it, 0), z = Math.min(R.zmax, Math.max(need + 0.05, R.zmin)), cam = look(S, R, pos.x, pos.y, z), s = SZ.toScreen(cam, pos.x, pos.y);
-        const h = SZ.hit(R, cam, s.x, s.y);
-        assert.equal(h.it, it, label + ': the click picks it');
+        // Centering the magnifying glass over it on the fixed scene finds that very thing.
+        const pos = SZ.pos(it, 0), s = SZ.toScreen(cam, pos.x, pos.y);
+        const z = Math.min(R.zmax, Math.max(need + 0.05, R.zmin * 1.6)), lens = lensAt(R, s.x, s.y, z);
+        const h = SZ.hit(R, cam, s.x, s.y, lens);
+        assert.equal(h.it, it, label + ': the click through the lens picks it');
         assert.equal(h.t, 'found', label);
+        if (need <= R.zmin) assert.equal(SZ.hit(R, cam, s.x, s.y, null).t, 'found', label + ': also clickable without the lens');
       }
     }
   }
@@ -171,72 +179,55 @@ test('rounds are the same for the same difficulty and arrangement, and the arran
   assert.equal(odd.failed, 0);
 });
 
-test('zooming keeps the scene point under the pointer still, eased or at once, and stays in range', () => {
-  const S = SZ.scene(1), R = SZ.makeRound(1, 0, {});
+test('the world camera stays fixed showing the full scene; the magnifying glass toggles, moves, and zooms eased or at once', () => {
+  for (let w = 0; w < SZ.WORLDS.length; w++) {
+    const S = SZ.scene(w), R = SZ.makeRound(w, 0, {}), cam = SZ.camera(S, R);
+    assert.equal(cam.x, S.w / 2); assert.equal(cam.y, S.h / 2); assert.equal(cam.z, R.zmin);
+    assert.deepEqual(plain(SZ.toScreen(cam, 0, 0)), { x: 0, y: 0 });
+    assert.deepEqual(plain(SZ.toScreen(cam, S.w, S.h)), { x: W, y: H });
+  }
+  const S = SZ.scene(1), R = SZ.makeRound(1, 0, {}), cam = SZ.camera(S, R);
   for (const still of [true, false]) {
-    const cam = look(S, R, 1600, 900, 1);
-    const sx = 812, sy = 290, before = SZ.toWorld(cam, sx, sy);
-    assert.equal(SZ.zoomAt(cam, sx, sy, 1.6, still), true);
+    const lens = SZ.lens(R);
+    assert.equal(lens.on, false);
+    assert.equal(lens.z, R.zmin);
+    assert.equal(SZ.zoomLens(lens, 0.8, still), false, 'zooming out while off does nothing');
+    SZ.moveLens(lens, 812, 290);
+    const before = SZ.toWorld(cam, 812, 290);
+    assert.equal(SZ.zoomLens(lens, 2.5, still), true);
+    assert.equal(lens.on, true);
+    if (!still) {
+      SZ.stepLens(lens, 1 / 60, false);
+      assert.ok(lens.z > R.zmin && lens.z < lens.tz, 'eases over several frames');
+    }
     for (let i = 0; i < 90; i++) {
-      SZ.stepCam(cam, 1 / 60, still);
-      const now = SZ.toWorld(cam, sx, sy);
-      assert.ok(Math.abs(now.x - before.x) < 1e-6 && Math.abs(now.y - before.y) < 1e-6, `frame ${i}: the point stays under the pointer`);
+      SZ.stepLens(lens, 1 / 60, still);
+      const lc = SZ.lensCam(cam, lens), now = SZ.toWorld(lc, 812, 290);
+      assert.ok(Math.abs(now.x - before.x) < 1e-6 && Math.abs(now.y - before.y) < 1e-6, `frame ${i}: the scene point under the lens center stays put`);
     }
-    assert.equal(cam.z, 1.6);
-    assert.equal(cam.an, false, 'the zoom finished');
-    // Zooming out eases back, around another point.
-    const p2 = SZ.toWorld(cam, 400, 500);
-    SZ.zoomAt(cam, 400, 500, 1 / 1.25, still);
-    if (!still) { SZ.stepCam(cam, 1 / 60, false); assert.ok(cam.z > 1.28 && cam.z < 1.6, 'eases over several frames'); }
-    for (let i = 0; i < 90; i++) SZ.stepCam(cam, 1 / 60, still);
-    assert.ok(Math.abs(cam.z - 1.28) < 1e-9);
-    const q = SZ.toWorld(cam, 400, 500);
-    assert.ok(Math.abs(q.x - p2.x) < 1e-6 && Math.abs(q.y - p2.y) < 1e-6);
+    assert.ok(Math.abs(lens.z - R.zmin * 2.5) < 1e-9);
+    assert.equal(SZ.stepLens(lens, 1 / 60, still), false, 'the zoom finished');
+    // Toggle off remembers custom zoom, toggle back on restores it.
+    assert.equal(SZ.toggleLens(lens, true), false);
+    assert.equal(lens.z, R.zmin);
+    assert.equal(SZ.toggleLens(lens, true), true);
+    assert.ok(Math.abs(lens.z - R.zmin * 2.5) < 1e-9);
   }
-  const cam = look(S, R, 1600, 900, 1);
-  for (let i = 0; i < 40; i++) { SZ.zoomAt(cam, 640, 360, 1.5, true); }
-  assert.equal(cam.z, R.zmax, 'never past the top zoom');
-  for (let i = 0; i < 40; i++) { SZ.zoomAt(cam, 640, 360, 0.5, true); }
-  assert.equal(cam.z, R.zmin, 'never below the whole scene');
-  assert.equal(SZ.zoomAt(cam, 640, 360, 0.5, true), false, 'no change at the end of the range');
-  // A locked round never zooms.
-  const L = SZ.makeRound(0, 0, {}), lc = SZ.camera(SZ.scene(0), L);
-  assert.equal(SZ.zoomAt(lc, 640, 360, 2, true), false);
-  assert.equal(lc.z, 1);
-});
-
-test('panning follows the drag and is clamped to the scene (plus room for the HUD); a flick glides and stops', () => {
-  const S = SZ.scene(2), R = SZ.makeRound(2, 0, {});
-  const cam = look(S, R, 1600, 900, 1.5);
-  SZ.pan(cam, -150, 60);
-  assert.ok(Math.abs(cam.x - (1600 + 100)) < 1e-9 && Math.abs(cam.y - (900 - 40)) < 1e-9, 'the scene moves with the pointer');
-  for (const z of [R.zmin, 0.7, 1.3, R.zmax]) {
-    const c = look(S, R, 1600, 900, z);
-    for (const [dx, dy] of [[1e5, 0], [-1e5, 0], [0, 1e5], [0, -1e5], [1e5, 1e5], [-1e5, -1e5]]) {
-      SZ.pan(c, dx, dy);
-      const tl = SZ.toScreen(c, 0, 0), br = SZ.toScreen(c, S.w, S.h);
-      assert.ok(tl.x <= P.l + 1e-6 && tl.y <= P.t + 1e-6 && br.x >= W - P.r - 1e-6 && br.y >= H - P.b - 1e-6, `z ${z}: the view stays on the scene`);
-      assert.ok(tl.x >= P.l - 1e-6 || tl.x <= 0 + 1e-6, 'no more than the HUD room past the edge');
-    }
-  }
-  // At the lowest zoom the whole scene fits with the HUD's room.
-  const c = look(S, R, 0, 0, R.zmin), tl = SZ.toScreen(c, 0, 0);
-  assert.ok(Math.abs(tl.x - P.l) < 1e-6 && Math.abs(tl.y - P.t) < 1e-6);
-  // Without the HUD (the result screen) the scene fills the whole screen.
-  SZ.clampCam(c, { l: 0, r: 0, t: 0, b: 0 });
-  const t2 = SZ.toScreen(c, 0, 0), b2 = SZ.toScreen(c, S.w, S.h);
-  assert.ok(t2.x <= 1e-6 && t2.y <= 1e-6 && b2.x >= W - 1e-6 && b2.y >= H - 1e-6);
-  // A flick glides, slows down and stops; with reduced motion it stops at once.
-  const g = look(S, R, 1600, 900, 1);
-  g.vx = 900; g.vy = -300;
-  const x0 = g.x;
-  let n = 0;
-  while ((g.vx || g.vy) && n < 600) { SZ.stepCam(g, 1 / 60, false); n++; }
-  assert.ok(n > 20 && n < 200, `glides for ${n} frames`);
-  assert.ok(g.x < x0 - 80, 'the view moved the way of the flick');
-  const s = look(S, R, 1600, 900, 1);
-  s.vx = 900; SZ.stepCam(s, 1 / 60, true);
-  assert.equal(s.x, 1600); assert.equal(s.vx, 0);
+  const lens = SZ.lens(R);
+  for (let i = 0; i < 40; i++) SZ.zoomLens(lens, 1.5, true);
+  assert.equal(lens.z, R.zmax, 'never past the top zoom');
+  assert.equal(SZ.zoomLens(lens, 1.5, true), false, 'no change at the top');
+  for (let i = 0; i < 40; i++) SZ.zoomLens(lens, 0.5, true);
+  assert.equal(lens.z, R.zmin, 'never below the whole scene');
+  assert.equal(lens.on, false, 'zooming all the way out closes the lens');
+  // Moving clamps to the screen and reports whether it moved.
+  assert.equal(SZ.moveLens(lens, -500, 9999), true);
+  assert.deepEqual([lens.x, lens.y], [24, H - 24]);
+  assert.equal(SZ.moveLens(lens, -100, 9000), false);
+  assert.equal(SZ.inLens(lens, 24, H - 24), false, 'off lens never captures points');
+  SZ.toggleLens(lens, true);
+  assert.equal(SZ.inLens(lens, 24 + SZ.LENS_R - 1, H - 24), true);
+  assert.equal(SZ.inLens(lens, 24 + SZ.LENS_R + 1, H - 24), false);
 });
 
 test('the wheel: pixels, lines and pages; tiny trackpad steps and huge notches; up zooms in', () => {
@@ -256,33 +247,34 @@ test('the wheel: pixels, lines and pages; tiny trackpad steps and huge notches; 
   assert.ok(Math.abs(f - notch) < 1e-9);
 });
 
-test('clicks: found, already found, too small (zoom!), a shut cover (zoom!), a look-alike, empty ground', () => {
-  const S = SZ.scene(3), R = SZ.makeRound(3, 0, { size: 1, decoys: 2 });
+test('clicks: found through the lens, already found, too small outside or without the lens, a shut cover, a look-alike, empty ground', () => {
+  const S = SZ.scene(3), R = SZ.makeRound(3, 0, { size: 1, decoys: 2 }), cam = SZ.camera(S, R);
   const t = R.items.find(i => i.e >= 0 && !i.cv), cov = R.items.find(i => i.e >= 0 && i.cv), dec = R.items.find(i => i.e < 0 && i.k && !i.cv);
-  const at = (it, z) => { const cam = look(S, R, it.x, it.y, z); return [cam, SZ.toScreen(cam, it.x, it.y)]; };
-  let [cam, s] = at(t, R.zmin);
+  const ts = SZ.toScreen(cam, t.x, t.y), cs = SZ.toScreen(cam, cov.x, cov.y), ds = SZ.toScreen(cam, dec.x, dec.y);
   assert.ok(t.r * R.zmin < SZ.MIN_R);
-  assert.equal(SZ.click(R, cam, s.x, s.y).t, 'small', 'too small to pick yet');
+  assert.equal(SZ.click(R, cam, ts.x, ts.y, null).t, 'small', 'too small to pick without the lens');
   assert.equal(R.wrong, 0, 'a zoom hint is not a wrong click');
-  [cam, s] = at(t, SZ.needZoom(t) + 0.05);
-  const h = SZ.click(R, cam, s.x, s.y);
+  // A lens far away does not magnify t.
+  const farLens = lensAt(R, ts.x > 640 ? 150 : 1130, ts.y, SZ.needZoom(t) + 0.2);
+  assert.equal(SZ.click(R, cam, ts.x, ts.y, farLens).t, 'small', 'outside the lens circle stays unmagnified');
+  // Magnifying t with the lens finds it.
+  const tLens = lensAt(R, ts.x, ts.y, SZ.needZoom(t) + 0.05);
+  const h = SZ.click(R, cam, ts.x, ts.y, tLens);
   assert.equal(h.t, 'found'); assert.equal(R.found, 1); assert.equal(R.list[t.e].got, 1); assert.equal(t.got, true);
-  assert.equal(SZ.click(R, cam, s.x, s.y).t, 'again');
+  assert.equal(SZ.click(R, cam, ts.x, ts.y, tLens).t, 'again');
   assert.equal(R.found, 1);
-  [cam, s] = at(cov, cov.cv.zo - 0.05);
-  assert.equal(SZ.click(R, cam, s.x, s.y).t, 'closed');
-  [cam, s] = at(cov, SZ.needZoom(cov) + 0.02);
-  assert.ok(SZ.coverOpen(cov, cam.z) >= SZ.OPEN_AT);
-  assert.equal(SZ.click(R, cam, s.x, s.y).t, 'found');
-  [cam, s] = at(dec, 2);
-  assert.equal(SZ.click(R, cam, s.x, s.y).t, 'decoy');
+  // Covered item: shut at low lens zoom, open once magnified past zo.
+  assert.equal(SZ.click(R, cam, cs.x, cs.y, lensAt(R, cs.x, cs.y, cov.cv.zo - 0.05)).t, 'closed');
+  const openLens = lensAt(R, cs.x, cs.y, SZ.needZoom(cov) + 0.02);
+  assert.ok(SZ.coverOpen(cov, openLens.z) >= SZ.OPEN_AT);
+  assert.equal(SZ.click(R, cam, cs.x, cs.y, openLens).t, 'found');
+  assert.equal(SZ.click(R, cam, ds.x, ds.y, lensAt(R, ds.x, ds.y, 2)).t, 'decoy');
   assert.equal(R.wrong, 1);
   // Empty ground: a point far from everything.
-  cam = look(S, R, 1600, 900, 2);
   let miss = null;
-  for (let x = 120; x < 1200 && !miss; x += 37) for (let y = 90; y < 590 && !miss; y += 41) if (SZ.hit(R, cam, x, y).t === 'miss') miss = [x, y];
+  for (let x = 120; x < 1200 && !miss; x += 37) for (let y = 90; y < 560 && !miss; y += 41) if (SZ.hit(R, cam, x, y, null).t === 'miss') miss = [x, y];
   assert.ok(miss);
-  assert.equal(SZ.click(R, cam, miss[0], miss[1]).t, 'miss');
+  assert.equal(SZ.click(R, cam, miss[0], miss[1], null).t, 'miss');
   assert.equal(R.wrong, 2);
   assert.equal(R.found, 2, 'wrong clicks never find anything');
 });
@@ -290,9 +282,9 @@ test('clicks: found, already found, too small (zoom!), a shut cover (zoom!), a l
 test('the round: the clock, wrong clicks in a row cost seconds only when the penalty is on, time-up, stars', () => {
   const S = SZ.scene(4), R = SZ.makeRound(4, 0, { pen: 5, timeK: 1 });
   assert.equal(R.limit, 120);
-  const cam = look(S, R, 1600, 900, 2);
+  const cam = SZ.camera(S, R);
   let miss = null;
-  for (let x = 120; x < 1200 && !miss; x += 37) for (let y = 90; y < 590 && !miss; y += 41) if (SZ.hit(R, cam, x, y).t === 'miss') miss = [x, y];
+  for (let x = 120; x < 1200 && !miss; x += 37) for (let y = 90; y < 560 && !miss; y += 41) if (SZ.hit(R, cam, x, y, null).t === 'miss') miss = [x, y];
   SZ.click(R, cam, ...miss); SZ.click(R, cam, ...miss);
   assert.equal(R.pen, 0);
   const third = SZ.click(R, cam, ...miss);
@@ -304,9 +296,9 @@ test('the round: the clock, wrong clicks in a row cost seconds only when the pen
   assert.equal(SZ.click(R, cam, ...miss).t, 'over', 'nothing counts after the end');
   assert.equal(SZ.outcome(R), 0.1);
   // Without the penalty, wrong clicks only count.
-  const Q = SZ.makeRound(1, 0, { pen: 0 }), qc = look(SZ.scene(1), Q, 1600, 900, 2);
+  const Q = SZ.makeRound(1, 0, { pen: 0 }), qc = SZ.camera(SZ.scene(1), Q);
   let m2 = null;
-  for (let x = 120; x < 1200 && !m2; x += 37) for (let y = 90; y < 590 && !m2; y += 41) if (SZ.hit(Q, qc, x, y).t === 'miss') m2 = [x, y];
+  for (let x = 120; x < 1200 && !m2; x += 37) for (let y = 90; y < 560 && !m2; y += 41) if (SZ.hit(Q, qc, x, y, null).t === 'miss') m2 = [x, y];
   for (let i = 0; i < 6; i++) SZ.click(Q, qc, ...m2);
   assert.equal(Q.pen, 0); assert.equal(Q.wrong, 6);
   // Stars: finishing, the round's time, few wrong clicks.
@@ -315,9 +307,9 @@ test('the round: the clock, wrong clicks in a row cost seconds only when the pen
   assert.equal(star(61, 0), 2); assert.equal(star(61, 9), 1);
   const X = SZ.makeRound(1, 0, {});
   assert.equal(SZ.stars(X), 0, 'no stars before the end');
-  // Finding everything ends the round.
+  // Finding everything on the fixed scene ends the round.
   const F = SZ.makeRound(0, 0, { size: 1 }), fc = SZ.camera(SZ.scene(0), F);
-  for (const it of F.items.filter(i => i.e >= 0)) { fc.x = it.x; fc.y = it.y; SZ.clampCam(fc); const s = SZ.toScreen(fc, it.x, it.y); assert.equal(SZ.click(F, fc, s.x, s.y).t, 'found'); }
+  for (const it of F.items.filter(i => i.e >= 0)) { const s = SZ.toScreen(fc, it.x, it.y); assert.equal(SZ.click(F, fc, s.x, s.y, null).t, 'found'); }
   assert.equal(F.done, true); assert.equal(F.found, F.total);
   SZ.tick(F, 5);
   assert.equal(F.t, 0, 'the clock stops at the end');
