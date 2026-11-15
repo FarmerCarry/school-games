@@ -129,7 +129,7 @@ async function playLevel(page, { pace = 12 } = {}) {
   return state(page);
 }
 
-test('the title waits; Play opens level 1-1 with its Ctrl+C and Ctrl+V demo; Enter closes it', async t => {
+test('the title waits; Play opens level 1-1 with its Ctrl+C demo; Enter closes it; the belt stands still', async t => {
   const page = await game(t);
   await frames(page, 60);
   let s = await state(page);
@@ -147,11 +147,13 @@ test('the title waits; Play opens level 1-1 with its Ctrl+C and Ctrl+V demo; Ent
   await press(page, 'Enter');
   assert.equal((await state(page)).demo, false);
   await frames(page, 30);
-  assert.ok((await state(page)).offset > off, 'then the belt runs');
-  // The demo closes by itself too (about 4 s for its two shortcuts).
+  s = await state(page);
+  assert.equal(s.offset, off, 'the first worlds are calm: the belt stands still');
+  assert.equal(s.speed, 0); assert.equal(s.limit, 0, 'and there is no clock');
+  // The demo closes by itself too (about 6 s in a calm world).
   const again = await game(t);
   await again.locator('#btnPlay').click();
-  assert.ok(await until(again, '!s.demo', 60 * 6));
+  assert.ok(await until(again, '!s.demo', 60 * 7));
 });
 
 test('real Ctrl+C and Ctrl+V copy the duck into the box, Enter ships it; the page never scrolls, selects or loses focus', async t => {
@@ -167,10 +169,12 @@ test('real Ctrl+C and Ctrl+V copy the duck into the box, Enter ships it; the pag
   await press(page, 'Control+KeyC');
   s = await state(page);
   assert.deepEqual(s.clip, { cut: false, kinds: ['duck'] }, 'the copy machine holds a duck');
-  await press(page, 'Control+KeyV');
+  await step(page);
+  assert.equal((await state(page)).demo, true, 'Ctrl+V is shown just when it is needed');
   await press(page, 'Control+KeyV');
   s = await state(page);
-  assert.deepEqual(box(s).items.map(t => t.k), ['duck', 'duck']);
+  assert.equal(s.demo, false, 'the shortcut itself closes its demo');
+  assert.deepEqual(box(s).items.map(t => t.k), ['duck']);
   assert.equal(box(s).ready, true);
   assert.equal(s.belts[0].items.length, 1, 'the original duck rides on');
   await press(page, 'Control+KeyA');
@@ -190,6 +194,10 @@ test('real Ctrl+C and Ctrl+V copy the duck into the box, Enter ships it; the pag
   assert.ok((await keys(page)).some(k => k.code === 'Enter' && k.prevented), 'Enter is kept from the browser');
   s = await state(page);
   assert.equal(s.done, 1);
+  // The next box wants two ducks: the copy machine still has one, so Ctrl+V twice.
+  assert.ok(await until(page, 's.boxes[0].order === "بطتان" && !s.boxes[0].ship', 120));
+  await press(page, 'Control+KeyV'); await press(page, 'Control+KeyV');
+  await press(page, 'Enter');
   assert.ok(await until(page, "s.screen === 'result'", 60 * 4));
   s = await state(page);
   assert.equal(s.result.stars, 3); assert.equal(s.result.fail, false);
@@ -236,32 +244,32 @@ test('a shortcut typed while Windows writes Arabic still works: KeyC with the ke
 
 test('Ctrl+X moves a toy to another box; Ctrl+Z puts it back and Ctrl+Y does it again', async t => {
   const page = await game(t, { save: SAVE(6) });
-  await startAt(page, 6);   // 2-1: a car and a ball in the wrong boxes
+  await startAt(page, 6);   // 2-1: the car that box 1 needs is in box 2
   let s = await state(page);
   const [a, b] = s.boxes;
-  assert.deepEqual(a.items.map(t => t.k), ['car', 'ball']);
-  const ball = a.items.find(t => t.k === 'ball');
-  await clickToy(page, ball.id);
+  assert.deepEqual(b.items.map(t => t.k), ['ball', 'car']);
+  const car = b.items.find(t => t.k === 'car');
+  await clickToy(page, car.id);
   await press(page, 'Control+KeyX');
   s = await state(page);
-  assert.deepEqual(s.boxes[0].items.map(t => t.k), ['car'], 'the ball left box 1');
-  assert.deepEqual(s.clip, { cut: true, kinds: ['ball'] });
-  await clickBox(page, b.i);
-  assert.equal((await state(page)).place, b.i);
+  assert.deepEqual(s.boxes[1].items.map(t => t.k), ['ball'], 'the car left box 2');
+  assert.deepEqual(s.clip, { cut: true, kinds: ['car'] });
+  await clickBox(page, a.i);
+  assert.equal((await state(page)).place, a.i);
   await press(page, 'Control+KeyV');
   s = await state(page);
-  assert.deepEqual(s.boxes[1].items.map(t => t.k), ['ball', 'car', 'ball']);
+  assert.deepEqual(s.boxes[0].items.map(t => t.k), ['car', 'car']);
   assert.equal(s.undo, 2);
   await press(page, 'Control+KeyZ');
-  assert.deepEqual((await state(page)).boxes[1].items.map(t => t.k), ['ball', 'car']);
+  assert.deepEqual((await state(page)).boxes[0].items.map(t => t.k), ['car']);
   await press(page, 'Control+KeyZ');
   s = await state(page);
-  assert.deepEqual(s.boxes[0].items.map(t => t.k), ['car', 'ball'], 'two undos: the ball is back where it was');
-  assert.equal(s.boxes[0].items[1].id, ball.id, 'the very same ball');
+  assert.deepEqual(s.boxes[1].items.map(t => t.k), ['ball', 'car'], 'two undos: the car is back where it was');
+  assert.equal(s.boxes[1].items[1].id, car.id, 'the very same car');
   await press(page, 'Control+KeyY');
   await press(page, 'Control+Shift+KeyZ');
   s = await state(page);
-  assert.deepEqual(s.boxes[1].items.map(t => t.k), ['ball', 'car', 'ball'], 'Ctrl+Y (and Ctrl+Shift+Z) redo');
+  assert.deepEqual(s.boxes[0].items.map(t => t.k), ['car', 'car'], 'Ctrl+Y (and Ctrl+Shift+Z) redo');
   assert.equal(s.redo, 0);
   // Finish the level by following the coach; it ends with the Ctrl+S stamp.
   s = await playLevel(page);
@@ -446,8 +454,8 @@ test('the map: a level opens with a star in the one before; a locked one wiggles
 });
 
 test('a timed day that runs out ends with no stars; Enter tries again', async t => {
-  const page = await game(t, { save: SAVE(5), dda: 0.95 });
-  await startAt(page, 5);   // 1-6, the copy workshop's rush
+  const page = await game(t, { save: SAVE(17), dda: 0.95 });
+  await startAt(page, 17);   // 3-6, the recycling corner's rush
   const s = await state(page);
   assert.ok(s.limit > 0);
   assert.ok(await until(page, "s.screen === 'result'", 60 * (s.limit + 5), 120));
@@ -456,12 +464,12 @@ test('a timed day that runs out ends with no stars; Enter tries again', async t 
   assert.match(await page.locator('#resTitle').textContent(), /انتهى الوقت/);
   assert.equal(await page.locator('#resAgain').isVisible(), false, 'one big «again» button, no twin');
   assert.equal(await page.locator('#resNext').getAttribute('aria-label'), 'العب مرة أخرى');
-  assert.equal((await stored(page)).stars[5], 0);
+  assert.equal((await stored(page)).stars[17], 0);
   assert.deepEqual(await page.evaluate(() => sf.results), [0]);
   await step(page, 60);
   await press(page, 'Enter');
   const again = await state(page);
-  assert.equal(again.screen, 'play'); assert.equal(again.level, 5);
+  assert.equal(again.screen, 'play'); assert.equal(again.level, 17);
 });
 
 test('reduced motion: everything still works, with no particles, no shaking and no sliding', async t => {

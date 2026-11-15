@@ -79,7 +79,19 @@ test('five worlds of six levels; every order, toy and lesson is well formed', ()
     for (const s of L.belts) assert.ok(SF.list(s).every(t => SF.KINDS.includes(t.k)) && SF.list(s).length <= 7, L.id + ' belt ' + s);
     for (const a of L.teach) { assert.ok(SF.ACTS[a], L.id + ' teaches ' + a); assert.ok(!taught.has(a), a + ' is taught once'); taught.add(a); }
     for (const a of taught) assert.ok(L.tools[a], L.id + ' keeps ' + a);
-    assert.equal(L.stamp, L.i >= 2, L.id + ': from 1-3 on every day ends with Ctrl+S');
+    assert.equal(L.stamp, L.i >= 5, L.id + ': from 1-6 on every day ends with Ctrl+S');
+    assert.equal(L.calm, L.world < 2, L.id + ': the first two worlds are calm');
+    if (L.calm) {
+      assert.ok(!L.time && !L.gremlin && !L.mess && !L.redo, L.id + ': no clock and no gremlin in a calm world');
+      assert.ok(L.belts.length === 1, L.id + ': one belt');
+    }
+    if (L.world === 0) {
+      for (const b of L.boxes.concat(L.queue.map(q => [q]))) {
+        const order = SF.bag(b[0]);
+        assert.ok(Object.keys(order).length === 1 && Object.values(order)[0] <= 3, L.id + ': one kind of toy, at most three: ' + b[0]);
+      }
+      assert.ok(L.boxes.length === 1 || L.tools.place, L.id + ': one box until clicking a box is taught');
+    }
   }
   // Every keyboard shortcut on the actions card is taught, one lesson per level, in order.
   for (const a of SF.CARD) assert.ok(a === 'ship' || a === 'select' || taught.has(a), a + ' is taught');
@@ -112,7 +124,7 @@ test('timed days can be finished at a slow child\'s pace, and the clock ends a d
     assert.equal(w.phase, 'done', L.id + ' finishes at 2.6 s a step');
     assert.ok(w.left > 0);
   }
-  const w = SF.create(5, { seed: 1, timeScale: 1 });
+  const w = SF.create(17, { seed: 1, timeScale: 1 });   // 3-6
   assert.equal(w.limit, 150);
   run(w, 151);
   assert.equal(w.phase, 'fail');
@@ -120,14 +132,15 @@ test('timed days can be finished at a slow child\'s pace, and the clock ends a d
   assert.equal(SF.stars(w), 0);
   assert.equal(SF.outcome(w), 0);
   // The difficulty knobs are bounded.
-  const easy = SF.create(5, { timeScale: 1.45, parScale: 1.6, speed: 10 }), hard = SF.create(5, { timeScale: 0.1, speed: -5 });
+  const easy = SF.create(17, { timeScale: 1.45, parScale: 1.6, speed: 10 }), hard = SF.create(17, { timeScale: 0.1, speed: -5 });
   assert.equal(easy.limit, Math.round(150 * 1.45));
   assert.equal(hard.limit, 75, 'never less than half the clock');
   assert.equal(hard.speed, 0);
 });
 
-test('level 1-1 by hand: click the duck, Ctrl+C, Ctrl+V twice, Enter', () => {
-  const w = SF.create(0, { seed: 2 });
+test('level 1-1 by hand: click the duck, Ctrl+C, Ctrl+V, Enter; then Ctrl+V twice and Enter', () => {
+  const w = SF.create(0, { seed: 2, speed: 40 });
+  assert.equal(w.speed, 0, 'the belt of a calm world stands still');
   const duck = beltToy(w, 'duck'), box = boxes(w)[0].i;
   assert.equal(w.place, box, 'the box is where a paste goes at the start');
   assert.equal(SF.act(w, { t: 'paste' }), 'empty', 'nothing to paste yet');
@@ -140,10 +153,15 @@ test('level 1-1 by hand: click the duck, Ctrl+C, Ctrl+V twice, Enter', () => {
   assert.equal(w.undo.length, 0, 'copying changes nothing that needs undoing');
   assert.equal(SF.act(w, { t: 'ship' }), 'wrong');
   assert.equal(w.mistakes, 0, 'sending an empty box is not a mistake');
-  SF.act(w, { t: 'paste' }); SF.act(w, { t: 'paste' });
-  assert.deepEqual(kinds(w, box), ['duck', 'duck']);
+  SF.act(w, { t: 'paste' });
+  assert.deepEqual(kinds(w, box), ['duck']);
   assert.equal(kinds(w, 0).length, 1, 'the duck on the belt is still there');
   assert.ok(SF.ready(w, w.cons[box]));
+  assert.equal(SF.act(w, { t: 'ship' }), 'ok');
+  run(w, 1);
+  assert.deepEqual({ ...w.cons[box].order }, { duck: 2 }, 'the next box wants two ducks');
+  assert.equal(SF.hint(w).act, 'paste', 'the copy machine still holds the duck: only Ctrl+V is needed');
+  SF.act(w, { t: 'paste' }); SF.act(w, { t: 'paste' });
   assert.equal(SF.act(w, { t: 'ship' }), 'ok');
   run(w, 1);
   assert.equal(w.phase, 'done', 'the first level has no stamp yet');
@@ -269,7 +287,7 @@ test('Shift+click picks many toys; a second Shift+click drops one; a plain click
 });
 
 test('Tab and the arrow keys move the selection; Shift+arrow grows it', () => {
-  const w = SF.create(7, { seed: 6 });   // 2-2: a long belt and one box
+  const w = SF.create(7, { seed: 6 });   // 2-2: four toys on the belt and one box
   const order = SF.ordered(w, w.cons[0]).filter(id => SF.visible(SF.find(w, id).x));
   SF.act(w, { t: 'tab' });
   assert.deepEqual([...w.sel], [order[0]], 'the first Tab picks the rightmost toy');
@@ -309,20 +327,20 @@ test('Tab and the arrow keys move the selection; Shift+arrow grows it', () => {
 });
 
 test('orders: broken toys and extra toys are never right; Enter sends the box that is ready', () => {
-  const w = SF.create(2, { seed: 7 });   // 1-3: car*3, then teddy*2
+  const w = SF.create(2, { seed: 7 });   // 1-3: teddy*2, then duck*3 and teddy
   const c = boxes(w)[0];
-  assert.deepEqual(plain(SF.need(w, c)), { ok: false, missing: { car: 3 }, extra: [] });
-  click(w, beltToy(w, 'car')); SF.act(w, { t: 'copy' });
-  for (let i = 0; i < 4; i++) SF.act(w, { t: 'paste' });
+  assert.deepEqual(plain(SF.need(w, c)), { ok: false, missing: { teddy: 2 }, extra: [] });
+  click(w, beltToy(w, 'teddy')); SF.act(w, { t: 'copy' });
+  for (let i = 0; i < 3; i++) SF.act(w, { t: 'paste' });
   const n = SF.need(w, c);
-  assert.equal(n.ok, false); assert.equal(n.extra.length, 1, 'one car too many');
+  assert.equal(n.ok, false); assert.equal(n.extra.length, 1, 'one teddy too many');
   assert.equal(SF.act(w, { t: 'ship' }), 'wrong');
   assert.equal(w.mistakes, 1, 'a box with the wrong toys is a mistake');
   assert.ok(w.ev.some(e => e.t === 'wrong' && e.con === c.i));
   SF.act(w, { t: 'undo' });
   assert.ok(SF.ready(w, c));
   // A broken copy is broken too.
-  w.clip = { cut: false, items: [{ k: 'car', b: true }] };
+  w.clip = { cut: false, items: [{ k: 'teddy', b: true }] };
   SF.act(w, { t: 'paste' });
   assert.equal(SF.need(w, c).extra.length, 1);
   SF.act(w, { t: 'undo' });
@@ -331,11 +349,11 @@ test('orders: broken toys and extra toys are never right; Enter sends the box th
   assert.equal(SF.act(w, { t: 'click', x: c.x, y: SF.BOX.y + 170 }), 'none', 'a box on its way is not there to click');
   run(w, 1);
   assert.equal(c.ship, 0); assert.ok(!c.gone);
-  assert.deepEqual({ ...c.order }, { teddy: 2 }, 'the next order comes in the same box');
+  assert.deepEqual({ ...c.order }, { duck: 3 }, 'the next order comes in the same box');
   assert.equal(c.items.length, 0);
-  assert.equal(w.done, 1); assert.equal(w.total, 2);
+  assert.equal(w.done, 1); assert.equal(w.total, 3);
   // Two boxes: Enter sends the ready one even when the other one is picked.
-  const v = SF.create(1, { seed: 7 });   // 1-2: car+ball and ball*2
+  const v = SF.create(3, { seed: 7 });   // 1-4: car*2 and ball*2
   const [a, b] = boxes(v);
   click(v, beltToy(v, 'ball')); SF.act(v, { t: 'copy' });
   clickBox(v, b.i); SF.act(v, { t: 'paste' }); SF.act(v, { t: 'paste' });
@@ -345,18 +363,24 @@ test('orders: broken toys and extra toys are never right; Enter sends the box th
 });
 
 test('stars: a wrong box or a slow day costs a star each; timed days count the time left', () => {
-  const quick = solve(1).w;
+  const quick = solve(12).w;
   assert.equal(SF.stars(quick), 3);
-  const slow = solve(1, { pace: 8 }).w;
+  const slow = solve(12, { pace: 12 }).w;
   assert.ok(slow.t > slow.par);
   assert.equal(SF.stars(slow), 2);
+  slow.mistakes = 1; assert.equal(SF.stars(slow), 1, 'never fewer than one for a finished day');
+  // In the calm first worlds a slow day costs nothing: only a wrong box does.
+  const calm = solve(1, { pace: 20 }).w;
+  assert.ok(calm.t > calm.par); assert.equal(SF.stars(calm), 3);
   const oops = SF.create(0, { seed: 1 });
-  click(oops, beltToy(oops, 'duck')); SF.act(oops, { t: 'copy' }); SF.act(oops, { t: 'paste' });
+  click(oops, beltToy(oops, 'duck')); SF.act(oops, { t: 'copy' }); SF.act(oops, { t: 'paste' }); SF.act(oops, { t: 'paste' });
   SF.act(oops, { t: 'ship' });
-  SF.act(oops, { t: 'paste' }); SF.act(oops, { t: 'ship' }); run(oops, 1);
+  SF.act(oops, { t: 'undo' }); SF.act(oops, { t: 'ship' }); run(oops, 1);
+  SF.act(oops, { t: 'paste' }); SF.act(oops, { t: 'paste' }); SF.act(oops, { t: 'ship' }); run(oops, 1);
+  assert.equal(oops.phase, 'done');
   assert.equal(oops.mistakes, 1); assert.equal(SF.stars(oops), 2);
-  oops.t = oops.par + 1; assert.equal(SF.stars(oops), 1, 'never fewer than one for a finished day');
-  const timed = solve(5, { pace: 1 }).w;
+  oops.t = oops.par + 100; assert.equal(SF.stars(oops), 2, 'slow is fine in a calm world');
+  const timed = solve(17, { pace: 1 }).w;
   assert.ok(timed.left > timed.limit * 0.3); assert.equal(SF.stars(timed), 3);
   timed.left = timed.limit * 0.2; assert.equal(SF.stars(timed), 2);
   assert.deepEqual([1, 2, 3].map(s => [0, 0.55, 0.8, 1][s]), [0.55, 0.8, 1]);
@@ -484,6 +508,7 @@ test('results: stars only go up, the best time only down, the next level opens, 
   assert.ok(SF.isOpen(s, 0) && !SF.isOpen(s, 1) && !SF.isOpen(s, 30) && !SF.isOpen(s, -1));
   assert.equal(SF.nextLevel(s), 0);
   const w = solve(0, { pace: 10 }).w;
+  w.mistakes = 1;   // one box sent with the wrong toys
   const r = SF.applyResult(s, w);
   assert.equal(r.stars, 2); assert.equal(r.before, 0); assert.equal(r.best, true); assert.equal(r.unlocked, 1);
   assert.equal(s.stars[0], 2); assert.ok(SF.isOpen(s, 1)); assert.equal(SF.nextLevel(s), 1);
@@ -494,9 +519,10 @@ test('results: stars only go up, the best time only down, the next level opens, 
   assert.ok(s.best[0] <= r.time);
   const slowAgain = solve(0, { pace: 10 }).w, r3 = SF.applyResult(s, slowAgain);
   assert.equal(r3.best, false); assert.equal(s.stars[0], 3, 'a worse day never takes stars away');
-  const failed = SF.create(5, { seed: 1 }); run(failed, 200);
-  const before = s.stars[5], r4 = SF.applyResult(s, failed);
-  assert.equal(r4.stars, 0); assert.equal(s.stars[5], before); assert.equal(r4.coins, failed.done);
+  const failed = SF.create(17, { seed: 1 }); run(failed, 200);
+  assert.equal(failed.phase, 'fail');
+  const before = s.stars[17], r4 = SF.applyResult(s, failed);
+  assert.equal(r4.stars, 0); assert.equal(s.stars[17], before); assert.equal(r4.coins, failed.done);
   assert.equal(SF.totalStars(s), 3); assert.equal(SF.worldStars(s, 0), 3);
   // The shop: too poor, bought (and worn), worn again.
   s.coins = 20;

@@ -71,21 +71,26 @@
   // before the level starts (each one Ctrl+Z); redo: changes that were undone just
   // before it starts (each one Ctrl+Y; g: it was the gremlin's).
   // "!duck" is a broken duck, "duck*3" three ducks.
+  // The first two worlds are for children of 5 to 7 who cannot read yet: the belts stand
+  // still, there is no clock and a slow day costs no star (calm). In the copy workshop an
+  // order asks for one kind of toy and at most three, one box stands on the floor until
+  // clicking a box is taught, and the same few steps come again and again before anything
+  // new; Ctrl+S waits for the workshop's last day.
   const RAW = [
-    // 1 — the copy workshop: click a toy, Ctrl+C, Ctrl+V, Enter, Ctrl+S
-    { teach: ['copy', 'paste'], belts: ['duck'], boxes: [['duck*2', '']], par: 40 },
-    { teach: ['place'], belts: ['ball car'], boxes: [['car ball', ''], ['ball*2', '']], par: 60 },
-    { teach: ['save'], belts: ['car teddy'], boxes: [['car*3', '']], queue: ['teddy*2'], par: 60 },
-    { belts: ['duck ball teddy'], boxes: [['duck teddy', ''], ['ball*3', '']], queue: ['teddy*2 duck'], par: 80 },
-    { belts: ['robot duck', 'car ball'], boxes: [['robot*2', ''], ['car duck ball', '']], queue: ['duck*3'], par: 90 },
-    { belts: ['duck car rocket', 'teddy ball'], boxes: [['rocket*2', ''], ['teddy car', ''], ['ball*2 duck', '']], queue: ['rocket duck*2', 'car*2 teddy'], time: 150 },
+    // 1 — the copy workshop: click a toy, Ctrl+C, Ctrl+V, Enter; Ctrl+S at the end
+    { teach: ['copy', 'paste'], belts: ['duck'], boxes: [['duck', '']], queue: ['duck*2'], par: 60 },
+    { belts: ['ball car'], boxes: [['ball*2', '']], queue: ['car*2'], par: 80 },
+    { belts: ['teddy duck'], boxes: [['teddy*2', '']], queue: ['duck*3', 'teddy'], par: 90 },
+    { teach: ['place'], belts: ['car ball'], boxes: [['car*2', ''], ['ball*2', '']], par: 80 },
+    { belts: ['robot duck'], boxes: [['robot*2', ''], ['duck*2', '']], queue: ['duck'], par: 100 },
+    { teach: ['save'], belts: ['rocket teddy'], boxes: [['rocket*2', ''], ['teddy*2', '']], par: 90 },
     // 2 — the cutting room: Ctrl+X moves a toy, Tab and the arrows move the selection
-    { teach: ['cut'], belts: ['robot'], boxes: [['car*2', 'car ball'], ['ball*2', 'ball car']], par: 60 },
-    { teach: ['tab'], belts: ['rocket duck rocket car rocket ball'], boxes: [['duck car', 'rocket']], queue: ['ball*2'], par: 70 },
-    { belts: ['teddy ball'], boxes: [['teddy*2', 'teddy duck'], ['duck*2', 'ball teddy']], par: 80 },
-    { belts: ['car rocket', 'duck'], boxes: [['rocket car', ''], ['duck*2', 'duck rocket']], queue: ['car*2 rocket'], par: 90 },
-    { belts: ['ball robot teddy'], boxes: [['robot*2', 'ball robot'], ['ball teddy', 'robot'], ['teddy*2', '']], par: 100 },
-    { belts: ['duck car ball', 'robot teddy'], boxes: [['car*2', 'car duck'], ['duck ball', 'ball'], ['robot*2', 'teddy']], queue: ['teddy*2 ball', 'duck*3'], time: 150 },
+    { teach: ['cut'], belts: ['robot'], boxes: [['car*2', 'car'], ['ball', 'ball car']], par: 80 },
+    { teach: ['tab'], belts: ['rocket duck car ball'], boxes: [['duck', '']], queue: ['ball*2'], par: 80 },
+    { belts: ['teddy ball'], boxes: [['teddy*2', 'teddy duck'], ['duck', '']], par: 90 },
+    { belts: ['car rocket'], boxes: [['rocket', 'rocket car'], ['car*2', '']], queue: ['rocket*2'], par: 100 },
+    { belts: ['ball robot duck'], boxes: [['robot*2', 'ball robot'], ['ball*2', '']], queue: ['duck ball'], par: 110 },
+    { belts: ['duck car ball'], boxes: [['car*2', 'car duck'], ['duck ball', 'ball']], queue: ['ball*2', 'duck*2'], par: 130 },
     // 3 — the recycling corner: Delete recycles a broken toy, Ctrl+Z undoes a change
     { teach: ['del'], belts: ['!teddy duck !car'], boxes: [['duck*3', 'duck !duck duck !duck']], par: 60 },
     { teach: ['undo'], belts: ['ball'], boxes: [['ball*2 car', 'ball ball car'], ['teddy*2', 'teddy teddy']], mess: [{ b0: 'ball !car robot', b1: 'teddy' }], par: 40 },
@@ -141,8 +146,9 @@
       teach: r.teach || [], tools: tools, belts: r.belts || [], boxes: r.boxes, queue: r.queue || [],
       time: r.time || 0, par: r.par || Math.round((r.time || 120) * 0.6), gremlin: r.gremlin || 0,
       mess: r.mess || null, redo: r.redo || null,
+      calm: world < 2,
       // From the level that teaches Ctrl+S on, every day's work ends with its stamp.
-      stamp: i >= 2
+      stamp: i >= 5
     };
   });
   SF.COUNT = SF.LEVELS.length;
@@ -270,7 +276,7 @@
     const def = SF.LEVELS[li] || SF.LEVELS[0];
     const w = {
       li: def.i, def: def, t: 0, phase: 'play', ev: [],
-      speed: Math.max(0, num(o.speed, 24)), offset: 270,
+      speed: def.calm ? 0 : Math.max(0, num(o.speed, 24)), offset: 270,
       limit: def.time ? Math.round(def.time * Math.max(0.5, num(o.timeScale, 1))) : 0,
       par: Math.round(def.par * Math.max(0.5, num(o.parScale, 1))),
       toys: {}, nextId: 1, cons: [], queue: def.queue.map(bag), done: 0,
@@ -747,8 +753,9 @@
   };
 
   /* ------------------------------------------------------- stars, coins */
-  SF.slow = function (w) { return w.limit ? w.left < w.limit * 0.3 : w.t > w.par; };
-  // 3 stars: no box sent with the wrong toys, and quick. A wrong box or a slow day costs one.
+  SF.slow = function (w) { if (w.def.calm) return false; return w.limit ? w.left < w.limit * 0.3 : w.t > w.par; };
+  // 3 stars: no box sent with the wrong toys, and quick. A wrong box or a slow day costs one
+  // (never a slow day in the calm first worlds).
   SF.stars = function (w) {
     if (w.phase !== 'done') return 0;
     return Math.max(1, 3 - (w.mistakes > 0 ? 1 : 0) - (SF.slow(w) ? 1 : 0));

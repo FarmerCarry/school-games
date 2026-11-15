@@ -38,8 +38,8 @@
 
   /* --------------------------------------------------------------- state */
   let screen = 'title', world = null, li = 0, time = 0, demo = null, ending = 0, result = null, resultT = 0, resultLock = 0;
-  let idle = 0, hint = null, streak = 0, lastOk = -9, stampAnim = -1, sheetT = 0, typing = 0, tier = 1, menuOff = 0;
-  const queue = [], held = {}, demoSeen = {};
+  let idle = 0, hint = null, streak = 0, lastOk = -9, stampAnim = -1, sheetT = 0, typing = 0, tier = 1, menuOff = 0, nudge = 0;
+  const queue = [], held = {}, demoSeen = {}, lessons = [];
   let floats = [], flyers = [], poofs = [], toast = null;
   let appear = {}, flash = {}, boxShake = {};
   const bump = { copier: 0, bin: 0 }, mood = { m: '', t: 0 }, hand = { on: false, x: 0, y: 0, t: 0 };
@@ -55,9 +55,50 @@
   }
   function focusGame() { try { canvas.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }
   function say(text) { $('live').textContent = text; }
+
+  /* -------------------------------------------------------------- voice */
+  // The youngest players cannot read yet: an Arabic voice (when the PC has one) says what a
+  // new shortcut does and which keys to press, the coach's next step after a quiet moment,
+  // and a word of praise. Muting the game mutes it too; without an Arabic voice it is silent.
+  const voice = (() => {
+    const S = window.speechSynthesis;
+    let ar = null, last = '', at = -99;
+    const pick = () => { try { return S.getVoices().find(v => /^ar/i.test(v.lang)) || null; } catch (e) { return null; } };
+    if (S && S.addEventListener) S.addEventListener('voiceschanged', () => { ar = pick(); });
+    return {
+      say(text) {
+        if (!S || !text || Kit.audio.muted || (text === last && time - at < 4)) return;
+        ar = ar || pick();
+        if (!ar || typeof SpeechSynthesisUtterance !== 'function') return;
+        try {
+          S.cancel();
+          const u = new SpeechSynthesisUtterance(text);
+          u.voice = ar; u.lang = ar.lang; u.rate = 0.85;
+          S.speak(u);
+          last = text; at = time;
+        } catch (e) { /* no voice */ }
+      },
+      stop() { try { if (S) S.cancel(); } catch (e) { /* ignore */ } }
+    };
+  })();
+  // Keys as a child hears them: «كنترول» and the letter's name.
+  const CTRL_SAY = l => 'اضغط كنترول، ومعه حرف ' + l;
+  const SPEAK = {
+    copy: 'انسخ! ' + CTRL_SAY('سي'), paste: 'الصق! ' + CTRL_SAY('في'), place: 'انقر على الصندوق',
+    save: 'احفظ واختم! ' + CTRL_SAY('إس'), cut: 'قُصّ! ' + CTRL_SAY('إكس'), tab: 'اضغط زر تاب',
+    del: 'أرسل اللعبة المكسورة للتدوير! اضغط زر ديليت', undo: 'تراجع! ' + CTRL_SAY('زد'),
+    gremlin: 'بُرغي خرّب الصندوق! ' + CTRL_SAY('زد'), redo: 'أعد! ' + CTRL_SAY('واي'),
+    multi: 'اضغط شِفت وانقر على الألعاب', all: 'اختر الكل! ' + CTRL_SAY('إيه'), ship: 'أرسل الصندوق! اضغط إنتر'
+  };
+  const PRAISE = ['أحسنت!', 'رائع!', 'ممتاز!', 'برافو!'];
+  function speakHint(w, h) {
+    if (!h) return;
+    if (h.act === 'select') { const t = w.toys[h.toy]; if (t) voice.say('انقر على ال' + SF.NAMES[t.k][0]); }
+    else voice.say(SPEAK[h.act]);
+  }
   function chip(id, n) { $(id).querySelector('b').textContent = String(n); }
   function toTitle() {
-    world = null;
+    world = null; voice.stop();
     chip('titleStars', SF.totalStars(save) + '/' + SF.COUNT * 3);
     setScreen('title');
   }
@@ -113,7 +154,7 @@
     chip('mapCoins', save.coins);
     chip('mapStars', SF.totalStars(save) + '/' + SF.COUNT * 3);
   }
-  function toMap() { world = null; refreshMap(); setScreen('map'); J.whoosh(0.4); }
+  function toMap() { world = null; voice.stop(); refreshMap(); setScreen('map'); J.whoosh(0.4); }
   function wiggle(el) { el.classList.remove('wiggle'); void el.offsetWidth; el.classList.add('wiggle'); setTimeout(() => el.classList.remove('wiggle'), 500); }
   function pickLevel(i, el) {
     if (!SF.isOpen(save, i)) { J.error(); wiggle(el); return; }
@@ -195,10 +236,16 @@
       timeScale: dda.value(1.45, 0.85), parScale: dda.value(1.6, 1), gremlinEvery: dda.value(28, 12)
     });
     const def = world.def;
-    // A new shortcut is shown once per visit; Restart and Play again go straight to work.
-    demo = def.teach.length && !demoSeen[i] ? { acts: def.teach, t: 0, dur: def.teach.length > 1 ? 4.4 : 3 } : null;
+    // A new shortcut is shown once per visit, one at a time and just when it is needed: the
+    // first at the start, the next one when the coach first asks for it (Ctrl+V right after
+    // the first Ctrl+C, Ctrl+S when the day's sheet comes, Ctrl+Z when the gremlin strikes).
+    // Restart and Play again go straight to work.
+    lessons.length = 0;
+    if (!demoSeen[i]) def.teach.forEach(a => lessons.push(a));
     demoSeen[i] = true;
-    ending = 0; result = null; idle = 0; hint = SF.hint(world); streak = 0; stampAnim = -1; sheetT = 0; typing = 0;
+    demo = null;
+    if (lessons.length && lessons[0] !== 'save' && lessons[0] !== 'gremlin') openDemo(lessons[0]);
+    ending = 0; result = null; idle = 0; nudge = 0; hint = SF.hint(world); streak = 0; stampAnim = -1; sheetT = 0; typing = 0;
     queue.length = 0; floats = []; flyers = []; poofs = []; toast = null; appear = {}; flash = {}; boxShake = {};
     bump.copier = bump.bin = 0; mood.m = ''; mood.t = 0; hand.on = false;
     fx.clear(); Kit.keys.reset();
@@ -208,9 +255,16 @@
     setScreen('play');
     J.whoosh(0.5);
   }
+  function openDemo(act) {
+    lessons.splice(lessons.indexOf(act), 1);
+    // The calm first worlds give a demo twice the time, its keys pressed again and again.
+    demo = { acts: [act], t: 0, dur: world.def.calm ? 6 : 3 };
+    voice.say(SPEAK[act]);
+  }
   function endDemo() { if (!demo) return; demo = null; idle = 0; J.tap(); }
   function pause(own) {
     if (screen !== 'play') return;
+    voice.stop();
     setScreen('pause');
     if (own) J.back();
   }
@@ -439,6 +493,7 @@
           const c = w.cons[e.con];
           Kit.track.hit();
           J.coin(Math.min(5, e.combo)); J.whoosh(0.7); setMood('happy', 1.3);
+          voice.say(PRAISE[w.done % PRAISE.length]);
           burst(c.x, BOX.y + 40, 26);
           float(c.x, BOX.y - 10, '+2', '#ffd23f', 40);
           if (e.combo > 1) { float(c.x, BOX.y + 40, 'كومبو ×' + e.combo, '#ff7eb6', 40); J.streak(Math.min(12, e.combo + 2)); }
@@ -485,7 +540,7 @@
     return show ? SF.ACTS[hint.act].codes : [];
   }
   function handTarget(w) {
-    if (!hint || demo || ending || idle < (w.li === 0 ? 2.5 : 6)) return null;
+    if (!hint || demo || ending || idle < (w.def.calm ? 2.5 : 6)) return null;
     const h = hint;
     if (h.act === 'select') {
       const f = SF.find(w, h.toy);
@@ -529,7 +584,11 @@
     handleEvents();
     idle += dt;
     hint = SF.hint(w);
+    if (hint && lessons.indexOf(hint.act) >= 0) { openDemo(hint.act); hand.on = false; return; }
     if (w.phase === 'stamp') sheetT += dt;
+    // After a quiet moment the voice says the next step, then again now and then.
+    if (idle < 1) nudge = 0;
+    else if (idle > (w.def.calm ? 4 : 8) + nudge) { speakHint(w, hint); nudge += 10; }
     coachStep(dt);
   }
   function decay(dt) {
@@ -704,7 +763,8 @@
     return { act: d.acts[i], lt: d.t - i * per, per: per };
   }
   // Which of the demo's keys are down now: Ctrl first, then the letter, then both let go.
-  function demoDown(j) { const s = demoStep(); return s.lt > 0.35 + j * 0.45 && s.lt < s.per - 0.3; }
+  // A long demo presses its keys again every 2.2 s.
+  function demoDown(j) { const s = demoStep(), cyc = s.per > 4 ? 2.2 : s.per, lt = s.lt % cyc; return lt > 0.35 + j * 0.45 && lt < cyc - 0.3; }
   function demoHeld(code) { const codes = SF.ACTS[demoStep().act].codes, j = codes.indexOf(code); return j >= 0 && demoDown(j); }
   function drawDemo(ctx, still) {
     const s = demoStep(), act = SF.ACTS[s.act], Wd = SF.WORLDS[world.def.world];
