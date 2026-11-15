@@ -129,7 +129,7 @@ jobs:
       - name: Measure software-rendered startup and active frames (informational)
         continue-on-error: true
         timeout-minutes: 8
-        run: node tools/perf.mjs --samples 5 --seconds 5 --json artifacts/runtime-performance.json portal hoop-heads splat-strike
+        run: node tools/perf.mjs --samples 5 --seconds 5 --json artifacts/runtime-performance.json portal hoop-heads splat-strike steady-hand
         env:
           SG_ROOT: _site
       - name: Upload informational runtime performance report

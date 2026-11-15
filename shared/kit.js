@@ -11,22 +11,22 @@
 (function () {
   'use strict';
 
-  var Kit = {};
+  var Kit = {}, win = window, doc = document, M = Math;
 
   /* ---------------------------------------------------------------- math */
   Kit.clamp = function (v, a, b) { return v < a ? a : v > b ? b : v; };
   Kit.lerp = function (a, b, t) { return a + (b - a) * t; };
-  Kit.rand = function (a, b) { return a + Math.random() * (b - a); };
-  Kit.randInt = function (a, b) { return Math.floor(a + Math.random() * (b - a + 1)); };
-  Kit.pick = function (arr) { return arr[Math.floor(Math.random() * arr.length)]; };
+  Kit.rand = function (a, b) { return a + M.random() * (b - a); };
+  Kit.randInt = function (a, b) { return M.floor(a + M.random() * (b - a + 1)); };
+  Kit.pick = function (arr) { return arr[M.floor(M.random() * arr.length)]; };
   Kit.shuffle = function (arr) {
     for (var i = arr.length - 1; i > 0; i--) {
-      var j = Math.floor(Math.random() * (i + 1));
+      var j = M.floor(M.random() * (i + 1));
       var t = arr[i]; arr[i] = arr[j]; arr[j] = t;
     }
     return arr;
   };
-  Kit.dist = function (x1, y1, x2, y2) { var dx = x2 - x1, dy = y2 - y1; return Math.sqrt(dx * dx + dy * dy); };
+  Kit.dist = function (x1, y1, x2, y2) { var dx = x2 - x1, dy = y2 - y1; return M.sqrt(dx * dx + dy * dy); };
 
   /* ------------------------------------------------------------- storage */
   // Kit.store('my-game') -> { get(key, fallback), set(key, value), remove(key) }
@@ -36,15 +36,15 @@
     return {
       get: function (key, fallback) {
         try {
-          var raw = window.localStorage.getItem(prefix + key);
+          var raw = win.localStorage.getItem(prefix + key);
           return raw === null ? fallback : JSON.parse(raw);
         } catch (e) { return fallback; }
       },
       set: function (key, value) {
-        try { window.localStorage.setItem(prefix + key, JSON.stringify(value)); return true; } catch (e) { return false; }
+        try { win.localStorage.setItem(prefix + key, JSON.stringify(value)); return true; } catch (e) { return false; }
       },
       remove: function (key) {
-        try { window.localStorage.removeItem(prefix + key); } catch (e) { /* ignore */ }
+        try { win.localStorage.removeItem(prefix + key); } catch (e) { /* ignore */ }
       }
     };
   };
@@ -52,7 +52,7 @@
 
   /* --------------------------------------------------------- preferences */
   // System default, with an explicit local override shared by every game.
-  var motionQuery = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+  var motionQuery = win.matchMedia ? win.matchMedia('(prefers-reduced-motion: reduce)') : null;
   var motionListeners = [];
   function validMotion(value) { return value === 'reduce' || value === 'full' ? value : 'system'; }
   // Adds fn to a listener list and returns its unsubscribe function.
@@ -65,7 +65,7 @@
   };
   function paintMotion() {
     var reduced = Kit.motion.reduced();
-    document.documentElement.setAttribute('data-sg-motion', reduced ? 'reduce' : 'full');
+    doc.documentElement.setAttribute('data-sg-motion', reduced ? 'reduce' : 'full');
     motionListeners.forEach(function (fn) { fn(reduced); });
   }
   if (motionQuery) {
@@ -76,14 +76,14 @@
 
   /* ----------------------------------------------------------- lifecycle */
   var lifecycleHandlers = [], pointerResets = [], ready = false, failed = false;
-  var perf = window.performance;
+  var perf = win.performance;
   // Whole milliseconds (an int32 holds 24 days of performance.now()).
   function clock() { return perf ? perf.now() | 0 : Date.now(); }
   function tellPortal(message) {
-    if (window.parent !== window) window.parent.postMessage(message, window.location && window.location.protocol !== 'file:' ? window.location.origin : '*');
+    if (win.parent !== win) win.parent.postMessage(message, win.location && win.location.protocol !== 'file:' ? win.location.origin : '*');
   }
   // Window capture listeners run before any game listener can stop the event.
-  function listen(type, fn) { window.addEventListener(type, fn, true); }
+  function listen(type, fn) { win.addEventListener(type, fn, true); }
   function suspend(reason) {
     // One pause per stop of play: a blur and the hidden page that follows it, or Kit's own
     // fullscreen exit and the portal's, find play already cut (until 0) and count once.
@@ -145,17 +145,17 @@
     // not make a successfully initialized game fail its readiness handshake.
     if (e.message || (e.target && e.target.tagName === 'SCRIPT')) runtimeError(e.error || e.message || 'Game script failed to load');
   });
-  window.addEventListener('unhandledrejection', function (e) { runtimeError(e.reason); });
-  window.addEventListener('blur', function () { suspend('blur'); });
-  document.addEventListener('visibilitychange', function () { if (document.hidden) suspend('hidden'); });
-  var wasFullscreen = !!document.fullscreenElement;
-  document.addEventListener('fullscreenchange', function () {
-    var fullscreen = !!document.fullscreenElement;
+  win.addEventListener('unhandledrejection', function (e) { runtimeError(e.reason); });
+  win.addEventListener('blur', function () { suspend('blur'); });
+  doc.addEventListener('visibilitychange', function () { if (doc.hidden) suspend('hidden'); });
+  var wasFullscreen = !!doc.fullscreenElement;
+  doc.addEventListener('fullscreenchange', function () {
+    var fullscreen = !!doc.fullscreenElement;
     if (wasFullscreen && !fullscreen) suspend('fullscreen-exit');
     wasFullscreen = fullscreen;
   });
-  window.addEventListener('message', function (e) {
-    if (window.parent === window || e.source !== window.parent) return;
+  win.addEventListener('message', function (e) {
+    if (win.parent === win || e.source !== win.parent) return;
     var message = e.data;
     if (!message || typeof message !== 'object') return;
     if (message.type === 'sg:pause') suspend(message.reason || 'portal');
@@ -166,7 +166,7 @@
       if (typeof message.motionPreference === 'string') Kit.motion.setPreference(message.motionPreference);
       else if (typeof message.reducedMotion === 'boolean') Kit.motion.setPreference(message.reducedMotion ? 'reduce' : 'full');
       // Whether the portal's statistics sender is on: off drops what waits and stops counting.
-      if (typeof message.telemetry === 'boolean' && !(telemetry = message.telemetry)) { tev = []; il = [0, 0, 0, 0, 0, 0]; cueAt = -1; clearTimeout(timer); timer = 0; }
+      if (typeof message.telemetry === 'boolean' && !(telemetry = message.telemetry)) { tev = []; unacked = []; il = [0, 0, 0, 0, 0, 0]; cueAt = -1; clearTimeout(timer); timer = 0; }
       tick();
     }
   });
@@ -186,8 +186,8 @@
   // ['tu', 's' | 'd'] for a first-time tutorial's start and end. Histograms: upper bounds in
   // ms, the last bucket open: rt 300 500 800 1200 2000, il (input latency) 8 16 33 50 100.
   // Frames: smooth <= 20 ms, ok <= 34 ms, choppy <= 250 ms, stall; only engaged play in a round.
-  var telemetry = window.parent !== window ? null : false, timer = 0, from, until, tn = 0, engaged = 0, roundMs = 0, roundId = '';
-  var frames = [0, 0, 0, 0], il = [0, 0, 0, 0, 0, 0], rt = [0, 0, 0, 0, 0, 0], tev = [], tutorials = {};
+  var telemetry = win.parent !== win ? null : false, timer = 0, from, until, tn = 0, engaged = 0, roundMs = 0, roundId = '';
+  var frames = [0, 0, 0, 0], il = [0, 0, 0, 0, 0, 0], rt = [0, 0, 0, 0, 0, 0], tev = [], unacked = [], tutorials = {};
   var tier = 0, hits = 0, misses = 0, cueAt = -1, r0 = 0, ri = 0, rd = 0, rp = 0, rsum = 0, rn = 0, dl = -1;
   function live() { return telemetry !== false && !failed; }
   function push() { if (live() && tev.length < 400) tev.push.apply(tev, arguments); }
@@ -208,13 +208,15 @@
   function countFrame(ms) {
     try { if (ms > 0 && roundId && clock() < until) frames[ms > 20 ? ms > 34 ? ms > 250 ? 3 : 2 : 1 : 0]++; } catch (e) { /* ignore */ }
   }
-  function send(cut) {
+  function send(cut, out) {
     tally();
     if (cut) until = 0;
     while (telemetry && ready && !failed && (engaged || frames.some(Number) || il.some(Number) || tev.length)) {
-      tellPortal({ type: 'sg:telemetry', version: 2, e: engaged, f: frames, il: il, ev: tev.splice(0, 64) });
+      var m = { type: 'sg:telemetry', version: 2, e: engaged, f: frames, il: il, ev: tev.splice(0, 64) };
+      if (out) out.push(m); else { if (unacked.length < 16) unacked.push(m); tellPortal(m); }
       engaged = 0; frames = [0, 0, 0, 0]; il = [0, 0, 0, 0, 0, 0];
     }
+    return out;
   }
   // One 10 s timer, only while the portal's sender is on and the game is ready.
   function tick() {
@@ -243,10 +245,10 @@
   }
   function text(value) { try { return String(value).slice(0, 24); } catch (e) { return ''; } }
   // A page that goes away (not kept in the back-forward cache) with a round open quits it.
-  listen('pagehide', function (e) {
-    if (!(e && e.persisted) && roundId) { tally(); mark('q'); roundId = ''; }
-    send(e);
-  });
+  function quitOpen(quit) { if (quit && roundId) { tally(); mark('q'); roundId = ''; } }
+  Kit._ack = function () { unacked.shift(); };
+  Kit._flush = function (quit) { quitOpen(quit); return [unacked.splice(0), send(quit, [])]; };
+  listen('pagehide', function (e) { quitOpen(!(e && e.persisted)); send(e); });
   listen('pointermove', engage);
   listen('wheel', engage);
   Kit.stats = {
@@ -592,16 +594,16 @@
       // The first frame after starting or showing the page has no frame time.
       var ms = last ? t - last : 0;
       last = t;
-      if (document.hidden) return;
+      if (doc.hidden) return;
       countFrame(ms);
-      acc += Math.min(0.25, ms / 1000);
+      acc += M.min(0.25, ms / 1000);
       var n = 0;
       while (acc >= step && n < 8) { update(step); acc -= step; n++; }
       if (n === 8) acc = 0;
       if (render) render(acc / step);
     }
     rafId = requestAnimationFrame(frame);
-    document.addEventListener('visibilitychange', function () { last = 0; });
+    doc.addEventListener('visibilitychange', function () { last = 0; });
     handle.stop = function () { handle.running = false; cancelAnimationFrame(rafId); };
     return handle;
   };
@@ -619,13 +621,13 @@
         o = o || {};
         var n = o.count || 12;
         for (var i = 0; i < n; i++) {
-          var a = o.angle != null ? o.angle + (Math.random() - 0.5) * (o.spread || Math.PI * 2) : Math.random() * Math.PI * 2;
-          var sp = (o.speed || 200) * (0.4 + Math.random() * 0.6);
+          var a = o.angle != null ? o.angle + (M.random() - 0.5) * (o.spread || M.PI * 2) : M.random() * M.PI * 2;
+          var sp = (o.speed || 200) * (0.4 + M.random() * 0.6);
           list.push({
-            x: x, y: y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
-            life: (o.life || 0.6) * (0.6 + Math.random() * 0.4), max: o.life || 0.6,
-            size: (o.size || 5) * (0.6 + Math.random() * 0.6),
-            color: o.colors ? o.colors[Math.floor(Math.random() * o.colors.length)] : (o.color || '#fff'),
+            x: x, y: y, vx: M.cos(a) * sp, vy: M.sin(a) * sp,
+            life: (o.life || 0.6) * (0.6 + M.random() * 0.4), max: o.life || 0.6,
+            size: (o.size || 5) * (0.6 + M.random() * 0.6),
+            color: o.colors ? o.colors[M.floor(M.random() * o.colors.length)] : (o.color || '#fff'),
             g: o.gravity == null ? 400 : o.gravity
           });
         }
@@ -643,7 +645,7 @@
       draw: function (ctx) {
         for (var i = 0; i < list.length; i++) {
           var p = list[i];
-          ctx.globalAlpha = Math.max(0, p.life / p.max);
+          ctx.globalAlpha = M.max(0, p.life / p.max);
           ctx.fillStyle = p.color;
           ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
         }
@@ -657,22 +659,23 @@
   // then ctx.translate(shake.x, shake.y) while drawing the world.
   Kit.shake = function () {
     var s = { x: 0, y: 0, power: 0 };
-    s.add = function (p) { if (!Kit.motion.reduced()) s.power = Math.max(s.power, p); };
+    s.add = function (p) { if (!Kit.motion.reduced()) s.power = M.max(s.power, p); };
     s.update = function (dt) {
       if (Kit.motion.reduced()) { s.power = s.x = s.y = 0; return; }
-      s.power = Math.max(0, s.power - dt * 40);
-      s.x = (Math.random() - 0.5) * 2 * s.power;
-      s.y = (Math.random() - 0.5) * 2 * s.power;
+      s.power = M.max(0, s.power - dt * 40);
+      s.x = (M.random() - 0.5) * 2 * s.power;
+      s.y = (M.random() - 0.5) * 2 * s.power;
     };
     return s;
   };
 
   /* ------------------------------------------------------------------ UI */
+  var mkEl = function (t) { return doc.createElement(t); };
   // Adds the standard round mute button (top-right corner). Also binds the
   // M key unless opts.key === false.
   Kit.muteButton = function (opts) {
     opts = opts || {};
-    var b = document.createElement('button');
+    var b = mkEl('button');
     b.className = 'sg-mute';
     b.type = 'button';
     b.setAttribute('aria-label', 'كتم الصوت');
@@ -684,9 +687,9 @@
     audio.onMuteChange(paint);
     b.addEventListener('click', function (e) { e.stopPropagation(); audio.unlock(); audio.toggleMute(); if (e.detail > 0) b.blur(); });
     b.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
-    document.body.appendChild(b);
+    doc.body.appendChild(b);
     if (opts.key !== false) {
-      window.addEventListener('keydown', function (e) { if (Kit.isGameKeyEvent(e) && e.code === 'KeyM' && !e.repeat) audio.toggleMute(); });
+      win.addEventListener('keydown', function (e) { if (Kit.isGameKeyEvent(e) && e.code === 'KeyM' && !e.repeat) audio.toggleMute(); });
     }
     return b;
   };
@@ -696,7 +699,7 @@
   // Retry, so a PC whose storage is blocked is not covered for the whole session.
   Kit.saveStatus = function (opts) {
     opts = opts || {};
-    var panel = document.createElement('div'), message = document.createElement('span'), retry = document.createElement('button');
+    var panel = mkEl('div'), message = mkEl('span'), retry = mkEl('button');
     var timer = 0, foldTimer = 0, hasFailed = false, retrying = false;
     panel.className = 'sg-save-status'; panel.hidden = true;
     panel.setAttribute('role', 'status'); panel.setAttribute('aria-live', 'polite');
@@ -708,7 +711,7 @@
       try { if (opts.retry) opts.retry(); } finally { retrying = false; }
       if (e.detail > 0) retry.blur();
     });
-    panel.appendChild(message); panel.appendChild(retry); document.body.appendChild(panel);
+    panel.appendChild(message); panel.appendChild(retry); doc.body.appendChild(panel);
     function fold(on) {
       clearTimeout(foldTimer);
       panel.setAttribute('data-compact', on ? 'true' : 'false');
@@ -737,7 +740,7 @@
   // One shared formatter: toLocaleString() builds a new ICU formatter on every call,
   // which is slow when a HUD formats numbers every frame.
   var numFmt = (typeof Intl !== 'undefined' && Intl.NumberFormat) ? new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }) : null;
-  Kit.fmt = function (n) { n = Math.floor(n); return numFmt ? numFmt.format(n) : n.toLocaleString('en-US'); };
+  Kit.fmt = function (n) { n = M.floor(n); return numFmt ? numFmt.format(n) : n.toLocaleString('en-US'); };
 
-  window.Kit = Kit;
+  win.Kit = Kit;
 })();

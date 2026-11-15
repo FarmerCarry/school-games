@@ -10,9 +10,18 @@
   var INK = A.INK = '#141a44';
   A.HOT = '#ff4d7a';
   var cache = {}, tracks = {}, rgbaCache = {}, rtlCache = {};
+  var DASH = [4, 6], CARRY_DASH = [10, 12], SOLID = [];
+  var HAND_PARTS = [[22, 5, 17, 54, 8.5], [37, 36, 15, 30, 7.5], [50, 40, 14, 28, 7], [14, 46, 52, 48, 19]], HAND_PASSES = [INK, '#fff'];
   A.reset = () => { cache = {}; tracks = {}; };
 
   function canvas(w, h) { var c = document.createElement('canvas'); c.width = Math.max(1, Math.ceil(w)); c.height = Math.max(1, Math.ceil(h)); return c; }
+  A.pic = (c, w, h, ps) => {
+    var pw = Math.ceil(w * ps), ph = Math.ceil(h * ps), g;
+    c = c || canvas(pw, ph);
+    if (c.width !== pw || c.height !== ph) { c.width = pw; c.height = ph; }
+    g = c.getContext('2d'); g.setTransform(ps, 0, 0, ps, 0, 0); g.clearRect(0, 0, w, h);
+    return [c, g];
+  };
   function rgba(hex, a) {
     var k = hex + a, v = rgbaCache[k];
     if (!v) { var n = parseInt(hex.slice(1), 16); v = rgbaCache[k] = 'rgba(' + (n >> 16 & 255) + ',' + (n >> 8 & 255) + ',' + (n & 255) + ',' + a + ')'; }
@@ -26,6 +35,7 @@
     g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath();
   };
   A.circle = (g, x, y, r) => { g.beginPath(); g.arc(x, y, Math.max(0.1, r), 0, TAU); };
+  var F = A.F = (g, c) => { g.fillStyle = c; g.fill(); }, S = A.S = (g, w, c) => { g.lineWidth = w; if (c) g.strokeStyle = c; g.stroke(); };
   // Text with a thick dark outline. Arabic is drawn right to left, in one piece.
   A.text = (g, s, x, y, size, color, o) => {
     o = o || {};
@@ -117,9 +127,9 @@
     L.carry.forEach(c => {
       var r = segRange(L, c[0], c[1]);
       g.strokeStyle = 'rgba(255,190,60,0.16)'; runs(g, L, -6, r[0], r[1]);
-      g.setLineDash([10, 12]); g.lineCap = 'butt';
+      g.setLineDash(CARRY_DASH); g.lineCap = 'butt';
       g.strokeStyle = 'rgba(255,200,80,0.32)'; runs(g, L, -10, r[0], r[1]);
-      g.setLineDash([]); g.lineCap = 'round';
+      g.setLineDash(SOLID); g.lineCap = 'round';
     });
     // A dotted guide along the middle.
     g.fillStyle = 'rgba(255,255,255,0.2)';
@@ -134,12 +144,10 @@
     var key = L.i + '|' + ps + '|' + L.P.width.toFixed(3);
     if (!tracks[key]) {
       tracks = {};
-      var c = canvas(W * ps, H * ps), g = c.getContext('2d');
-      g.setTransform(ps, 0, 0, ps, 0, 0);
-      var wd = SH.WORLDS[L.world];
-      background(g, wd, 7 + L.i * 131);
-      drawTrack(g, L, wd);
-      tracks[key] = c;
+      var p = A.pic(null, W, H, ps), wd = SH.WORLDS[L.world];
+      background(p[1], wd, 7 + L.i * 131);
+      drawTrack(p[1], L, wd);
+      tracks[key] = p[0];
     }
     return tracks[key];
   };
@@ -147,10 +155,9 @@
   A.backdrop = (world, ps) => {
     var key = 'bd' + world + '|' + ps;
     if (!cache[key]) {
-      var c = canvas(W * ps, H * ps), g = c.getContext('2d');
-      g.setTransform(ps, 0, 0, ps, 0, 0);
-      background(g, SH.WORLDS[world], 99 + world * 17);
-      cache[key] = c;
+      var p = A.pic(null, W, H, ps);
+      background(p[1], SH.WORLDS[world], 99 + world * 17);
+      cache[key] = p[0];
     }
     return cache[key];
   };
@@ -180,31 +187,27 @@
         g.beginPath();
         for (n = 0; n < len; n++) { q = pts[a0 + n]; pPt(g, q, side, q.hw + 2, n); }
         for (n = len - 1; n >= 0; n--) pPt(g, pts[a0 + n], side, pHe[n], 1);
-        g.closePath(); g.fillStyle = fill; g.fill();
+        g.closePath(); F(g, fill);
         g.beginPath();
         for (n = 0; n < len; n++) pPt(g, pts[a0 + n], side, pHe[n], n);
-        g.lineWidth = 9; g.strokeStyle = edge; g.stroke();
-        g.lineWidth = 3.5; g.strokeStyle = '#ffe3ea'; g.stroke();
+        S(g, 9, edge); S(g, 3.5, '#ffe3ea');
       }
     }
   };
   function bar(g, x1, y1, x2, y2, th, color) {
     g.lineCap = 'round';
     g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2);
-    g.lineWidth = th + 10; g.strokeStyle = rgba(color, 0.28); g.stroke();
-    g.lineWidth = th; g.strokeStyle = color; g.stroke();
-    g.lineWidth = Math.max(2, th - 7); g.strokeStyle = '#fff4f7'; g.stroke();
+    S(g, th + 10, rgba(color, 0.28)); S(g, th, color); S(g, Math.max(2, th - 7), '#fff4f7');
   }
   // A sliding gate: a bar that slides out of a housing beside the track and back in.
   A.slide = (g, o, t) => {
     var b = SH.slideBar(o, t), hw = o.half - 12, th = o.th + 14;
     bar(g, b[0], b[1], b[2], b[3], o.th, A.HOT);
     g.save(); g.translate(o.x, o.y); g.rotate(Math.atan2(o.ny * o.side, o.nx * o.side));
-    A.rr(g, hw + 10, -th / 2, 2 * hw + 34, th, th / 2); g.fillStyle = '#20264f'; g.fill();
-    g.lineWidth = 3; g.strokeStyle = rgba(A.HOT, 0.9); g.stroke();
+    A.rr(g, hw + 10, -th / 2, 2 * hw + 34, th, th / 2); F(g, '#20264f'); S(g, 3, rgba(A.HOT, 0.9));
     g.beginPath();
     for (var x = hw + 26; x < 3 * hw + 36; x += 16) { g.moveTo(x, -th / 2 + 5); g.lineTo(x + 7, 0); g.lineTo(x, th / 2 - 5); }
-    g.lineWidth = 3; g.strokeStyle = rgba(A.HOT, 0.55); g.stroke();
+    S(g, 3, rgba(A.HOT, 0.55));
     g.restore();
   };
   A.spin = (g, o, t) => {
@@ -212,21 +215,20 @@
       var ang = SH.spinAngle(o, t, a);
       bar(g, o.px, o.py, o.px + Math.cos(ang) * o.len, o.py + Math.sin(ang) * o.len, o.th, '#ff7a2e');
     }
-    A.circle(g, o.px, o.py, 14); g.fillStyle = '#ffe2b8'; g.fill(); g.lineWidth = 5; g.strokeStyle = '#ff7a2e'; g.stroke();
-    A.circle(g, o.px, o.py, 4); g.fillStyle = INK; g.fill();
+    A.circle(g, o.px, o.py, 14); F(g, '#ffe2b8'); S(g, 5, '#ff7a2e');
+    A.circle(g, o.px, o.py, 4); F(g, INK);
   };
   // A door: two halves meeting in the middle; a = how open (0 shut).
   A.door = (g, d, a, t, still) => {
-    var e = d.half, m = d.half * a;
-    var col = '#ff9f1c';
+    var e = d.half, m = d.half * a, col = '#ff9f1c';
     bar(g, d.x - d.nx * e, d.y - d.ny * e, d.x - d.nx * m, d.y - d.ny * m, d.th, col);
     bar(g, d.x + d.nx * m, d.y + d.ny * m, d.x + d.nx * e, d.y + d.ny * e, d.th, col);
     if (a < 0.05) {
       // A little lock in the middle.
       var k = still ? 1 : 1 + 0.06 * Math.sin(t * 6);
       g.save(); g.translate(d.x, d.y); g.scale(k, k);
-      g.beginPath(); g.arc(0, -5, 6, Math.PI, 0); g.lineWidth = 3.5; g.strokeStyle = INK; g.stroke();
-      A.rr(g, -9, -5, 18, 14, 4); g.fillStyle = '#ffd23f'; g.fill(); g.lineWidth = 3; g.stroke();
+      g.beginPath(); g.arc(0, -5, 6, Math.PI, 0); S(g, 3.5, INK);
+      A.rr(g, -9, -5, 18, 14, 4); F(g, '#ffd23f'); S(g, 3);
       g.restore();
     }
   };
@@ -237,31 +239,30 @@
     y += bob;
     A.glow(g, x, y, 30, '#ffcf3a', 0.8);
     g.save(); g.translate(x, y); g.scale(0.35 + 0.65 * sq, 1);
-    A.circle(g, 0, 0, 14); g.fillStyle = '#ffd23f'; g.fill(); g.lineWidth = 3; g.strokeStyle = '#b86a00'; g.stroke();
-    A.circle(g, 0, 0, 9); g.lineWidth = 2; g.strokeStyle = '#ffef9a'; g.stroke();
+    A.circle(g, 0, 0, 14); F(g, '#ffd23f'); S(g, 3, '#b86a00');
+    A.circle(g, 0, 0, 9); S(g, 2, '#ffef9a');
     g.scale(1.25, 1.25); g.beginPath(); g.moveTo(1.5, -6); g.lineTo(-3, 1); g.lineTo(0.5, 1); g.lineTo(-1.5, 6); g.lineTo(3.5, -1); g.lineTo(0, -1); g.closePath();
-    g.fillStyle = '#b86a00'; g.fill();
+    F(g, '#b86a00');
     g.restore();
   };
   A.lantern = (g, cp, lit, t, still, pop) => {
     var x = cp.lx, y = cp.ly, k = 1.2 + (pop || 0) * 0.5;
     if (lit) A.glow(g, x, y - 4, 40 * k, '#ffd23f', 0.9);
     g.save(); g.translate(x, y); g.scale(k, k);
-    A.rr(g, -3, 4, 6, 14, 2); g.fillStyle = '#a9b0e0'; g.fill();
-    A.rr(g, -10, -14, 20, 20, 6); g.fillStyle = lit ? '#fff3a8' : '#323a7a'; g.fill();
-    g.lineWidth = 3; g.strokeStyle = lit ? '#ffb800' : '#c9d0ff'; g.stroke();
-    A.rr(g, -12, -19, 24, 6, 3); g.fillStyle = lit ? '#ffb800' : '#c9d0ff'; g.fill();
+    A.rr(g, -3, 4, 6, 14, 2); F(g, '#a9b0e0');
+    A.rr(g, -10, -14, 20, 20, 6); F(g, lit ? '#fff3a8' : '#323a7a'); S(g, 3, lit ? '#ffb800' : '#c9d0ff');
+    A.rr(g, -12, -19, 24, 6, 3); F(g, lit ? '#ffb800' : '#c9d0ff');
     if (lit) {
       var f = still ? 0 : Math.sin(t * 12 + x) * 1.2;
       g.beginPath(); g.moveTo(0, -11 + f); g.quadraticCurveTo(5, -4, 0, 2); g.quadraticCurveTo(-5, -4, 0, -11 + f);
-      g.fillStyle = '#ff8a1f'; g.fill();
+      F(g, '#ff8a1f');
     }
     g.restore();
     // A faint line across the track where the checkpoint is.
-    g.setLineDash([4, 6]);
+    g.setLineDash(DASH);
     g.beginPath(); g.moveTo(cp.x - cp.nx * (cp.hw - 3), cp.y - cp.ny * (cp.hw - 3)); g.lineTo(cp.x + cp.nx * (cp.hw - 3), cp.y + cp.ny * (cp.hw - 3));
-    g.lineWidth = 2; g.strokeStyle = lit ? 'rgba(255,214,60,0.55)' : 'rgba(255,255,255,0.18)'; g.stroke();
-    g.setLineDash([]);
+    S(g, 2, lit ? 'rgba(255,214,60,0.55)' : 'rgba(255,255,255,0.18)');
+    g.setLineDash(SOLID);
   };
   // The lamp at the end of the track: a light bulb whose screw base points on along the
   // way (dx, dy); lit when the spark arrives.
@@ -278,17 +279,16 @@
     g.save(); g.translate(x, y); g.rotate(Math.atan2(dy, dx));
     g.lineJoin = 'round';
     // The screw base and its dark tip.
-    A.rr(g, r * 0.86, -r * 0.46, r * 0.62, r * 0.92, r * 0.16); g.fillStyle = '#c9d0e8'; g.fill(); g.lineWidth = 3; g.strokeStyle = INK; g.stroke();
-    g.beginPath(); g.moveTo(r * 1.06, -r * 0.46); g.lineTo(r * 1.06, r * 0.46); g.moveTo(r * 1.26, -r * 0.46); g.lineTo(r * 1.26, r * 0.46); g.lineWidth = 2.5; g.stroke();
-    g.beginPath(); g.arc(r * 1.48, 0, r * 0.24, -Math.PI / 2, Math.PI / 2); g.fillStyle = INK; g.fill();
+    A.rr(g, r * 0.86, -r * 0.46, r * 0.62, r * 0.92, r * 0.16); F(g, '#c9d0e8'); S(g, 3, INK);
+    g.beginPath(); g.moveTo(r * 1.06, -r * 0.46); g.lineTo(r * 1.06, r * 0.46); g.moveTo(r * 1.26, -r * 0.46); g.lineTo(r * 1.26, r * 0.46); S(g, 2.5);
+    g.beginPath(); g.arc(r * 1.48, 0, r * 0.24, -Math.PI / 2, Math.PI / 2); F(g, INK);
     // The glass.
     g.beginPath(); g.arc(0, 0, r, 0.6, TAU - 0.6); g.lineTo(r * 0.88, -r * 0.46); g.lineTo(r * 0.88, r * 0.46); g.closePath();
-    g.fillStyle = lit ? '#fff7c2' : 'rgba(255,248,214,0.28)'; g.fill();
-    g.lineWidth = 4; g.strokeStyle = lit ? '#ffcf3a' : '#fff3c4'; g.stroke();
+    F(g, lit ? '#fff7c2' : 'rgba(255,248,214,0.28)'); S(g, 4, lit ? '#ffcf3a' : '#fff3c4');
     // A shine and the filament.
-    g.beginPath(); g.arc(0, 0, r * 0.7, Math.PI * 1.05, Math.PI * 1.4); g.lineWidth = 3; g.strokeStyle = 'rgba(255,255,255,0.75)'; g.lineCap = 'round'; g.stroke();
+    g.beginPath(); g.arc(0, 0, r * 0.7, Math.PI * 1.05, Math.PI * 1.4); g.lineCap = 'round'; S(g, 3, 'rgba(255,255,255,0.75)');
     g.beginPath(); g.moveTo(r * 0.86, -r * 0.2); g.lineTo(r * 0.1, -r * 0.3); g.lineTo(-r * 0.12, -r * 0.12); g.lineTo(r * 0.06, 0); g.lineTo(-r * 0.12, r * 0.12); g.lineTo(r * 0.1, r * 0.3); g.lineTo(r * 0.86, r * 0.2);
-    g.lineWidth = 3; g.strokeStyle = lit ? '#ff8a1f' : '#ffd86b'; g.stroke();
+    S(g, 3, lit ? '#ff8a1f' : '#ffd86b');
     g.restore();
   };
 
@@ -383,13 +383,12 @@
     g.save(); g.globalAlpha = alpha == null ? 1 : alpha;
     g.translate(x - 24.4, y - 4 + (press || 0) * 8); g.scale(0.8, 0.8);
     // Fingers, palm and thumb: first a thick dark outline, then white on top.
-    var parts = [[22, 5, 17, 54, 8.5], [37, 36, 15, 30, 7.5], [50, 40, 14, 28, 7], [14, 46, 52, 48, 19]];
     g.lineWidth = 9; g.lineJoin = 'round';
-    [INK, '#fff'].forEach((c, pass) => {
-      g.fillStyle = c; g.strokeStyle = c;
-      parts.forEach(p => { A.rr(g, p[0], p[1], p[2], p[3], p[4]); g.fill(); if (!pass) g.stroke(); });
+    for (var pass = 0; pass < 2; pass++) {
+      var c = HAND_PASSES[pass]; g.fillStyle = g.strokeStyle = c;
+      for (var i = 0; i < 4; i++) { var p = HAND_PARTS[i]; A.rr(g, p[0], p[1], p[2], p[3], p[4]); g.fill(); if (!pass) g.stroke(); }
       g.save(); g.translate(16, 59); g.rotate(0.66); A.rr(g, -13, -7, 27, 14, 7); g.fill(); if (!pass) g.stroke(); g.restore();
-    });
+    }
     g.restore();
   };
   // A school mouse; pressed lights its left button.
