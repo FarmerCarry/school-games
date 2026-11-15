@@ -32,7 +32,7 @@
     "rail-rush": 142000,
     "road-hopper": 116500,
     "seek-zoom": 132500,
-    "shortcut-factory": 124500,
+    "shortcut-factory": 126000,
     "skybound-golf": 117500,
     "snake-arena": 98500,
     "splat-strike": 231000,
@@ -54,5 +54,5 @@
     "fredoka-latin-500-normal.woff2": 18500,
     "fredoka-latin-700-normal.woff2": 18000
   },
-  "precacheBytes": 6798000
+  "precacheBytes": 6800000
 }

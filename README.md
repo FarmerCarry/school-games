@@ -193,9 +193,13 @@ the B key's «لا» counts. Seeds buy plants and decorations for the garden scr
 conveyor belts and order cards ask for them: pick toys with a click, Shift+click, Tab, the arrows or
 Ctrl+A, then Ctrl+C / Ctrl+V on the copy machine, Ctrl+X to move, Delete to recycle, Ctrl+Z / Ctrl+Y
 to undo and redo (also the mess of «بُرغي», a cheeky gremlin), Enter to ship a box and Ctrl+S to
-stamp the day. Each new shortcut gets a short demo with big keycaps; five worlds of six levels end
-with timed rushes. Shortcuts work by key position, so Ctrl+C works with Arabic input; browser keys
-such as Ctrl+W are never used.
+stamp the day. Each new shortcut gets a short demo with big keycaps, shown just when it is first
+needed (Ctrl+V right after the first Ctrl+C), and an Arabic voice (when the PC has one) says what to
+press for children who cannot read yet. The first two worlds are calm, for 5 to 7 year olds: the
+belts stand still, there is no clock, a slow day costs no star, the copy workshop asks for one kind
+of toy at a time with one box on the floor, and Ctrl+S waits for its last day. The other three
+worlds end with timed rushes. Shortcuts work by key position, so Ctrl+C works with Arabic input;
+browser keys such as Ctrl+W are never used.
 
 **ابحث وكبّر (Seek & Zoom)** is a hidden-object game for the mouse wheel and dragging. Five big
 scenes drawn in code (park, market, beach, toy room, space station) list things to find as pictures

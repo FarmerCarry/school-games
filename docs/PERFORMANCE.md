@@ -1182,3 +1182,22 @@ priority (10), while Edge's browser process, which delivers input and the test's
 runs below normal (6). The classroom check now lowers the graphics process of its own Edge to
 below normal, once per browser after the WebGL warm-up, with an asynchronous PowerShell call
 that logs its result. The games are unchanged: on a classroom PC nothing competes with them.
+
+## Shortcut Factory: a gentle start for 5 to 7 year olds, 15 November 2026
+
+The first two worlds of «مصنع الاختصارات» are rebuilt for children who cannot read yet: the
+belts stand still, there is no clock and no star for speed, the copy workshop asks for one kind
+of toy at a time with one box on the floor, and Ctrl+S waits for the workshop's last day. Each
+new shortcut's demo now comes just when it is first needed, one shortcut at a time, and an
+Arabic voice (the browser's own speech synthesis, only when the PC has an Arabic voice) says
+what to press. Nothing new is drawn and no files are added; only the game's code grows.
+
+Measured with the Linux minified build, against the previous commit built the same way.
+
+| Measurement | Before bytes | After bytes | Before limit | New limit |
+| --- | ---: | ---: | ---: | ---: |
+| Shortcut Factory page | 124,454 | 125,909 | 124,500 | 126,000 |
+| Offline precache | 6,797,579 | 6,799,034 | 6,798,000 | 6,800,000 |
+
+Both limits are the measured size rounded up (the game to the next 500 bytes, the cache to the
+next 1,000).
