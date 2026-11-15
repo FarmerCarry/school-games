@@ -10,9 +10,10 @@
   var PH = {
     pw: 22, ph: 38,
     speed: 235, pushSpeed: 135,
-    accG: 2800, decG: 3400, accA: 1900, decA: 1200,
-    gUp: 2100, gDown: 2500, jumpV: 690, cut: 0.45, maxFall: 900,
-    coyote: 0.1, buffer: 0.13,
+    accG: 2800, decG: 3400, accA: 2300, decA: 1200,
+    gUp: 2100, gDown: 2400, jumpV: 705, cut: 0.72, apexV: 140, apexG: 0.72, maxFall: 860,
+    coyote: 0.16, hazardGrace: 0.095, buffer: 0.2,
+    ledgeUp: 6, cornerNudge: 6,
     fanAcc: 4600, fanUp: 440,
     boxW: 30, boxH: 30
   };
@@ -213,6 +214,10 @@
     while (mv !== 0) {
       var b = blockerAt(w, e, e.x + s, e.y, false);
       if (!b) { e.x += s; mv -= s; continue; }
+      if (b === STATIC) {
+        var up = canStepUp(w, e, s);
+        if (up) { e.y -= up; e.x += s; e.ry = 0; if (e.vy > 0) e.vy = 0; mv -= s; continue; }
+      }
       if (e.isPlayer && b.isBox && pushBox(w, b, s, 0)) { e.x += s; mv -= s; e.pushing = s; continue; }
       if (e.isPlayer && b.isBox) e.pushing = s;
       e.rx = 0;
@@ -229,6 +234,7 @@
     while (mv !== 0) {
       var b = blockerAt(w, e, e.x, e.y + s, s > 0);
       if (!b) { e.y += s; mv -= s; continue; }
+      if (e.isPlayer && s < 0 && b === STATIC && nudgeCeiling(w, e)) { e.y -= 1; mv += 1; continue; }
       e.ry = 0;
       return true;
     }
@@ -403,7 +409,9 @@
     if (jp) p.buffer = PH.buffer; else p.buffer -= dt;
     var wasGrounded = p.grounded;
     p.grounded = p.vy >= 0 && !!blockerAt(w, p, p.x, p.y + 1, true);
-    if (p.grounded) p.coyote = PH.coyote; else p.coyote -= dt;
+    var deadly0 = p.grounded && isDeadly(p, footTile(w, p));
+    if (p.grounded && !deadly0) p.coyote = PH.coyote;
+    else { if (deadly0 && p.coyote > PH.hazardGrace) p.coyote = PH.hazardGrace; p.coyote -= dt; }
     if (p.grounded) { var mu = moverUnder(w, p); p.baseVx = mu ? mu.vx : 0; }
     var maxS = p.pushing ? PH.pushSpeed : PH.speed;
     var acc = p.grounded ? (dir ? PH.accG : PH.decG) : (dir ? PH.accA : PH.decA);
@@ -422,7 +430,7 @@
 
     var fan = inFan(w, p);
     p.inFan = fan >= 0;
-    var g = p.vy < 0 ? PH.gUp : PH.gDown;
+    var g = (p.vy < 0 ? PH.gUp : PH.gDown) * (Math.abs(p.vy) < PH.apexV ? PH.apexG : 1);
     if (fan >= 0) {
       p.vy += (PH.gUp - PH.fanAcc * fan) * dt;
       if (p.vy < -PH.fanUp) p.vy = -PH.fanUp;
@@ -443,24 +451,73 @@
       p.vy = 0;
     }
     var nowG = p.vy >= 0 && !!blockerAt(w, p, p.x, p.y + 1, true);
-    if (nowG && !wasGrounded && p.airT > 0.05) w.events.push({ t: 'land', p: p, v: p.fallV });
+    var deadly1 = nowG && isDeadly(p, footTile(w, p));
+    if (nowG && !wasGrounded && p.airT > 0.05 && !deadly1) w.events.push({ t: 'land', p: p, v: p.fallV });
     if (!nowG) p.airT += dt; else p.airT = 0;
     if (nowG && p.vy > 0) p.vy = 0;
     p.grounded = nowG;
-    if (nowG) p.coyote = PH.coyote;
+    if (nowG && !deadly1) p.coyote = PH.coyote;
+    else if (deadly1 && p.coyote > PH.hazardGrace) p.coyote = PH.hazardGrace;
   }
 
+  function isDeadly(p, ft) {
+    return ft === GOO || (ft === LAVA && p.kind === 'ice') || (ft === WATER && p.kind === 'fire');
+  }
+
+  function canStepUp(w, e, s) {
+    if (!e.isPlayer || e.vy < -180 || e.vy > 300) return 0;
+    for (var k = 1; k <= PH.ledgeUp; k++) {
+      if (blockerAt(w, e, e.x, e.y - k, false)) return 0;
+      if (!blockerAt(w, e, e.x + s, e.y - k, false) && blockerAt(w, e, e.x + s, e.y - k + 1, true)) {
+        var ox = e.x, oy = e.y;
+        e.x = ox + s; e.y = oy - k;
+        var bad = isDeadly(e, footTile(w, e));
+        e.x = ox; e.y = oy;
+        return bad ? 0 : k;
+      }
+    }
+    return 0;
+  }
+
+  function nudgeCeiling(w, e) {
+    for (var d = 1; d <= PH.cornerNudge; d++) {
+      for (var dir = -1; dir <= 1; dir += 2) {
+        var nx = e.x + dir * d;
+        if (!blockerAt(w, e, nx, e.y, false) && !blockerAt(w, e, nx, e.y - 1, false)) {
+          e.x = nx;
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  function boxUnder(w, p) {
+    for (var i = 0; i < w.boxes.length; i++) {
+      var b = w.boxes[i];
+      if (p.y + p.h === b.y && p.x < b.x + b.w && p.x + p.w > b.x) return b;
+    }
+    return null;
+  }
+
+  // Safe ground under any part of the feet protects from adjacent liquid; only when
+  // the feet sit wholly over a deadly basin does it count as stepping in.
   function footTile(w, p) {
+    if (moverUnder(w, p) || boxUnder(w, p)) return 0;
     if ((p.y + p.h) % T !== 0) return 0;
     var ty = (p.y + p.h) / T;
-    var x0 = Math.floor((p.x + 5) / T), x1 = Math.floor((p.x + p.w - 6) / T);
-    var res = 0;
+    var x0 = Math.floor((p.x + 4) / T), x1 = Math.floor((p.x + p.w - 5) / T);
+    var safe = false, deadly = 0, friendly = 0, mid = Math.floor((p.x + p.w / 2) / T);
     for (var tx = x0; tx <= x1; tx++) {
       var t = tile(w, tx, ty);
-      if (t === GOO) return GOO;
-      if (t === LAVA || t === WATER) res = res || t;
+      if (t === E) continue;
+      if (isDeadly(p, t)) deadly = t === GOO ? GOO : (deadly || t);
+      else {
+        safe = true;
+        if ((t === LAVA || t === WATER) && tx === mid) friendly = t;
+      }
     }
-    return res;
+    return safe ? friendly : deadly;
   }
   FI.footTile = footTile;
 
@@ -477,9 +534,10 @@
     if (!p.grounded) return;
     var ft = footTile(w, p);
     if (!ft) return;
-    if (ft === GOO) return kill(w, p, 'goo');
-    if (ft === LAVA && p.kind === 'ice') return kill(w, p, 'lava');
-    if (ft === WATER && p.kind === 'fire') return kill(w, p, 'water');
+    if (isDeadly(p, ft)) {
+      if (p.coyote <= 0) kill(w, p, ft === GOO ? 'goo' : ft === LAVA ? 'lava' : 'water');
+      return;
+    }
     p.onLiquid = ft;
   }
 

@@ -16,7 +16,7 @@
     "dino-3d": 128500,
     "drift-king": 109000,
     "egg-rush": 154500,
-    "fire-and-ice": 123000,
+    "fire-and-ice": 124000,
     "hoop-heads": 149000,
     "key-runner": 120000,
     "keyboard-obby": 121500,
@@ -54,5 +54,5 @@
     "fredoka-latin-500-normal.woff2": 18500,
     "fredoka-latin-700-normal.woff2": 18000
   },
-  "precacheBytes": 6797000
+  "precacheBytes": 6798000
 }
