@@ -179,7 +179,7 @@ test('rounds are the same for the same difficulty and arrangement, and the arran
   assert.equal(odd.failed, 0);
 });
 
-test('the world camera stays fixed showing the full scene; the magnifying glass toggles, moves, and zooms eased or at once', () => {
+test('the world camera stays fixed showing the full scene; the magnifying glass stays always visible (even at zoom 0), moves, and zooms eased or at once', () => {
   for (let w = 0; w < SZ.WORLDS.length; w++) {
     const S = SZ.scene(w), R = SZ.makeRound(w, 0, {}), cam = SZ.camera(S, R);
     assert.equal(cam.x, S.w / 2); assert.equal(cam.y, S.h / 2); assert.equal(cam.z, R.zmin);
@@ -189,9 +189,10 @@ test('the world camera stays fixed showing the full scene; the magnifying glass 
   const S = SZ.scene(1), R = SZ.makeRound(1, 0, {}), cam = SZ.camera(S, R);
   for (const still of [true, false]) {
     const lens = SZ.lens(R);
-    assert.equal(lens.on, false);
+    assert.equal(lens.on, true, 'the magnifying glass starts visible');
     assert.equal(lens.z, R.zmin);
-    assert.equal(SZ.zoomLens(lens, 0.8, still), false, 'zooming out while off does nothing');
+    assert.equal(SZ.zoomLens(lens, 0.8, still), false, 'zooming out when already at 0 does nothing');
+    assert.equal(lens.on, true, 'and never hides the lens');
     SZ.moveLens(lens, 812, 290);
     const before = SZ.toWorld(cam, 812, 290);
     assert.equal(SZ.zoomLens(lens, 2.5, still), true);
@@ -207,11 +208,11 @@ test('the world camera stays fixed showing the full scene; the magnifying glass 
     }
     assert.ok(Math.abs(lens.z - R.zmin * 2.5) < 1e-9);
     assert.equal(SZ.stepLens(lens, 1 / 60, still), false, 'the zoom finished');
-    // Toggle off remembers custom zoom, toggle back on restores it.
-    assert.equal(SZ.toggleLens(lens, true), false);
+    // Zooming all the way back out to zmin (eased or instant) keeps lens.on === true.
+    assert.equal(SZ.zoomLens(lens, 0.05, still), true);
+    for (let i = 0; i < 120; i++) SZ.stepLens(lens, 1 / 60, still);
     assert.equal(lens.z, R.zmin);
-    assert.equal(SZ.toggleLens(lens, true), true);
-    assert.ok(Math.abs(lens.z - R.zmin * 2.5) < 1e-9);
+    assert.equal(lens.on, true, 'the magnifying glass stays visible at zoom 0');
   }
   const lens = SZ.lens(R);
   for (let i = 0; i < 40; i++) SZ.zoomLens(lens, 1.5, true);
@@ -219,13 +220,12 @@ test('the world camera stays fixed showing the full scene; the magnifying glass 
   assert.equal(SZ.zoomLens(lens, 1.5, true), false, 'no change at the top');
   for (let i = 0; i < 40; i++) SZ.zoomLens(lens, 0.5, true);
   assert.equal(lens.z, R.zmin, 'never below the whole scene');
-  assert.equal(lens.on, false, 'zooming all the way out closes the lens');
+  assert.equal(lens.on, true, 'zooming all the way out keeps the magnifying glass visible');
   // Moving clamps to the screen and reports whether it moved.
   assert.equal(SZ.moveLens(lens, -500, 9999), true);
   assert.deepEqual([lens.x, lens.y], [24, H - 24]);
   assert.equal(SZ.moveLens(lens, -100, 9000), false);
-  assert.equal(SZ.inLens(lens, 24, H - 24), false, 'off lens never captures points');
-  SZ.toggleLens(lens, true);
+  assert.equal(SZ.inLens(null, 24, H - 24), false);
   assert.equal(SZ.inLens(lens, 24 + SZ.LENS_R - 1, H - 24), true);
   assert.equal(SZ.inLens(lens, 24 + SZ.LENS_R + 1, H - 24), false);
 });

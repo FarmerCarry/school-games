@@ -1,6 +1,6 @@
 // Seek and Zoom in real Chromium: the world stays fixed full-screen (never dragged);
-// the magnifying glass button, keys and mouse wheel (and Ctrl+wheel) control the movable
-// lens without scrolling or zooming the page; clicks find things through or outside the
+// the always-visible magnifying glass, keys and mouse wheel (and Ctrl+wheel) control the
+// movable lens without scrolling or zooming the page; clicks find things through or outside the
 // lens; whole rounds, stickers, instant lightbulb hints, timed rounds, pause, saves and fit.
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
@@ -146,7 +146,7 @@ async function findAll(page) {
   }
 }
 
-test('the title waits; Play opens the full fixed park, dragging never moves the world, and the magnifier and hint buttons work right away', async t => {
+test('the title waits; Play opens the full fixed park with the magnifying glass always visible, dragging never moves the world, and the hint button works right away', async t => {
   const page = await game(t, { dda: TIER[1] });
   await step(page, 30);
   let s = await state(page);
@@ -162,29 +162,32 @@ test('the title waits; Play opens the full fixed park, dragging never moves the 
   s = await state(page);
   assert.equal(s.screen, 'play'); assert.equal(s.index, 0);
   assert.deepEqual(s.cam, { x: 1280, y: 720, z: 0.5 }, 'the entire park stays fixed on screen');
+  assert.equal(s.lens.on, true, 'the magnifying glass is visible right away');
+  assert.equal(s.lens.z, s.zmin, 'starts at zoom 0');
   assert.equal(s.intro, true); assert.equal(s.tier, 1);
   assert.equal(await page.locator('#zoomBox').isVisible(), true);
-  assert.equal(await page.locator('#btnLens').isVisible(), true);
+  assert.equal(await page.locator('#btnLens').count(), 0, 'no magnifier toggle button');
   assert.equal(await page.locator('#btnHint').isVisible(), true);
   // The list shows big first; the clock waits for it.
   await step(page, 60);
   assert.equal((await state(page)).time, 0);
-  // Pressing the magnifier button immediately dismisses the intro and opens the movable lens.
-  await page.locator('#btnLens').click();
+  // Clicking + zooms in and dismisses the intro; clicking − back to 0 keeps the magnifying glass visible.
+  await page.locator('#btnIn').click();
   await step(page);
   s = await state(page);
   assert.equal(s.intro, false);
-  assert.equal(s.lens.on, true, 'the magnifying glass appears right away');
+  assert.equal(s.lens.on, true);
   assert.ok(s.lens.z > s.zmin);
-  assert.equal(await page.locator('#btnLens').getAttribute('aria-pressed'), 'true');
-  await page.locator('#btnLens').click();
+  await page.locator('#btnOut').click();
   await step(page);
-  assert.equal((await state(page)).lens.on, false, 'pressing it again hides the lens');
-  assert.equal(await page.locator('#btnLens').getAttribute('aria-pressed'), 'false');
-  // Dragging across the scene never pans the world or counts a wrong click.
+  s = await state(page);
+  assert.equal(s.lens.z, s.zmin);
+  assert.equal(s.lens.on, true, 'zooming back to 0 keeps the magnifying glass visible');
+  // Dragging across the scene moves the lens with the pointer, never pans the world, and never counts a wrong click.
   await dragBy(page, 760, 380, -260, -80);
   s = await state(page);
   assert.deepEqual(s.cam, { x: 1280, y: 720, z: 0.5 }, 'the world never moves when dragged');
+  assert.equal(s.lens.on, true);
   assert.equal(s.wrong, 0);
   // Pressing the lightbulb button shows a hint immediately without waiting.
   await page.locator('#btnHint').click();
@@ -196,13 +199,13 @@ test('the title waits; Play opens the full fixed park, dragging never moves the 
   assert.ok((await state(page)).time > 0.9);
 });
 
-test('the real mouse wheel opens and zooms the magnifying glass over the pointer, eased, while the world stays fixed', async t => {
+test('the real mouse wheel zooms the always-visible magnifying glass over the pointer, eased, and stays visible at zoom 0', async t => {
   const page = await game(t, { save: SAVE(2), dda: TIER[1], reducedMotion: 'no-preference' });
   await openRound(page, 2);
   await skipIntro(page);
   let s = await state(page);
   const fixedCam = s.cam;
-  assert.equal(s.cam.z, s.zmin); assert.equal(s.lens.on, false);
+  assert.equal(s.cam.z, s.zmin); assert.equal(s.lens.on, true); assert.equal(s.lens.z, s.zmin);
   // Zoom in on a spot in the middle of the screen, notch by notch.
   const spot = [820, 300], w0 = under(s, ...spot), z0 = s.zmin;
   await wheelAt(page, ...spot, -100);
@@ -236,13 +239,14 @@ test('the real mouse wheel opens and zooms the magnifying glass over the pointer
   await step(page, 40);
   s = await state(page);
   assert.ok(Math.abs(z2 / s.lens.z - Math.exp(100 * 0.0022)) < 0.01, 'tiny steps add up to a notch out');
-  // Far out: closes the lens back to the whole scene; far in: never past the top zoom.
+  // Far out: clamps at zoom 0 while keeping the magnifying glass visible; far in: never past the top zoom.
   await wheelAt(page, 640, 360, 100, 30); await step(page, 60);
   s = await state(page);
-  assert.equal(s.lens.z, s.zmin); assert.equal(s.lens.on, false);
+  assert.equal(s.lens.z, s.zmin); assert.equal(s.lens.on, true, 'stays visible at zoom 0');
+  assert.equal(await page.locator('#zoomFill').evaluate(el => el.style.height), '0%');
   await wheelAt(page, 640, 360, -100, 30); await step(page, 60);
   s = await state(page);
-  assert.equal(s.lens.z, s.zmax); assert.deepEqual(s.cam, fixedCam);
+  assert.equal(s.lens.z, s.zmax); assert.equal(s.lens.on, true); assert.deepEqual(s.cam, fixedCam);
   assert.ok(s.moves >= 6);
 });
 
@@ -302,9 +306,10 @@ test('a click on a thing finds it and it flies to the list; empty ground and loo
   await find(page, decoy);
   s = await state(page);
   assert.equal(s.found, 1); assert.equal(s.wrong, 1);
-  // Turn the lens off and click empty ground: one wrong click; double click is still one.
-  if ((await state(page)).lens.on) { await page.locator('#btnLens').click(); await step(page); }
+  // Zoom all the way out (lens stays visible at zmin) and click empty ground: one wrong click; double click is still one.
+  await wheelAt(page, 640, 360, 100, 20); await step(page, 4);
   const near = await items(page), cs = await state(page);
+  assert.equal(cs.lens.on, true); assert.equal(cs.lens.z, cs.zmin);
   let empty = null;
   for (let x = 200; x < 1100 && !empty; x += 53) for (let y = 120; y < 540 && !empty; y += 47) {
     const w = under(cs, x, y);
@@ -322,8 +327,8 @@ test('finishing a round: everything found, the result with stars and a new stick
   const page = await game(t, { dda: TIER[1] });
   await page.locator('#btnPlay').click(); await step(page);
   await skipIntro(page);
-  await page.locator('#btnLens').click(); await step(page);
-  await page.locator('#btnLens').click(); await step(page);
+  await page.locator('#btnIn').click(); await step(page);
+  await page.locator('#btnOut').click(); await step(page);
   await findAll(page);
   let s = await state(page);
   assert.equal(s.done, true); assert.equal(s.found, s.total);
@@ -428,48 +433,47 @@ test('P, Esc, the button and a lost focus pause; nothing moves while paused, and
   }
 });
 
-test('Restart from the pause starts the round again: nothing found, no moves, the magnifying glass off again', async t => {
+test('Restart from the pause starts the round again: nothing found, no moves, the magnifying glass stays visible back at zoom 0', async t => {
   const page = await game(t, { save: SAVE(3), dda: TIER[1] });
   await openRound(page, 3);
   await skipIntro(page);
   const s0 = await state(page), start = s0.cam;
   await find(page, (await items(page)).find(i => i.e >= 0 && i.need > s0.zmin));
   let s = await state(page);
-  assert.equal(s.found, 1); assert.equal(s.lens.on, true); assert.ok(s.moves > 0);
+  assert.equal(s.found, 1); assert.equal(s.lens.on, true); assert.ok(s.lens.z > s.zmin); assert.ok(s.moves > 0);
   await page.keyboard.press('Escape'); await step(page);
   await page.locator('#btnRestart').click(); await step(page);
   s = await state(page);
   assert.equal(s.screen, 'play'); assert.equal(s.found, 0); assert.equal(s.moves, 0); assert.equal(s.time, 0);
-  assert.deepEqual(s.cam, start); assert.equal(s.lens.on, false); assert.equal(s.lens.z, s.zmin); assert.equal(s.intro, true);
+  assert.deepEqual(s.cam, start); assert.equal(s.lens.on, true); assert.equal(s.lens.z, s.zmin); assert.equal(s.intro, true);
   // R in the pause restarts too.
-  await skipIntro(page); await page.locator('#btnLens').click(); await step(page);
-  assert.equal((await state(page)).lens.on, true);
+  await skipIntro(page); await page.locator('#btnIn').click(); await step(page);
+  assert.ok((await state(page)).lens.z > s.zmin);
   await page.keyboard.press('KeyP'); await step(page);
   await page.keyboard.press('KeyR'); await step(page);
   s = await state(page);
-  assert.equal(s.screen, 'play'); assert.equal(s.moves, 0); assert.equal(s.lens.on, false);
+  assert.equal(s.screen, 'play'); assert.equal(s.moves, 0); assert.equal(s.lens.on, true); assert.equal(s.lens.z, s.zmin);
 });
 
-test('the keys and the on-screen buttons: L toggles the lens, + and − zoom it, the arrows move the lens while the world stays fixed', async t => {
+test('the keys and the on-screen buttons: + and − zoom the always-visible lens, arrows move it, and zooming out to 0 keeps it visible', async t => {
   const page = await game(t, { save: SAVE(6), dda: TIER[1] });
   await openRound(page, 6);
   await skipIntro(page);
   let s = await state(page);
   const fixedCam = s.cam, z0 = s.zmin;
-  await page.keyboard.press('KeyL'); await step(page);
-  assert.equal((await state(page)).lens.on, true);
-  await page.keyboard.press('KeyL'); await step(page);
-  assert.equal((await state(page)).lens.on, false);
-  await page.keyboard.down('Equal'); await step(page, 30); await page.keyboard.up('Equal');
-  s = await state(page);
-  assert.ok(s.lens.on && s.lens.z > z0 * 2, '+ opens and zooms in while held');
-  assert.deepEqual(s.cam, fixedCam, 'world stays fixed');
-  const x0 = s.lens.x, y0 = s.lens.y;
+  assert.equal(s.lens.on, true); assert.equal(s.lens.z, z0);
+  // Arrows move the magnifying glass even when zoom is 0.
+  const xStart = s.lens.x, yStart = s.lens.y;
   await page.keyboard.down('ArrowRight'); await step(page, 20); await page.keyboard.up('ArrowRight');
   await page.keyboard.down('ArrowDown'); await step(page, 10); await page.keyboard.up('ArrowDown');
   s = await state(page);
-  assert.ok(s.lens.x > x0 + 50 && s.lens.y > y0 + 20, '→ and ↓ move the magnifying glass right and down');
+  assert.ok(s.lens.x > xStart + 50 && s.lens.y > yStart + 20, '→ and ↓ move the magnifying glass right and down at zoom 0');
+  assert.equal(s.lens.on, true);
   assert.deepEqual(s.cam, fixedCam, 'world never pans');
+  await page.keyboard.down('Equal'); await step(page, 30); await page.keyboard.up('Equal');
+  s = await state(page);
+  assert.ok(s.lens.on && s.lens.z > z0 * 2, '+ zooms in while held');
+  assert.deepEqual(s.cam, fixedCam, 'world stays fixed');
   const z1 = s.lens.z;
   await page.keyboard.down('Minus'); await step(page, 15); await page.keyboard.up('Minus');
   assert.ok((await state(page)).lens.z < z1 * 0.8, '− zooms out');
@@ -481,8 +485,10 @@ test('the keys and the on-screen buttons: L toggles the lens, + and − zoom it,
   for (let i = 0; i < 6; i++) await page.locator('#btnOut').click();
   await step(page, 2);
   s = await state(page);
-  assert.equal(s.lens.z, s.zmin); assert.equal(s.lens.on, false);
-  assert.match(await page.locator('#btnOut').getAttribute('class'), /off/, 'the − button greys out at the end');
+  assert.equal(s.lens.z, s.zmin);
+  assert.equal(s.lens.on, true, 'zooming all the way out to 0 keeps the magnifying glass visible');
+  assert.equal(await page.locator('#zoomFill').evaluate(el => el.style.height), '0%');
+  assert.match(await page.locator('#btnOut').getAttribute('class'), /off/, 'the − button greys out at zoom 0');
 });
 
 test('the hint: pressing H or the lightbulb works right away; after an idle wait the lightbulb glows (and shows by itself for the youngest)', async t => {
@@ -613,8 +619,9 @@ test('fits the smaller portal frame; a click on a thing finds it at this size to
   const it = (await items(page)).find(i => i.e >= 0);
   await find(page, it);
   assert.equal((await state(page)).found, 1);
+  assert.equal(await page.locator('#btnLens').count(), 0, 'no magnifier toggle button');
   const boxes = [];
-  for (const sel of ['#btnPause', '#zoomBox', '#btnLens', '#btnHint']) {
+  for (const sel of ['#btnPause', '#zoomBox', '#btnHint']) {
     const b = await page.locator(sel).boundingBox();
     assert.ok(b.x >= canvas.x && b.y + b.height <= canvas.y + canvas.height + 1, sel);
     boxes.push(b);

@@ -457,8 +457,7 @@
   SZ.toScreen = function (cam, wx, wy, out) { out = out || {}; out.x = W / 2 + (wx - cam.x) * cam.z; out.y = H / 2 + (wy - cam.y) * cam.z; return out; };
 
   SZ.lens = function (R) {
-    var def = clamp(2, R.zmin * 1.6, R.zmax);
-    return { on: false, x: W / 2, y: H / 2, r: SZ.LENS_R, z: R.zmin, tz: R.zmin, zmin: R.zmin, zmax: R.zmax, saved: def };
+    return { on: true, x: W / 2, y: H / 2, r: SZ.LENS_R, z: R.zmin, tz: R.zmin, zmin: R.zmin, zmax: R.zmax };
   };
   SZ.moveLens = function (lens, sx, sy) {
     var x = clamp(sx, 24, W - 24), y = clamp(sy, 24, H - 24);
@@ -466,39 +465,22 @@
     lens.x = x; lens.y = y;
     return true;
   };
-  SZ.toggleLens = function (lens, instant) {
-    if (lens.on) {
-      if (lens.tz > lens.zmin * 1.2) lens.saved = lens.tz;
-      lens.on = false; lens.z = lens.tz = lens.zmin;
-    } else {
-      lens.on = true;
-      lens.tz = clamp(lens.saved || 2, lens.zmin * 1.5, lens.zmax);
-      if (instant) lens.z = lens.tz;
-    }
-    return lens.on;
-  };
   SZ.zoomLens = function (lens, f, instant) {
-    if (!(f > 0) || lens.zmax <= lens.zmin) return false;
-    if (!lens.on && f <= 1) return false;
-    var tz = clamp((lens.on ? lens.tz : lens.zmin) * f, lens.zmin, lens.zmax);
-    if (tz === lens.tz && (!lens.on || tz === lens.z)) return false;
+    if (!lens || !(f > 0) || lens.zmax <= lens.zmin) return false;
+    var tz = clamp(lens.tz * f, lens.zmin, lens.zmax);
+    if (tz === lens.tz && tz === lens.z) return false;
     lens.on = true;
     lens.tz = tz;
-    if (tz >= lens.zmin * 1.4) lens.saved = tz;
-    if (instant) { lens.z = tz; if (tz <= lens.zmin) lens.on = false; }
+    if (instant) lens.z = tz;
     return true;
   };
   // Eases the lens zoom (in log space, so every step feels the same).
   // still: reduced motion, the zoom jumps at once. Returns true if it changed.
   SZ.stepLens = function (lens, dt, still) {
-    if (lens.z === lens.tz) {
-      if (lens.on && lens.tz <= lens.zmin) { lens.on = false; return true; }
-      return false;
-    }
+    if (!lens || lens.z === lens.tz) return false;
     var lz = Math.log(lens.z), lt = Math.log(lens.tz), k = still ? 1 : 1 - Math.exp(-dt * 14);
     lz += (lt - lz) * k;
     lens.z = Math.abs(lt - lz) < 0.002 ? lens.tz : Math.exp(lz);
-    if (lens.z === lens.zmin && lens.tz <= lens.zmin) lens.on = false;
     return true;
   };
   SZ.inLens = function (lens, sx, sy) {

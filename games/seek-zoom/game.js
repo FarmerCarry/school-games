@@ -428,29 +428,17 @@
   }
   function paintZoom() {
     if (!lens) return;
-    const z = lens.on ? lens.tz : lens.zmin;
-    const k = lens.zmax > lens.zmin ? (Math.log(z) - Math.log(lens.zmin)) / (Math.log(lens.zmax) - Math.log(lens.zmin)) : 0;
+    const k = lens.zmax > lens.zmin ? (Math.log(lens.tz) - Math.log(lens.zmin)) / (Math.log(lens.zmax) - Math.log(lens.zmin)) : 0;
     $('zoomFill').style.height = Math.round(k * 100) + '%';
-    $('btnIn').classList.toggle('off', lens.on && lens.tz >= lens.zmax);
-    $('btnOut').classList.toggle('off', !lens.on || lens.tz <= lens.zmin);
-    $('btnLens').classList.toggle('on', lens.on);
-    $('btnLens').setAttribute('aria-pressed', lens.on ? 'true' : 'false');
-  }
-  function toggleLens() {
-    if (!R || !lens || screen !== 'play' || R.done || R.over) return;
-    if (intro) endIntro();
-    if (ptr.known && ptr.x >= SZ.PAD.l) SZ.moveLens(lens, ptr.x, ptr.y);
-    const on = SZ.toggleLens(lens, calm());
-    if (on) markZoomUsed();
-    moves++; dirty = true; paintZoom();
-    if (on) J.pop(0.45); else J.tap();
+    $('btnIn').classList.toggle('off', lens.tz >= lens.zmax);
+    $('btnOut').classList.toggle('off', lens.tz <= lens.zmin);
   }
   function zoomBy(x, y, f, movePtr) {
     if (!R || !lens || R.done || R.over) return false;
     if (intro) endIntro();
     if (movePtr) SZ.moveLens(lens, x, y);
     const ok = SZ.zoomLens(lens, f, calm());
-    if (ok) { if (lens.on) markZoomUsed(); moves++; dirty = true; paintZoom(); }
+    if (ok) { if (lens.tz > lens.zmin) markZoomUsed(); moves++; dirty = true; paintZoom(); }
     return ok;
   }
 
@@ -469,7 +457,6 @@
   on($('btnMenu'), () => { J.back(); toMap(); });
   on($('btnIn'), () => { if (zoomBy(lens ? lens.x : MID.x, lens ? lens.y : MID.y, 1.45, false)) J.tap(); });
   on($('btnOut'), () => { if (zoomBy(lens ? lens.x : MID.x, lens ? lens.y : MID.y, 1 / 1.45, false)) J.tap(); });
-  on($('btnLens'), toggleLens);
   on($('btnHint'), () => showHint(true));
   on($('resNext'), resultNext);
   on($('resAgain'), resultAgain);
@@ -491,12 +478,13 @@
     const p = view.toLogical(e.clientX, e.clientY);
     ptr.x = p.x; ptr.y = p.y; ptr.known = true;
     if (e.button !== 0 || screen !== 'play' || !R) return;
-    const isTouch = e.pointerType === 'touch';
+    const isTouch = e.pointerType === 'touch', zoomed = lens.z > lens.zmin * 1.02;
     let placeOnly = false;
-    if (isTouch && lens.on && !SZ.inLens(lens, p.x, p.y) && SZ.hit(R, cam, p.x, p.y, null).t !== 'found') {
-      SZ.moveLens(lens, p.x, p.y); dirty = true; placeOnly = true;
-    } else if (!isTouch) {
-      if (SZ.moveLens(lens, p.x, p.y) && lens.on) dirty = true;
+    if (isTouch && zoomed && !SZ.inLens(lens, p.x, p.y)) {
+      if (SZ.hit(R, cam, p.x, p.y, null).t !== 'found') placeOnly = true;
+      if (SZ.moveLens(lens, p.x, p.y)) dirty = true;
+    } else if (!isTouch || !zoomed) {
+      if (SZ.moveLens(lens, p.x, p.y)) dirty = true;
     }
     drag.on = true; drag.id = e.pointerId; drag.placeOnly = placeOnly; drag.x0 = p.x; drag.y0 = p.y; drag.moved = false;
     try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* old browsers */ }
@@ -506,12 +494,13 @@
     const overBtn = !!(e.target && e.target.closest && e.target.closest('#hud button'));
     if (!overBtn) { ptr.x = p.x; ptr.y = p.y; ptr.known = true; }
     if (screen === 'title') dirty = true;
-    if (screen === 'play' && R && lens && !overBtn) {
-      if (SZ.moveLens(lens, p.x, p.y) && lens.on) dirty = true;
+    const isTouch = e.pointerType === 'touch';
+    if (drag.on && !drag.moved && Math.hypot(p.x - drag.x0, p.y - drag.y0) >= 10) drag.moved = true;
+    if (screen === 'play' && R && lens && !overBtn && (!isTouch || (drag.on && drag.moved))) {
+      if (SZ.moveLens(lens, p.x, p.y)) dirty = true;
     }
     if (!drag.on) return;
-    if (e.buttons === 0 && e.pointerType !== 'touch') { endDrag(false); return; }
-    if (!drag.moved && Math.hypot(p.x - drag.x0, p.y - drag.y0) >= 10) drag.moved = true;
+    if (e.buttons === 0 && !isTouch) { endDrag(false); return; }
   });
   function endDrag(cancel) {
     if (!drag.on) return;
@@ -534,14 +523,12 @@
     } else if (screen === 'play' && R) {
       if (K.anyPressed(['KeyP', 'Escape'])) { pause(true); return; }
       if (intro && go) endIntro();
-      if (K.pressed('KeyL')) toggleLens();
       if (K.pressed('KeyH')) showHint(true);
-      // Arrows (or WASD) move the magnifying glass across the fixed scene; + and − adjust its zoom.
+      // Arrows (or WASD) move the always-visible magnifying glass across the fixed scene; + and − adjust its zoom.
       const mx = (K.anyDown(['ArrowRight', 'KeyD']) ? 1 : 0) - (K.anyDown(['ArrowLeft', 'KeyA']) ? 1 : 0);
       const my = (K.anyDown(['ArrowDown', 'KeyS']) ? 1 : 0) - (K.anyDown(['ArrowUp', 'KeyW']) ? 1 : 0);
       if (mx || my) {
         if (intro) endIntro();
-        if (!lens.on) { SZ.toggleLens(lens, calm()); markZoomUsed(); paintZoom(); }
         const v = 540 * dt;
         if (!coach.keyMove) { coach.keyMove = true; moves++; }
         if (SZ.moveLens(lens, lens.x + mx * v, lens.y + my * v)) dirty = true;
@@ -685,14 +672,16 @@
   }
   function drawPlayLens(ctx) {
     if (!lens || !lens.on) return;
-    const d = D(), r = lens.r, L = lens, lc = SZ.lensCam(cam, L, lcam);
-    const sb = [L.x - r, L.y - r, L.x + r, L.y + r];
-    ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.beginPath(); ctx.arc(L.x * d, L.y * d, r * d, 0, Math.PI * 2); ctx.clip();
-    drawScene(ctx, wi, lc, sb);
-    drawItems(ctx, lc, sb);
-    ctx.restore();
+    const d = D(), r = lens.r, L = lens;
+    if (L.z > cam.z + 1e-4) {
+      const lc = SZ.lensCam(cam, L, lcam), sb = [L.x - r, L.y - r, L.x + r, L.y + r];
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.beginPath(); ctx.arc(L.x * d, L.y * d, r * d, 0, Math.PI * 2); ctx.clip();
+      drawScene(ctx, wi, lc, sb);
+      drawItems(ctx, lc, sb);
+      ctx.restore();
+    }
     ctx.setTransform(d, 0, 0, d, 0, 0);
     A.circ(ctx, L.x, L.y, r); ctx.fillStyle = 'rgba(214,244,255,0.08)'; ctx.fill();
     const ang = L.x > W - 220 ? (L.y > H - 220 ? -2.35 : 2.35) : (L.y > H - 220 ? -0.75 : 0.75);
@@ -737,12 +726,13 @@
     if (small) { A.glass(ctx, gx, p.y, 1.15, still ? 0 : Math.sin(time * 6) * 0.18); A.text(ctx, 'كبّر!', gx, p.y - 54, 28, '#ffffff'); }
     ctx.globalAlpha = 1;
   }
-  // The coach: in the first round with tiny items, shows how to zoom with the lens or wheel.
+  // The coach: in the first round with tiny items, shows how to zoom with the wheel or +.
   function drawCoach(ctx) {
     if (intro || R.done || !coach.zoom || coach.t <= 0.8) return;
     const still = calm(), bob = still ? 0 : Math.sin(time * 6) * 0.8;
-    const x = ptr.known && ptr.x >= SZ.PAD.l ? Math.min(W - 110, Math.max(SZ.PAD.l + 110, ptr.x + 80)) : MID.x;
-    const y = ptr.known && ptr.x >= SZ.PAD.l ? Math.min(H - SZ.PAD.b - 70, Math.max(150, ptr.y)) : MID.y;
+    const lx = lens ? lens.x : MID.x, ly = lens ? lens.y : MID.y;
+    const x = lx <= W - 340 ? lx + 236 : Math.max(SZ.PAD.l + 100, lx - 236);
+    const y = Math.min(H - SZ.PAD.b - 70, Math.max(150, ly));
     A.rr(ctx, x - 90, y - 120, 180, 174, 30); A.fill(ctx, 'rgba(43,36,82,0.62)');
     A.mouse(ctx, x - 34, y + 8, 0.88, bob, '#ffd23f');
     A.glass(ctx, x + 38, y + 6, 1.05, still ? 0 : bob * 0.2);
