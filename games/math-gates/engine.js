@@ -33,7 +33,7 @@
   // MG.HARDER says which way each knob moves as the tiers get harder; the engine test
   // checks every row.
   MG.TUNE = {
-    speed: [5, 5.8, 6.6, 7.4, 8.2],            // run speed, m/s
+    speed: [6.25, 7.25, 8.25, 9.25, 10.25],    // run speed, m/s
     gap: [34, 32, 31, 30, 29],                 // m between gate rows
     margin: [0.34, 0.24, 0.15, 0.09, 0.05],    // every decoy is at least this share of the best result below it
     marginMin: [3, 2, 2, 1, 1],                // .. and at least this many runners below it

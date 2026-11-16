@@ -391,24 +391,28 @@
     close: hook(close),
     // A message that passed site.js's origin check: only sg:telemetry v2 counts.
     msg: hook(function (win, d) {
-      var f = cur && cur.w === win ? cur : 0, v, e;
+      var f = cur && cur.w === win ? cur : 0;
       if (!d || d.type !== 'sg:telemetry' || d.version !== 2) return;
       if (!f) gone.forEach(function (x) { if (x.w === win) f = x; });
       // Nothing more counts for a game once its 'gx' is written.
       if (!f || (f.v !== game && closing.indexOf(f.v) < 0)) return;
-      v = f.v;
-      e = count(d.e, 12e4) || 0;
-      v.e += e;
-      v.s.e += e;
-      add(v.il, hist(d.il, 6, 1e5));
-      add(v.f, hist(d.f, 4, 2e4));
-      if (isArr(d.ev)) d.ev.slice(0, 64).forEach(function (x) { round(v, x); });
-      // The last frame of a closed game has said its last word.
-      if (f !== cur && v.last === f) settle(v);
+      if (f.sk) { f.sk--; return; }
+      try { if (win.Kit && win.Kit._ack) win.Kit._ack(); } catch (e) { /* cross-frame guard */ }
+      ingest(f, d);
     }),
     // The heart button of the open game, pressed (on: now hearted, or not).
     fav: hook(function (slug, hearted) { if (game && game.g === slug) rec(game.s, ['fv', game.n, slug, hearted ? 1 : 0]); })
   };
+  function ingest(f, d) {
+    var v = f.v, e = count(d.e, 12e4) || 0;
+    v.e += e;
+    v.s.e += e;
+    add(v.il, hist(d.il, 6, 1e5));
+    add(v.f, hist(d.f, 4, 2e4));
+    if (isArr(d.ev)) d.ev.slice(0, 64).forEach(function (x) { round(v, x); });
+    // The last frame of a closed game has said its last word.
+    if (f !== cur && v.last === f) settle(v);
+  }
 
   /* --------------------------------------------------------- listeners */
   if (!ready) return;
@@ -420,19 +424,30 @@
     tag = { g: a.getAttribute('data-slug'), t: now(),
       s: m[1] || m[3] || (m[2] ? 'related' : m[4] ? 'category' : a.querySelector('.hot') ? 'featured' : 'catalog') };
   }), true);
+  function pull(quit) {
+    try {
+      var f = cur, r = f && f.w && f.w.Kit && f.w.Kit._flush && f.w.Kit._flush(quit);
+      if (isArr(r)) {
+        f.sk = (f.sk || 0) + r[0].length;
+        r[0].concat(r[1]).forEach(function (d) { ingest(f, d); });
+      }
+    } catch (e) { /* gone */ }
+  }
   doc.addEventListener('visibilitychange', safe(function () {
     if (!doc.hidden) return;
     if (cur && !cur.r) cur.vis = 0;
+    pull(0);
     beacon();
   }));
   // Unloading ends the open game and the session at once; a page kept in the
   // back-forward cache only sends what waits, and its session goes on if it returns.
   addEventListener('pagehide', safe(function (e) {
     if (!e.persisted) {
+      pull(1);
       close();
       closing.slice().forEach(function (v) { settle(v, 1); });
       end(sess);
-    }
+    } else pull(0);
     beacon();
   }));
   safe(begin)();

@@ -92,6 +92,7 @@ async function setup(t, { telemetry = ON, copy = telemetry, gpc = false, clock =
   await context.addInitScript(([config, copy, gpc]) => {
     // The test's setting wins over a build's own (a build may be made with SG_TELEMETRY_URL).
     Object.defineProperty(window, 'SG_TELEMETRY', { value: (location.pathname.startsWith('/copy/') ? copy : config) || undefined, writable: false });
+    if (!navigator.onLine) Object.defineProperty(Navigator.prototype, 'onLine', { configurable: true, get: () => true });
     if (gpc) Object.defineProperty(Navigator.prototype, 'globalPrivacyControl', { configurable: true, get: () => true });
     addEventListener('message', e => {
       const d = e.data;
@@ -618,6 +619,27 @@ test('a hidden page sends what waits by fetch with keepalive, keeps it until the
   await setHidden(page, true);
   like((await queue(page)).map(x => x.e.ev), [[['ss', 0]]]);
   assert.equal(state.posts.length, sent, 'nothing goes while offline');
+  await page.goto(origin + '/seed.html');
+  await page.evaluate(key => localStorage.removeItem(key), qKey(INGEST));
+
+  // Unloading mid-round: the game frame's open round quits synchronously before 'gx' and 'se'.
+  await page.goto(origin + '/#/play/steady-hand');
+  await ready(page);
+  await page.frameLocator('#stage iframe').locator('#btnPlay').click();
+  await page.waitForFunction(() => document.querySelector('#stage iframe')?.contentWindow?.__game?.state?.screen === 'play');
+  await page.evaluate(() => new Promise(r => {
+    const w = document.querySelector('#stage iframe').contentWindow;
+    w.requestAnimationFrame(() => w.requestAnimationFrame(r));
+  }));
+  const midBefore = state.posts.length;
+  await page.goto(origin + '/seed.html');
+  await until(() => state.posts.slice(midBefore).some(p => JSON.parse(p.body).ev.some(ev => ev[0] === 'se')), 'mid-round unload send');
+  const midEv = batches(state).slice(midBefore).flatMap(b => b.ev);
+  const reIdx = midEv.findIndex(ev => ev[0] === 're' && ev[4] === 'steady-hand' && ev[5] === 'q' && ev[6] === 'L1');
+  const gxIdx = midEv.findIndex(ev => ev[0] === 'gx' && ev[3] === 'steady-hand');
+  const seIdx = midEv.findIndex(ev => ev[0] === 'se');
+  assert.ok(reIdx > 0 && gxIdx > reIdx && seIdx > gxIdx, 'mid-round quit precedes gx and se: ' + JSON.stringify(midEv));
+  assert.ok(midEv[gxIdx][4] >= midEv[reIdx][7] && midEv[gxIdx][6].reduce((a, b) => a + b, 0) > 0, 'engaged ms and frames drained into gx');
   for (const p of state.posts) assert.equal(p.headers.cookie, undefined, 'no cookie, neither while the page lives nor as it unloads');
   await checkBatches(page, batches(state));
 });
