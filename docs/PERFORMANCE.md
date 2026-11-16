@@ -1312,3 +1312,18 @@ move to the art kit. The engine and the level data are the rebuilt ones.
 
 The page limit is the measured size plus a few hundred bytes. The cache is
 rounded up to the next 1,000. The portal is unchanged.
+
+## Troll Level makeover
+
+World pictures move to the shared art kit: one baked backdrop per world, chunky
+tiles, and a crisper hero. Play, scoring and the round ids from 14 November
+(`w12-10`, never three digits in a row) stay. The page gets smaller because
+repeated drawing left the world files.
+
+| Measurement | After bytes | Previous limit | New limit |
+| --- | ---: | ---: | ---: |
+| Troll Level page | 245,107 | 253,500 | 245,500 |
+| Offline precache | 7,699,215 | 7,708,000 | 7,700,000 |
+
+The page limit is the measured size rounded up to the next 500 bytes. The cache
+is rounded up to the next 1,000. The portal is unchanged.

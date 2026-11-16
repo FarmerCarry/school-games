@@ -211,66 +211,10 @@
   /* ================================================================ drawing */
   if (Art) {
     var SHEET = '#f1e6ff', BLUSH = 'rgba(255,105,150,0.7)', GLOW = '#fff6a8', PUFF = ['#ffffff', '#f1e6ff', '#e2c8ff'];
-    var DARK_R = 150, WINDOWS = [128, 372, 210, 300, 316, 196, 330, 300, 432, 340, 520, 372];
+    var DARK_R = 150;
 
     Art.GROUND.haunt = { top: '#e9d2ff', drips: 1, mark: 'pebble' };
 
-    var blob = function (g, x, y, r) { g.moveTo(x + r, y); g.arc(x, y, r, 0, TAU); };
-    // A bare tree: a trunk from the bottom of the screen, branches ending in curls.
-    var tree = function (g, x, h, r) {
-      var y = E.H - h, k, a, bx, by, s;
-      g.lineWidth = 14; g.beginPath(); g.moveTo(x, E.H); g.quadraticCurveTo(x + 18, E.H - h * 0.5, x - 6, y); g.stroke();
-      g.lineWidth = 6; g.beginPath();
-      for (k = 0; k < 4; k++) {
-        s = k % 2 ? 1 : -1; by = y + 20 + k * h * 0.12; bx = x + 4 + s * (40 + r() * 30);
-        g.moveTo(x + 2, by + 30); g.quadraticCurveTo(x + s * 20, by, bx, by - 14);
-        for (a = 0; a < 7; a++) g.lineTo(bx + s * Math.cos(a * 0.9) * (12 - a * 1.5), by - 14 - Math.sin(a * 0.9) * (12 - a * 1.5));
-      }
-      g.stroke();
-    };
-    // A friendly haunted house: a big moon, a lopsided roofline with crooked
-    // windows, curly bare trees, white bats and cobwebs in the corners.
-    Art.SCENERY.haunt = function (g, pal, r) {
-      var i, k, x, y, s, mx = 860 + r() * 260;
-      g.fillStyle = '#ffffff'; g.globalAlpha = 0.14; g.beginPath(); blob(g, mx, 175, 135); g.fill();
-      g.globalAlpha = 0.18; g.beginPath(); blob(g, mx, 175, 98); g.fill();
-      g.fillStyle = '#fff4d8'; g.globalAlpha = 0.85; g.beginPath(); blob(g, mx, 175, 64); g.fill();
-      g.fillStyle = '#efd9b4'; g.globalAlpha = 0.6; g.beginPath(); blob(g, mx - 20, 160, 12); blob(g, mx + 18, 190, 9); blob(g, mx + 22, 150, 6); g.fill();
-      // the house: wings, a leaning tower and a chimney, all running down behind the floor
-      g.fillStyle = pal.bg2; g.globalAlpha = 1; g.beginPath();
-      g.moveTo(90, E.H); g.lineTo(96, 330); g.lineTo(70, 330); g.lineTo(190, 225); g.lineTo(300, 318); g.lineTo(282, 318);
-      g.lineTo(286, 250); g.lineTo(262, 250); g.lineTo(334, 120); g.lineTo(392, 248); g.lineTo(370, 248);
-      g.lineTo(372, 300); g.lineTo(470, 262); g.lineTo(474, 200); g.lineTo(500, 202); g.lineTo(498, 276);
-      g.lineTo(600, 318); g.lineTo(576, 320); g.lineTo(590, E.H); g.closePath(); g.fill();
-      // tall crooked windows: most are dark, two are lit
-      for (i = 0; i < WINDOWS.length; i += 2) {
-        x = WINDOWS[i]; y = WINDOWS[i + 1]; s = (i / 2 % 3 - 1) * 4;
-        g.fillStyle = i === 2 || i === 8 ? '#fff2b8' : pal.bg; g.globalAlpha = i === 2 || i === 8 ? 0.55 : 0.75;
-        g.beginPath(); g.moveTo(x + s, y); g.quadraticCurveTo(x + 13 + s, y - 22, x + 26 + s, y); g.lineTo(x + 26 - s, y + 64); g.lineTo(x - s, y + 64); g.closePath(); g.fill();
-      }
-      g.strokeStyle = '#b866ec'; g.globalAlpha = 0.5; g.lineCap = 'round'; g.lineJoin = 'round';
-      for (x = 700 + r() * 60; x < E.W + 40; x += 230 + r() * 120) tree(g, x, 260 + r() * 120, r);
-      tree(g, 30 + r() * 20, 300, r);
-      // bats
-      g.fillStyle = '#ffffff'; g.globalAlpha = 0.3; g.beginPath();
-      for (i = 0; i < 6; i++) {
-        x = 120 + i * 200 + r() * 100; y = 150 + r() * 170; s = 0.8 + r() * 0.6;
-        g.moveTo(x - 16 * s, y); g.quadraticCurveTo(x - 9 * s, y - 10 * s, x - 3 * s, y - 2 * s); g.lineTo(x, y - 6 * s); g.lineTo(x + 3 * s, y - 2 * s);
-        g.quadraticCurveTo(x + 9 * s, y - 10 * s, x + 16 * s, y); g.quadraticCurveTo(x + 8 * s, y - 3 * s, x, y + 4 * s); g.quadraticCurveTo(x - 8 * s, y - 3 * s, x - 16 * s, y);
-      }
-      g.fill();
-      // cobwebs in the two top corners of the room
-      g.strokeStyle = '#ffffff'; g.globalAlpha = 0.4; g.lineWidth = 1.5; g.beginPath();
-      for (i = 0; i < 2; i++) {
-        x = i ? E.W - T : T; s = i ? -1 : 1;
-        for (k = 0; k < 5; k++) { g.moveTo(x, 3 * T); g.lineTo(x + s * Math.cos(k * Math.PI / 8) * 96, 3 * T + Math.sin(k * Math.PI / 8) * 96); }
-        for (y = 30; y < 96; y += 26) {
-          g.moveTo(x + s * y, 3 * T);
-          for (k = 1; k < 5; k++) g.quadraticCurveTo(x + s * Math.cos((k - 0.5) * Math.PI / 8) * y * 0.8, 3 * T + Math.sin((k - 0.5) * Math.PI / 8) * y * 0.8, x + s * Math.cos(k * Math.PI / 8) * y, 3 * T + Math.sin(k * Math.PI / 8) * y);
-        }
-      }
-      g.stroke();
-    };
 
     // Sprites: every ghost pose, Bubo, the stones and the raft are painted once
     // into small canvases (2x, so they stay sharp) and blitted each frame. They

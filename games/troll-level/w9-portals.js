@@ -215,68 +215,6 @@
 
     Art.GROUND.tower = { top: '#cfe0ff', line: '#ffffff', mark: 'pebble' };
 
-    // A four-point sparkle (added to the current path).
-    var spark = function (g, x, y, s) {
-      g.moveTo(x, y - s); g.lineTo(x + s / 4, y - s / 4); g.lineTo(x + s, y); g.lineTo(x + s / 4, y + s / 4);
-      g.lineTo(x, y + s); g.lineTo(x - s / 4, y + s / 4); g.lineTo(x - s, y); g.lineTo(x - s / 4, y - s / 4); g.closePath();
-    };
-
-    var at = []; // x, y (and size) of each window and book, for their lines
-    // The wizard's tower: tall arched windows down to the floor, big thin spiral
-    // swirls, floating open books and round potions, and scattered sparkles.
-    Art.SCENERY.tower = function (g, pal, r) {
-      var i, k, x, y, s, a;
-      g.fillStyle = pal.bg2; g.beginPath();
-      for (i = 0; i < 4; i++) {
-        x = 70 + i * 320 + r() * 120; s = 96 + r() * 24; y = 150 + r() * 50;
-        g.moveTo(x, E.H); g.lineTo(x, y + s / 2); g.arc(x + s / 2, y + s / 2, s / 2, Math.PI, 0); g.lineTo(x + s, E.H); g.closePath();
-        at[i * 3] = x; at[i * 3 + 1] = y; at[i * 3 + 2] = s;
-      }
-      g.fill();
-      // the window panes
-      g.strokeStyle = pal.bg; g.lineWidth = 7; g.globalAlpha = 0.55; g.beginPath();
-      for (i = 0; i < 4; i++) {
-        x = at[i * 3]; y = at[i * 3 + 1]; s = at[i * 3 + 2];
-        g.moveTo(x + s / 2, y + 8); g.lineTo(x + s / 2, E.H); g.moveTo(x, y + s * 1.1); g.lineTo(x + s, y + s * 1.1);
-      }
-      g.stroke();
-      g.strokeStyle = '#ffffff'; g.lineWidth = 3; g.globalAlpha = 0.18; g.lineCap = 'round'; g.beginPath();
-      for (i = 0; i < 3; i++) {
-        x = 230 + i * 420 + r() * 100; y = 220 + r() * 160; s = 60 + r() * 30; a = r() * TAU;
-        g.moveTo(x, y);
-        for (k = 1; k <= 40; k++) g.lineTo(x + Math.cos(a + k * 0.32) * s * k / 40, y + Math.sin(a + k * 0.32) * s * k / 40);
-      }
-      g.stroke();
-      g.fillStyle = '#ffffff'; g.globalAlpha = 0.3; g.beginPath();
-      for (i = 0; i < 6; i++) {
-        x = 90 + i * 215 + r() * 100; y = 150 + r() * 250; s = 20 + r() * 8;
-        at[i * 3] = x; at[i * 3 + 1] = y; at[i * 3 + 2] = s;
-        if (i % 2) {
-          // an open book: two tall pages, a little lower at the spine
-          g.moveTo(x, y + s * 0.1); g.quadraticCurveTo(x - s * 0.45, y - s * 0.12, x - s, y); g.lineTo(x - s, y + s * 0.8);
-          g.quadraticCurveTo(x - s * 0.45, y + s * 0.68, x, y + s * 0.9); g.quadraticCurveTo(x + s * 0.45, y + s * 0.68, x + s, y + s * 0.8);
-          g.lineTo(x + s, y); g.quadraticCurveTo(x + s * 0.45, y - s * 0.12, x, y + s * 0.1); g.closePath();
-        } else {
-          // a round potion with a neck and a cork
-          g.moveTo(x + s * 0.7, y); g.arc(x, y, s * 0.7, 0, TAU);
-          g.rect(x - s * 0.2, y - s * 1.15, s * 0.4, s * 0.6); g.rect(x - s * 0.3, y - s * 1.4, s * 0.6, s * 0.3);
-        }
-      }
-      g.fill();
-      // the lines of writing on the books' pages
-      g.strokeStyle = pal.bg; g.lineWidth = 2; g.globalAlpha = 0.7; g.beginPath();
-      for (i = 1; i < 6; i += 2) {
-        x = at[i * 3]; y = at[i * 3 + 1]; s = at[i * 3 + 2];
-        for (k = 0; k < 3; k++) {
-          a = y + s * (0.22 + k * 0.17);
-          g.moveTo(x - s * 0.8, a); g.lineTo(x - s * 0.2, a + s * 0.06); g.moveTo(x + s * 0.2, a + s * 0.06); g.lineTo(x + s * 0.8, a);
-        }
-      }
-      g.stroke();
-      g.fillStyle = '#ffffff'; g.globalAlpha = 0.55; g.beginPath();
-      for (i = 0; i < 26; i++) spark(g, r() * E.W, 130 + r() * 380, 3 + r() * 5);
-      g.fill();
-    };
 
     // A portal's spinning middle: a dark disk with two bright arms spiralling
     // in, drawn once per colour (3x, so it stays sharp when stretched).
@@ -307,8 +245,14 @@
       k = Math.min(1, (t - q.at) * 6);
       k = q.open ? k + Math.sin(k * Math.PI) * 0.25 : 1 - k * 0.8;
       rx *= k; ry *= k;
-      ctx.globalAlpha = q.open ? 0.35 : 0.15; ctx.fillStyle = PCOL[c];
-      ctx.beginPath(); ctx.ellipse(cx, cy, rx + 7, ry + 7, 0, 0, TAU); ctx.fill();
+      var glow = root.Kit && root.Kit.art && root.Kit.art.quality.tier > 0 && root.Kit.art.glow(PCOL[c], 40);
+      if (glow && glow.canvas) {
+        ctx.globalAlpha = q.open ? 0.75 : 0.35;
+        ctx.drawImage(glow.canvas, cx - glow.w / 2, cy - glow.h / 2);
+      } else {
+        ctx.globalAlpha = q.open ? 0.35 : 0.15; ctx.fillStyle = PCOL[c];
+        ctx.beginPath(); ctx.ellipse(cx, cy, rx + 7, ry + 7, 0, 0, TAU); ctx.fill();
+      }
       ctx.globalAlpha = 1;
       if (!disks[c]) disks[c] = disk(c);
       ctx.save(); ctx.translate(cx, cy); ctx.scale(rx / SR, ry / SR); ctx.rotate(t * 4);
