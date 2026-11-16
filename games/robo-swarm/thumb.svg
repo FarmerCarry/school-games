@@ -53,5 +53,6 @@
     <circle cx="-6" cy="7" r="2.5" fill="#24304a"/><circle cx="10" cy="7" r="2.5" fill="#24304a"/>
     <circle cx="4" cy="-24" r="4" fill="#ffe14a"/>
   </g>
-  <text x="200" y="54" text-anchor="middle" font-family="Tahoma, sans-serif" font-size="42" font-weight="700" fill="#fff">G,HE 'D1H(H*'*</text>
+  <text x="200" y="58" text-anchor="middle" direction="rtl" font-family="Fredoka, 'Segoe UI', Tahoma, sans-serif" font-size="36" font-weight="700" fill="#1b1640" stroke="#1b1640" stroke-width="12" stroke-linejoin="round" paint-order="stroke">هجوم الروبوتات</text>
+  <text x="200" y="58" text-anchor="middle" direction="rtl" font-family="Fredoka, 'Segoe UI', Tahoma, sans-serif" font-size="36" font-weight="700" fill="#ffffff">هجوم الروبوتات</text>
 </svg>
