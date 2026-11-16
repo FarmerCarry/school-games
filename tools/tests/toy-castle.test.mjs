@@ -15,7 +15,12 @@ let browser, server;
 
 before(async () => {
   server = await startTestServer(root);
-  browser = await launchChromium({ args: ['--disable-gpu-vsync', '--disable-frame-rate-limit'] });
+  // Keep the normal frame clock. --disable-frame-rate-limit makes this page's real
+  // title-screen loop spend its animation frames in one burst, after which Chromium
+  // delivers no further frames. The idle-audio test below focuses the shop button
+  // with the live loop running, and Playwright waits on an animation frame to call
+  // the button stable — with no frames left, that wait runs out at 30s.
+  browser = await launchChromium();
 });
 after(async () => {
   await browser?.close();
