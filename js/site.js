@@ -693,10 +693,10 @@
   var frameAt = 0;        // when the current frame was made (performance.now())
   function routeHash() { return location.hash || '#/'; }
   function frameEl() { return $('#stage iframe'); }
-  // A paused game and its title/menu still own a session.
-  // Include the pending route so a launch cannot race an offline refresh check.
+  // A paused game, its title/menu, a pending launch, or active typing in search own the view.
   window.SGUpdateSafe = function () {
-    return renderedHash !== null && !current && !frameEl() && parseRoute().name !== 'play';
+    var a = document.activeElement;
+    return renderedHash !== null && !current && !frameEl() && parseRoute().name !== 'play' && !(a && a.id === 'q');
   };
   // The anonymous play statistics sender (js/telemetry.js, docs/TELEMETRY.md). It does
   // nothing unless the fast build gave it the school's statistics server; tm() skips a
@@ -1130,6 +1130,12 @@
       if (v) go('#/search/' + enc(v), onSearch);
       else if (onSearch) go('#/', true);
       else typing = false;
+    });
+    var qBlurTimer = 0;
+    q.addEventListener('focus', function () { clearTimeout(qBlurTimer); });
+    q.addEventListener('blur', function () {
+      clearTimeout(qBlurTimer);
+      qBlurTimer = setTimeout(function () { window.dispatchEvent(new Event('sg:sessionchange')); }, 300);
     });
     q.addEventListener('keydown', function (e) {
       if (e.key === 'Escape') { q.value = ''; q.blur(); if (parseRoute().name === 'search') go('#/', true); }

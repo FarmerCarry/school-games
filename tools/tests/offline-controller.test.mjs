@@ -38,7 +38,7 @@ function registration({ active = null, installing = null, update } = {}) {
 
 function controller(registrations, options = {}) {
   const status = { hidden: true, textContent: '', setAttribute(name, value) { this[name] = value; } };
-  const retry = events(), update = { hidden: true }, refresh = events(), timers = new Map(), timerHistory = [];
+  const retry = events(), timers = new Map(), timerHistory = [], session = new Map(Object.entries(options.session || {}));
   let calls = 0, nextTimer = 0, reloads = 0;
   const serviceWorker = {
     ...events(), controller: options.controlled === false ? null : {},
@@ -47,6 +47,10 @@ function controller(registrations, options = {}) {
       if (!result) throw new Error('unexpected registration');
       return result;
     }
+  };
+  const sessionStorage = options.sessionStorage === null ? null : {
+    getItem: key => session.has(key) ? session.get(key) : null,
+    setItem: (key, value) => { session.set(key, String(value)); }
   };
   class Channel {
     constructor() {
@@ -57,10 +61,11 @@ function controller(registrations, options = {}) {
       }) };
     }
   }
-  const window = { ...events(), SG_OFFLINE_BUILD: options.build !== false, SG_OFFLINE_VERSION: 'page-v1', gameOpen: false,
+  const window = { ...events(), SG_OFFLINE_BUILD: options.build !== false, SG_OFFLINE_VERSION: 'page-v1',
+    gameOpen: !!options.gameOpen, sessionStorage,
     SGUpdateSafe() { return !this.gameOpen; } };
   const document = { ...events(), readyState: 'complete', hidden: false,
-    getElementById: id => ({ offlineStatus: status, offlineRetry: retry, offlineUpdate: update, offlineRefresh: refresh })[id] };
+    getElementById: id => ({ offlineStatus: status, offlineRetry: retry })[id] || null };
   vm.runInNewContext(source, {
     window, location: { protocol: options.protocol || 'https:', reload() { reloads++; } }, navigator: { serviceWorker }, MessageChannel: Channel,
     document,
@@ -71,7 +76,7 @@ function controller(registrations, options = {}) {
     },
     clearTimeout: id => timers.delete(id)
   });
-  return { status, retry, update, refresh, window, document, serviceWorker, timers, timerHistory,
+  return { status, retry, window, document, serviceWorker, timers, timerHistory, session,
     get calls() { return calls; }, get reloads() { return reloads; } };
 }
 
@@ -191,11 +196,10 @@ test('focus after a failed first install keeps the failure instead of claiming p
   assert.equal(page.status['data-state'], 'ready');
 });
 
-test('first install and unchanged worker never offer an update or reload', async () => {
+test('first install and unchanged worker never reload', async () => {
   const installing = worker(), owner = registration({ installing });
   const page = controller([owner]);
   await flush();
-  assert.equal(page.update.hidden, true);
   owner.installing = null; owner.active = installing;
   installing.state = 'activated'; installing.emit('statechange');
   page.serviceWorker.emit('controllerchange');
@@ -203,49 +207,56 @@ test('first install and unchanged worker never offer an update or reload', async
   page.window.emit('focus');
   await flush();
   assert.equal(page.status['data-state'], 'ready');
-  assert.equal(page.update.hidden, true);
-  page.refresh.emit('click');
-  await flush();
   assert.equal(page.reloads, 0);
 });
 
-test('an already-upgraded worker on the first reply offers only an explicit tab-local refresh', async () => {
+test('an upgraded worker auto-reloads an idle portal tab while deferring a tab with an open game', async () => {
   const active = worker('activated'); active.version = 'page-v2';
   const owner = registration({ active });
-  const first = controller([owner]), second = controller([owner]);
+  const idle = controller([owner]), playing = controller([owner], { gameOpen: true });
   await flush();
-  assert.equal(first.update.hidden, false, 'page identity detects upgrade without controllerchange');
-  assert.equal(second.update.hidden, false);
-  assert.equal(first.reloads, 0);
-  first.refresh.emit('click');
+  assert.equal(idle.reloads, 1, 'idle portal tab reloads into the verified upgrade');
+  assert.equal(idle.session.get('sg:offline:reloaded'), 'page-v2');
+  assert.equal(playing.reloads, 0, 'tab with an open game keeps its live session');
+  playing.window.gameOpen = false; playing.window.emit('sg:sessionchange');
   await flush();
-  assert.equal(first.reloads, 1);
-  assert.equal(second.reloads, 0, 'another tab does not consent by sharing the same worker');
+  assert.equal(playing.reloads, 1, 'closing the game reloads into the verified upgrade');
   assert.deepEqual([active.requests.at(-1).repair, active.requests.at(-1).quick], [false, true]);
 });
 
-test('incomplete upgrades and failed installs retain the old working version without an update prompt', async () => {
+test('sessionStorage loop guard prevents repeated reloads if stale HTML is served again', async () => {
+  const active = worker('activated'); active.version = 'page-v2';
+  const owner = registration({ active });
+  const page = controller([owner], { session: { 'sg:offline:reloaded': 'page-v2' } });
+  await flush();
+  assert.equal(page.reloads, 0, 'already-attempted version does not loop');
+  active.version = 'page-v3';
+  page.window.emit('focus');
+  await flush();
+  assert.equal(page.reloads, 1, 'a newer version still reloads once');
+});
+
+test('incomplete upgrades and failed installs retain the old working version without reloading', async () => {
   const old = worker('activated'), next = worker(); next.version = 'page-v2';
   const owner = registration({ active: old, installing: next });
   const page = controller([owner]);
   await flush();
-  assert.equal(page.update.hidden, true);
+  assert.equal(page.reloads, 0);
   owner.installing = null; next.state = 'redundant'; next.emit('statechange');
   await flush();
   assert.equal(page.status['data-state'], 'ready');
-  assert.equal(page.update.hidden, true);
+  assert.equal(page.reloads, 0);
   next.ready = false; next.state = 'activated'; owner.active = next;
   page.serviceWorker.emit('controllerchange');
   await flush();
   assert.equal(page.status['data-state'], 'unavailable');
-  assert.equal(page.update.hidden, true);
+  assert.equal(page.reloads, 0);
   next.ready = true; page.window.emit('focus');
   await flush();
-  assert.equal(page.update.hidden, false);
-  assert.equal(page.reloads, 0);
+  assert.equal(page.reloads, 1);
 });
 
-test('a hard-reloaded uncontrolled page never offers the older cached version as an update', async () => {
+test('a hard-reloaded uncontrolled page never reloads to the older cached version', async () => {
   // Ctrl+F5 bypasses the worker: the page is the newest build from the network
   // while the previous complete version stays active and the new one installs.
   const old = worker('activated'), next = worker(); old.version = 'page-v0';
@@ -253,109 +264,99 @@ test('a hard-reloaded uncontrolled page never offers the older cached version as
   const page = controller([owner], { controlled: false });
   await flush();
   assert.equal(page.status['data-state'], 'ready');
-  assert.equal(page.update.hidden, true);
-  page.refresh.emit('click');
-  await flush();
   assert.equal(page.reloads, 0);
   owner.installing = null; next.state = 'redundant'; next.emit('statechange');
   page.window.emit('focus');
   await flush();
   assert.equal(page.status['data-state'], 'ready');
-  assert.equal(page.update.hidden, true, 'a failed install still leaves only the older cached version');
+  assert.equal(page.reloads, 0, 'a failed install still leaves only the older cached version');
   const newer = worker('activated'); newer.version = 'page-v2';
   owner.active = newer; page.serviceWorker.controller = newer;
   page.serviceWorker.emit('controllerchange');
   await flush();
-  assert.equal(page.update.hidden, false, 'a later complete version that claims the page is a real update');
-  assert.equal(page.reloads, 0);
+  assert.equal(page.reloads, 1, 'a later complete version that claims the page auto-reloads');
 });
 
-test('game sessions defer refresh and a launch during awaited verification prevents reload', async () => {
+test('game sessions defer auto-refresh and a launch during verification prevents reload', async () => {
   const active = worker('activated'); active.version = 'page-v2';
-  const page = controller([registration({ active })]);
+  const page = controller([registration({ active })], { gameOpen: true });
   await flush();
   for (const state of ['running', 'paused', 'menu', 'handoff']) {
     page.window.gameOpen = true; page.window.emit('sg:sessionchange');
-    assert.equal(page.update.hidden, true, state);
-    page.refresh.emit('click');
     await flush();
     assert.equal(page.reloads, 0, state);
   }
-  page.window.gameOpen = false; page.window.emit('sg:sessionchange');
-  assert.equal(page.update.hidden, false);
   active.hold = true;
-  page.refresh.emit('click');
-  assert.equal(page.refresh.disabled, true);
+  page.window.gameOpen = false; page.window.emit('sg:sessionchange');
   page.window.gameOpen = true; page.window.emit('sg:sessionchange');
   active.pending.shift()();
   await flush();
   assert.equal(page.reloads, 0, 'post-await session check protects the newly opened game');
+  active.hold = false;
   page.window.gameOpen = false; page.window.emit('sg:sessionchange');
-  assert.equal(page.update.hidden, false);
-  assert.equal(page.reloads, 0, 'closing a game still requires new explicit consent');
-  active.hold = false; page.refresh.emit('click');
   await flush();
-  assert.equal(page.reloads, 1);
+  assert.equal(page.reloads, 1, 'returning to the games list reloads into the verified upgrade');
 });
 
-test('refresh rejects incomplete, timed-out and stale-worker verification', async () => {
+test('auto-refresh rejects incomplete, timed-out and stale-worker verification', async () => {
   const active = worker('activated'); active.version = 'page-v2';
-  const owner = registration({ active }), page = controller([owner]);
+  const owner = registration({ active }), page = controller([owner], { gameOpen: true });
   await flush();
-  active.ready = false; page.refresh.emit('click');
+  active.ready = false; page.window.gameOpen = false; page.window.emit('sg:sessionchange');
   await flush();
   assert.equal(page.reloads, 0);
-  assert.equal(page.update.hidden, true);
-  active.ready = true; page.window.emit('focus'); await flush();
-  active.hold = true; page.refresh.emit('click');
+  assert.equal(page.status['data-state'], 'unavailable');
+  page.window.gameOpen = true; active.ready = true; page.window.emit('focus'); await flush();
+  active.hold = true; page.window.gameOpen = false; page.window.emit('sg:sessionchange');
   [...page.timers.values()].find(timer => timer.delay === 15000).callback();
   await flush();
   assert.equal(page.reloads, 0);
-  assert.equal(page.update.hidden, true);
-  active.hold = false; page.window.emit('focus'); await flush();
-  active.hold = true; page.refresh.emit('click');
-  const newer = worker('activated'); newer.version = 'page-v3'; owner.active = newer;
+  assert.equal(page.status['data-state'], 'unavailable');
+  page.window.gameOpen = true; active.hold = false; page.window.emit('focus'); await flush();
+  active.hold = true; page.window.gameOpen = false; page.window.emit('sg:sessionchange');
+  const newer = worker('activated'); newer.version = 'page-v3'; newer.hold = true; owner.active = newer;
   active.pending.at(-1)();
   await flush();
-  assert.equal(page.reloads, 0, 'a different active worker requires a new verification and consent');
-  assert.equal(page.update.hidden, false);
+  assert.equal(page.reloads, 0, 'a different active worker requires its own verification before reloading');
+  newer.pending.at(-1)();
+  await flush();
+  newer.pending.at(-1)();
+  await flush();
+  assert.equal(page.reloads, 1);
+  assert.equal(page.session.get('sg:offline:reloaded'), 'page-v3');
 });
 
-test('an initial status from a superseded worker cannot announce its stale update', async () => {
+test('an initial status from a superseded worker cannot reload into its stale update', async () => {
   const old = worker('activated'); old.hold = true; old.version = 'page-v2';
   const owner = registration({ active: old }), page = controller([owner]);
   await flush();
   const current = worker('activated'); current.ready = false; current.version = 'page-v3';
   owner.active = current; page.serviceWorker.emit('controllerchange');
   old.pending.shift()(); await flush();
-  assert.equal(page.update.hidden, true);
   assert.equal(page.status['data-state'], 'unavailable');
   assert.equal(page.reloads, 0);
 });
 
 test('losing the active worker clears a previously verified update until replacement is ready', async () => {
   const active = worker('activated'); active.version = 'page-v2';
-  const owner = registration({ active }), page = controller([owner]);
+  const owner = registration({ active }), page = controller([owner], { gameOpen: true });
   await flush();
-  assert.equal(page.update.hidden, false);
   const next = worker(); next.version = 'page-v3';
   owner.active = null; owner.installing = next;
   owner.emit('updatefound'); page.window.emit('focus');
   await flush();
-  assert.equal(page.update.hidden, true, 'an installing worker is not a completed update');
   assert.equal(page.status['data-state'], 'preparing');
   owner.installing = null; next.state = 'redundant'; next.emit('statechange');
   page.retry.emit('click'); await flush();
-  assert.equal(page.update.hidden, true, 'failed re-registration cannot retain old availability');
-  assert.equal(page.reloads, 0);
+  page.window.gameOpen = false; page.window.emit('sg:sessionchange'); await flush();
+  assert.equal(page.reloads, 0, 'failed re-registration cannot retain old availability');
 });
 
-test('source and downloaded-folder pages never register or offer updates', async () => {
+test('source and downloaded-folder pages never register or reload', async () => {
   for (const options of [{ build: false }, { protocol: 'file:' }]) {
     const page = controller([], options);
     await flush();
     assert.equal(page.calls, 0);
-    assert.equal(page.update.hidden, true);
     assert.equal(page.reloads, 0);
     if (options.protocol) assert.equal(page.status['data-state'], 'local');
   }

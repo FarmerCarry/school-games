@@ -56,36 +56,42 @@ async function mockCompletedUpdate(page) {
   });
 }
 
-test('verified update waits through real game menus, play and pause', async t => {
+test('verified update waits through real game menus, play, pause and search focus, then auto-reloads on return', async t => {
   const page = await pageFor(t);
   await mockCompletedUpdate(page);
   await page.clock.install();
   const frame = await openGame(page);
+  await page.evaluate(() => { window.portalLiveSentinel = 'same-portal-doc'; });
   await frame.evaluate(() => { window.updateProgress = 'same-live-game'; });
   assert.equal(await page.evaluate(() => SGUpdateSafe()), false, 'title/menu still owns the iframe session');
-  assert.equal(await page.locator('#offlineUpdate').isHidden(), true);
+  assert.equal(await page.locator('#offlineUpdate').count(), 0, 'manual update banner is gone');
   await clickControl(frame, '#btnPlay');
   await frame.waitForFunction(() => !__game.state().demo && ['countdown', 'play', 'goal'].includes(__game.state().scene));
-  assert.equal(await page.locator('#offlineUpdate').isHidden(), true);
+  assert.equal(await page.evaluate(() => window.portalLiveSentinel), 'same-portal-doc');
   await frame.locator('#pauseBtn').click();
   await frame.waitForFunction(() => __game.state().paused);
   assert.equal(await page.evaluate(() => SGUpdateSafe()), false, 'paused match is not a safe refresh');
-  assert.equal(await page.locator('#offlineUpdate').isHidden(), true);
   assert.equal(await frame.evaluate(() => window.updateProgress), 'same-live-game');
-  await page.locator('#backGames').click();
-  await page.locator('#offlineUpdate').waitFor({ state: 'visible' });
+  await Promise.all([
+    page.waitForEvent('load'),
+    page.locator('#backGames').click()
+  ]);
+  assert.equal(await page.evaluate(() => window.portalLiveSentinel), undefined, 'closing the game auto-reloads into the verified build');
+  assert.equal(await page.evaluate(() => sessionStorage.getItem('sg:offline:reloaded')), 'completed-next-build');
   assert.equal(await page.evaluate(() => SGUpdateSafe()), true);
-  assert.equal(await page.locator('#stage iframe').count(), 0);
-  assert.equal(await page.locator('#offlineRefresh').innerText(), 'حدّث الصفحة الآن');
+  await page.locator('#q').focus();
+  assert.equal(await page.evaluate(() => SGUpdateSafe()), false, 'focused search box defers auto-refresh while typing');
+  await page.locator('#q').blur();
+  assert.equal(await page.evaluate(() => SGUpdateSafe()), true);
 });
 
 test('refresh verification cannot discard a game launched while the status reply is pending', async t => {
   const page = await pageFor(t);
   await mockCompletedUpdate(page);
-  await page.goto(origin);
-  await page.locator('#offlineUpdate').waitFor({ state: 'visible' });
+  const frame0 = await openGame(page);
+  assert.ok(frame0);
   await page.evaluate(() => { window.offlineUpdateTest.hold = true; window.refreshRaceSentinel = 'same-document'; });
-  await page.locator('#offlineRefresh').click();
+  await page.locator('#backGames').click();
   await page.waitForFunction(() => offlineUpdateTest.pending.length > 0);
   assert.equal(await page.evaluate(() => {
     location.hash = '#/play/air-hockey';
@@ -95,13 +101,15 @@ test('refresh verification cannot discard a game launched while the status reply
   const frame = page.frames().find(frame => frame.url().includes('/games/air-hockey/'));
   await frame.evaluate(() => { window.updateProgress = 'preserved-after-await'; });
   await page.evaluate(() => offlineUpdateTest.pending.splice(0).forEach(reply => reply()));
-  await page.waitForFunction(() => !document.getElementById('offlineRefresh').disabled);
+  await page.waitForTimeout(100);
   assert.equal(await page.evaluate(() => refreshRaceSentinel), 'same-document');
   assert.equal(await frame.evaluate(() => window.updateProgress), 'preserved-after-await');
-  assert.equal(await page.locator('#offlineUpdate').isHidden(), true);
-  await page.locator('#backGames').click();
-  await page.locator('#offlineUpdate').waitFor({ state: 'visible' });
-  assert.equal(await page.evaluate(() => refreshRaceSentinel), 'same-document', 'safe close still requires explicit fresh consent');
+  await page.evaluate(() => { window.offlineUpdateTest.hold = false; });
+  await Promise.all([
+    page.waitForEvent('load'),
+    page.locator('#backGames').click()
+  ]);
+  assert.equal(await page.evaluate(() => window.refreshRaceSentinel), undefined, 'safe close later reloads cleanly');
 });
 
 test('personal games appear first and quick filters select matching games', async t => {
