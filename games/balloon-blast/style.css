@@ -1,0 +1,73 @@
+#ui {
+  position: fixed; left: 0; top: 0; width: 1280px; height: 720px;
+  transform-origin: 0 0; pointer-events: none; z-index: 5; direction: rtl;
+  font-family: var(--sg-font);
+}
+#ui .scr { position: absolute; inset: 0; pointer-events: none; }
+#ui .scr[hidden], #ui [hidden] { display: none !important; }
+button { font-family: var(--sg-font); font-weight: 700; cursor: pointer; }
+
+.panel {
+  pointer-events: auto; background: rgba(255, 255, 255, 0.92);
+  border: 4px solid #16324f; border-radius: 28px;
+  box-shadow: 0 10px 0 rgba(22, 50, 79, 0.25);
+  color: #16324f;
+}
+h1, h2, p { margin: 0; }
+h1 { font-size: 42px; line-height: 1.05; }
+h2 { font-size: 36px; }
+
+#scrTitle .brand {
+  position: absolute; top: 18px; right: 28px; width: 250px; text-align: right; padding: 16px 18px;
+}
+#scrTitle .brand h1 { color: #0b3a66; text-shadow: 0 3px 0 #fff; }
+#scrTitle .brand p { margin-top: 6px; font-size: 18px; }
+.menu { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
+.go, .alt {
+  border: none; border-radius: 18px; color: #fff; padding: 10px 16px; text-align: right;
+  box-shadow: 0 5px 0 rgba(0, 0, 0, 0.25);
+}
+.go { background: linear-gradient(#46e38e, #14a85a); font-size: 32px; }
+.alt { background: linear-gradient(#4f9bff, #2158c8); font-size: 22px; }
+.alt.gold { background: linear-gradient(#ffd23f, #f0a202); color: #4a3200; }
+.go small, .alt small { display: block; font-size: 14px; font-weight: 500; opacity: 0.95; }
+.go:active, .alt:active { transform: translateY(3px); box-shadow: 0 2px 0 rgba(0, 0, 0, 0.25); }
+
+#scrTitle .howto {
+  position: absolute; top: 110px; left: 28px; width: 250px; padding: 14px 16px; text-align: right;
+}
+#scrTitle .howto h2 { font-size: 22px; margin-bottom: 8px; }
+.krow { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 16px; margin: 6px 0; }
+.prog { margin-top: 10px; font-size: 16px; }
+.crits { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.crits button {
+  width: 42px; height: 42px; border-radius: 50%; border: 3px solid #16324f; background: #e7f6ff; font-size: 20px;
+}
+.crits button.on { background: #b6ff9a; }
+.crits button:disabled { opacity: 0.35; }
+
+#scrDuo, #scrAdv, #scrPause, #scrResult { pointer-events: auto; background: rgba(8, 24, 48, 0.45); }
+.sheet {
+  pointer-events: auto; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: 640px; max-height: 640px; padding: 22px; text-align: center; overflow: auto;
+}
+.row { display: flex; gap: 12px; justify-content: center; margin-top: 16px; flex-wrap: wrap; }
+.worlds { display: flex; gap: 8px; justify-content: center; margin: 10px 0; }
+.worlds button, .stages button {
+  border: 3px solid #16324f; border-radius: 14px; background: #fff; color: #16324f; padding: 8px 10px; font-size: 16px;
+}
+.stages { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin-top: 8px; }
+.stages button { min-height: 64px; }
+.stages button small { display: block; color: #e0a000; }
+.chk { font-size: 18px; margin-top: 8px; }
+
+#pauseBtn {
+  pointer-events: auto; position: absolute; top: 16px; left: 16px; z-index: 6;
+  width: 64px; height: 64px; border: none; border-radius: 18px;
+  background: #16324f; color: #fff; font-size: 28px;
+  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.3);
+}
+.banner { font-size: 48px; margin: 8px 0; }
+.banner.lose { color: #c2414a; }
+.stars { font-size: 36px; letter-spacing: 4px; }
+.sub { font-size: 20px; margin-top: 6px; }

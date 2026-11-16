@@ -28,7 +28,7 @@ Only `js/telemetry.js` sends, and only when the fast build is given the server's
 the address, the offline ZIP run from a folder and a browser with Global Privacy Control send
 nothing. Details, the exact fields and how to turn it off: [`docs/TELEMETRY.md`](docs/TELEMETRY.md).
 
-## The games (51)
+## The games (52)
 
 | Game | English name | Players | Type |
 |---|---|---|---|
@@ -56,6 +56,7 @@ nothing. Details, the exact fields and how to turn it off: [`docs/TELEMETRY.md`]
 | سباق المكاتب | Desk Karts (top-down school desk micro-kart racing) | 1-2 | سباقات، لاعبان، أركيد |
 | النار والجليد | Fire & Ice | 1-2 | لاعبان، ألغاز |
 | هجوم الروبوتات | Robo Swarm | 1-2 | تصويب، تحدي الروبوتات، لاعبان |
+| معركة البالونات | Balloon Blast | 1-2 | تحدي الروبوتات، لاعبان |
 | دبابات الألوان | Paint Tanks | 1-3 | لاعبان، تحدي الروبوتات |
 | مصارعة السومو | Sumo Bonk | 1-2 | لاعبان، رياضة |
 | هوكي الهواء | Air Hockey | 1-2 | لاعبان، رياضة |
@@ -85,6 +86,8 @@ nothing. Details, the exact fields and how to turn it off: [`docs/TELEMETRY.md`]
 | ساحة الثعابين | Snake Arena | 1 | تحدي الروبوتات، أركيد |
 
 The original arcade games save best scores and unlocks in the browser, and have a title screen, P/Esc pause and a 🔊 mute button. The two board games use a compact board with local two-player and computer modes.
+
+**معركة البالونات (Balloon Blast)** is a water-balloon maze. Drop a balloon, step away, and the splash pops crates and traps a rival in a bubble. Play against three computers, with a friend on the same keyboard, or through three adventure worlds. Stars and coins open more critters. Rounds are reported with the site's anonymous play statistics, the same way as every other game.
 
 **هجوم الروبوتات (Robo Swarm)** is a recess-sized survivors game. You only move: the foam blaster fires by itself at the nearest wind-up robot. Popped robots drop bolts, and every level pauses for a choice of three upgrade cards (up to a rubber-duck tornado or a paint cannon). Survive four minutes to pop the King Robot, or pick a quick run when recess is short. Two players share one keyboard. Coins buy a heart, a little speed, or a card reroll, and beating a map opens the next arena. Rounds are reported with the site's anonymous play statistics, the same way as every other game.
 

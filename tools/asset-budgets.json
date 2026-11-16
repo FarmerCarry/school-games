@@ -1,8 +1,9 @@
 {
   "format": 1,
-  "portalBytes": 477000,
+  "portalBytes": 481000,
   "gameHtmlBytes": {
     "air-hockey": 115000,
+    "balloon-blast": 85500,
     "beat-dash": 118000,
     "blob-battle": 105500,
     "block-burst": 114000,
@@ -61,5 +62,5 @@
     "fredoka-latin-500-normal.woff2": 18500,
     "fredoka-latin-700-normal.woff2": 18000
   },
-  "precacheBytes": 7586000
+  "precacheBytes": 7676000
 }

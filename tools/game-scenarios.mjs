@@ -298,7 +298,10 @@ export const scenarios = {
   // Nothing drops until the child clicks or presses Space; Restart clears the jar.
   'juicy-drop': defaults(['#btnPlay'], `${g}.state.screen === 'play'`, `[${g}.state.time,${g}.state.cloudX,${g}.state.drops,${g}.state.fruits]`, hold('Space'), '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.drops === 0 && ${g}.state.score === 0`),
   // Robo Swarm: the foam blaster fires by itself. Only the child's keys move the hero.
-  'robo-swarm': defaults(['#btnPlay'], `${g}.state === 'play' && !${g}.paused`, `[${g}.px,${g}.t]`, hold('ArrowRight'), '#btnPause', `${g}.state === 'pause'`, '#btnRestart', `${g}.t < 0.5`)
+  'robo-swarm': defaults(['#btnPlay'], `${g}.state === 'play' && !${g}.paused`, `[${g}.px,${g}.t]`, hold('ArrowRight'), '#btnPause', `${g}.state === 'pause'`, '#btnRestart', `${g}.t < 0.5`),
+  // Balloon Blast: critters walk only when the child holds a direction. The splash at the
+  // start of a round is a freeze, so the scenario waits until the round is actually moving.
+  'balloon-blast': defaults(['#play1'], `${g}.screen === 'play' && !${g}.paused`, `${g}.info().t + ',' + ${g}.info().px + ',' + ${g}.info().py`, hold('ArrowRight'), '#pauseBtn', `${g}.paused`, '#bRestart', `${g}.world.freeze > 0 && ${g}.world.round === 1 && ${g}.scores[0] === 0`, { ready: `${g}.world && ${g}.world.phase === 'play' && ${g}.world.freeze <= 0` })
 };
 for (const slug of ['connect-four','tic-tac-toe']) scenarios[slug] = {
   start: [click('#localButton')], active: `document.getElementById('boardApp').dataset.mode === 'local' && document.getElementById('gameBoard').dataset.winner === '0' && document.getElementById('gameBoard').dataset.draw !== 'true'`,
@@ -338,7 +341,8 @@ const inputSnapshots = {
   'toy-castle': `${g}.state.p1Spawned`,
   'magic-crayon': `${g}.state.rolling`,
   'juicy-drop': `${g}.state.drops`,
-  'robo-swarm': `${g}.px`
+  'robo-swarm': `${g}.px`,
+  'balloon-blast': `${g}.info().px`
 };
 for (const [slug, expr] of Object.entries(inputSnapshots)) scenarios[slug].inputSnapshot = expr;
 
@@ -392,7 +396,8 @@ const inputSeen = {
   'magic-crayon': `${g}.state.rolling === true`,
   'juicy-drop': `${g}.state.drops > sgInput.before`,
   // Bolts and robots move by themselves. Only holding right walks the hero that way.
-  'robo-swarm': `${g}.px > sgInput.before + 8`
+  'robo-swarm': `${g}.px > sgInput.before + 8`,
+  'balloon-blast': `${g}.info().px > sgInput.before + 4`
 };
 for (const [slug, expr] of Object.entries(inputSeen)) scenarios[slug].inputSeen = expr;
 
@@ -413,7 +418,7 @@ const heldKeys = {
   'keyboard-obby': 'KeyF',
   'splat-catapult': 'ArrowUp', 'recess-kitchen': 'ArrowRight', 'desk-karts': 'ArrowUp',
   'toy-castle': 'Digit1', 'magic-crayon': 'Space', 'juicy-drop': 'Space',
-  'robo-swarm': 'ArrowRight'
+  'robo-swarm': 'ArrowRight', 'balloon-blast': 'ArrowRight'
 };
 for (const [slug, key] of Object.entries(heldKeys)) scenarios[slug].heldKey = key;
 
