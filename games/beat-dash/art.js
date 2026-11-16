@@ -169,40 +169,60 @@
     }
   };
 
+  function ink() { return (typeof Kit !== 'undefined' && Kit.art && Kit.art.pal) ? Kit.art.pal.ink : INK; }
+  function lift(hex, amt) { return (typeof Kit !== 'undefined' && Kit.art && Kit.art.shade) ? Kit.art.shade(hex, amt) : hex; }
+
   // The player cube. size in px, centred at the current origin.
   BD.drawCube = function (ctx, size, face, c1, c2, blink) {
-    var h = size / 2;
-    ctx.fillStyle = c1;
-    ctx.fillRect(-h, -h, size, size);
+    var h = size / 2, r = Math.max(4, size * 0.16), edge = ink();
+    rr(ctx, -h, -h, size, size, r);
+    var g = ctx.createLinearGradient(-h, -h, -h, h);
+    g.addColorStop(0, lift(c1, 0.34));
+    g.addColorStop(0.55, c1);
+    g.addColorStop(1, lift(c1, -0.2));
+    ctx.fillStyle = g;
+    ctx.fill();
+    ctx.lineWidth = Math.max(2.5, size * 0.075);
+    ctx.strokeStyle = edge;
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+    var ih = size * 0.58, io = ih / 2;
+    rr(ctx, -io, -io * 0.92, ih, ih, r * 0.55);
     ctx.fillStyle = c2;
-    ctx.globalAlpha = 0.9;
-    ctx.fillRect(-h * 0.62, -h * 0.62, size * 0.62, size * 0.62);
+    ctx.globalAlpha = 0.94;
+    ctx.fill();
     ctx.globalAlpha = 1;
-    ctx.fillStyle = 'rgba(255,255,255,0.28)';
-    ctx.fillRect(-h, -h, size, size * 0.12);
-    ctx.lineWidth = Math.max(2, size * 0.07);
-    ctx.strokeStyle = INK;
-    ctx.strokeRect(-h + ctx.lineWidth / 2, -h + ctx.lineWidth / 2, size - ctx.lineWidth, size - ctx.lineWidth);
+    ctx.lineWidth = Math.max(2, size * 0.045);
+    ctx.strokeStyle = edge;
+    ctx.stroke();
+    if (typeof Kit !== 'undefined' && Kit.art && Kit.art.gloss) Kit.art.gloss(ctx, -h + size * 0.08, -h + size * 0.06, size * 0.84, size * 0.42);
     ctx.save();
     ctx.scale(size, size);
     BD.drawFace(ctx, face, blink);
     ctx.restore();
   };
 
-  // Rocket body (pointing right) with the cube riding in it.
-  BD.drawRocket = function (ctx, size, face, c1, c2, t) {
-    var s = size;
-    ctx.save();
-    // flame
-    var fl = 0.35 + 0.15 * Math.sin(t * 40);
+  // Soft flame, drawn in the rocket's local space. bodyOnly rockets skip it so the body can be cached.
+  BD.drawFlame = function (ctx, size, t) {
+    var s = size, fl = 0.35 + 0.15 * Math.sin((t || 0) * 40);
     ctx.fillStyle = '#ffb000';
     ctx.beginPath(); ctx.moveTo(-0.62 * s, -0.16 * s); ctx.lineTo((-0.62 - fl) * s, 0); ctx.lineTo(-0.62 * s, 0.16 * s); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#fff4a0';
+    ctx.fillStyle = '#fff6c4';
     ctx.beginPath(); ctx.moveTo(-0.62 * s, -0.08 * s); ctx.lineTo((-0.62 - fl * 0.55) * s, 0); ctx.lineTo(-0.62 * s, 0.08 * s); ctx.closePath(); ctx.fill();
+  };
+
+  // Rocket body (pointing right) with the cube riding in it.
+  // bodyOnly skips the flame so a cached body can sit behind a live flame.
+  BD.drawRocket = function (ctx, size, face, c1, c2, t, bodyOnly) {
+    var s = size;
+    ctx.save();
+    if (!bodyOnly) BD.drawFlame(ctx, s, t);
     // mini cube in the cockpit
     ctx.save(); ctx.translate(-0.08 * s, -0.3 * s); BD.drawCube(ctx, s * 0.5, face, c1, c2, 0); ctx.restore();
     // body
-    ctx.fillStyle = c1; ctx.strokeStyle = INK; ctx.lineWidth = Math.max(2, s * 0.07);
+    var body = ctx.createLinearGradient(0, -0.22 * s, 0, 0.26 * s);
+    body.addColorStop(0, lift(c1, 0.3)); body.addColorStop(1, lift(c1, -0.15));
+    ctx.fillStyle = body; ctx.strokeStyle = ink(); ctx.lineWidth = Math.max(2, s * 0.07); ctx.lineJoin = 'round';
     ctx.beginPath();
     ctx.moveTo(-0.62 * s, -0.22 * s);
     ctx.lineTo(0.3 * s, -0.22 * s);
@@ -215,8 +235,7 @@
     // fins
     ctx.fillStyle = c2;
     ctx.beginPath(); ctx.moveTo(-0.62 * s, 0.26 * s); ctx.lineTo(-0.36 * s, 0.26 * s); ctx.lineTo(-0.66 * s, 0.5 * s); ctx.closePath(); ctx.fill(); ctx.stroke();
-    ctx.fillStyle = 'rgba(255,255,255,0.35)';
-    ctx.fillRect(-0.5 * s, -0.18 * s, 0.7 * s, 0.06 * s);
+    if (typeof Kit !== 'undefined' && Kit.art && Kit.art.gloss) Kit.art.gloss(ctx, -0.5 * s, -0.2 * s, 0.9 * s, 0.16 * s);
     ctx.restore();
   };
 

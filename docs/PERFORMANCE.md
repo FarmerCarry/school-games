@@ -1296,3 +1296,19 @@ those two pages.
 
 Page limits are the measured size rounded up to the next 500 bytes. The cache is
 rounded up to the next 1,000. The art-kit limit sits under the 14,500 byte cap.
+
+## Beat Dash makeover, reconciled with the 14 November rebuild
+
+The 1 November drawing pass (neon cartoon cube, baked parallax, candy tiles
+through `Kit.art`) is applied on top of the 14 November rebuild. That rebuild
+is what makes the first level finishable for young children: the long run-up,
+ground jumps, and the per-PC difficulty (`Kit.dda`) stay. Only the pictures
+move to the art kit. The engine and the level data are the rebuilt ones.
+
+| Measurement | After bytes | Previous limit | New limit |
+| --- | ---: | ---: | ---: |
+| Beat Dash page | 123,973 | 118,000 | 124,500 |
+| Offline precache | 7,707,428 | 7,701,000 | 7,708,000 |
+
+The page limit is the measured size plus a few hundred bytes. The cache is
+rounded up to the next 1,000. The portal is unchanged.
