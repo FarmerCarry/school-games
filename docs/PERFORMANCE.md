@@ -1233,3 +1233,24 @@ Every limit is again the measured size rounded up (the games to the next 500 byt
 and the cache to the next 1,000). Measure frame rates on the school's weakest PC with
 `npm run perf -- --native-gpu --headed --seconds 30 splat-catapult recess-kitchen desk-karts
 toy-castle magic-crayon juicy-drop`.
+
+## Robo Swarm, 16 November 2026
+
+هجوم الروبوتات is a survivors-style auto-shooter for one or two players on one
+keyboard, brought forward from the older pull request onto the current site.
+The world is a pooled simulation drawn from baked sprites. The arena bitmap is
+blitted once per frame, and the moving layer is drawn into a 640×360 buffer and
+scaled up. Rounds are reported through `Kit.stats`, like every other game.
+
+Measured with the Linux minified build as CI builds it (with the statistics
+address), on top of the six new games.
+
+| Measurement | Before bytes | After bytes | Before limit | New limit |
+| --- | ---: | ---: | ---: | ---: |
+| Robo Swarm page | — | 96,380 | — | 96,500 |
+| Portal | 472,486 | 476,559 | 473,000 | 477,000 |
+| Offline precache, 63 → 64 files | 7,485,015 | 7,585,468 | 7,489,000 | 7,586,000 |
+
+The game limit is the measured size rounded up to the next 500 bytes. The portal
+and the cache are rounded up to the next 1,000. The portal grew by the catalog
+entry and the inlined thumbnail; the cache grew by that plus the new page.

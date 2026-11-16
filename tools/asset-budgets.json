@@ -1,6 +1,6 @@
 {
   "format": 1,
-  "portalBytes": 473000,
+  "portalBytes": 477000,
   "gameHtmlBytes": {
     "air-hockey": 115000,
     "beat-dash": 118000,
@@ -35,6 +35,7 @@
     "rail-rush": 142000,
     "recess-kitchen": 104500,
     "road-hopper": 116500,
+    "robo-swarm": 96500,
     "seek-zoom": 134500,
     "shortcut-factory": 126000,
     "skybound-golf": 117500,
@@ -60,5 +61,5 @@
     "fredoka-latin-500-normal.woff2": 18500,
     "fredoka-latin-700-normal.woff2": 18000
   },
-  "precacheBytes": 7489000
+  "precacheBytes": 7586000
 }

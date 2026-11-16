@@ -28,7 +28,7 @@ Only `js/telemetry.js` sends, and only when the fast build is given the server's
 the address, the offline ZIP run from a folder and a browser with Global Privacy Control send
 nothing. Details, the exact fields and how to turn it off: [`docs/TELEMETRY.md`](docs/TELEMETRY.md).
 
-## The games (50)
+## The games (51)
 
 | Game | English name | Players | Type |
 |---|---|---|---|
@@ -55,6 +55,7 @@ nothing. Details, the exact fields and how to turn it off: [`docs/TELEMETRY.md`]
 | ملك الانزلاق | Drift King | 1 | سباقات |
 | سباق المكاتب | Desk Karts (top-down school desk micro-kart racing) | 1-2 | سباقات، لاعبان، أركيد |
 | النار والجليد | Fire & Ice | 1-2 | لاعبان، ألغاز |
+| هجوم الروبوتات | Robo Swarm | 1-2 | تصويب، تحدي الروبوتات، لاعبان |
 | دبابات الألوان | Paint Tanks | 1-3 | لاعبان، تحدي الروبوتات |
 | مصارعة السومو | Sumo Bonk | 1-2 | لاعبان، رياضة |
 | هوكي الهواء | Air Hockey | 1-2 | لاعبان، رياضة |
@@ -84,6 +85,8 @@ nothing. Details, the exact fields and how to turn it off: [`docs/TELEMETRY.md`]
 | ساحة الثعابين | Snake Arena | 1 | تحدي الروبوتات، أركيد |
 
 The original arcade games save best scores and unlocks in the browser, and have a title screen, P/Esc pause and a 🔊 mute button. The two board games use a compact board with local two-player and computer modes.
+
+**هجوم الروبوتات (Robo Swarm)** is a recess-sized survivors game. You only move: the foam blaster fires by itself at the nearest wind-up robot. Popped robots drop bolts, and every level pauses for a choice of three upgrade cards (up to a rubber-duck tornado or a paint cannon). Survive four minutes to pop the King Robot, or pick a quick run when recess is short. Two players share one keyboard. Coins buy a heart, a little speed, or a card reroll, and beating a map opens the next arena. Rounds are reported with the site's anonymous play statistics, the same way as every other game.
 
 **فقاعات بوب (Bubble Bop)** is the «ابدأ من هنا» starter game for a 6-year-old who has never used a mouse or keyboard. It is a real arcade game with no words to read, no way to lose and no timer in its levels. Bop, a round glowing friend, floats with the mouse pointer. Eleven worlds teach one input each through play. The first five: touch bubbles with Bop to pop them (no click needed), click on or near balloons, press the long Space bar so a frog catches fireflies, move a basket under falling fruit with ← → (or A/D), and a party world that mixes these four. The next six: drag baby turtles to the pool of their colour, double-click sleeping clams to find pearls, press and hold the button (or Space) to blow a bubble until it fills a ring, steer a submarine to starfish with all four arrows (or WASD), press the letter a balloon carries, and a grand party world that mixes these five. The letter world draws an on-screen keyboard like the school's own (Latin letter top-left, Arabic letter bottom-right, F and J bumps); keys are found by their place, so either input language works, and the key to press always glows. It starts with F and J, then the home row and the rows above and below. Each world has three short levels (one to three stars) and a 60-second party round with combos, gold targets and a best score; the map shows worlds 1–5 and 6–11 on two pages turned with big arrows. Hit areas are bigger than the pictures, targets drift towards Bop, mashing and stray keys never cost anything, and an on-screen mouse, Space bar, arrow keys and keyboard light up with the real ones. A wordless hand shows the move after a few idle seconds and repeats while the child waits. Difficulty follows the child (Kit.dda): a 6–7-year-old starts with huge, slow targets, a generous double-click gap and hold window and turtles that can also be carried with two clicks, a 10–11-year-old with a brisk challenge, and each world adapts to how the last level went. Stars (up to 99) unlock colours and hats for Bop. Two optional picture cards show how to hold the mouse and where the keys are. P or Esc pauses. Progress stays in this browser, and saves from the five-world version keep all their stars.
 

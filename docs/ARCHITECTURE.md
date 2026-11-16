@@ -201,9 +201,9 @@ ranges. The full contract is [`TELEMETRY.md`](TELEMETRY.md).
 
 | Reports | Games |
 |---|---|
-| rounds, outcome and score | all 50 (connect-four and tic-tac-toe through `shared/board-game.js`); no score: block-world, critter-mart, pizza-clicker, tank-splat, the board games and two-player rounds |
-| hits and misses | bubble-bop, chaos-island, desk-karts, dino-3d, egg-rush, juicy-drop, key-runner, keyboard-obby, lucky-lake, magic-crayon, math-gates, recess-kitchen, road-hopper, seek-zoom, shortcut-factory, splat-catapult, steady-hand, toy-castle, typing-test, word-garden |
-| reaction times (`Kit.track.cue` / `react`) | bubble-bop, chaos-island, dino-3d, key-runner, keyboard-obby, lucky-lake, road-hopper, shortcut-factory, typing-test, word-garden |
+| rounds, outcome and score | all 51 (connect-four and tic-tac-toe through `shared/board-game.js`); no score: block-world, critter-mart, pizza-clicker, tank-splat, the board games and two-player rounds |
+| hits and misses | bubble-bop, chaos-island, desk-karts, dino-3d, egg-rush, juicy-drop, key-runner, keyboard-obby, lucky-lake, magic-crayon, math-gates, recess-kitchen, road-hopper, robo-swarm, seek-zoom, shortcut-factory, splat-catapult, steady-hand, toy-castle, typing-test, word-garden |
+| reaction times (`Kit.track.cue` / `react`) | bubble-bop, chaos-island, dino-3d, key-runner, keyboard-obby, lucky-lake, road-hopper, robo-swarm, shortcut-factory, typing-test, word-garden |
 | difficulty tier and level | every game that uses `Kit.dda` (reported by Kit at each read) |
 | tutorial start and done | the games with a first-time coach |
 
