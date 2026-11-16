@@ -320,13 +320,24 @@ test('real rounds reach the statistics server as the contract says, with nothing
   await home(page);
   // Leaving the game sends at once.
   await until(() => allEvents(state).some(ev => ev[0] === 'gx' && ev[3] === 'tic-tac-toe'), 'tic-tac-toe closing');
+  // The surprise button picks at random. Pin it to a game this test has not already
+  // opened: a repeat of tic-tac-toe or the starter makes the old close look like the
+  // new one, and the check reads the earlier visit.
+  await page.evaluate(avoid => {
+    const slugs = GAMES.map(game => game.slug);
+    const index = Math.max(0, slugs.findIndex(slug => !avoid.includes(slug)));
+    Math.random = () => (index + 0.5) / slugs.length;
+  }, [starter, 'tic-tac-toe']);
   await page.locator('#surprise').click();
   await ready(page);
   const surprised = await page.evaluate(() => decodeURIComponent(location.hash.split('/')[2]));
   await page.locator('#favBtn').click();
   await page.locator('#favBtn').click();
   await home(page);
-  await until(() => allEvents(state).some(ev => ev[0] === 'gx' && ev[3] === surprised), 'the surprise game closing');
+  await until(() => {
+    const opened = allEvents(state).find(ev => ev[0] === 'go' && ev[3] === surprised && ev[4] === 'surprise');
+    return opened && allEvents(state).some(ev => ev[0] === 'gx' && ev[2] === opened[2] && ev[3] === surprised);
+  }, 'the surprise game closing');
 
   const list = batches(state);
   await checkBatches(page, list);
