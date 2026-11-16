@@ -219,52 +219,6 @@
 
     Art.GROUND.ice = { top: '#eaf9ff', line: '#ffffff', mark: 'ring', stroke: 2 };
 
-    // A frozen sky: three rounded ice mountains with snow caps, big soft
-    // snowflakes, and a snow bank with igloos that runs down behind the floor.
-    Art.SCENERY.ice = function (g, pal, r) {
-      var i, k, x, y, s, a, c, d, ph = r() * 9;
-      for (i = 0; i < 3; i++) {
-        x = 170 + i * 460 + r() * 120; s = 170 + r() * 70; y = 250 + r() * 90;
-        g.fillStyle = pal.bg2; g.globalAlpha = 1; g.beginPath();
-        g.moveTo(x - s * 1.5, E.H);
-        g.bezierCurveTo(x - s * 0.75, y + 30, x - s * 0.4, y, x, y);
-        g.bezierCurveTo(x + s * 0.4, y, x + s * 0.75, y + 30, x + s * 1.5, E.H);
-        g.fill();
-        // each cap is clipped to its own mountain, so it never spills onto a neighbour
-        g.save(); g.clip();
-        g.fillStyle = '#ffffff'; g.globalAlpha = 0.85; g.beginPath();
-        g.moveTo(x - s * 1.5, y - 20); g.lineTo(x - s * 1.5, y + 46);
-        for (k = 0; k < 6; k++) g.quadraticCurveTo(x - s * 1.5 + (k + 0.5) * s / 2, y + 66, x - s * 1.5 + (k + 1) * s / 2, y + 46);
-        g.lineTo(x + s * 1.5, y - 20);
-        g.fill();
-        g.restore();
-      }
-      g.strokeStyle = '#ffffff'; g.globalAlpha = 0.35; g.lineWidth = 5; g.lineCap = 'round'; g.beginPath();
-      for (i = 0; i < 9; i++) {
-        x = 70 + i * 140 + r() * 70; y = 150 + r() * 240; s = 16 + r() * 22; a = r();
-        for (k = 0; k < 6; k++) {
-          c = a + k * Math.PI / 3;
-          d = s * 0.6;
-          g.moveTo(x, y); g.lineTo(x + Math.cos(c) * s, y + Math.sin(c) * s);
-          g.moveTo(x + Math.cos(c) * d + Math.cos(c + 0.8) * s * 0.3, y + Math.sin(c) * d + Math.sin(c + 0.8) * s * 0.3);
-          g.lineTo(x + Math.cos(c) * d, y + Math.sin(c) * d);
-          g.lineTo(x + Math.cos(c) * d + Math.cos(c - 0.8) * s * 0.3, y + Math.sin(c) * d + Math.sin(c - 0.8) * s * 0.3);
-        }
-      }
-      g.stroke();
-      g.fillStyle = '#ffffff'; g.globalAlpha = 0.3; g.beginPath(); g.moveTo(0, E.H);
-      for (x = 0; x <= E.W; x += 32) g.lineTo(x, 482 - Math.sin(x / 160 + ph) * 12 - Math.sin(x / 57) * 4);
-      g.lineTo(E.W, E.H); g.fill();
-      // igloos: domes of snow blocks sitting on the bank
-      for (x = 80 + r() * 120; x < E.W - 40; x += 300 + r() * 200) {
-        s = 34 + r() * 14;
-        g.fillStyle = '#ffffff'; g.globalAlpha = 0.55; g.beginPath(); g.arc(x, 496, s, Math.PI, 0); g.fill();
-        g.strokeStyle = pal.bg; g.globalAlpha = 0.9; g.lineWidth = 2.5; g.beginPath();
-        for (k = 1; k < 3; k++) { d = Math.sqrt(s * s - k * k * s * s / 9); g.moveTo(x - d, 496 - k * s / 3); g.lineTo(x + d, 496 - k * s / 3); }
-        for (k = -1; k < 2; k++) { g.moveTo(x + k * s * 0.45 + s * 0.2, 496); g.lineTo(x + k * s * 0.45 + s * 0.2, 496 - s / 3); }
-        g.stroke();
-      }
-    };
 
     // A strip of ice tiles: a glassy body, a frosty top when nothing sits on
     // it, a deeper edge at the bottom and a diagonal shine on each tile.

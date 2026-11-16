@@ -23,7 +23,7 @@
   ];
   // Plug-ins from world files (w6-ice.js ...), all optional:
   //   Art.ACC[skinId](ctx, face, t, ink, top): a new skin's accessory (push the skin on Art.SKINS);
-  //   Art.SCENERY[theme](g, pal, rnd) and Art.GROUND[theme]: a world's baked backdrop and ground look;
+  //   Art.GROUND[theme]: a world's ground look. The sky plate is baked per theme in Art.backdrop;
   //   Art.SFX[name](A): a sound for L.sfx(name), A = Kit.audio;
   //   Art.EV[type](d, ui): a world's own engine event (w.emit), ui = { fx, shake, say, sfx, pal, loud };
   //   Art.CAUSE[cause]: Arabic death texts for a world's own w.die(cause);
@@ -38,13 +38,7 @@
     return Art.SKINS[0];
   };
 
-  function rr(ctx, x, y, w, h, r) {
-    ctx.beginPath();
-    ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y); ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-    ctx.lineTo(x + w, y + h - r); ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-    ctx.lineTo(x + r, y + h); ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-    ctx.lineTo(x, y + r); ctx.quadraticCurveTo(x, y, x + r, y); ctx.closePath();
-  }
+  function rr(ctx, x, y, w, h, r) { window.Kit.art.round(ctx, x, y, w, h, r); }
   Art.rr = rr;
 
   Art.star = function (ctx, x, y, r, fill, stroke, lw) {
@@ -67,7 +61,8 @@
     ctx.translate(x, y);
     if (o.flip) ctx.scale(1, -1);
     var sc = o.scale == null ? 1 : o.scale;
-    ctx.scale((o.sx || 1) * sc, (o.sy || 1) * sc);
+    var crisp = o.crisp == null ? 1.12 : o.crisp;
+    ctx.scale((o.sx || 1) * sc * crisp, (o.sy || 1) * sc * crisp);
     if (o.alpha != null) ctx.globalAlpha = o.alpha;
     var face = o.face || 1, t = o.t || 0;
     var w = 30, h = 36;
@@ -93,7 +88,7 @@
     if (skin.id === 'rainbow') body = 'hsl(' + ((t * 120) % 360) + ',95%,65%)';
     rr(ctx, -w / 2, -h - 2, w, h, 11);
     ctx.fillStyle = body; ctx.fill();
-    ctx.lineWidth = 3.5; ctx.strokeStyle = ink; ctx.stroke();
+    ctx.lineWidth = 4; ctx.strokeStyle = ink; ctx.stroke();
     // shine
     ctx.fillStyle = 'rgba(255,255,255,0.55)';
     rr(ctx, -w / 2 + 5, -h + 3, 6, 10, 3); ctx.fill();
@@ -199,11 +194,6 @@
 
   /* --------------------------------------------------------- world */
   var TAU = Math.PI * 2;
-  // Seeded random numbers, so a level's scenery is the same every time it is drawn.
-  function rng(s) {
-    s = Math.imul(s + 1, 0x9e3779b1) >>> 0;
-    return function () { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
-  }
   // A fixed number in [0, 1) per tile, so a moving trap tile carries exactly the
   // same marks as the ground it pretends to be.
   function hash(x, y, k) {
@@ -211,126 +201,152 @@
     h = Math.imul(h ^ (h >>> 15), 0x85ebca6b);
     return ((h ^ (h >>> 13)) >>> 0) / 4294967296;
   }
-  function blob(g, x, y, r) { g.moveTo(x + r, y); g.arc(x, y, r, 0, TAU); }
-  function stripes(g, pal) {
-    g.fillStyle = pal.bg2; g.globalAlpha = 0.55; g.beginPath();
-    for (var k = -E.H; k < E.W + E.H; k += 120) { g.moveTo(k, 0); g.lineTo(k + 50, 0); g.lineTo(k + 50 - E.H, E.H); g.lineTo(k - E.H, E.H); g.closePath(); }
-    g.fill();
-  }
-  // Slanted light beams from the top of the screen.
-  function beams(g, r, a) {
-    g.fillStyle = '#ffffff'; g.globalAlpha = a; g.beginPath();
-    for (var i = 0; i < 5; i++) {
-      var x = i * 290 + r() * 160, bw = 40 + r() * 60;
-      g.moveTo(x, 0); g.lineTo(x + bw, 0); g.lineTo(x + bw * 2 - 240, E.H); g.lineTo(x - 240, E.H); g.closePath();
-    }
-    g.fill();
-  }
 
-  // Big, soft, low-contrast scenery for each world. It is baked into the static
-  // canvas once per level (no per-frame cost) and sits behind every tile, so it
-  // never changes how traps, spikes or the player read. Stems and trunks run to
-  // the bottom of the screen, so they never float above a pit.
-  var SCENERY = {
-    // Orange world: a sunburst, a soft sun, puffy clouds and low dunes.
-    sun: function (g, pal, r) {
-      var cx = 160 + r() * 960, cy = 165, i, a, x;
-      g.fillStyle = pal.bg2; g.globalAlpha = 0.6; g.beginPath();
-      for (i = 0; i < 16; i++) { a = i * Math.PI / 8; g.moveTo(cx, cy); g.arc(cx, cy, 1500, a, a + Math.PI / 16); g.closePath(); }
-      g.fill();
-      g.fillStyle = '#fff1a8'; g.globalAlpha = 0.3; g.beginPath(); blob(g, cx, cy, 104); g.fill();
-      g.globalAlpha = 0.5; g.beginPath(); blob(g, cx, cy, 68); g.fill();
-      g.fillStyle = '#ffffff'; g.globalAlpha = 0.32; g.beginPath();
-      for (i = 0; i < 4; i++) {
-        x = 90 + i * 320 + r() * 150; a = 0.7 + r() * 0.5; var y = 200 + r() * 140;
-        blob(g, x, y, 34 * a); blob(g, x + 36 * a, y + 10 * a, 24 * a); blob(g, x - 36 * a, y + 12 * a, 22 * a);
-        g.moveTo(x + 60 * a, y + 22 * a); g.ellipse(x, y + 22 * a, 60 * a, 13 * a, 0, 0, TAU);
+  // One backdrop per world: sky gradient plus two silhouette layers, baked once
+  // and dropped when the world changes. Tier 0 is a still plate (clouds included).
+  // Higher tiers draw the clouds live so they can drift. Tiles are never part of it.
+  var BD = null, BD_KEY = '';
+  var LOOK = {
+    sun: ['#ffe9a8', '#ff9a1f', '#c45a14', 'hills'],
+    sea: ['#d9fff6', '#2eb8ae', '#0e6e78', 'waves'],
+    candy: ['#ffe4f6', '#ff78b4', '#e23d88', 'candy'],
+    forest: ['#e9ffb4', '#74c83a', '#2d7a20', 'trees'],
+    space: ['#6a58c8', '#1c1044', '#0e0828', 'stars'],
+    ice: ['#f5fbff', '#7ec8f2', '#eaf7ff', 'snow'],
+    castle: ['#ffd8c8', '#e07858', '#7a3830', 'fort'],
+    toys: ['#fff3b4', '#f0b020', '#d07018', 'hills'],
+    tower: ['#d8e6ff', '#4a8af0', '#1e3878', 'fort'],
+    music: ['#e6ffee', '#3ed488', '#146848', 'waves'],
+    haunt: ['#f6e6ff', '#c070e4', '#fffafc', 'ghosts'],
+    royal: ['#ffd4d8', '#e25868', '#ffd23f', 'fort']
+  };
+  function hill(g, w, h, y0, amp, n) {
+    var i, x, step = w / n;
+    g.beginPath(); g.moveTo(0, h); g.lineTo(0, y0);
+    for (i = 1; i <= n; i++) { x = step * i; g.quadraticCurveTo(x - step * 0.5, y0 - amp, x, y0); }
+    g.lineTo(w, h); g.closePath(); g.fill();
+  }
+  function faceGhost(g, x, y, s) {
+    g.fillStyle = '#fffafc'; g.beginPath();
+    g.arc(x, y, s, Math.PI, 0);
+    g.quadraticCurveTo(x + s * 0.7, y + s * 1.15, x + s * 0.35, y + s * 0.85);
+    g.quadraticCurveTo(x, y + s * 1.2, x - s * 0.35, y + s * 0.85);
+    g.quadraticCurveTo(x - s * 0.7, y + s * 1.15, x - s, y);
+    g.fill();
+    g.lineWidth = Math.max(2, s * 0.12); g.strokeStyle = '#6a3a88'; g.stroke();
+    g.fillStyle = '#2a1840'; g.beginPath();
+    g.arc(x - s * 0.32, y - s * 0.08, s * 0.13, 0, TAU);
+    g.arc(x + s * 0.32, y - s * 0.08, s * 0.13, 0, TAU); g.fill();
+    g.fillStyle = '#ff8fb5'; g.beginPath();
+    g.arc(x - s * 0.5, y + s * 0.16, s * 0.11, 0, TAU);
+    g.arc(x + s * 0.5, y + s * 0.16, s * 0.11, 0, TAU); g.fill();
+    g.strokeStyle = '#2a1840'; g.lineWidth = Math.max(1.5, s * 0.08); g.beginPath();
+    g.arc(x, y + s * 0.18, s * 0.2, 0.2 * Math.PI, 0.8 * Math.PI); g.stroke();
+  }
+  function sil(g, w, h, kind, layer, col) {
+    var y0 = h * (layer ? 0.78 : 0.62), amp = layer ? h * 0.16 : h * 0.1, i, x, s, yy, j, top;
+    g.save(); g.fillStyle = col; g.globalAlpha = layer ? 0.92 : 0.42;
+    if (kind === 'stars') {
+      g.fillStyle = '#fff6c9'; g.globalAlpha = layer ? 0.95 : 0.55;
+      if (!layer) {
+        for (i = 0; i < 16; i++) { x = (i * 97) % w; yy = 16 + (i * 41) % (h * 0.55); s = 1.5 + (i % 3); g.beginPath(); g.arc(x, yy, s, 0, TAU); g.fill(); }
+      } else {
+        g.beginPath(); g.arc(w * 0.72, h * 0.26, h * 0.11, 0, TAU); g.fill();
+        g.strokeStyle = '#ffffff'; g.globalAlpha = 0.4; g.lineWidth = 6;
+        g.beginPath(); g.ellipse(w * 0.72, h * 0.26, h * 0.2, h * 0.045, -0.45, 0, TAU); g.stroke();
       }
-      g.fill();
-      g.fillStyle = '#ff9408'; g.globalAlpha = 0.45; g.beginPath(); g.moveTo(0, E.H);
-      for (x = 0; x <= E.W; x += 32) g.lineTo(x, 470 - Math.sin(x / 190 + cx) * 26 - Math.sin(x / 71) * 8);
-      g.lineTo(E.W, E.H); g.fill();
-    },
-    // Sea world: light from the surface, slow wave lines, weed and bubbles.
-    sea: function (g, pal, r) {
-      var i, x, y, h;
-      beams(g, r, 0.13);
-      g.strokeStyle = pal.bg2; g.lineWidth = 12; g.lineCap = 'round'; g.globalAlpha = 0.9; g.beginPath();
-      for (y = 200; y < 500; y += 95) { h = r() * 6; g.moveTo(0, y); for (x = 16; x <= E.W; x += 16) g.lineTo(x, y + Math.sin(x / 64 + h) * 8); }
-      g.stroke();
-      g.strokeStyle = '#2cc9ad'; g.lineWidth = 9; g.globalAlpha = 0.55; g.beginPath();
-      for (i = 0; i < 10; i++) {
-        x = 30 + r() * 1220; h = 50 + r() * 90;
-        g.moveTo(x, E.H); g.lineTo(x, 525); g.bezierCurveTo(x + 22, 525 - h * 0.35, x - 22, 525 - h * 0.65, x + 6, 525 - h);
+    } else if (kind === 'ghosts') {
+      if (!layer) hill(g, w, h, h * 0.72, h * 0.08, 4);
+      else { g.globalAlpha = 1; for (i = 0; i < 3; i++) faceGhost(g, w * (0.2 + i * 0.26), h * 0.4, h * 0.065); }
+    } else if (kind === 'waves') {
+      g.globalAlpha = layer ? 0.5 : 0.28; g.strokeStyle = col; g.lineWidth = layer ? 8 : 5; g.beginPath();
+      for (i = 0; i < (layer ? 3 : 2); i++) {
+        yy = h * (0.42 + i * 0.1); g.moveTo(0, yy);
+        for (x = 0; x <= w; x += 20) g.lineTo(x, yy + Math.sin(x / 36 + i) * (layer ? 7 : 4));
       }
       g.stroke();
-      g.strokeStyle = '#ffffff'; g.lineWidth = 3; g.globalAlpha = 0.45; g.beginPath();
-      for (i = 0; i < 24; i++) blob(g, r() * E.W, 140 + r() * 360, 4 + r() * 11);
-      g.stroke();
-    },
-    // Candy world: candy-cane stripes, giant lollipops and sprinkles.
-    candy: function (g, pal, r) {
-      var i, x, y, s, a;
-      stripes(g, pal);
-      for (i = 0; i < 4; i++) {
-        x = 120 + i * 320 + r() * 80; y = 210 + r() * 120; s = 42 + r() * 22;
-        g.fillStyle = '#ffffff'; g.globalAlpha = 0.35; g.beginPath();
-        g.rect(x - 5, y, 10, E.H - y); blob(g, x, y, s); g.fill();
-        g.strokeStyle = pal.bg; g.lineWidth = 8; g.globalAlpha = 0.75; g.beginPath();
-        for (a = 0; a < 16; a += 0.3) g.lineTo(x + Math.cos(a) * a * s / 17, y + Math.sin(a) * a * s / 17);
-        g.stroke();
+      g.fillStyle = col; g.globalAlpha = layer ? 0.85 : 0.4;
+      hill(g, w, h, h * (layer ? 0.86 : 0.74), layer ? 22 : 12, 5);
+    } else if (kind === 'trees') {
+      hill(g, w, h, y0, amp * 0.4, 5);
+      g.globalAlpha = layer ? 0.9 : 0.4; g.fillStyle = col;
+      for (i = 0; i < (layer ? 6 : 4); i++) {
+        x = (i + 0.5) * w / (layer ? 6 : 4); s = layer ? 22 : 14;
+        g.fillRect(x - 3, y0 - s * 2.2, 6, s * 2.2);
+        g.beginPath(); g.arc(x, y0 - s * 2.1, s, 0, TAU); g.fill();
       }
-      g.lineWidth = 6; g.lineCap = 'round'; g.globalAlpha = 0.55;
-      for (i = 0; i < 4; i++) {
-        g.strokeStyle = SPRINKLES[i]; g.beginPath();
-        for (s = 0; s < 9; s++) {
-          x = r() * E.W; y = 130 + r() * 380; a = r() * Math.PI;
-          g.moveTo(x - Math.cos(a) * 7, y - Math.sin(a) * 7); g.lineTo(x + Math.cos(a) * 7, y + Math.sin(a) * 7);
+    } else if (kind === 'candy') {
+      hill(g, w, h, y0, amp * 0.45, 4);
+      if (layer) {
+        for (i = 0; i < 4; i++) {
+          x = w * (0.14 + i * 0.22); s = 18;
+          g.globalAlpha = 0.9; g.fillStyle = '#fffafc'; g.fillRect(x - 3, y0 - 64, 6, 64);
+          g.beginPath(); g.arc(x, y0 - 70, s, 0, TAU); g.fill();
+          g.strokeStyle = i % 2 ? '#ff5a9a' : '#7d5cff'; g.lineWidth = 3; g.beginPath();
+          g.arc(x, y0 - 70, s * 0.55, 0.4, 2.4); g.stroke();
         }
-        g.stroke();
       }
-    },
-    // Forest world: soft sunbeams, two rows of round trees and drifting leaves.
-    forest: function (g, pal, r) {
-      var i, x, h, c;
-      beams(g, r, 0.16);
-      for (i = 0; i < 2; i++) {
-        g.fillStyle = i ? '#b2e248' : '#ffffff'; g.globalAlpha = i ? 0.75 : 0.3; g.beginPath();
-        for (x = -30 + r() * 80; x < E.W + 40; x += 110 + r() * 110) {
-          h = 150 + r() * 130 - i * 70; c = 40 + r() * 26 - i * 6;
-          g.rect(x - 7, 520 - h, 14, h + 200);
-          blob(g, x, 520 - h, c); blob(g, x - c * 0.7, 520 - h + c * 0.45, c * 0.68); blob(g, x + c * 0.7, 520 - h + c * 0.45, c * 0.68);
-        }
-        g.fill();
-      }
-      g.fillStyle = '#86c934'; g.globalAlpha = 0.5; g.beginPath();
-      for (i = 0; i < 16; i++) { x = r() * E.W; h = 130 + r() * 300; g.moveTo(x, h); g.ellipse(x, h, 10, 4, r() * Math.PI, 0, TAU); }
-      g.fill();
-    },
-    // Space world: twinkling stars, a ringed planet and a crescent moon.
-    space: function (g, pal, r) {
-      var i, x, y, s, px = 140 + r() * 400, mx = px + 380 + r() * 300, my = 170 + r() * 80;
-      g.fillStyle = '#ffffff'; g.globalAlpha = 0.6; g.beginPath();
-      for (i = 0; i < 46; i++) {
-        x = r() * E.W; y = 130 + r() * 400; s = 3 + r() * 6;
-        g.moveTo(x, y - s); g.lineTo(x + s / 4, y - s / 4); g.lineTo(x + s, y); g.lineTo(x + s / 4, y + s / 4);
-        g.lineTo(x, y + s); g.lineTo(x - s / 4, y + s / 4); g.lineTo(x - s, y); g.lineTo(x - s / 4, y - s / 4); g.closePath();
+    } else if (kind === 'snow') {
+      g.fillStyle = layer ? '#f4fbff' : '#c5e6f8';
+      hill(g, w, h, y0 - 8, amp * 1.25, 3);
+      if (layer) { g.fillStyle = '#ffffff'; g.globalAlpha = 0.95; hill(g, w, h, y0 - amp * 0.85, amp * 0.35, 3); }
+    } else if (kind === 'fort') {
+      g.beginPath();
+      for (i = 0; i < (layer ? 4 : 3); i++) {
+        x = w * (0.06 + i * 0.3); s = layer ? 64 : 40; top = h * (layer ? 0.4 : 0.52);
+        g.rect(x, top, s, h - top); g.rect(x - 6, top - 12, s + 12, 12);
+        for (j = 0; j < s; j += 14) g.rect(x + j, top - 22, 7, 12);
       }
       g.fill();
-      g.fillStyle = pal.bg2; g.globalAlpha = 1; g.beginPath(); blob(g, px, 250, 78); g.fill();
-      g.strokeStyle = '#ffffff'; g.lineWidth = 10; g.globalAlpha = 0.35;
-      g.beginPath(); g.ellipse(px, 250, 130, 26, -0.25, 0, TAU); g.stroke();
-      // crescent: the outer circle's left side, back along an offset circle (c = the angle where they meet)
-      var c = Math.atan2(Math.sqrt(52 * 52 - 22 * 22), 22);
-      g.fillStyle = '#fff6c9'; g.globalAlpha = 0.6; g.beginPath();
-      g.arc(mx, my, 52, c, TAU - c); g.arc(mx + 44, my, 52, Math.PI + c, Math.PI - c, true); g.fill();
+    } else hill(g, w, h, y0, amp, layer ? 4 : 3);
+    if (!layer && kind !== 'stars' && kind !== 'ghosts') {
+      g.globalAlpha = 0.9; g.fillStyle = '#fff3b0';
+      g.beginPath(); g.arc(w * 0.8, h * 0.18, kind === 'snow' ? 16 : 26, 0, TAU); g.fill();
     }
+    g.restore();
+  }
+  function paintPlate(g, w, h, theme, tier) {
+    var L = LOOK[theme] || LOOK.sun, sky = window.Kit.art.sky(theme, w, h, [L[0], L[1]]), i;
+    if (sky.canvas) g.drawImage(sky.canvas, 0, 0, w, h);
+    else { g.fillStyle = L[1]; g.fillRect(0, 0, w, h); }
+    sil(g, w, h, L[3], 0, L[2]);
+    sil(g, w, h, L[3], 1, L[2]);
+    if (!tier) {
+      g.fillStyle = 'rgba(255,255,255,0.88)';
+      for (i = 0; i < 3; i++) {
+        g.beginPath(); g.arc(70 + i * 190, 42 + (i % 2) * 18, 14, 0, TAU); g.arc(88 + i * 190, 38 + (i % 2) * 18, 10, 0, TAU); g.fill();
+      }
+    }
+  }
+  Art.invalidate = function () { BD = null; BD_KEY = ''; };
+  Art.backdrop = function (theme, tier) {
+    var key = (theme || 'sun') + ':' + (tier > 0 ? 1 : 0);
+    if (BD && BD_KEY === key && BD.canvas) return BD;
+    BD = null; BD_KEY = key;
+    BD = window.Kit.art.bake('tlbd:' + key, 640, 360, function (g, w, h) { paintPlate(g, w, h, theme || 'sun', tier > 0 ? 1 : 0); });
+    return BD;
+  };
+  var CLOUD = null;
+  Art.drawSkyBits = function (ctx, t, tier) {
+    var reduced, drift, i, x, y, s, c;
+    if (!tier) return;
+    reduced = window.Kit.motion && window.Kit.motion.reduced();
+    if (!CLOUD || !CLOUD.canvas) CLOUD = window.Kit.art.sprite('tl-cloud', 86, 36, function (g) {
+      g.fillStyle = '#ffffff'; g.beginPath();
+      g.arc(24, 22, 12, 0, TAU); g.arc(42, 16, 14, 0, TAU); g.arc(60, 22, 11, 0, TAU); g.fill();
+    });
+    c = CLOUD; if (!c || !c.canvas) return;
+    drift = reduced ? 0 : Math.sin(t * 0.18) * 28;
+    ctx.save();
+    for (i = 0; i < (tier > 1 ? 4 : 2); i++) {
+      x = ((i * 320 + drift * (0.55 + (i % 2) * 0.7)) % 1480 + 1480) % 1480 - 90;
+      y = 54 + (i % 3) * 34; s = 0.85 + (i % 2) * 0.28;
+      ctx.globalAlpha = 0.75;
+      ctx.drawImage(c.canvas, x, y, 86 * s, 36 * s);
+    }
+    ctx.restore();
   };
 
-  // How each world dresses its ground: the band on exposed tops, optional bumps,
-  // drips or a bright top line, and the small marks inside the ground
-  // (stroke = drawn as lines of that width).
-  Art.SCENERY = SCENERY;
   var SPRINKLES = ['#ff8fc7', '#ffe14d', '#7ff5e0', '#ffffff'];
   var GROUND = {
     sun: { top: '#c4561f', line: '#ffc46b', bumps: 1, mark: 'pebble' },
@@ -366,21 +382,40 @@
   // Every solid tile, fixed or part of a trap, is drawn by this one routine, so a
   // fake block or shy floor looks exactly like the real ground. Each layer is one
   // path with pixel-snapped edges, so tiles never show seams between them.
+  function blob(g, x, y, r) { g.moveTo(x + r, y); g.arc(x, y, r, 0, TAU); }
   function drawTiles(ctx, w, grp, tiles, ox, oy, pal, k) {
     var st = GROUND[pal.theme] || GROUND.sun, n = tiles.length;
     var i, b, x, y, px, py, l, r, v, c, m, list;
+    var body = st.top ? window.Kit.art.shade(st.top, -0.34) : pal.bg;
+    var side = st.top ? window.Kit.art.shade(st.top, -0.55) : pal.ink;
     ctx.save();
-    ctx.fillStyle = pal.ink; ctx.beginPath();
+    ctx.fillStyle = body; ctx.beginPath();
     for (i = 0; i < n; i++) prect(ctx, tiles[i].x * T + ox, tiles[i].y * T + oy, T, T, k);
     ctx.fill();
+    // Right and bottom shade on every tile: a crack of AO where tiles meet,
+    // and a side face on the rim. Same routine for real ground and fake blocks.
+    ctx.fillStyle = side; ctx.beginPath();
+    for (i = 0; i < n; i++) {
+      px = tiles[i].x * T + ox; py = tiles[i].y * T + oy;
+      prect(ctx, px + T - 5, py, 5, T, k); prect(ctx, px, py + T - 6, T, 6, k);
+    }
+    ctx.fill();
+    ctx.fillStyle = pal.ink; ctx.beginPath(); m = 0;
+    for (i = 0; i < n; i++) {
+      x = tiles[i].x; y = tiles[i].y; px = x * T + ox; py = y * T + oy;
+      if (!solidAt(w, grp, x - 1, y)) { prect(ctx, px, py, 3, T, k); m++; }
+      if (!solidAt(w, grp, x + 1, y)) { prect(ctx, px + T - 3, py, 3, T, k); m++; }
+      if (!solidAt(w, grp, x, y + 1)) { prect(ctx, px, py + T - 3, T, 3, k); m++; }
+    }
+    if (m) ctx.fill();
     // the themed top on every exposed top (and an optional bright line above it)
     for (c = 0; c < (st.line ? 2 : 1); c++) {
-      ctx.fillStyle = c ? st.line : st.top; ctx.beginPath(); m = 0;
+      ctx.fillStyle = c ? st.line : (st.top ? window.Kit.art.shade(st.top, 0.32) : pal.bg); ctx.beginPath(); m = 0;
       for (i = 0; i < n; i++) {
         x = tiles[i].x; y = tiles[i].y;
         if (solidAt(w, grp, x, y - 1)) continue;
         px = x * T + ox; py = y * T + oy; m++;
-        prect(ctx, px, py, T, c ? 2 : 6, k);
+        prect(ctx, px, py, T, c ? 2 : 9, k);
         if (c) continue;
         if (st.bumps) for (b = 0; b < 4; b++) { ctx.moveTo(px + b * 10 + 10, py + 5); ctx.arc(px + b * 10 + 5, py + 5, 5, 0, Math.PI); }
         if (st.drips) for (b = 0; b < 2; b++) {
@@ -390,6 +425,13 @@
       }
       if (!m) break; // nothing exposed (skip empty fills for live groups)
       ctx.fill();
+      if (!c && window.Kit.art.quality.tier > 0) {
+        for (i = 0; i < n; i++) {
+          x = tiles[i].x; y = tiles[i].y;
+          if (solidAt(w, grp, x, y - 1)) continue;
+          window.Kit.art.gloss(ctx, x * T + ox + 3, y * T + oy + 3, T - 8, 8);
+        }
+      }
     }
     // small marks inside the ground, on a checkerboard like the original dots
     list = st.mark === 'sprinkle' ? SPRINKLES : [pal.ink2];
@@ -417,10 +459,12 @@
   Art.buildStatic = function (w, pal, res, seed, c) {
     c = c || document.createElement('canvas');
     c.width = Math.round(E.W * res); c.height = Math.round(E.H * res);
-    var g = c.getContext('2d'), tiles = [];
+    var g = c.getContext('2d'), tiles = [], tier = window.Kit.art.quality.tier, bd;
     g.setTransform(res, 0, 0, res, 0, 0);
-    g.fillStyle = pal.bg; g.fillRect(0, 0, E.W, E.H);
-    g.save(); (SCENERY[pal.theme] || stripes)(g, pal, rng(seed || 0)); g.restore();
+    bd = Art.backdrop(pal.theme, tier);
+    if (bd && bd.canvas) g.drawImage(bd.canvas, 0, 0, E.W, E.H);
+    else { g.fillStyle = pal.bg; g.fillRect(0, 0, E.W, E.H); }
+    if (tier > 0) window.Kit.art.vignette(g, E.W, E.H, 0.2);
     for (var y = 0; y < E.ROWS; y++) for (var x = 0; x < E.COLS; x++) if (w.grid[y * E.COLS + x]) tiles.push({ x: x, y: y });
     drawTiles(g, w, null, tiles, 0, 0, pal, res);
     for (var m = 0; m < Art.MODS.length; m++) if (Art.MODS[m].bake) { g.save(); Art.MODS[m].bake(g, w, pal); g.restore(); }
@@ -504,6 +548,7 @@
         else { ctx.moveTo(cx - sh, cy + a); ctx.lineTo(cx + T - 12 - sh, cy + a + 10); ctx.lineTo(cx - sh, cy + a + 20); }
       }
       ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = 2; ctx.stroke();
       if (clip) ctx.restore();
     }
   };

@@ -180,6 +180,32 @@ button { font-family: var(--sg-font); }
 .hudbtn[hidden] { display: none; }
 .hudbtn span { display: block; width: 5px; height: 16px; background: #ffffff; border-radius: 2px; }
 .hudbtn:hover { background: rgba(0, 0, 0, 0.55); }
+html[data-sg-art] .bigbtn,
+html[data-sg-art] .midbtn,
+html[data-sg-art] .backbtn {
+  background-image: linear-gradient(#fff6, #0000 46%);
+  box-shadow: inset 0 3px 0 #fff8, 0 6px 0 var(--ink);
+}
+html[data-sg-art] .card,
+html[data-sg-art] .panel {
+  background-image: linear-gradient(#fff8, #fffaf0 42%);
+  box-shadow: inset 0 4px 0 #fff8, 0 8px 0 #000;
+}
+html[data-sg-art] .bigbtn:active,
+html[data-sg-art] .midbtn:active,
+html[data-sg-art] .backbtn:active { transform: translateY(4px); box-shadow: inset 0 2px 0 #fff6, 0 2px 0 var(--ink); }
+html[data-sg-art="0"] .bigbtn,
+html[data-sg-art="0"] .midbtn,
+html[data-sg-art="0"] .backbtn,
+html[data-sg-art="0"] .card,
+html[data-sg-art="0"] .panel { box-shadow: 0 4px 0 var(--ink); background-image: none; }
+html[data-sg-motion="reduce"] .logo .w1,
+html[data-sg-motion="reduce"] .logo .w2,
+html[data-sg-motion="reduce"] .bigbtn,
+html[data-sg-motion="reduce"] .panel.win h2,
+html[data-sg-motion="reduce"] .stars3 .st.on,
+html[data-sg-motion="reduce"] .lv .new,
+html[data-sg-motion="reduce"] .newbest { animation: none; }
 /* Save warning (Kit.saveStatus). While a level is played (the pause button shows)
    it sits on the ceiling at the top left of the 1280x720 game area, under the pause
    button, instead of over the hint bar and the skip tip at the bottom. A little
