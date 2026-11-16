@@ -5,9 +5,20 @@
   const $ = id => document.getElementById(id);
   const canvas = $('game'), ui = $('ui'), panel = $('panel'), bar = $('bar');
   let frameDirty = true; // the next render draws even if the game is not playing
-  const view = Kit.fit(canvas, CG.W, CG.H, { onResize: v => { ui.style.left = canvas.style.left; ui.style.top = canvas.style.top; ui.style.transform = 'scale(' + v.scale + ')'; frameDirty = true; } });
-  const fx = Kit.particles(), shake = Kit.shake();
+  let bg = null, bgKey = '';
+  Kit.art.init({ canvas: canvas, ctx: canvas.getContext('2d'), mode: '2d', theme: 'candy' });
+  const view = Kit.fit(canvas, CG.W, CG.H, { onResize: v => {
+    ui.style.left = canvas.style.left; ui.style.top = canvas.style.top; ui.style.transform = 'scale(' + v.scale + ')';
+    bgKey = ''; A.resetCaches(); frameDirty = true;
+  } });
+  A.warm();
+  let fx = Kit.art.fx(200);
+  const cakeSpring = Kit.art.spring(210, 12);
   const calm = () => Kit.motion.reduced();
+  function poof(x, y, color, n, shape, speed) {
+    fx.burst(x, y, { n: n, color: color, speed: speed || 210, life: 0.5, size: 7, shape: shape || 'confetti' });
+  }
+  Kit.art.quality.on(() => { bgKey = ''; A.resetCaches(); A.warm(); frameDirty = true; });
 
   /* ---------------------------------------------------------------- save */
   // Every field is checked on load: a damaged or hand-edited save must never stop the game.
@@ -42,7 +53,6 @@
   let placing = null, selected = -1, menuPad = -1, hoverPad = -1, mouse = { x: -100, y: -100 };
   let time = 0, ending = null, result = null, resultLock = 0, busyT = 0;
   let floats = [], zaps = [], rings = [], tutorial = 0, hud = {};
-  let bg = null, bgKey = '';
 
   /* -------------------------------------------------------------- screens */
   const SCREENS = ['title', 'levels', 'cakes', 'pause', 'win', 'lose', 'over'];
@@ -60,7 +70,8 @@
   function begin(def) {
     world = CG.create(def);
     speed = 1; placing = null; selected = -1; menuPad = -1; hoverPad = -1;
-    fx.clear(); floats = []; zaps = []; rings = []; time = 0; ending = null; result = null; busyT = 0;
+    fx = Kit.art.fx(200); cakeSpring.sx = cakeSpring.sy = 1; cakeSpring.v = 0;
+    floats = []; zaps = []; rings = []; time = 0; ending = null; result = null; busyT = 0;
     hud = {};
     buildBar();
     hideBanner();
@@ -322,7 +333,8 @@
     if (CG.build(world, pad, type)) {
       S.build();
       const p = world.pads[pad];
-      fx.burst(p.x, p.y, { count: 18, colors: ['#fff', CG.TOWERS[type].color, '#ffcc00'], speed: 220, life: 0.5, size: 6, gravity: 300 });
+      poof(p.x, p.y, '#ffffff', 6, 'star', 200);
+      poof(p.x, p.y, CG.TOWERS[type].color, 8, 'confetti', 180);
       placing = null;
       closePanel();
       if (tutorial === 1) tutorial = 2;
@@ -340,7 +352,8 @@
     if (CG.upgrade(world, pad)) {
       S.upgrade();
       const p = world.pads[pad];
-      fx.burst(p.x, p.y, { count: 24, colors: ['#ffcc00', '#fff', '#ff7eb6'], speed: 260, life: 0.6, size: 6, gravity: 200 });
+      poof(p.x, p.y, '#ffcc00', 10, 'star', 240);
+      poof(p.x, p.y, '#ffffff', 6, 'confetti', 200);
       if (!save.upgraded) { save.upgraded = 1; persist(); }
       hideHint();
     } else S.deny();
@@ -349,7 +362,7 @@
   function sellTower(pad) {
     if (!world || ending || pad < 0) return;
     const value = CG.sellValue(world, pad), p = world.pads[pad];
-    if (CG.sell(world, pad)) { S.sell(); float(p.x, p.y - 30, '+' + value, '#ffcc00', 26); closePanel(); }
+    if (CG.sell(world, pad)) { S.sell(); Kit.art.pop('+' + value, p.x, p.y - 30, { color: '#ffcc00', size: 26 }); closePanel(); }
     updateHUD();
   }
   function callWave() {
@@ -533,19 +546,22 @@
         case 'splash':
           S.splash();
           rings.push({ x: e.x, y: e.y, r: e.r, t: 0, color: '255,126,182' });
-          fx.burst(e.x, e.y, { count: 14, colors: ['#ff7eb6', '#fff', '#b77745'], speed: 220, life: 0.45, size: 6, gravity: 300 });
+          poof(e.x, e.y, '#ff7eb6', 8, 'confetti', 200);
+          poof(e.x, e.y, '#fff6ea', 4, 'dot', 160);
           break;
         case 'pop': {
           const en = CG.ENEMIES[e.type];
-          if (e.boss) { S.bossPop(); shake.add(10); } else S.blobPop();
-          fx.burst(e.x, e.y, { count: e.boss ? 60 : 12, colors: [en.color, '#fff', '#ffcc00', '#ff7eb6'], speed: e.boss ? 380 : 230, life: 0.55, size: e.boss ? 9 : 6, gravity: 380 });
-          float(e.x, e.y - 18, '+' + e.reward, '#ffcc00', e.boss ? 34 : 22);
+          if (e.boss) { S.bossPop(); Kit.art.shake.add(0.5); Kit.art.hitstop(70); } else S.blobPop();
+          poof(e.x, e.y, en.color, e.boss ? 16 : 8, 'confetti', e.boss ? 280 : 200);
+          poof(e.x, e.y, '#ffcc00', e.boss ? 8 : 4, 'star', 220);
+          Kit.art.pop('+' + e.reward, e.x, e.y - 18, { color: '#ffcc00', size: e.boss ? 34 : 22 });
           break;
         }
         case 'leak':
-          S.chomp(); shake.add(7);
-          float(e.x + 30, e.y - 70, 'نَم!', '#ff5d8f', 30);
-          fx.burst(e.x + 30, e.y - 10, { count: 16, colors: ['#ff9ec8', '#fff1d6', '#fff'], speed: 200, life: 0.5, size: 6, gravity: 300 });
+          S.chomp(); Kit.art.shake.add(0.34); cakeSpring.kick(-0.48);
+          float(e.x + 30, e.y - 70, 'نَم!', '#ff5470', 30);
+          poof(e.x + 30, e.y - 10, '#ff9ec8', 8, 'confetti', 180);
+          poof(e.x + 30, e.y - 10, '#fff6ea', 4, 'star', 150);
           bump('hearts', true);
           break;
         case 'spawn':
@@ -557,16 +573,19 @@
         case 'boss': S.boss(); if (!tipShowing()) banner(CG.ENEMIES[e.type].name + ' قادم!', '', '', 2200); break;
         case 'wave': S.wave(); if (world.wave > 1 || endless) banner('الموجة ' + world.wave, '', '', 1300); break;
         case 'clear':
-          S.clear(); float(world.cake.x, world.cake.y - 90, '+' + e.bonus, '#ffcc00', 30); bump('coins');
+          S.clear(); Kit.art.pop('+' + e.bonus, world.cake.x, world.cake.y - 90, { color: '#ffcc00', size: 30 }); bump('coins');
           // Saved at once: an endless run left by Menu, Restart or closing the tab keeps its best.
           if (endless && e.n > save.endless) { save.endless = e.n; persist(); }
           break;
-        case 'early': float(world.cake.x, world.cake.y - 120, '+' + e.bonus, '#3ddc84', 30); break;
+        case 'early': Kit.art.pop('+' + e.bonus, world.cake.x, world.cake.y - 120, { color: '#3ddc84', size: 30 }); break;
         case 'win':
           commitWin(e.stars);
           ending = { kind: 'win', t: 1.6 };
           banner('الكعكة بأمان!', '', '', 1500);
-          if (!calm()) for (let i = 0; i < 5; i++) fx.burst(200 + i * 220, 200, { count: 26, colors: ['#ff7eb6', '#ffcc00', '#6fd3ff', '#62d26f', '#fff'], speed: 380, life: 1.2, size: 8, gravity: 420 });
+          Kit.art.flash('#fff4c2', 120);
+          if (!calm()) for (let i = 0; i < 5; i++) {
+            poof(200 + i * 220, 180, ['#ff7eb6', '#ffcc00', '#6fd3ff', '#62d26f', '#ffffff'][i], 8, 'confetti', 260);
+          }
           break;
         case 'lose':
           commitLose();
@@ -580,7 +599,10 @@
   function tipShowing() { return !$('banner').hidden && $('banner').classList.contains('tip'); }
   function updateFx(dt) {
     fx.update(dt);
-    shake.update(dt);
+    Kit.art.shake.update(dt);
+    Kit.art.pop.update(dt);
+    cakeSpring.update(dt);
+    Kit.art.flash.update(dt);
     for (let i = floats.length - 1; i >= 0; i--) { const f = floats[i]; f.t += dt; f.y -= dt * 40; if (f.t > 1.1) floats.splice(i, 1); }
     for (let i = zaps.length - 1; i >= 0; i--) { zaps[i].t += dt; if (zaps[i].t > 0.16) zaps.splice(i, 1); }
     for (let i = rings.length - 1; i >= 0; i--) { rings[i].t += dt; if (rings[i].t > 0.35) rings.splice(i, 1); }
@@ -611,13 +633,18 @@
 
   function pixelScale() { return Math.min(2, Math.max(0.5, Math.round(view.scale * view.dpr * 4) / 4)); }
   function ensureBackground() {
-    const k = pixelScale(), key = CG.LEVELS.indexOf(world.def) + '|' + world.def.w + '|' + k;
+    const tier = Kit.art.quality.tier, bucket = Math.round(view.scale * view.dpr * 4) / 4;
+    const key = (endless ? 'e' : levelIdx) + '|' + world.def.w + '|' + world.roads[0].len + '|' + tier + '|' + bucket;
     if (bg && bgKey === key) return;
+    const baked = Kit.art.bake(key, CG.W, CG.H, g => { A.background(g, world); });
+    const src = baked && baked.canvas;
     bg = bg || document.createElement('canvas');
-    bg.width = Math.round(CG.W * k); bg.height = Math.round(CG.H * k);
+    const bw = src ? src.width : CG.W, bh = src ? src.height : CG.H;
+    if (bg.width !== bw || bg.height !== bh) { bg.width = bw; bg.height = bh; }
     const g = bg.getContext('2d');
-    g.setTransform(k, 0, 0, k, 0, 0);
-    A.background(g, world);
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.clearRect(0, 0, bg.width, bg.height);
+    if (src) g.drawImage(src, 0, 0);
     bgKey = key;
   }
   function padState(i) {
@@ -629,7 +656,7 @@
     if (!w) return;
     ensureBackground();
     ctx.save();
-    ctx.translate(shake.x, shake.y);
+    Kit.art.shake.apply(ctx);
     ctx.drawImage(bg, 0, 0, CG.W, CG.H);
     w.pads.forEach((p, i) => { if (!p.tower) A.pad(ctx, p.x, p.y, padState(i), still ? 0 : time); });
     if (glow >= 0 && screen === 'play') {
@@ -638,8 +665,8 @@
       A.circle(ctx, p.x, p.y, CG.PAD + 8 + pulse * 6); ctx.stroke();
     }
     const showRange = selected >= 0 && w.pads[selected].tower ? selected : -1;
-    if (showRange >= 0) { const p = w.pads[showRange]; A.range(ctx, p.x, p.y, CG.towerLevel(p.tower).range, true); }
-    A.cake(ctx, w.cake.x, w.cake.y, CG.CAKES[save.cake], w.hearts, time, still, pixelScale());
+    if (showRange >= 0) { const p = w.pads[showRange]; A.range(ctx, p.x, p.y, CG.towerLevel(p.tower).range, true, still ? 0 : time); }
+    A.cake(ctx, w.cake.x, w.cake.y, CG.CAKES[save.cake], w.hearts, time, still, pixelScale(), cakeSpring.sx, cakeSpring.sy);
     for (const b of w.enemies) A.blob(ctx, b, time, still);
     w.pads.forEach(p => { if (p.tower) A.tower(ctx, p.tower, p.x, p.y, time); });
     for (const s of w.shots) A.shot(ctx, s);
@@ -648,19 +675,26 @@
       const at = hoverPad >= 0 && !w.pads[hoverPad].tower ? w.pads[hoverPad] : mouse;
       if (at.x > 0) {
         const ok = hoverPad >= 0 && !w.pads[hoverPad].tower && w.coins >= CG.TOWERS[placing].lv[0].cost;
-        A.range(ctx, at.x, at.y, CG.TOWERS[placing].lv[0].range, ok);
+        A.range(ctx, at.x, at.y, CG.TOWERS[placing].lv[0].range, ok, still ? 0 : time);
         ctx.globalAlpha = 0.7; A.tower(ctx, { type: placing, lv: 0, angle: -Math.PI / 2, kick: 0 }, at.x, at.y, time); ctx.globalAlpha = 1;
       }
     }
     for (const r of rings) {
-      ctx.strokeStyle = 'rgba(' + r.color + ',' + (1 - r.t / 0.35) + ')'; ctx.lineWidth = 4;
-      A.circle(ctx, r.x, r.y, r.r * (0.4 + r.t / 0.35 * 0.6)); ctx.stroke();
+      const a = 1 - r.t / 0.35, rad = r.r * (0.4 + r.t / 0.35 * 0.6);
+      ctx.fillStyle = 'rgba(' + r.color + ',' + (0.16 * a) + ')';
+      ctx.strokeStyle = 'rgba(' + r.color + ',' + a + ')'; ctx.lineWidth = 4;
+      A.circle(ctx, r.x, r.y, rad); ctx.fill(); ctx.stroke();
     }
     for (const z of zaps) {
-      ctx.strokeStyle = 'rgba(255,240,160,' + (1 - z.t / 0.16) + ')'; ctx.lineWidth = 6; ctx.lineCap = 'round';
+      const a = 1 - z.t / 0.16;
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = 'rgba(27,22,64,' + (0.45 * a) + ')'; ctx.lineWidth = 9;
       ctx.beginPath(); ctx.moveTo(z.x, z.y); ctx.lineTo(z.tx, z.ty); ctx.stroke();
-      ctx.strokeStyle = 'rgba(255,90,110,' + (1 - z.t / 0.16) + ')'; ctx.lineWidth = 2;
+      ctx.strokeStyle = 'rgba(255,255,255,' + a + ')'; ctx.lineWidth = 5;
       ctx.beginPath(); ctx.moveTo(z.x, z.y); ctx.lineTo(z.tx, z.ty); ctx.stroke();
+      ctx.strokeStyle = 'rgba(232,53,75,' + a + ')'; ctx.lineWidth = 5; ctx.setLineDash([6, 7]);
+      ctx.beginPath(); ctx.moveTo(z.x, z.y); ctx.lineTo(z.tx, z.ty); ctx.stroke();
+      ctx.setLineDash([]);
     }
     fx.draw(ctx);
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
@@ -673,7 +707,11 @@
       ctx.fillStyle = f.color; ctx.fillText(f.text, f.x, f.y);
     }
     ctx.globalAlpha = 1;
+    ctx.direction = 'ltr';
+    Kit.art.pop.draw(ctx);
     ctx.restore();
+    if (Kit.art.quality.tier > 0) Kit.art.vignette(ctx, CG.W, CG.H, 0.2);
+    Kit.art.flash.draw(ctx, CG.W, CG.H);
   }
   // Paused and menu screens keep their last frame; only a change (resize, restored canvas,
   // late fonts, a new screen) draws again.
@@ -683,7 +721,7 @@
     draw();
   }
 
-  canvas.addEventListener('contextrestored', () => { bgKey = ''; A.resetCaches(); frameDirty = true; Array.prototype.forEach.call(document.querySelectorAll('canvas[data-icon]'), c => A.towerIcon(c, c.getAttribute('data-icon'))); });
+  canvas.addEventListener('contextrestored', () => { bgKey = ''; A.resetCaches(); A.warm(); frameDirty = true; Array.prototype.forEach.call(document.querySelectorAll('canvas[data-icon]'), c => A.towerIcon(c, c.getAttribute('data-icon'))); });
   if (document.fonts && document.fonts.load) {
     document.fonts.load('700 24px Fredoka', 'نَم+5').then(() => { frameDirty = true; }, () => { /* fallback fonts */ });
   }
@@ -708,6 +746,6 @@
   Kit.muteButton();
   Kit.lifecycle({ pause: pause, reset: function () { hoverPad = -1; } });
   toTitle();
-  Kit.loop(update, render);
+  Kit.art.loop(update, render);
   Kit.ready();
 })();

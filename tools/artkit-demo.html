@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>طقم الرسم</title>
+<link rel="stylesheet" href="../shared/game.css">
+<style>
+  html, body { margin: 0; height: 100%; background: #10142b; }
+  canvas { display: block; }
+  html[data-sg-art] .sg-overlay.demo-card {
+    inset: auto;
+    inset-inline-start: 16px;
+    top: 16px;
+    width: auto;
+    height: auto;
+    background: transparent;
+    backdrop-filter: none;
+    animation: none;
+  }
+  html[data-sg-art] .sg-overlay.demo-card .sg-panel { min-width: 220px; max-width: 280px; padding: 16px 18px; }
+  .tier-note { margin: 8px 0 0; font-size: 16px; }
+</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+<div class="sg-overlay demo-card">
+  <div class="sg-panel">
+    <h1 class="sg-title">طقم الرسم</h1>
+    <p class="sg-sub tier-note">جودة <b id="tierLabel">٢</b></p>
+    <button class="sg-btn" type="button">العب</button>
+    <button class="sg-btn secondary" type="button">رجوع</button>
+    <button class="sg-btn good" type="button">أحسنت</button>
+    <p><span class="sg-key">→</span> <span class="sg-key">←</span></p>
+  </div>
+</div>
+<script src="../shared/kit.js"></script>
+<script src="../shared/artkit.js"></script>
+<script>
+(function () {
+  var q = new URLSearchParams(location.search);
+  if (q.has('tier')) Kit.store('art').set('tier', +q.get('tier'));
+  if (q.get('motion') === 'reduce') Kit.motion.setPreference('reduce');
+  var canvas = document.getElementById('view');
+  var ctx = canvas.getContext('2d');
+  Kit.art.init({ canvas: canvas, ctx: ctx, mode: '2d', theme: q.get('theme') || 'day' });
+  var view = Kit.fit(canvas, 1280, 720);
+  document.getElementById('tierLabel').textContent = String(Kit.art.quality.tier);
+  var pal = Kit.art.pal;
+  var sky = Kit.art.sky('demo', 1280, 720, Kit.art.stops());
+  var far = Kit.art.bake('hills', 1280, 720, function (c, w, h) {
+    c.fillStyle = pal.grassDeep;
+    c.beginPath();
+    c.moveTo(0, h);
+    for (var x = 0; x <= w; x += 40) c.lineTo(x, h * 0.62 + Math.sin(x * 0.015) * 26);
+    c.lineTo(w, h); c.closePath(); c.fill();
+    c.fillStyle = pal.grass;
+    c.beginPath();
+    c.moveTo(0, h);
+    for (var x2 = 0; x2 <= w; x2 += 40) c.lineTo(x2, h * 0.78 + Math.sin(x2 * 0.02 + 1) * 18);
+    c.lineTo(w, h); c.closePath(); c.fill();
+  });
+  var near = Kit.art.bake('bushes', 1280, 720, function (c, w, h) {
+    for (var i = 0; i < 8; i++) {
+      Kit.art.blob(c, 80 + i * 160, h * 0.84, 48, 0.14, i);
+      Kit.art.outlined(c, i % 2 ? '#7adf78' : pal.grass, 4);
+    }
+  });
+  var farLayer = Kit.art.layer(far, 0.25);
+  var nearLayer = Kit.art.layer(near, 0.55);
+  var hero = Kit.art.sprite('hero', 150, 160, function (c, w, h) {
+    Kit.art.blob(c, w / 2, h * 0.58, 58, 0.08, 0.4);
+    Kit.art.outlined(c, '#ffb703', 5);
+    c.fillStyle = '#fff';
+    c.beginPath(); c.arc(w * 0.38, h * 0.48, 14, 0, 6.3); c.arc(w * 0.62, h * 0.48, 14, 0, 6.3); c.fill();
+    c.strokeStyle = pal.ink; c.lineWidth = 4; c.stroke();
+    c.fillStyle = pal.ink;
+    c.beginPath(); c.arc(w * 0.38, h * 0.5, 6, 0, 6.3); c.arc(w * 0.62, h * 0.5, 6, 0, 6.3); c.fill();
+    c.strokeStyle = pal.bad; c.lineWidth = 4; c.lineCap = 'round';
+    c.beginPath(); c.arc(w / 2, h * 0.62, 16, 0.2, Math.PI - 0.2); c.stroke();
+  });
+  var coins = pal.team.map(function (color, i) {
+    return Kit.art.sprite('team' + i, 54, 54, function (c, w, h) {
+      c.beginPath(); c.arc(w / 2, h / 2, 22, 0, 6.3);
+      Kit.art.outlined(c, color, 4);
+      Kit.art.gloss(c, 8, 6, w - 16, h * 0.45, 16);
+    });
+  });
+  var fx = Kit.art.fx();
+  var spring = Kit.art.spring();
+  var eye = {};
+  var cam = 0, burst = 0, popT = 0, shakeT = 0, lid = 0;
+  Kit.art.loop(function (dt) {
+    cam += dt * 40;
+    burst -= dt; popT -= dt; shakeT -= dt;
+    if (burst <= 0) {
+      burst = 0.45;
+      fx.burst(430, 340, { n: 22, color: pal.team[(Kit.art.rand() * 4) | 0], speed: 260, life: 1.1, size: 16, shape: 'confetti' });
+      fx.burst(430, 320, { n: 10, color: pal.gold, speed: 160, life: 0.9, size: 12, shape: 'star' });
+    }
+    if (popT <= 0) {
+      popT = 1.2;
+      Kit.art.pop('\u2066+10\u2069', 430, 230, { color: '#fff', size: 36 });
+      Kit.art.pop('رائع!', 540, 190, { color: pal.gold, size: 34 });
+      spring.kick(-3.2);
+    }
+    if (shakeT <= 0) { shakeT = 1.3; Kit.art.shake.add(0.35); }
+    fx.update(dt);
+    spring.update(dt);
+    Kit.art.shake.update(dt);
+    Kit.art.pop.update(dt);
+    lid = Kit.art.blink(eye);
+  }, function () {
+    var tier = Kit.art.quality.tier;
+    var c = view.ctx;
+    if (sky.canvas) c.drawImage(sky.canvas, 0, 0, 1280, 720);
+    c.save();
+    Kit.art.shake.apply(c);
+    farLayer.draw(c, cam, 0);
+    nearLayer.draw(c, cam * 1.6, 0);
+    if (tier > 0) Kit.art.blit(c, Kit.art.glow(pal.gold, 70), 430, 390, { alpha: 0.85 });
+    Kit.art.shadow(c, 360, 400, 140, 36, 0.5);
+    Kit.art.blit(c, hero, 430, 360, { sx: spring.sx, sy: spring.sy });
+    if (lid > 0.05) {
+      c.fillStyle = '#ffb703';
+      c.fillRect(392, 332, 30, 22 * lid);
+      c.fillRect(438, 332, 30, 22 * lid);
+    }
+    for (var i = 0; i < coins.length; i++) Kit.art.blit(c, coins[i], 250 + i * 72, 640);
+    fx.draw(view.ctx);
+    Kit.art.pop.draw(view.ctx);
+    view.ctx.restore();
+    if (tier > 0) Kit.art.vignette(view.ctx, 1280, 720, 0.35);
+  });
+})();
+</script>
+</body>
+</html>

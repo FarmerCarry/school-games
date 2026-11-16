@@ -63,6 +63,7 @@ time, after a 2 s tail). Any start in a window, or any output above −60 dBFS, 
 ```
 games/<slug>/            game code (the UI layer calls Kit.dda, Kit.stats, Kit.track; engines stay pure)
 shared/juice.js          Kit.juice  — procedural SFX engine (opt-in; portal + games)
+shared/artkit.js         Kit.art    — opt-in drawing kit (one shared file, not inlined)
 shared/kit.js            Kit        — lifecycle, input, audio graph, saving, scaling, Kit.dda,
                                       play statistics (Kit.stats, Kit.track, sg:telemetry)
 js/catalog.js            the games, categories and site name
@@ -86,6 +87,11 @@ Kit is inlined into every game page, so every minified byte in `shared/kit.js` c
 * `shared/juice.js`: **≤ 4,500 minified bytes**, loaded only by pages that use it
   (`<script src="../../shared/juice.js">` after `kit.js`; the portal loads
   `shared/juice.js` before `js/site.js`).
+* `shared/artkit.js`: **≤ 14,500 minified bytes**, one external file. It is not
+  inlined, so a byte there is paid once per PC, not once per game. Paint Tanks
+  and Cake Guards load it. The build leaves it external and adds `?v=` (the
+  first 8 hex characters of its sha256). `tools/artkit-demo.html` is a review
+  page and is not shipped.
 * Per-game budgets in `tools/asset-budgets.json` are reviewed numbers: when a change
   legitimately grows a page, raise its budget to the new size plus a small margin and
   record it in `docs/PERFORMANCE.md`.
