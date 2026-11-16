@@ -296,7 +296,9 @@ export const scenarios = {
   'magic-crayon': defaults(['#btnPlay'], `${g}.state.screen === 'play' && ${g}.state.id === '1-1'`, `[${g}.state.time,${g}.state.rolling,${g}.state.inkUsed,${g}.state.ball]`, hold('Space'), '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.inkUsed === 0 && !${g}.state.rolling && ${g}.state.strokes === 0`),
   // Juicy Drop: a first visit opens stage 1-1 with the helper cloud waiting above the jar.
   // Nothing drops until the child clicks or presses Space; Restart clears the jar.
-  'juicy-drop': defaults(['#btnPlay'], `${g}.state.screen === 'play'`, `[${g}.state.time,${g}.state.cloudX,${g}.state.drops,${g}.state.fruits]`, hold('Space'), '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.drops === 0 && ${g}.state.score === 0`)
+  'juicy-drop': defaults(['#btnPlay'], `${g}.state.screen === 'play'`, `[${g}.state.time,${g}.state.cloudX,${g}.state.drops,${g}.state.fruits]`, hold('Space'), '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.drops === 0 && ${g}.state.score === 0`),
+  // Robo Swarm: the foam blaster fires by itself. Only the child's keys move the hero.
+  'robo-swarm': defaults(['#btnPlay'], `${g}.state === 'play' && !${g}.paused`, `[${g}.px,${g}.t]`, hold('ArrowRight'), '#btnPause', `${g}.state === 'pause'`, '#btnRestart', `${g}.t < 0.5`)
 };
 for (const slug of ['connect-four','tic-tac-toe']) scenarios[slug] = {
   start: [click('#localButton')], active: `document.getElementById('boardApp').dataset.mode === 'local' && document.getElementById('gameBoard').dataset.winner === '0' && document.getElementById('gameBoard').dataset.draw !== 'true'`,
@@ -335,7 +337,8 @@ const inputSnapshots = {
   'desk-karts': `${g}.state.p1Dist`,
   'toy-castle': `${g}.state.p1Spawned`,
   'magic-crayon': `${g}.state.rolling`,
-  'juicy-drop': `${g}.state.drops`
+  'juicy-drop': `${g}.state.drops`,
+  'robo-swarm': `${g}.px`
 };
 for (const [slug, expr] of Object.entries(inputSnapshots)) scenarios[slug].inputSnapshot = expr;
 
@@ -387,7 +390,9 @@ const inputSeen = {
   'desk-karts': `${g}.state.p1Dist > sgInput.before`,
   'toy-castle': `${g}.state.p1Spawned > sgInput.before`,
   'magic-crayon': `${g}.state.rolling === true`,
-  'juicy-drop': `${g}.state.drops > sgInput.before`
+  'juicy-drop': `${g}.state.drops > sgInput.before`,
+  // Bolts and robots move by themselves. Only holding right walks the hero that way.
+  'robo-swarm': `${g}.px > sgInput.before + 8`
 };
 for (const [slug, expr] of Object.entries(inputSeen)) scenarios[slug].inputSeen = expr;
 
@@ -407,7 +412,8 @@ const heldKeys = {
   // until the hop is seen, so a slow software-rendered frame cannot miss it.
   'keyboard-obby': 'KeyF',
   'splat-catapult': 'ArrowUp', 'recess-kitchen': 'ArrowRight', 'desk-karts': 'ArrowUp',
-  'toy-castle': 'Digit1', 'magic-crayon': 'Space', 'juicy-drop': 'Space'
+  'toy-castle': 'Digit1', 'magic-crayon': 'Space', 'juicy-drop': 'Space',
+  'robo-swarm': 'ArrowRight'
 };
 for (const [slug, key] of Object.entries(heldKeys)) scenarios[slug].heldKey = key;
 

@@ -111,7 +111,8 @@ test('engine, simulation, level and verifier files never call Kit.stats or Kit.t
     'games/wacky-soccer/balance-sim.js', 'games/snake-arena/world.js', 'games/bubble-bop/rules.js', 'games/math-gates/engine.js',
     'games/word-garden/words.js', 'games/steady-hand/levels.js', 'games/splat-catapult/engine.js',
     'games/recess-kitchen/engine.js', 'games/desk-karts/engine.js', 'games/toy-castle/engine.js',
-    'games/magic-crayon/engine.js', 'games/juicy-drop/engine.js']) {
+    'games/magic-crayon/engine.js', 'games/juicy-drop/engine.js', 'games/robo-swarm/engine.js',
+    'games/robo-swarm/data.js']) {
     assert.ok(engines.some(file => rel(file) === known), 'engine scan covers ' + known);
   }
   const found = engines.filter(file => /\bKit\s*\.\s*(?:stats|track)\b/.test(read(file))).map(rel);
@@ -135,7 +136,7 @@ test('every catalog game reports the start and the end of its rounds', () => {
     if (!/Kit\.stats\.end\(/.test(text)) missing.push(slug + ': no Kit.stats.end');
   }
   assert.deepEqual(missing, []);
-  assert.equal(slugs.length, 50, 'the whole catalog');
+  assert.equal(slugs.length, 51, 'the whole catalog');
 });
 
 test('round ids are ids from the game, never typed text, names or codes', () => {

@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7a5cff"/>
+      <stop offset="1" stop-color="#ffb15a"/>
+    </linearGradient>
+  </defs>
+  <rect width="400" height="400" fill="url(#sky)"/>
+  <rect y="210" width="400" height="190" fill="#e7b45a"/>
+  <rect y="250" width="400" height="28" fill="#f0c36e"/>
+  <rect y="306" width="400" height="28" fill="#f0c36e"/>
+  <rect x="36" y="268" width="46" height="32" rx="6" fill="#ff5a7a"/>
+  <rect x="300" y="236" width="40" height="28" rx="6" fill="#3ec6ff"/>
+  <rect x="250" y="330" width="54" height="30" rx="6" fill="#5dcc4a"/>
+  <!-- popping robot -->
+  <g transform="translate(300 150)">
+    <ellipse cx="0" cy="46" rx="28" ry="8" fill="#000" opacity="0.15"/>
+    <rect x="-22" y="-8" width="44" height="40" rx="14" fill="#c06bff"/>
+    <circle cx="-10" cy="6" r="7" fill="#fff"/><circle cx="10" cy="6" r="7" fill="#fff"/>
+    <circle cx="-8" cy="7" r="3" fill="#24304a"/><circle cx="12" cy="7" r="3" fill="#24304a"/>
+    <path d="M-6 18 q6 8 12 0" fill="none" stroke="#24304a" stroke-width="2"/>
+    <circle cx="8" cy="-28" r="5" fill="#ffe14a"/>
+    <rect x="4" y="-22" width="4" height="12" fill="#d8deea"/>
+  </g>
+  <g fill="#ffe14a">
+    <circle cx="268" cy="128" r="5"/><circle cx="246" cy="150" r="4"/><circle cx="338" cy="120" r="6"/>
+    <rect x="250" y="112" width="10" height="4" transform="rotate(20 250 112)"/>
+    <rect x="340" y="148" width="12" height="4" transform="rotate(-30 340 148)"/>
+  </g>
+  <!-- ducks orbiting the hero -->
+  <g fill="#ffe14a" stroke="#ff8a24" stroke-width="3">
+    <circle cx="168" cy="168" r="16"/><circle cx="250" cy="210" r="16"/>
+    <circle cx="150" cy="250" r="16"/><circle cx="230" cy="150" r="14"/>
+  </g>
+  <!-- hero -->
+  <g transform="translate(200 230)">
+    <ellipse cx="0" cy="78" rx="36" ry="10" fill="#000" opacity="0.18"/>
+    <rect x="-26" y="8" width="52" height="46" rx="16" fill="#ff8a24"/>
+    <circle cx="0" cy="-8" r="22" fill="#ffd2b8"/>
+    <rect x="-20" y="-28" width="40" height="16" rx="8" fill="#24304a"/>
+    <rect x="-16" y="-16" width="32" height="10" rx="5" fill="#9af0ff"/>
+    <circle cx="-8" cy="-6" r="2.4" fill="#24304a"/>
+    <circle cx="8" cy="-6" r="2.4" fill="#24304a"/>
+    <path d="M-8 4 q8 8 16 0" fill="none" stroke="#c47a58" stroke-width="2"/>
+    <rect x="24" y="18" width="36" height="16" rx="7" fill="#ff8a24"/>
+    <rect x="46" y="4" width="16" height="18" rx="6" fill="#14b8c8"/>
+    <circle cx="58" cy="26" r="7" fill="#ffe14a"/>
+  </g>
+  <!-- little walker -->
+  <g transform="translate(70 300)">
+    <rect x="-18" y="-6" width="36" height="34" rx="12" fill="#3ec6ff"/>
+    <circle cx="-8" cy="6" r="6" fill="#fff"/><circle cx="8" cy="6" r="6" fill="#fff"/>
+    <circle cx="-6" cy="7" r="2.5" fill="#24304a"/><circle cx="10" cy="7" r="2.5" fill="#24304a"/>
+    <circle cx="4" cy="-24" r="4" fill="#ffe14a"/>
+  </g>
+  <text x="200" y="54" text-anchor="middle" font-family="Tahoma, sans-serif" font-size="42" font-weight="700" fill="#fff">G,HE 'D1H(H*'*</text>
+</svg>
