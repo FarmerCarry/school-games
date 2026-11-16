@@ -54,11 +54,16 @@ test('every optimized thumbnail renders exactly the same pixels as its editable 
   // that never settles used to sit here until the 10-minute file limit.
   const withDeadline = async (work, ms, message) => {
     let timer;
+    // Closing the page makes a stuck decode reject. Otherwise browser.close()
+    // waits out the rest of the file limit after this clock has already fired.
+    const timeout = new Promise((_, reject) => {
+      timer = setTimeout(() => {
+        page.close().catch(() => {});
+        reject(new Error(message));
+      }, ms);
+    });
     try {
-      return await Promise.race([
-        work,
-        new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(message)), ms); })
-      ]);
+      return await Promise.race([work, timeout]);
     } finally { clearTimeout(timer); }
   };
   await page.goto(server.origin + '/artwork-fonts', { timeout: 15000 }).catch(error => {
