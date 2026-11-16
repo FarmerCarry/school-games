@@ -1254,3 +1254,21 @@ address), on top of the six new games.
 The game limit is the measured size rounded up to the next 500 bytes. The portal
 and the cache are rounded up to the next 1,000. The portal grew by the catalog
 entry and the inlined thumbnail; the cache grew by that plus the new page.
+
+## Balloon Blast, 16 November 2026
+
+معركة البالونات is a water-balloon maze for one or two players, brought forward
+from the older pull request onto the current site. The grid simulation stays in
+`engine.js` (no statistics calls); the page reports rounds through `Kit.stats`.
+
+Measured with the Linux minified build as CI builds it (with the statistics
+address), on top of Robo Swarm.
+
+| Measurement | Before bytes | After bytes | Before limit | New limit |
+| --- | ---: | ---: | ---: | ---: |
+| Balloon Blast page | — | 85,142 | — | 85,500 |
+| Portal | 476,559 | 480,963 | 477,000 | 481,000 |
+| Offline precache, 64 → 65 files | 7,585,468 | 7,675,014 | 7,586,000 | 7,676,000 |
+
+Same rounding as the other new games: the page to the next 500 bytes, the portal
+and the cache to the next 1,000.

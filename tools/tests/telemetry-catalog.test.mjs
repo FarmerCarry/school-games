@@ -100,7 +100,7 @@ async function playIn(state, slug) {
 }
 
 test('every catalog game reports its visit and its rounds to the statistics sender', { timeout: 30 * 60 * 1000 }, async t => {
-  assert.equal(slugs.length, 51);
+  assert.equal(slugs.length, 52);
   const state = await session(t, { url: INGEST, allowLocal: true }), { page } = state;
   await page.goto(server.origin + '/');
   const report = {}, missing = [];
