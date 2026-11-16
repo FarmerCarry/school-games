@@ -1,6 +1,6 @@
 {
   "format": 1,
-  "portalBytes": 481000,
+  "portalBytes": 482000,
   "gameHtmlBytes": {
     "air-hockey": 115000,
     "balloon-blast": 85500,
@@ -63,5 +63,5 @@
     "fredoka-latin-500-normal.woff2": 18500,
     "fredoka-latin-700-normal.woff2": 18000
   },
-  "precacheBytes": 7700000
+  "precacheBytes": 7702000
 }

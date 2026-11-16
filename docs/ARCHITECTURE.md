@@ -11,17 +11,20 @@ this file wins and they are updated to match.
 | Play tracking | **Anonymous play statistics only** ("Play statistics" below): the fast build may send what is played on each PC, never who plays it, to the school's own statistics server, and only when the build is given its address (`SG_TELEMETRY_URL`). No names, accounts, profiles or ages; no local play statistics or teacher statistics page; no third-party analytics. Nothing else on the site uses the network. |
 | Players | **No profiles.** No "who's playing", guests, age bands or XP: children open a game and play. Each game's progress and difficulty belong to the PC. |
 | Classroom settings | **None.** No classroom panel, quiet/effects preset, session timer or hand-over. The topbar 🔊 button mutes the portal and the games. |
-| Difficulty | Every game scales: tiered complexity per game plus dynamic difficulty (`Kit.dda`) that adapts to how the children play on that PC. |
+| Difficulty | Every game scales from a gentle start to real challenge via tiered levels or endless ramps, and 23 of the 52 games also adapt dynamically (`Kit.dda`) to how children play on that PC. |
 
 ## Audience and pillars
 
-* **Ages 6–11**, on old Windows school PCs with a mouse and keyboard and slow hard disks.
-  Pure entertainment: arcade, action and hyper-casual loops. No edutainment.
-* **Every game scales.** A 6-year-old novice and an 11-year-old expert must both find
-  the right challenge: tiered complexity per game plus dynamic difficulty (DDA).
+* **Ages 5–11**, on old Windows school PCs with a mouse and keyboard and slow hard disks.
+  Fun first: arcade, action, hyper-casual and playful skill games (typing, keyboard
+  shortcuts, spelling and quick math built as fast arcade loops rather than worksheets).
+* **Every game scales.** A 5-year-old novice and an 11-year-old expert must both find
+  the right challenge: tiered complexity per game, plus dynamic difficulty (DDA) where
+  adaptive pacing helps.
 * **Zero background music.** Only tactile, procedural SFX (see below).
 * **Lightweight.** No audio files, no fetched assets, one file per game in the fast
-  build, procedural canvas/SVG/three.js art, offline cache.
+  build (with `three.min.js` and `shared/artkit.js` cached once as shared files),
+  procedural canvas/SVG/three.js art, offline cache.
 * **Private by construction.** There is nothing to identify a child: no names, accounts,
   profiles or ages. Beyond each game's own progress and difficulty in that browser, the only
   record of play is the anonymous statistics a fast build with an address sends to the
@@ -79,19 +82,19 @@ the portal only through `postMessage` via Kit.
 ### Byte policy
 
 Kit is inlined into every game page, so every minified byte in `shared/kit.js` costs
-~38 bytes of offline cache.
+52 bytes of offline cache.
 
 * The play statistics in `shared/kit.js` (`Kit.stats`, `Kit.track`, `sg:telemetry`):
-  **about 2,060 minified bytes** (measured with the build's esbuild options), about 103 KB of
-  offline cache over the 50 game pages. Further growth needs a budget decision.
+  **about 2,060 minified bytes** (measured with the build's esbuild options), about 107 KB of
+  offline cache over the 52 game pages. Further growth needs a budget decision.
 * `shared/juice.js`: **≤ 4,500 minified bytes**, loaded only by pages that use it
   (`<script src="../../shared/juice.js">` after `kit.js`; the portal loads
   `shared/juice.js` before `js/site.js`).
 * `shared/artkit.js`: **≤ 14,500 minified bytes**, one external file. It is not
-  inlined, so a byte there is paid once per PC, not once per game. Paint Tanks
-  and Cake Guards load it. The build leaves it external and adds `?v=` (the
-  first 8 hex characters of its sha256). `tools/artkit-demo.html` is a review
-  page and is not shipped.
+  inlined, so a byte there is paid once per PC, not once per game. Paint Tanks,
+  Cake Guards, Beat Dash and Sneaky Levels (`troll-level`) load it. The build
+  leaves it external and adds `?v=` (the first 8 hex characters of its sha256).
+  `tools/artkit-demo.html` is a review page and is not shipped.
 * Per-game budgets in `tools/asset-budgets.json` are reviewed numbers: when a change
   legitimately grows a page, raise its budget to the new size plus a small margin and
   record it in `docs/PERFORMANCE.md`.

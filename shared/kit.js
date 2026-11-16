@@ -93,8 +93,8 @@
     if (Kit.keys) Kit.keys.reset();
     pointerResets.forEach(function (reset) { reset(); });
     lifecycleHandlers.slice().forEach(function (hooks) {
-      if (hooks.reset) hooks.reset();
-      hooks.pause(reason);
+      try { if (hooks.reset) hooks.reset(); } catch (e) { /* keep going */ }
+      try { hooks.pause(reason); } catch (e) { /* one faulty hook must not skip later save hooks */ }
     });
   }
   // Enter the game's existing pause state. Returning focus NEVER resumes play.

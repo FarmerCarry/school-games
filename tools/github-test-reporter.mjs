@@ -33,13 +33,15 @@ export default async function* report(source) {
       if (process.env.GITHUB_ACTIONS === 'true') yield `[test] start ${located(data)} ${data.name}\n`;
     }
     const error = data?.details?.error;
-    const fileTimedOut = type === 'test:fail' && error?.failureType === 'testTimeoutFailure' && data?.name === data?.file && running;
-    if (fileTimedOut) yield `timed out while running: ${running.name} (${located(running)})\n`;
+    const timedOut = type === 'test:fail' && error?.failureType === 'testTimeoutFailure'
+      ? (data?.name === data?.file ? running : data)
+      : null;
+    if (timedOut) yield `timed out while running: ${timedOut.name} (${located(timedOut)})\n`;
     if (type === 'test:fail' && process.env.GITHUB_ACTIONS === 'true' && error?.failureType !== 'subtestsFailed') {
       const detail = inspect(error, { depth: 8, colors: false, maxArrayLength: 100, maxStringLength: 12000 });
-      const title = fileTimedOut ? `Timed out: ${running.name}` : (data.name || 'Node test failed');
-      const message = fileTimedOut ? `Still running: ${running.name}\n${detail}` : detail;
-      yield githubError(title, message.slice(0, 14000), fileTimedOut ? running : data);
+      const title = timedOut ? `Timed out: ${timedOut.name}` : (data.name || 'Node test failed');
+      const message = timedOut ? `Still running: ${timedOut.name}\n${detail}` : detail;
+      yield githubError(title, message.slice(0, 14000), timedOut || data);
     }
     if ((type === 'test:pass' || type === 'test:fail') && running && data?.name === running.name) running = null;
   }

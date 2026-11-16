@@ -202,13 +202,20 @@ before publishing. The workflow builds with the school's Worker address by defau
 deploy job asks that server's `/v1/health` and stops before publishing while `accepts` lacks 3.
 
 1. Deploy the statistics server, with its allowed origins set to the portal's origin (for
-   example `https://name.github.io`).
-2. In the GitHub repository: **Settings → Secrets and variables → Actions → Variables → New
+   example `https://name.github.io`; the server refuses batches without an allowed `Origin`
+   header).
+2. **Keep the server's game list in step with `js/catalog.js`:** `school-games-telemetry`
+   keeps an explicit `GAME_SLUGS` allowlist in `games.mjs` (dropping events for any unknown
+   slug while still answering `204`) and fallback names/metadata in `dashboard/names.js`
+   (regenerated with `node dashboard/make-names.mjs`). Whenever a game is added or renamed in
+   `js/catalog.js`, update `games.mjs` and regenerate `dashboard/names.js` in
+   `school-games-telemetry` before or alongside publishing the game.
+3. In the GitHub repository: **Settings → Secrets and variables → Actions → Variables → New
    repository variable**, name **`SG_TELEMETRY_URL`**, value the full address, for example
    `https://telemetry.example.org/v1/batch`. It is a variable, not a secret: the address ends
    up in the public page anyway. Without it the workflow uses the school's Worker,
    `https://school-games-telemetry.services-agreement137.workers.dev/v1/batch`.
-3. Run the workflow (or push to `main`). `.github/workflows/build.yml` passes the address only
+4. Run the workflow (or push to `main`). `.github/workflows/build.yml` passes the address only
    to its "Build the fast site" steps; the build log then says
    `telemetry: the portal sends anonymous play statistics to <host>`.
 

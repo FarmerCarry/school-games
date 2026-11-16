@@ -1327,3 +1327,17 @@ repeated drawing left the world files.
 
 The page limit is the measured size rounded up to the next 500 bytes. The cache
 is rounded up to the next 1,000. The portal is unchanged.
+
+## Robo Swarm Arabic thumbnail and Kit suspend isolation, 16 November 2026
+
+Writing the Robo Swarm thumbnail caption in Arabic (`هجوم الروبوتات`) adds 142 bytes
+to the inlined portal, and isolating each `reset()` / `pause()` hook inside
+`Kit.lifecycle`'s `suspend()` adds 23 minified bytes to `shared/kit.js` (1,196 bytes
+across the 52 game pages; every individual game stays inside its existing page limit).
+Measured with the Linux minified build and the default statistics address:
+
+| Measurement | Before bytes | After bytes | Before limit | New limit |
+| --- | ---: | ---: | ---: | ---: |
+| Portal | 480,963 | 481,105 | 481,000 | 482,000 |
+| Offline precache, 66 files | 7,699,215 | 7,700,553 | 7,700,000 | 7,702,000 |
+

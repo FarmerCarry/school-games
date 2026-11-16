@@ -1,11 +1,12 @@
 # ألعاب الفسحة (Recess Arcade) 🎮
 
-A light, ad-free games website **in Arabic** for children aged 6–11: a small Poki-style portal
+A light, ad-free games website **in Arabic** for children aged 5–11: a small Poki-style portal
 with original browser games, all written from scratch for this site. The site and all of its
-games are in Arabic, laid out right-to-left. The games are being made to scale from a 6-year-old
-who has never held a mouse to an 11-year-old expert (Bubble Bop, Road Hopper, Dino 3D, Key Runner,
-Lightning Fingers, Egg Rush, Lucky Lake and Chaos Island adapt their difficulty to how the children
-play on each PC), and none of them plays background music.
+games are in Arabic, laid out right-to-left. The games scale from a 5-year-old who has never
+held a mouse to an 11-year-old expert (23 of the 52 games—including Bubble Bop, Road Hopper,
+Dino 3D, Beat Dash, Math Gates, Word Garden, Shortcut Factory, Robo Swarm and Balloon Blast—adapt
+their difficulty dynamically via `Kit.dda` to how children play on each PC), and none of them
+plays background music.
 
 - **No ads, no accounts, no profiles, no names, no ages, no chat, no third-party analytics, no links to other sites.**
   Children open a game and play; nothing they type is ever sent.
@@ -310,8 +311,9 @@ publishing them. It deploys that folder directly with GitHub's Pages artifact an
 (see `.github/workflows/build.yml` and `tools/build.mjs`). It looks and plays exactly
 the same, but:
 
-- each game is **one file** instead of 6–13, and the home page is one file with all pictures
-  built in, so a slow hard disk has far fewer files to read;
+- each game is **one file** instead of 6–13 (with `three.min.js` and `shared/artkit.js` shared
+  once across the games that use them), and the home page is one file with all pictures built in,
+  so a slow hard disk has far fewer files to read;
 - after the first visit, every PC keeps the whole site in an **offline cache**: games open
   without asking the server, still work if the internet drops, and after an update each PC
   downloads only the files that changed;
@@ -426,6 +428,7 @@ games/<slug>/             one folder per game (index.html + thumb.svg + its own 
 shared/kit.js             tiny helper library all games use (sound, saving, input, scaling, lifecycle,
                           difficulty control Kit.dda, play statistics Kit.stats and Kit.track)
 shared/juice.js           procedural sound effects (Kit.juice in games, Juice in the portal)
+shared/artkit.js          2D cartoon drawing kit (Kit.art; kept as one shared file in the fast build)
 shared/game.css           shared game page styles + the Fredoka font
 lib/three/                three.js r159 (MIT) for the 3D games
 docs/ARCHITECTURE.md      the platform contract: runtime, Kit, the portal, sound, difficulty

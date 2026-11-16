@@ -10,7 +10,7 @@
  * GitHub's 10-minute cache expires, a separate check with the server), so the build cuts
  * the number of files a page needs:
  *   - each game becomes ONE html file: its CSS/JS plus shared/kit.js and shared/game.css are
- *     minified and inlined. Fonts and three.js stay shared files (cached once for all games).
+ *     minified and inlined. Fonts, three.js and shared/artkit.js stay shared files (cached once).
  *   - the portal becomes one html file with its CSS, JS, the catalog and all thumbnails inlined.
  *   - sw.js: an offline cache. After the first visit the whole site is stored on the PC, pages
  *     open without asking the server, and it still works if the internet drops. Each build

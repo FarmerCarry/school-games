@@ -119,6 +119,20 @@ test('focus, visibility and portal escape clear held inputs before semantic paus
   assert.ok(h.sent.includes('sg:focus-portal'));
 });
 
+test('a throwing reset or pause hook in suspend never skips later lifecycle hooks', () => {
+  const h = harness(), seen = [];
+  h.Kit.lifecycle({
+    reset() { seen.push('first-reset'); throw new Error('broken reset'); },
+    pause(reason) { seen.push('first-pause:' + reason); throw new Error('broken pause'); }
+  });
+  h.Kit.lifecycle({
+    reset() { seen.push('second-reset'); },
+    pause(reason) { seen.push('second-pause:' + reason); }
+  });
+  assert.doesNotThrow(() => h.window.emit('blur'));
+  assert.deepEqual(seen, ['first-reset', 'first-pause:blur', 'second-reset', 'second-pause:blur']);
+});
+
 test('foreign windows cannot pause a game or change its preferences', () => {
   const h = harness(); let pauses = 0;
   h.Kit.lifecycle({pause() { pauses++; }});

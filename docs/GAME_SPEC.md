@@ -1,7 +1,7 @@
 # Game spec (the rules every game follows)
 
-Players are **children aged 6–11** (1st to 5th grade) on **old Windows school PCs with a mouse
-and keyboard**, at school, as a reward. A 6-year-old who has barely used a mouse and an 11-year-old
+Players are **children aged 5–11** (kindergarten to 5th grade) on **old Windows school PCs with a mouse
+and keyboard**, at school, as a reward. A 5-year-old who has barely used a mouse and an 11-year-old
 expert play the same games, so every game scales (see "Kit v2 for game authors"). Every game is
 **original and written from scratch** for this site: no copied code or art, no ads, no network
 calls from games, no links to other sites. The platform contract is [`ARCHITECTURE.md`](ARCHITECTURE.md);
@@ -12,7 +12,8 @@ two players taking turns on the same PC and a computer opponent. Both modes must
 work offline and from `file://`, without player names, accounts, or a game server.
 
 The aim is **fun**: the kind of game a child picks on Poki or CrazyGames and asks for
-"one more round". These are not educational games: arcade, action and hyper-casual loops.
+"one more round"—arcade, action, hyper-casual, and playful skill games (typing, keyboard
+shortcuts, spelling or quick math taught through fast arcade play rather than worksheets).
 
 ## 🌐 Language: ARABIC (required)
 
@@ -61,6 +62,7 @@ A game may only use files from its own folder plus these shared ones:
 |-------------------------------------|---------------------------------------------------------------|
 | `../../shared/kit.js`               | helpers: sound, saving, keys, mouse, canvas scaling, loop, particles, lifecycle, difficulty (`Kit.dda`) |
 | `../../shared/juice.js`             | optional procedural sound effects (`Kit.juice`); load it after `kit.js` |
+| `../../shared/artkit.js`            | optional 2D cartoon drawing kit (`Kit.art`); stays one shared external file in the fast build |
 | `../../shared/game.css`             | base page styles, the Fredoka font, overlay/panel/button/keycap classes |
 | `../../lib/three/three.min.js`      | three.js r159 (classic script, gives `window.THREE`) for 3D games |
 
@@ -108,7 +110,8 @@ not loaded by other games.
    With three.js, cap `devicePixelRatio` at 1.5 and keep draw calls low.
 9. **Fast-build friendly.** Load your files with plain `<script src="…"></script>` and
    `<link rel="stylesheet" href="…">` tags (no extra attributes) — `tools/build.mjs` inlines
-   them into one file per game. Don't read canvases back with `toDataURL`/`getImageData` in
+   them into one file per game (keeping `three.min.js` and `shared/artkit.js` as shared cached
+   files paid once per PC). Don't read canvases back with `toDataURL`/`getImageData` in
    loops or every frame (each read waits for the graphics card); make images once and reuse them.
 10. **No console errors** at any point: loading, playing, pausing, dying, restarting,
    resizing or reloading.
