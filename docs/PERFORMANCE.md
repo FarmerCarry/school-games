@@ -1272,3 +1272,27 @@ address), on top of Robo Swarm.
 
 Same rounding as the other new games: the page to the next 500 bytes, the portal
 and the cache to the next 1,000.
+
+## Shared art kit, with the Paint Tanks and Cake Guards makeovers, 16 November 2026
+
+`shared/artkit.js` is the opt-in drawing kit (`Kit.art`). It stays one external
+file, minified and precached once: inlining it would copy the same bytes into
+every game. Paint Tanks and Cake Guards load it and use it for their pictures.
+The gameplay, controls and statistics calls are unchanged. `tools/artkit-demo.html`
+is only a review page and is not part of the site. The portal does not load the kit,
+so its size is unchanged.
+
+This branch also carries the new games below it, so the cache numbers include
+them. The art kit itself is the extra file, and the two makeovers are what grow
+those two pages.
+
+| Measurement | After bytes | Previous limit | New limit |
+| --- | ---: | ---: | ---: |
+| `shared/artkit.js` | 13,915 | — | 14,300 (cap 14,500) |
+| Paint Tanks page | 116,676 | 112,000 | 117,000 |
+| Cake Guards page | 90,746 | 84,000 | 91,000 |
+| Portal | 480,963 | 481,000 | 481,000 (unchanged) |
+| Offline precache, 65 → 66 files | 7,700,879 | 7,676,000 | 7,701,000 |
+
+Page limits are the measured size rounded up to the next 500 bytes. The cache is
+rounded up to the next 1,000. The art-kit limit sits under the 14,500 byte cap.

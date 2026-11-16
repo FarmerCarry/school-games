@@ -9,7 +9,7 @@
     "block-burst": 114000,
     "block-world": 158000,
     "bubble-bop": 175000,
-    "cake-guards": 84000,
+    "cake-guards": 91000,
     "candy-rope": 111500,
     "chaos-island": 151000,
     "connect-four": 55000,
@@ -46,7 +46,7 @@
     "steady-hand": 100500,
     "sumo-bonk": 121500,
     "swing-hook": 108000,
-    "tank-splat": 112000,
+    "tank-splat": 117000,
     "tic-tac-toe": 55000,
     "toy-castle": 112000,
     "troll-level": 253500,
@@ -56,11 +56,12 @@
     "word-garden": 122000
   },
   "threeBytes": 750000,
+  "artBytes": 14300,
   "fontBytes": {
     "baloo-bhaijaan-2-arabic-500-normal.woff2": 25000,
     "baloo-bhaijaan-2-arabic-700-normal.woff2": 25000,
     "fredoka-latin-500-normal.woff2": 18500,
     "fredoka-latin-700-normal.woff2": 18000
   },
-  "precacheBytes": 7676000
+  "precacheBytes": 7701000
 }
