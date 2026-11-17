@@ -1595,6 +1595,7 @@
     var t = menuT;
     var th = curTheme();
     ctx.setTransform(view.scale * view.dpr, 0, 0, view.scale * view.dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
     var look = myLook();
     if (scene === 'play' && G.s) {
       var s = G.s, L = G.L;
