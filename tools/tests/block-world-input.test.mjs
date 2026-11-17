@@ -172,3 +172,61 @@ test('Block World keeps the recipe list still while the backpack is open, so a d
   const inv = await page.evaluate(() => __game.G.inv.filter(Boolean).map(s => [s.id === BW.B.PLANKS ? 'planks' : s.id, s.n]));
   assert.deepEqual(inv, [['planks', 4]], 'one log made 4 planks and nothing else');
 });
+
+test('Auto-Best-Tool mines diamond ore while holding planks, and right-clicking TNT blasts a 3x3 ore crater', async t => {
+  const page = await adventure(t);
+  const res = await page.evaluate(() => {
+    const G = __game.G, P = __game.player, B = BW.B, I = BW.I;
+    G.inv.fill(null);
+    G.inv[0] = { id: B.PLANKS, n: 10 };
+    G.inv[20] = { id: I.PICK_DIAMOND, n: 1 };
+    G.sel = 0; // Holding planks in hand!
+    const tx = Math.floor(P.x + P.w / 2) + 2, ty = __game.surfaceY(tx) - 1;
+    G.world.set(tx, ty, B.DIAMOND_ORE);
+    stepGame(20);
+    clickAt(tx + 0.5, ty + 0.5, 0, 28);
+    const afterAutoTool = {
+      broken: G.world.get(tx, ty) === B.AIR,
+      droppedDiamond: G.items.some(it => it.id === I.DIAMOND)
+    };
+    // Place TNT next to Ruby & Gold Ore and right-click to detonate!
+    const bx = tx + 2, by = __game.surfaceY(bx) - 1;
+    G.world.set(bx, by, B.TNT);
+    G.world.set(bx + 1, by, B.RUBY_ORE);
+    G.world.set(bx, by + 1, B.GOLD_ORE);
+    clickAt(bx + 0.5, by + 0.5, 2, 2);
+    stepGame(85);
+    return {
+      afterAutoTool,
+      blasts: G.stats.blasts,
+      craterAir: G.world.get(bx + 1, by) === B.AIR && G.world.get(bx, by + 1) === B.AIR,
+      rubyDrop: G.items.some(it => it.id === I.RUBY) || (G.stats.got[I.RUBY] || 0) > 0
+    };
+  });
+  assert.deepEqual(res.afterAutoTool, { broken: true, droppedDiamond: true });
+  assert.equal(res.blasts, 1);
+  assert.equal(res.craterAir, true);
+  assert.equal(res.rubyDrop, true);
+});
+
+test('1-Click HUD Quick-Craft strip crafts directly on the play screen without opening backpack', async t => {
+  const page = await adventure(t);
+  const pt = await page.evaluate(() => {
+    __game.G.inv.fill(null);
+    __game.give(BW.B.LOG, 2);
+    stepGame(30);
+    __game.render();
+    const cv = document.getElementById('game'), r = cv.getBoundingClientRect();
+    const scale = r.width / 1280;
+    // First Quick-Craft pill is drawn at logical (24 + 26, 720 - 66 + 26) = (50, 680)
+    return { x: r.left + 50 * scale, y: r.top + 680 * scale };
+  });
+  await page.mouse.click(pt.x, pt.y);
+  await page.evaluate(() => stepGame(2));
+  const after = await page.evaluate(() => ({
+    mode: __game.G.mode,
+    craftedPlanks: __game.G.stats.craft[BW.B.PLANKS] || 0
+  }));
+  assert.deepEqual(after, { mode: 'play', craftedPlanks: 4 });
+});
+

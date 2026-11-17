@@ -1,725 +1,466 @@
-/* ضربة إلى الفضاء: game flow, input, camera, effects, sound and menus.
- * The canvas and the DOM layer share a fixed logical 1280 × 720 view.
- * No requests or module loader: this also runs from a downloaded folder.
- */
-(function () {
-  'use strict';
-  var P = window.GolfPhysics, A = window.GolfArt, K = window.Kit;
-  var $ = function (id) { return document.getElementById(id); };
-  var canvas = $('game'), ui = $('ui');
-  var view = K.fit(canvas, 1280, 720, { maxDpr: 1.5 });
-  var ctx = view.ctx, storage = K.store('skybound-golf');
-  var save = P.sanitizeSave(storage.get('progress', {}));
-  var reduced = K.motion.reduced();
+(function(){
+'use strict';
+var K=window.Kit,P=window.GolfPhysics,A=window.GolfArt,J=K.juice,W=1280,H=720;
+function el(id){return document.getElementById(id);}
+function on(n,ev,fn,cap){n.addEventListener(ev,fn,!!cap);}
+function ltr(v){return '\u2066'+v+'\u2069';}
+function clp(v,a,b){return v<a?a:v>b?b:v;}
 
-  var GAUGE_PERIOD = 1.3, SWING_TIME = 0.08, MAX_PARTICLES = 220;
-  var TEE_CAM = { x: 5.5, y: 3.6, zoom: 1.9 };
-  var s = {
-    world: save.world, course: P.createCourse(save.world), phase: 'title', time: 0,
-    cam: { x: TEE_CAM.x, y: TEE_CAM.y, zoom: TEE_CAM.zoom }, ball: null, skin: save.skin, reduced: reduced,
-    golfer: { angle: A.ADDRESS, jump: 0, jumpT: 0 }, gauge: { show: false, value: 0, perfect: P.bands.perfect },
-    trail: [], particles: [], popups: [], shake: { x: 0, y: 0 }, flash: 0, reticle: null,
-    bestX: 0, unlockX: 0, unlockName: '', flame: 0, squash: null, landed: null,
-    padPulse: null, propHit: null, magnet: 0, space: false, hints: true
-  };
-  var modalMode = '', paused = false, gaugeT = 0, swing = null, hitStop = 0, follow = -1, shake = 0;
-  var landedT = 0, result = null, newWorld = -1, burstEl = null, lastFocus = null, toastTimer = 0;
-  var coinStreak = 0, lastCoinAt = -9, busyAt = 0, gaugeHot = false, emptyWarned = false, unlockSeen = false;
-  var renderDirty = true, renderedTime = -1, hud = { meters: -1, coins: -1, alt: -1, rockets: '' };
-  var mute = K.muteButton(); ui.appendChild(mute);
-  // A held Space or Enter must not keep pressing the button that a screen
-  // change has just focused: one key press, one action.
-  ui.addEventListener('keydown', function (e) {
-    if (e.repeat && (e.code === 'Space' || e.code === 'Enter' || e.code === 'NumpadEnter') && e.target.closest && e.target.closest('button')) e.preventDefault();
-  }, true);
-  // The second press of a double-click lands on whatever the first one
-  // revealed (the canvas, a world card, an upgrade). Ignore it there.
-  var lastClick = null;
-  // Shop buttons are rebuilt after each purchase, so a control is known by
-  // its id or item, not by its element: quick repeat buys still count.
-  function control(el) {
-    return el.id || (el.dataset && (el.dataset.upgrade || el.dataset.skin)) || el;
-  }
-  function strayPress(e, target) {
-    // A button still showing where it was (mute, a shop card) revealed nothing.
-    if (lastClick && lastClick.el.isConnected && lastClick.el.offsetParent) return false;
-    return !!(lastClick && e.timeStamp - lastClick.t < 500 && control(target) !== lastClick.target &&
-      Math.abs(e.clientX - lastClick.x) < 16 && Math.abs(e.clientY - lastClick.y) < 16);
-  }
-  ui.addEventListener('click', function (e) {
-    if (!e.detail) return;
-    var target = e.target.closest ? e.target.closest('button') || e.target : e.target;
-    if (strayPress(e, target)) { e.preventDefault(); e.stopPropagation(); return; }
-    // Only a button press that changes what is under the pointer can be
-    // followed by a stray second press; clicks on empty space never arm this.
-    if (target.tagName === 'BUTTON') lastClick = { t: e.timeStamp, x: e.clientX, y: e.clientY, target: control(target), el: target };
-  }, true);
-  var saveStatus = K.saveStatus({ retry: persist });
+var cv=el('game'),ui=el('ui'),dirty=true;
+if(K.art)K.art.init({canvas:cv,mode:'2d',theme:'day'});
+var ctx=K.fit(cv,W,H,{maxDpr:1.5,onResize:function(v){
+ui.style.left=Math.round((window.innerWidth - W*v.scale)/2)+'px';
+ui.style.top=Math.round((window.innerHeight - H*v.scale)/2)+'px';
+ui.style.transform='scale('+v.scale+')';dirty=true;
+}}).ctx;
 
-  K.motion.onChange(function (value) {
-    reduced = s.reduced = value;
-    if (value) { s.trail.length = 0; s.particles.length = 0; s.shake.x = s.shake.y = 0; s.flash = 0; }
-    renderDirty = true;
-  });
-  canvas.addEventListener('contextrestored', function () { view.resize(); renderDirty = true; });
+var hud=el('hud'),rktsEl=el('rockets'),hintEl=el('hint'),pauseBtn=el('pause'),toastEl=el('toast');
+var titleEl=el('title-screen'),modalEl=el('modal'),panelEl=el('panel'),closeBtn=el('close-modal'),hdEl=el('modal-heading');
+var resEl=el('result-content'),unlkEl=el('result-unlock'),shopEl=el('shop-content'),upsEl=el('upgrades');
+var skWrap=el('skins-content'),skEl=el('skins'),wldsEl=el('worlds-content'),pauseEl=el('pause-content');
+var againBtn=el('again'),menuBtn=el('menu'),tipEl=el('modal-tip');
 
-  var UPGRADES = {
-    power: { name: 'قوة الضربة', explain: 'انطلق أبعد', icon: '<path d="M22 3 9 21h10l-4 14 16-20H21z" fill="#ffd000" stroke="#24133f" stroke-width="3" stroke-linejoin="round"/>' },
-    bounce: { name: 'الارتداد', explain: 'قفزات أعلى', icon: '<path d="M5 33Q11 4 19 24Q24 10 33 28" fill="none" stroke="#7dff8a" stroke-width="5" stroke-linecap="round"/><circle cx="31" cy="11" r="5" fill="#fff" stroke="#24133f" stroke-width="3"/>' },
-    rockets: { name: 'الصواريخ', explain: 'صاروخ إضافي', icon: '<path d="M20 3c7 6 9 15 6 24h-12C11 18 13 9 20 3z" fill="#fff" stroke="#24133f" stroke-width="3"/><circle cx="20" cy="15" r="3.5" fill="#2bd1c1" stroke="#24133f" stroke-width="2"/><path d="M14 22l-6 8 7-1M26 22l6 8-7-1" fill="#ff4f6d" stroke="#24133f" stroke-width="2.5" stroke-linejoin="round"/><path d="M16 29l4 9 4-9z" fill="#ff8a1a"/>' },
-    magnet: { name: 'المغناطيس', explain: 'اجذب العملات', icon: '<path d="M9 6v14a11 11 0 0 0 22 0V6h-7v14a4 4 0 0 1-8 0V6z" fill="#ff4f6d" stroke="#24133f" stroke-width="3" stroke-linejoin="round"/><path d="M9 6h7v6H9zM24 6h7v6h-7z" fill="#e6e8ff" stroke="#24133f" stroke-width="3"/>' },
-    thrust: { name: 'قوة الصاروخ', explain: 'دفعة أقوى', icon: '<path d="M15 20c-1 8 2 13 5 18 3-5 6-10 5-18z" fill="#ff8a1a" stroke="#24133f" stroke-width="2.5" stroke-linejoin="round"/><path d="M18 22c0 5 1 8 2 11 1-3 2-6 2-11z" fill="#ffd000"/><path d="M20 2c6 5 7 12 5 19h-10c-2-7-1-14 5-19z" fill="#fff" stroke="#24133f" stroke-width="3" stroke-linejoin="round"/><circle cx="20" cy="11" r="3" fill="#2bd1c1" stroke="#24133f" stroke-width="2"/><path d="M7 13v12M33 13v12M3 17v6M37 17v6" stroke="#7dff8a" stroke-width="3.5" stroke-linecap="round"/>' },
-    aim: { name: 'الضربة الذهبية', explain: 'منطقة ذهبية أكبر', icon: '<path d="M6 32a14 14 0 0 1 28 0" fill="none" stroke="#24133f" stroke-width="11" stroke-linecap="round"/><path d="M6 32a14 14 0 0 1 9-13" fill="none" stroke="#8fa3d9" stroke-width="6"/><path d="M15 19a14 14 0 0 1 19 13" fill="none" stroke="#ffd000" stroke-width="6"/><path d="M20 32l9-9" stroke="#fff" stroke-width="3.5" stroke-linecap="round"/><circle cx="20" cy="32" r="3" fill="#fff" stroke="#24133f" stroke-width="2"/><path d="M32 2l2 5 5 2-5 2-2 5-2-5-5-2 5-2z" fill="#ffd000" stroke="#24133f" stroke-width="1.8" stroke-linejoin="round"/>' },
-    skip: { name: 'القفز على الماء', explain: 'اقفز فوق الماء', icon: '<path d="M3 32q4-4 8 0t8 0 8 0 8 0" fill="none" stroke="#4fc3ff" stroke-width="4.5" stroke-linecap="round"/><path d="M5 27q5-13 10 0q4-9 8 0q3-6 6-1" fill="none" stroke="#fff" stroke-width="2.5" stroke-dasharray="2 3" stroke-linecap="round"/><circle cx="31" cy="20" r="5" fill="#fff" stroke="#24133f" stroke-width="2.5"/>' },
-    treasure: { name: 'الكنز', explain: 'عملات أكثر', icon: '<circle cx="12" cy="11" r="4.5" fill="#ffd000" stroke="#24133f" stroke-width="2"/><circle cx="27" cy="8" r="4.5" fill="#ffd000" stroke="#24133f" stroke-width="2"/><circle cx="20" cy="13" r="4" fill="#ffe36b" stroke="#24133f" stroke-width="2"/><path d="M6 19c0-6 28-6 28 0z" fill="#e08a3a" stroke="#24133f" stroke-width="3" stroke-linejoin="round"/><path d="M6 19h28v15H6z" fill="#c2702e" stroke="#24133f" stroke-width="3" stroke-linejoin="round"/><path d="M17 21h6v7h-6z" fill="#ffd000" stroke="#24133f" stroke-width="2"/>' }
-  };
-  // The result screen has room for one row of upgrades: the four cheapest still to buy,
-  // chosen when it opens and kept in place while it stays open, in the shop's order.
-  var resultKinds = null;
-  function cheapestKinds() {
-    var open = P.kinds.filter(function (k) { return save.upgrades[k] < P.upgrades[k].max; });
-    open.sort(function (a, b) { return P.cost(a, save.upgrades[a]) - P.cost(b, save.upgrades[b]) || P.kinds.indexOf(a) - P.kinds.indexOf(b); });
-    var done = P.kinds.filter(function (k) { return open.indexOf(k) < 0; });
-    return open.concat(done).slice(0, 4).sort(function (a, b) { return P.kinds.indexOf(a) - P.kinds.indexOf(b); });
-  }
-  var ROCKET_SVG = '<svg viewBox="0 0 40 44" aria-hidden="true">' + UPGRADES.rockets.icon + '</svg>';
-  var WORLD_LOOKS = [['#3aa6f2', '#6fd64b'], ['#ff8f5a', '#f8d27c'], ['#5ea8ff', '#ffffff'], ['#8a74ff', '#ffffff'], ['#0d0a2c', '#cfcbea']];
-  var INK = 'stroke="#24133f" stroke-width="3" stroke-linejoin="round"';
-  var WORLD_ICONS = [
-    '<rect x="27" y="34" width="8" height="20" rx="3" fill="#8a5531" ' + INK + '/><circle cx="31" cy="26" r="17" fill="#3fb653" ' + INK + '/><circle cx="25" cy="20" r="5" fill="#7fe06a"/><circle cx="38" cy="30" r="3" fill="#ff5f6f"/>',
-    '<rect x="25" y="12" width="12" height="44" rx="6" fill="#3fbf6e" ' + INK + '/><rect x="12" y="24" width="8" height="18" rx="4" fill="#3fbf6e" ' + INK + '/><rect x="42" y="18" width="8" height="18" rx="4" fill="#3fbf6e" ' + INK + '/><circle cx="31" cy="12" r="4" fill="#ff6fa8" ' + INK + '/>',
-    '<path d="M4 54 30 10l26 44z" fill="#7d9ad6" ' + INK + '/><path d="M21 25 30 10l9 15-5 4-4-3-4 3z" fill="#fff"/>',
-    '<path d="M10 44a10 10 0 0 1 4-19 14 14 0 0 1 27-3 11 11 0 0 1 11 22z" fill="#fff" ' + INK + '/><path d="M23 34q3 3 6 0M34 34q3 3 6 0" fill="none" stroke="#24133f" stroke-width="2.5" stroke-linecap="round"/>',
-    '<circle cx="31" cy="30" r="17" fill="#ff9f5a" ' + INK + '/><ellipse cx="31" cy="30" rx="28" ry="8" fill="none" stroke="#24133f" stroke-width="7" transform="rotate(-18 31 30)"/><ellipse cx="31" cy="30" rx="28" ry="8" fill="none" stroke="#ffd9a0" stroke-width="3.5" transform="rotate(-18 31 30)"/>'
-  ];
+ui.appendChild(K.muteButton());
+var store=K.store('skybound-golf'),save=P.sanitizeSave(store.get('progress'));
+var dda=K.dda?K.dda('skybound-golf',{id:'swing',target:0.68,tiers:3,start:0.5}):null;
+var badge=K.saveStatus({retry:persist});
+function persist(){if(store.set('progress',save))badge.saved();else badge.failed();}
 
-  /* -------------------------------------------------------- utilities */
-  function resize() {
-    renderDirty = true;
-    var scale = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
-    ui.style.left = Math.round((window.innerWidth - 1280 * scale) / 2) + 'px';
-    ui.style.top = Math.round((window.innerHeight - 720 * scale) / 2) + 'px';
-    ui.style.transform = 'scale(' + scale + ')';
-  }
-  window.addEventListener('resize', resize); resize();
-  function persist() { if (storage.set('progress', save)) saveStatus.saved(); else saveStatus.failed(); }
-  function announce(text) { $('announce').textContent = text; }
-  function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
-  // An LTR isolate keeps '+5' and '×3' in order inside right-to-left text.
-  function ltr(text) { return '\u2066' + text + '\u2069'; }
-  function worldId() { return P.worlds[s.world].id; }
-  function button(id, fn) {
-    $(id).addEventListener('click', function (e) { K.audio.unlock(); K.sfx.click(); if (e.detail) this.blur(); fn(); });
-  }
+var UP_META={
+power:['قوة الضربة','إطلاق أسرع وأبعد','<path d="M8 28L26 10l4 4L12 32z" fill="#ffd000" stroke-width="3"/><circle cx="29" cy="11" r="5" fill="#ff3d57" stroke-width="2.5"/>'],
+bounce:['ارتداد ناري','قفزات أعلى على الأرض','<path d="M6 28q8-18 14 0t14-14" fill="none" style="stroke:#00e676" stroke-width="4"/><circle cx="34" cy="12" r="4.5" fill="#ffd000" stroke-width="2.5"/>'],
+rockets:['صواريخ إضافية','دفعات أكثر في الجو','<path d="M20 5c7 6 8 15 5 22H15c-3-7-2-16 5-22z" fill="#ff3d57" stroke-width="3"/><path d="M16 27l4 8 4-8z" fill="#ffd000" stroke-width="0"/>'],
+magnet:['مغناطيس الذهب','يجذب العملات إليك','<path d="M11 10v10a9 9 0 0018 0V10h-5v10a4 4 0 01-8 0V10z" fill="#ff3d57" stroke-width="2.8"/>'],
+thrust:['وقود التيربو','دفعة صاروخ أقوى','<path d="M20 6l9 15h-6l3 13-15-17h7z" fill="#ffd000" stroke-width="2.8"/>'],
+aim:['نطاق ذهبي','منطقة ذهبية أوسع','<circle cx="20" cy="20" r="13" fill="none" style="stroke:#ffd000" stroke-width="4"/><circle cx="20" cy="20" r="5" fill="#ff3d57" stroke-width="0"/>'],
+skip:['تزلج خارق','يتخطى الماء والرمال','<path d="M5 26q7-6 15 0t15 0" fill="none" style="stroke:#00e5ff" stroke-width="4"/><circle cx="20" cy="14" r="5" fill="#fff" stroke-width="2.8"/>'],
+treasure:['صندوق الكنز','+10% عملات إضافية','<rect x="7" y="14" width="26" height="18" rx="4" fill="#ffb300" stroke-width="3"/><path d="M7 21h26" stroke-width="3"/>']
+};
+var W_STYLE=[
+['linear-gradient(#2b95f0,#9be7ff)','#4ad153','<circle cx="36" cy="34" r="18" fill="#ffd000" stroke-width="3.5"/><path d="M20 52l16-22 16 22z" fill="#ff3d57" stroke-width="3"/>'],
+['linear-gradient(#ff7b42,#ffe5a3)','#f2b252','<circle cx="36" cy="32" r="20" fill="#ffd600" stroke-width="3.5"/>'],
+['linear-gradient(#4b9aff,#e8f5ff)','#fff','<polygon points="36,12 58,54 14,54" fill="#fff" stroke-width="3.5"/>'],
+['linear-gradient(#2d113b,#e04f2e)','#633744','<polygon points="36,14 58,56 14,56" fill="#4a2538" stroke-width="3.5"/><polygon points="36,22 44,50 28,50" fill="#ff6d00" stroke-width="0"/>'],
+['linear-gradient(#090724,#281b66)','#a39cd6','<ellipse cx="36" cy="36" rx="28" ry="8" fill="none" style="stroke:#ffd9a0" stroke-width="4"/><circle cx="36" cy="36" r="15" fill="#ff8f4d" stroke-width="3.5"/>']
+];
+var RKT_SVG='<svg viewBox="0 0 36 40" aria-hidden="true"><path d="M18 3c8 7 9 18 6 26H12C9 21 10 10 18 3z" fill="#ff3d57" stroke-width="3.2"/><circle cx="18" cy="17" r="4" fill="#00e5ff" stroke-width="2.4"/><path d="M13 29l5 9 5-9z" fill="#ffd000" stroke-width="0"/></svg>';
 
-  /* ------------------------------------------------------------ sound */
-  var A2 = K.audio;
-  var sfx = {
-    thwack: function (grade) {
-      A2.noise({ dur: 0.09, vol: 0.5, filter: 5200, to: 700 });
-      A2.tone({ freq: 230, to: 70, type: 'square', dur: 0.12, vol: 0.22 });
-      if (grade === 'perfect') {
-        A2.noise({ dur: 0.5, vol: 0.25, filter: 900, to: 60 });
-        [1047, 1319, 1568, 2093].forEach(function (f, i) { A2.tone({ freq: f, type: 'triangle', dur: 0.12, vol: 0.13, delay: 0.04 + i * 0.05 }); });
-      }
-    },
-    swing: function () { A2.noise({ dur: 0.12, vol: 0.18, filter: 2600, to: 6000 }); },
-    bounce: function (strength, surface) {
-      if (surface === 'sand') { A2.noise({ dur: 0.14, vol: 0.12 + strength * 0.2, filter: 900, to: 200 }); return; }
-      if (surface === 'snow' || surface === 'cloud') A2.noise({ dur: 0.1, vol: 0.08 + strength * 0.12, filter: 3000, to: 600 });
-      A2.tone({ freq: 190 + strength * 70, to: 85, type: 'triangle', dur: 0.1, vol: 0.08 + strength * 0.22 });
-    },
-    boing: function (combo, perfect) {
-      var lift = Math.pow(2, Math.min(combo, 8) / 12);
-      A2.tone({ freq: 220 * lift, to: 820 * lift, type: 'sine', dur: 0.22, vol: 0.28 });
-      A2.tone({ freq: 330 * lift, to: 990 * lift, type: 'triangle', dur: 0.16, vol: 0.12 });
-      if (perfect) A2.tone({ freq: 1568 * lift, type: 'triangle', dur: 0.14, vol: 0.12, delay: 0.08 });
-    },
-    coin: function (streak, gem) {
-      var f = (gem ? 1319 : 988) * Math.pow(2, Math.min(streak, 14) / 12);
-      A2.tone({ freq: f, type: 'square', dur: 0.05, vol: 0.09 });
-      A2.tone({ freq: f * 1.5, type: 'square', dur: 0.08, vol: 0.09, delay: 0.05 });
-      if (gem) A2.tone({ freq: f * 2, type: 'triangle', dur: 0.12, vol: 0.1, delay: 0.1 });
-    },
-    rocket: function () {
-      A2.noise({ dur: 0.4, vol: 0.32, filter: 2400, to: 300 });
-      A2.tone({ freq: 110, to: 440, type: 'sawtooth', dur: 0.3, vol: 0.12 });
-    },
-    pad: function () { A2.tone({ freq: 140, to: 640, type: 'square', dur: 0.18, vol: 0.1 }); A2.tone({ freq: 300, to: 950, type: 'triangle', dur: 0.22, vol: 0.2 }); },
-    ring: function () { A2.noise({ dur: 0.25, vol: 0.18, filter: 4000, to: 900 }); A2.tone({ freq: 660, to: 1320, type: 'triangle', dur: 0.2, vol: 0.18 }); },
-    pop: function () { K.sfx.pop(); A2.noise({ dur: 0.06, vol: 0.25, filter: 7000 }); },
-    bonk: function (soft) {
-      if (soft) { A2.tone({ freq: 200, to: 700, type: 'sine', dur: 0.2, vol: 0.25 }); return; }
-      A2.tone({ freq: 150, to: 60, type: 'square', dur: 0.1, vol: 0.18 }); A2.noise({ dur: 0.22, vol: 0.12, filter: 6000, to: 2000 });
-    },
-    splash: function () { A2.noise({ dur: 0.6, vol: 0.32, filter: 2600, to: 250 }); A2.tone({ freq: 420, to: 120, type: 'sine', dur: 0.25, vol: 0.15 }); },
-    skip: function () { A2.tone({ freq: 520, to: 980, type: 'sine', dur: 0.09, vol: 0.18 }); A2.noise({ dur: 0.12, vol: 0.12, filter: 3000, to: 800 }); },
-    tick: function () { A2.tone({ freq: 1250, type: 'sine', dur: 0.04, vol: 0.08 }); },
-    empty: function () { A2.tone({ freq: 190, to: 120, type: 'square', dur: 0.12, vol: 0.08 }); },
-    gauge: function () { A2.tone({ freq: 1568, type: 'sine', dur: 0.05, vol: 0.05 }); },
-    fanfare: function () { [784, 988, 1175, 1568, 1175, 1568].forEach(function (f, i) { A2.tone({ freq: f, type: 'triangle', dur: 0.14, vol: 0.18, delay: i * 0.08 }); }); },
-    space: function () { [523, 659, 784, 1047, 1319, 1568, 2093].forEach(function (f, i) { A2.tone({ freq: f, type: 'triangle', dur: 0.2, vol: 0.16, delay: i * 0.07 }); }); },
-    land: function () { A2.tone({ freq: 160, to: 80, type: 'triangle', dur: 0.12, vol: 0.2 }); }
-  };
+function tone(f,to,d,tp,v,dl){K.audio.tone({freq:f,to:to,dur:d||0.1,type:tp||'triangle',vol:v||0.2,delay:dl||0});}
+var sfx={
+hit:function(g){if(g==='perfect'){K.sfx.hit();tone(520,1040,0.16,'triangle',0.26);tone(780,1560,0.2,'sine',0.2,0.05);}else if(g==='great'){K.sfx.hit();tone(420,760,0.13);}else tone(260,140,0.1);},
+rocket:function(){K.audio.noise({dur:0.24,vol:0.32,filter:1600,to:280});tone(240,680,0.2,'sawtooth',0.18);if(J)J.whoosh(0.9);},
+tnt:function(){K.sfx.boom();tone(140,520,0.22,'sawtooth',0.24);if(J)J.impact(1);},
+cannon:function(){K.sfx.hit();tone(190,880,0.22,'square',0.22);if(J)J.impact(0.85);},
+ufo:function(){tone(620,1380,0.12,'sine',0.24);if(J)J.pop(0.9);},
+ring:function(){tone(587,1175,0.14);if(J)J.chime(2);},
+superHit:function(c){if(J)J.streak(c||1);else tone(520,960,0.15);},
+bounce:function(st){if(J)J.land(st);else tone(150+st*90,80,0.07);},
+buy:function(){if(J)J.select();else tone(523,988,0.12);},
+empty:function(){if(J)J.error();else tone(170,110,0.08,'square',0.14);}
+};
 
-  /* ---------------------------------------------------------- effects */
-  function particle(kind, x, y, o) {
-    if (s.particles.length >= MAX_PARTICLES) s.particles.shift();
-    s.particles.push({ kind: kind, x: x, y: y, vx: o.vx || 0, vy: o.vy || 0, t: 0, life: o.life || 0.6, size: o.size || 8,
-      color: o.color || '#fff', rot: Math.random() * 6, vr: (Math.random() - 0.5) * 12, g: o.g == null ? 18 : o.g });
-  }
-  function burst(kind, x, y, count, o) {
-    if (reduced) count = Math.min(count, kind === 'ring' ? 1 : 3);
-    for (var n = 0; n < count; n++) {
-      var a = (o.angle == null ? Math.random() * Math.PI * 2 : o.angle + (Math.random() - 0.5) * (o.spread || 1));
-      var v = (o.speed || 8) * (0.4 + Math.random() * 0.6);
-      particle(kind, x, y, { vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: (o.life || 0.6) * (0.7 + Math.random() * 0.5),
-        size: (o.size || 8) * (0.7 + Math.random() * 0.6), color: o.colors ? o.colors[n % o.colors.length] : o.color, g: o.g });
-    }
-  }
-  var CONFETTI = ['#ff4f6d', '#ffd000', '#2bd1c1', '#8a5cff', '#7dff8a', '#ff8a1a'];
-  function popup(text, x, y, color, size, screen) {
-    if (s.popups.length > 7) s.popups.shift();
-    s.popups.push({ text: text, x: x, y: y, color: color || '#fff', size: size || 34, t: 0, life: 1.1, screen: !!screen });
-  }
-  function kick(power, flash) {
-    if (!reduced) { shake = Math.max(shake, power); s.flash = Math.max(s.flash, flash || 0); }
-  }
-  function toast(text, seconds) {
-    $('toast').textContent = text; $('toast').hidden = false; toastTimer = seconds || 1.8; announce(text);
-  }
+var mKind='',resKinds=[],guard={x:-999,y:-999,until:0},heldKey='';
+var gaugeT=0,swingT=0,swPwr=0,landedT=0,hitStop=0,toastT=0;
+function nextUnlock(best){for(var i=1;i<P.worlds.length;i++)if(best<P.worlds[i].unlock)return i;return -1;}
 
-  /* ------------------------------------------------------------ menus */
-  function stats() {
-    $('coins').textContent = K.fmt(save.coins);
-    $('shop-coins').textContent = K.fmt(save.coins);
-    $('best-meters').textContent = K.fmt(save.best);
-    $('world-label').textContent = P.worlds[save.world].name;
-    var next = P.worlds.filter(function (w) { return w.unlock > save.best; })[0];
-    $('journey').textContent = next ? 'العالم التالي: ' + next.name + ' عند ' + next.unlock + ' متر' : 'فتحت كل العوالم… هل تصل إلى حافة الفضاء؟';
-    s.unlockX = next ? next.unlock : 0; s.unlockName = next ? next.name : '';
-    s.magnet = P.magnetOf(save.upgrades);
-    s.gauge.perfect = P.perfectBand(save.upgrades);
-    s.hints = save.tips < 2 || save.shots < 8;
-  }
-  function controls() {
-    renderDirty = true;
-    ui.dataset.phase = s.phase;
-    var playing = s.phase !== 'title' && s.phase !== 'result';
-    $('title-screen').hidden = s.phase !== 'title' || !!modalMode;
-    $('hud').hidden = !playing && s.phase !== 'result';
-    $('pause').hidden = !playing;
-    s.gauge.show = s.phase === 'ready';
-    hint();
-  }
-  function hint() {
-    var text = '', pulse = false;
-    if (s.phase === 'ready') { text = save.shots ? 'مسافة أو انقر: اضرب في الذهبي!' : 'انقر أو اضغط مسافة عندما يصل المضرب إلى الذهبي!'; pulse = !save.shots; }
-    else if (s.phase === 'flight' && save.tips < 2) text = s.ball && s.ball.rocketsLeft ? 'في الهواء: صاروخ · قرب الأرض: قفزة خارقة' : 'اضغط قرب الأرض لقفزة خارقة!';
-    else if (s.phase === 'landed') text = 'مسافة: النتيجة';
-    $('hint').textContent = text; $('hint').hidden = !text || !!modalMode;
-    $('hint').classList.toggle('pulse', pulse);
-  }
-  function openModal(mode, focus) {
-    if (!modalMode) lastFocus = document.activeElement;
-    modalMode = mode; $('modal').hidden = false;
-    $('panel').className = 'panel ' + mode + '-panel';
-    $('result-content').hidden = mode !== 'result';
-    $('shop-content').hidden = mode !== 'shop' && mode !== 'result';
-    $('skins-content').hidden = mode !== 'shop';
-    $('worlds-content').hidden = mode !== 'worlds';
-    $('pause-content').hidden = mode !== 'pause';
-    $('again').hidden = mode !== 'result';
-    $('close-modal').hidden = mode === 'result' || mode === 'pause';
-    $('menu').hidden = mode === 'shop' || mode === 'worlds';
-    $('modal-heading').textContent = mode === 'shop' ? 'المتجر' : mode === 'worlds' ? 'اختر عالمك' : mode === 'pause' ? 'استراحة' : '';
-    $('modal-tip').textContent = mode === 'result' ? 'مسافة أو Enter أو R: ضربة أخرى' : mode === 'pause' ? 'P أو Esc للمتابعة' : 'Esc للرجوع · كل شيء يُحفظ تلقائيًا';
-    if (mode === 'result') resultKinds = cheapestKinds();
-    if (mode === 'shop' || mode === 'result') renderShop();
-    if (mode === 'worlds') renderWorlds();
-    controls();
-    if (focus !== false) (mode === 'result' ? $('again') : mode === 'pause' ? $('resume') : $('close-modal')).focus({ preventScroll: true });
-  }
-  function closeModal() {
-    modalMode = ''; $('modal').hidden = true; paused = false;
-    $('panel').classList.remove('celebrate');
-    controls();
-    if (lastFocus && lastFocus !== document.body && !lastFocus.hidden && lastFocus.offsetParent) lastFocus.focus({ preventScroll: true });
-    else canvas.focus({ preventScroll: true });
-  }
-  function menu() {
-    if (s.phase === 'flight') commit();
-    closeModal(); s.phase = 'title'; resetScene(); stats(); controls();
-    $('play').focus({ preventScroll: true });
-  }
-  function pause(focus) {
-    if (modalMode || s.phase === 'title' || s.phase === 'result') return;
-    paused = true; openModal('pause', focus);
-  }
-  function togglePause() { if (modalMode === 'pause') closeModal(); else pause(); }
+var s={
+phase:'title',world:save.world,skin:save.skin,reduced:K.motion.reduced(),
+course:P.createCourse(save.world,save.difficulty),time:0,cam:{x:10,y:4.5,zoom:1},
+golfer:{angle:A.ADDRESS,jump:0,jumpT:0},gauge:{show:false,value:0,perfect:0.9},
+ball:null,trail:[],particles:[],popups:[],shake:{x:0,y:0,p:0},flash:0,
+reticle:null,flame:0,hints:save.tips<2,magnet:P.magnetOf(save.upgrades),
+bestX:0,unlockX:0,unlockName:'',unlockedIndex:-1,prevBest:save.best,
+committed:false,lastOutcome:-1,squash:null,padPulse:null,propHit:null
+};
 
-  function renderShop() {
-    var focusKind = document.activeElement && document.activeElement.dataset.upgrade;
-    var host = $('upgrades'); host.textContent = '';
-    (modalMode === 'result' && resultKinds ? resultKinds : P.kinds).forEach(function (kind) {
-      var level = save.upgrades[kind], max = P.upgrades[kind].max, price = P.cost(kind, level), maxed = level >= max;
-      var b = document.createElement('button'); b.type = 'button'; b.dataset.upgrade = kind;
-      b.className = 'upgrade' + (maxed ? ' maxed' : save.coins >= price ? ' can' : '');
-      b.disabled = maxed || save.coins < price;
-      var pips = '';
-      for (var n = 0; n < max; n++) pips += '<i class="' + (n < level ? 'on' : '') + '"></i>';
-      b.innerHTML = '<span class="upgrade-icon" aria-hidden="true"><svg viewBox="0 0 40 40">' + UPGRADES[kind].icon + '</svg></span><strong>' + UPGRADES[kind].name +
-        '</strong><span class="explain">' + UPGRADES[kind].explain + '</span><span class="pips" aria-hidden="true">' + pips + '</span><span class="price">' +
-        (maxed ? 'مكتمل' : '<i class="coin-ico"></i>' + K.fmt(price)) + '</span>';
-      b.setAttribute('aria-label', UPGRADES[kind].name + '، المستوى ' + level + ' من ' + max + (maxed ? '، مكتمل' : '، السعر ' + price + ' عملة' + (save.coins < price ? '، العملات غير كافية' : '')));
-      b.addEventListener('click', function (e) { buy(kind, e); });
-      host.appendChild(b);
-    });
-    if (focusKind) {
-      // A keyboard purchase keeps the focus on the card while it can be bought
-      // again; otherwise Space and Enter fall back to the screen's main action.
-      var again = host.querySelector('[data-upgrade="' + focusKind + '"]'), go = modalMode === 'result' && newWorld >= 0 && $('result-unlock').querySelector('button');
-      if (again && !again.disabled && !go) again.focus({ preventScroll: true });
-      else (go || (modalMode === 'result' ? $('again') : $('close-modal'))).focus({ preventScroll: true });
-    }
-    renderSkins();
-    $('shop-coins').textContent = K.fmt(save.coins);
-  }
-  function buy(kind, e) {
-    var price = P.cost(kind, save.upgrades[kind]);
-    if (save.upgrades[kind] >= P.upgrades[kind].max || save.coins < price) return;
-    // After a mouse purchase, Space and Enter keep the screen's main action.
-    if (e && e.detail) e.currentTarget.blur();
-    save.coins -= price; save.upgrades[kind]++; persist(); stats(); A2.unlock(); K.sfx.power();
-    announce('تم تطوير ' + UPGRADES[kind].name + ' إلى المستوى ' + save.upgrades[kind]);
-    renderShop();
-  }
-  function renderSkins() {
-    if ($('skins-content').hidden) return;
-    var focusSkin = document.activeElement && document.activeElement.dataset.skin;
-    var host = $('skins'); host.textContent = '';
-    P.skins.forEach(function (k) {
-      var owned = save.skins.indexOf(k.id) >= 0, chosen = save.skin === k.id;
-      var b = document.createElement('button'); b.type = 'button'; b.className = 'skin'; b.dataset.skin = k.id;
-      b.disabled = !owned && save.coins < k.price; b.setAttribute('aria-pressed', String(chosen));
-      var preview = document.createElement('canvas'); preview.width = preview.height = 104; preview.setAttribute('aria-hidden', 'true');
-      var pctx = preview.getContext('2d'); pctx.scale(2, 2); A.preview(pctx, k.id, 52);
-      b.appendChild(preview);
-      b.insertAdjacentHTML('beforeend', '<strong>' + k.name + '</strong><span>' + (chosen ? 'مختارة' : owned ? 'اختر' : K.fmt(k.price)) + '</span>');
-      b.addEventListener('click', function (e) {
-        if (save.skins.indexOf(k.id) < 0) {
-          if (save.coins < k.price) return;
-          save.coins -= k.price; save.skins.push(k.id); K.sfx.power();
-        }
-        if (e.detail) b.blur();
-        save.skin = s.skin = k.id; persist(); stats(); renderDirty = true;
-        announce('الكرة الآن: ' + k.name);
-        renderShop();
-      });
-      host.appendChild(b);
-    });
-    var again = focusSkin && host.querySelector('[data-skin="' + focusSkin + '"]');
-    if (again) again.focus({ preventScroll: true });
-  }
-  function renderWorlds() {
-    var host = $('worlds-content'); host.textContent = '';
-    P.worlds.forEach(function (w, i) {
-      var b = document.createElement('button'); b.type = 'button';
-      b.className = 'world-option' + (i === save.world ? ' selected' : ''); b.disabled = save.best < w.unlock;
-      b.style.setProperty('--sky', 'linear-gradient(' + WORLD_LOOKS[i][0] + ', ' + WORLD_LOOKS[i][0] + 'aa)');
-      b.style.setProperty('--ground', WORLD_LOOKS[i][1]);
-      b.innerHTML = '<svg class="world-icon" viewBox="0 0 62 62" aria-hidden="true">' + WORLD_ICONS[i] + '</svg><strong>' + w.name + '</strong><span>' +
-        (b.disabled ? 'تُفتح عند <bdi dir="ltr">' + w.unlock + '</bdi> م' : i === save.world ? 'العالم الحالي' : 'العب هنا') + '</span>';
-      b.setAttribute('aria-pressed', i === save.world ? 'true' : 'false');
-      b.addEventListener('click', function () { save.world = i; persist(); K.sfx.power(); menu(); });
-      host.appendChild(b);
-    });
-  }
+function worldId(){return P.worlds[s.world].id;}
+function pBand(){var b=P.perfectBand(save.upgrades,save.difficulty);return(save.difficulty==='easy'&&dda)?clp(b -(1 - dda.level)*0.05,0.72,0.92):b;}
+function gPeriod(){var p=P.diffOf(save.difficulty).gaugePeriod;return(save.difficulty==='easy'&&dda)?p*dda.value(1.14,0.96):p;}
 
-  /* ------------------------------------------------------------- flow */
-  function resetScene() {
-    s.world = save.world; s.course = P.createCourse(save.world);
-    s.cam.x = TEE_CAM.x; s.cam.y = TEE_CAM.y; s.cam.zoom = TEE_CAM.zoom;
-    s.ball = null; s.trail.length = 0; s.particles.length = 0; s.popups.length = 0; s.reticle = null;
-    s.landed = null; s.flame = 0; s.squash = null; s.padPulse = null; s.propHit = null; s.space = false; s.flash = 0;
-    s.golfer.angle = A.ADDRESS; s.golfer.jump = s.golfer.jumpT = 0; s.gauge.value = 0;
-    // The best flag shows the record to beat, so it moves only between shots.
-    s.bestX = save.bests[worldId()] || 0;
-    swing = null; hitStop = 0; follow = -1; shake = 0; result = null; newWorld = -1; landedT = 0;
-    coinStreak = 0; emptyWarned = false; unlockSeen = false; gaugeT = 0;
-    $('toast').hidden = true; toastTimer = 0;
-    $('altimeter').classList.remove('space');
-    hud.meters = hud.coins = hud.alt = -1; hud.rockets = '';
-  }
-  function start() {
-    if (s.phase === 'flight') commit();
-    closeModal(); resetScene(); stats();
-    s.phase = 'ready';
-    if (!save.shots) Kit.stats.tutorial('start');
-    updateHud(); controls(); canvas.focus({ preventScroll: true });
-    announce('اضرب عندما يصل المضرب إلى المنطقة الذهبية');
-  }
-  function playWorld(i) { save.world = i; persist(); start(); }
+function syncCourse(){
+s.world=save.world;s.skin=save.skin;s.course=P.createCourse(save.world,save.difficulty);
+s.magnet=P.magnetOf(save.upgrades);s.hints=save.tips<2;s.bestX=save.bests[worldId()]||0;
+var nu=nextUnlock(save.best);
+s.unlockX=nu>0?P.worlds[nu].unlock:0;s.unlockName=nu>0?P.worlds[nu].name:'';dirty=true;
+}
+K.motion.onChange(function(m){
+s.reduced=typeof m==='boolean'?m:!!(m&&m.reduced);
+if(s.reduced){s.shake.x=s.shake.y=s.shake.p=s.flash=s.golfer.jump=s.golfer.jumpT=hitStop=0;s.trail.length=s.particles.length=0;s.squash=null;}
+dirty=true;
+});
 
-  // The player's one button.
-  function action() {
-    if (modalMode || paused) return;
-    if (s.phase === 'title') start();
-    else if (s.phase === 'ready') strike();
-    else if (s.phase === 'flight') flightPress();
-    else if (s.phase === 'landed') showResult();
-  }
-  function strike() {
-    var power = s.gauge.value;
-    // Play stats: each shot is a round of its world.
-    Kit.stats.round(worldId());
-    swing = { power: power, grade: P.grade(power, save.upgrades), from: s.golfer.angle, t: 0 };
-    s.phase = 'swing'; sfx.swing(); controls();
-  }
-  function contact() {
-    var g = swing.grade;
-    s.ball = P.launch(s.course, save.upgrades, swing.power);
-    s.phase = 'flight'; follow = 0; swing = null;
-    hitStop = reduced ? 0 : g === 'perfect' ? 0.13 : g === 'great' ? 0.07 : 0.04;
-    sfx.thwack(g); K.sfx.whoosh();
-    var bx = s.ball.x, by = s.ball.y;
-    burst('spark', bx, by, g === 'perfect' ? 14 : 6, { speed: 14, size: 12, color: '#ffd000', g: 6, life: 0.5 });
-    burst('ring', bx, by, 1, { speed: 0, size: g === 'perfect' ? 90 : 50, color: '#ffffff', life: 0.4, g: 0 });
-    burst('dust', bx, by - 0.4, 6, { speed: 4, size: 10, color: '#ffffff', angle: Math.PI * 0.85, spread: 1, life: 0.5, g: 2 });
-    var words = { perfect: 'ضربة مثالية!', great: 'ضربة قوية!', good: 'جيدة!', weak: 'ضعيفة…' };
-    popup(words[g], 2, by + 4.5, g === 'perfect' ? '#ffd000' : g === 'great' ? '#ff8a1a' : '#ffffff', g === 'perfect' ? 52 : 40);
-    kick(g === 'perfect' ? 14 : g === 'great' ? 8 : 4, g === 'perfect' ? 0.55 : 0.2);
-    if (g === 'perfect' && !reduced) s.golfer.jumpT = 0.001;
-    controls();
-  }
-  function flightPress() {
-    var b = s.ball;
-    if (!b || b.done) return;
-    var r = P.press(s.course, b, save.upgrades);
-    if (r.type === 'rocket') {
-      hint();
-      // Rocket power makes a bigger blast.
-      s.flame = 0.45 + 0.05 * r.thrust; sfx.rocket(); kick(7 + r.thrust, 0.12);
-      var sp = Math.hypot(b.vx, b.vy) || 1;
-      burst('flame', b.x, b.y, 16 + 3 * r.thrust, { angle: Math.atan2(-b.vy, -b.vx), spread: 1.2, speed: 16, size: 14, life: 0.5, g: -2 });
-      burst('ring', b.x, b.y, 1, { speed: 0, size: 70, color: '#ffb020', life: 0.35, g: 0 });
-      popup('صاروخ!', b.x, b.y + 3 + sp * 0.02, '#ffb020', 36);
-      $('rockets').classList.remove('empty');
-    } else if (r.type === 'late') {
-      sfx.boing(0, false); kick(5, 0.08);
-      burst('ring', r.x, r.y + 0.3, 1, { speed: 0, size: 70, color: '#ffffff', life: 0.45, g: 0 });
-      popup('قفزة جيدة', r.x, r.y + 4, '#ffffff', 32);
-    } else if (r.type === 'arm') {
-      sfx.tick();
-    } else if (r.type === 'empty') {
-      sfx.empty();
-      var row = $('rockets'); row.classList.remove('empty'); void row.offsetWidth; row.classList.add('empty');
-      if (!emptyWarned) { emptyWarned = true; popup('لا صواريخ! اضغط قرب الأرض', b.x, b.y + 3, '#ffffff', 28); }
-    }
-    updateHud();
-  }
-  function onEvent(e) {
-    var b = s.ball;
-    if (e.type === 'coin') {
-      coinStreak = s.time - lastCoinAt < 0.7 ? coinStreak + 1 : 0; lastCoinAt = s.time;
-      sfx.coin(coinStreak, e.gem);
-      burst('spark', e.x, e.y, e.gem ? 8 : 4, { speed: 7, size: e.gem ? 12 : 8, color: e.gem ? '#e9a6ff' : '#ffe14d', g: 4, life: 0.4 });
-      if (e.gem) popup(ltr('+5'), e.x, e.y + 1, '#e9a6ff', 34);
-      var chip = $('run-coins').parentNode; chip.classList.remove('bump'); void chip.offsetWidth; chip.classList.add('bump');
-    } else if (e.type === 'ring') {
-      sfx.ring(); kick(5, 0.15);
-      burst('ring', e.x, e.y, 1, { speed: 0, size: 110, color: '#ffd000', life: 0.45, g: 0 });
-      popup('تسارع! ' + ltr('+3'), e.x, e.y + 4, '#ffb020', 36);
-    } else if (e.type === 'balloon') {
-      sfx.pop(); kick(4);
-      burst('confetti', e.x, e.y, 16, { speed: 12, size: 12, colors: CONFETTI, life: 0.9, g: 14 });
-      popup('بوب! ' + ltr('+2'), e.x, e.y + 3, '#ffffff', 34);
-    } else if (e.type === 'prop') {
-      var soft = e.prop === 'puff' || e.prop === 'crystal';
-      sfx.bonk(soft); kick(4 + e.strength * 6);
-      s.propHit = { id: e.id, t: 0 };
-      var leaf = { tree: '#3fb653', cactus: '#7ee39a', pine: '#ffffff', puff: '#ffffff', crystal: '#c79bff' }[e.prop];
-      burst(e.prop === 'pine' || e.prop === 'puff' ? 'dust' : 'confetti', e.x, e.y, 10, { speed: 8, size: 10, color: leaf, life: 0.7, g: 8 });
-      popup(soft ? 'بوينغ!' : 'بونك!', e.x, e.y + 2.5, '#ffffff', 30);
-    } else if (e.type === 'pad') {
-      sfx.pad(); kick(7, 0.1);
-      s.padPulse = { x: nearestPadX(e.x), t: 0 };
-      burst('spark', e.x, e.y, 10, { speed: 12, size: 11, colors: CONFETTI, g: 10, life: 0.6, angle: -Math.PI / 2, spread: 1.8 });
-      popup('قفزة!', e.x, e.y + 4, '#7dff8a', 40);
-    } else if (e.type === 'bounce' || e.type === 'roll') {
-      var dust = { sand: '#ffe39a', snow: '#ffffff', ice: '#d9f8ff', cloud: '#ffffff', dust: '#d8d4f2', green: '#c8ff9a' }[e.surface] || '#e9ffd0';
-      if (e.type === 'bounce') { sfx.bounce(e.strength, e.surface); kick(e.strength * 6); s.squash = { t: 0, angle: Math.PI / 2 }; }
-      burst('dust', e.x, e.y, e.type === 'bounce' ? 6 : 3, { speed: 5, size: 12, color: dust, angle: -Math.PI / 2, spread: 2.6, g: -1, life: 0.55 });
-    } else if (e.type === 'super') {
-      var perfect = e.quality === 'perfect';
-      sfx.boing(e.combo, perfect); kick(perfect ? 9 : 5, perfect ? 0.22 : 0.08);
-      s.squash = { t: 0, angle: Math.PI / 2 };
-      if (perfect) hitStop = Math.max(hitStop, reduced ? 0 : 0.05);
-      burst('ring', e.x, e.y + 0.3, 1, { speed: 0, size: perfect ? 120 : 70, color: perfect ? '#ffd000' : '#ffffff', life: 0.45, g: 0 });
-      burst('spark', e.x, e.y + 0.3, perfect ? 12 : 5, { speed: 14, size: 11, color: perfect ? '#ffd000' : '#ffffff', angle: -Math.PI / 2, spread: 2.2, g: 10, life: 0.6 });
-      popup(perfect ? 'قفزة خارقة!' + (e.combo > 1 ? ' ' + ltr('×' + e.combo) : '') : 'قفزة جيدة', e.x, e.y + 4, perfect ? '#ffd000' : '#ffffff', perfect ? 44 : 32);
-      if (perfect && save.tips < 2) { save.tips = 2; Kit.stats.tutorial('done'); hint(); }
-    } else if (e.type === 'skip') {
-      sfx.skip(); kick(4);
-      burst('dust', e.x, e.y, 10, { speed: 9, size: 9, color: '#9fe3ff', angle: -Math.PI / 2, spread: 1.6, g: 20, life: 0.6 });
-      popup('قفزة على الماء!' + (e.count > 1 ? ' ' + ltr('×' + e.count) : ''), e.x, e.y + 4, '#7fd4ff', 34);
-    } else if (e.type === 'splash') {
-      sfx.splash(); kick(8);
-      burst('dust', e.x, e.y, 18, { speed: 14, size: 12, color: '#7fd4ff', angle: -Math.PI / 2, spread: 1.2, g: 26, life: 0.9 });
-      popup('سبلاش!', e.x, e.y + 4, '#7fd4ff', 48);
-    } else if (e.type === 'hole') {
-      sfx.fanfare(); kick(10, 0.4);
-      burst('confetti', e.x, e.y + 1, 30, { speed: 16, size: 12, colors: CONFETTI, angle: -Math.PI / 2, spread: 1.4, g: 16, life: 1.2 });
-      popup(e.ace ? 'حفرة من ضربة واحدة!' : 'في الحفرة!', e.x, e.y + 5, '#ffd000', 54);
-    } else if (e.type === 'space') {
-      s.space = true; sfx.space(); kick(10, 0.6);
-      burst('confetti', b.x, b.y, 30, { speed: 18, size: 13, colors: CONFETTI, g: 6, life: 1.4 });
-      toast('وصلت إلى حافة الفضاء! +100', 2.6);
-      $('altimeter').classList.add('space');
-    }
-  }
-  function nearestPadX(x) {
-    var f = P.features(s.course, x - 4, x + 4).flats.filter(function (o) { return o.type === 'pad'; })[0];
-    return f ? f.x : x;
-  }
+function armG(e){if(e&&typeof e.clientX==='number'&&(e.clientX||e.clientY)){guard.x=e.clientX;guard.y=e.clientY;guard.until=performance.now()+420;}}
+function isG(e){return e&&performance.now()<guard.until&&Math.hypot(e.clientX - guard.x,e.clientY - guard.y)<18;}
+function shake(p){if(!s.reduced)s.shake.p=Math.max(s.shake.p,p);}
+function flash(v){if(!s.reduced)s.flash=Math.max(s.flash,v);}
+function popup(txt,x,y,col,sz){s.popups.push({text:txt,x:x,y:y,color:col||'#ffd000',size:sz||28,t:0});if(s.popups.length>16)s.popups.shift();dirty=true;}
+function burst(x,y,col,cnt,kind,sz){
+if(s.reduced)return;
+if(kind==='ring'){s.particles.push({x:x,y:y,vx:0,vy:0,rot:0,t:0,life:0.35,size:sz||44,color:col,kind:'ring'});return;}
+for(var i=0;i<cnt;i++){
+var a=(i/cnt)*Math.PI*2+(i % 3)*0.2,sp=4+(i % 5)*2.6;
+s.particles.push({x:x,y:y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp+3,rot:a,t:0,life:0.42+(i % 3)*0.12,size:sz||9,color:col,kind:kind||'spark'});
+}
+if(s.particles.length>90)s.particles.splice(0,s.particles.length - 90);
+}
+function toast(msg){toastEl.textContent=el('announce').textContent=msg;toastEl.hidden=false;toastT=2.6;}
 
-  // Saves the finished shot once, before any animation can be interrupted. A shot left in
-  // flight from the pause menu (start, menu) is saved with what it has earned so far,
-  // including the world its toast already announced.
-  function commit() {
-    if (result) return result;
-    var b = s.ball, distance = Math.floor(b.maxX), reward = P.reward(b), id = worldId();
-    var oldBest = save.best, oldWorldBest = save.bests[id] || 0;
-    result = { distance: distance, reward: reward, oldBest: oldBest, record: distance > oldWorldBest && save.shots > 0, reason: b.reason,
-      hole: b.hole, ace: b.ace, space: b.space, height: Math.floor(b.maxY) };
-    save.coins = Math.min(9999999, save.coins + reward.total);
-    save.bests[id] = Math.max(oldWorldBest, distance); save.best = Math.max(save.best, distance);
-    save.high = Math.max(save.high, Math.floor(b.maxY));
-    save.shots++; if (b.hole) save.holes++; if (b.space) save.spaces++;
-    if (save.tips < 1) save.tips = 1;
-    Kit.stats.end('end', distance);
-    persist(); stats();
-    return result;
-  }
-  function land() {
-    commit();
-    s.phase = 'landed'; landedT = 0; s.reticle = null;
-    s.landed = { x: s.ball.x, d: Math.floor(s.ball.maxX), t: 0 };
-    if (s.ball.reason !== 'water' && s.ball.reason !== 'hole') sfx.land();
-    if (result.record) { popup('رقم قياسي!', s.ball.x, s.ball.y + 7, '#ffd000', 48); K.sfx.win(); }
-    controls();
-  }
-  function showResult() {
-    if (s.phase === 'result') return;
-    var r = commit();
-    $('toast').hidden = true;
-    s.phase = 'result'; openModal('result');
-    var heading = r.ace ? 'حفرة من ضربة واحدة!' : r.hole ? 'في الحفرة!' : r.space ? 'إلى الفضاء!' : r.record ? 'رقم قياسي جديد!' : r.reason === 'water' ? 'سبلاش!' : 'رحلة رائعة!';
-    $('modal-heading').textContent = heading;
-    var best = save.bests[worldId()] || 0, gap = best - r.distance;
-    $('result-note').textContent = r.record ? 'أبعد من أي ضربة سابقة في ' + P.worlds[s.world].name + '!' :
-      gap > 0 && gap <= Math.max(15, best * 0.12) ? 'قريب جدًا! أفضل ضربة لك ' + best + ' متر' :
-      r.reason === 'water' ? 'اضغط قرب الماء لتقفز عليه!' : 'طوّر ضربتك وانطلق أبعد';
-    $('result-meters').textContent = K.fmt(r.distance);
-    var parts = r.reward, html = '<span class="chip total"><i class="coin-ico"></i>+' + K.fmt(parts.total) + '</span>';
-    if (parts.coins) html += '<span class="chip">جمعت ' + parts.coins + '</span>';
-    html += '<span class="chip">المسافة ' + parts.distance + '</span>';
-    if (parts.bonus) html += '<span class="chip">مكافأة ' + parts.bonus + '</span>';
-    if (parts.treasure) html += '<span class="chip">الكنز ' + parts.treasure + '</span>';
-    $('result-coins').innerHTML = html;
-    var unlocked = P.worlds.filter(function (w) { return w.unlock > r.oldBest && w.unlock <= save.best; });
-    var box = $('result-unlock'); box.hidden = !unlocked.length;
-    $('again').className = 'button ' + (unlocked.length ? 'secondary' : 'primary');
-    newWorld = -1;
-    if (unlocked.length) {
-      newWorld = P.worlds.indexOf(unlocked[unlocked.length - 1]);
-      box.textContent = 'عالم جديد: ' + P.worlds[newWorld].name + '!';
-      var go = document.createElement('button'); go.type = 'button'; go.className = 'button primary';
-      go.textContent = 'العب هناك'; box.appendChild(go);
-      go.addEventListener('click', function () { A2.unlock(); K.sfx.click(); playWorld(newWorld); });
-      go.focus({ preventScroll: true });
-      $('modal-tip').textContent = 'مسافة أو Enter: العالم الجديد · R: ضربة أخرى';
-    }
-    if (r.record || r.hole || r.space || unlocked.length) { K.sfx.win(); if (!reduced) celebrate(r.distance); }
-    else K.sfx.coin();
-    announce(heading + '، ' + r.distance + ' متر، ' + parts.total + ' عملة');
-  }
-  // CSS confetti and a quick count-up while the canvas rests.
-  function celebrate(distance) {
-    if (!burstEl) {
-      burstEl = document.createElement('div'); burstEl.className = 'burst'; burstEl.setAttribute('aria-hidden', 'true');
-      for (var n = 0; n < 16; n++) burstEl.innerHTML += '<i style="--a:' + (n * 22.5) + 'deg;background:' + CONFETTI[n % 6] + '"></i>';
-      $('panel').appendChild(burstEl);
-    }
-    $('panel').classList.remove('celebrate'); void $('panel').offsetWidth; $('panel').classList.add('celebrate');
-    var meters = $('result-meters'), began = performance.now();
-    (function count(now) {
-      var k = Math.min(1, (now - began) / 650);
-      meters.textContent = K.fmt(modalMode === 'result' ? distance * k * (2 - k) : distance);
-      if (k < 1 && modalMode === 'result') requestAnimationFrame(count);
-    })(began);
-  }
+function syncTitle(){
+el('coins').textContent=K.fmt(save.coins);el('best-meters').textContent=K.fmt(save.best);el('world-label').textContent=P.worlds[save.world].name;
+var btns=el('difficulty-bar').querySelectorAll('[data-difficulty]');
+for(var i=0;i<btns.length;i++)btns[i].setAttribute('aria-pressed',String(btns[i].getAttribute('data-difficulty')===save.difficulty));
+var nu=nextUnlock(save.best);
+el('journey').textContent=nu>0?'الوسام القادم: '+P.worlds[nu].name+' عند '+P.worlds[nu].unlock+' م (جميع العوالم مفتوحة!)':'بطل المجرة! حطّمت جميع أوسمة المسافة!';
+}
 
-  /* ------------------------------------------------------------- loop */
-  function updateHud() {
-    var b = s.ball, meters = b ? Math.floor(b.maxX) : 0;
-    if (meters !== hud.meters) { $('meters').textContent = K.fmt(meters); hud.meters = meters; }
-    var coins = b ? P.reward({ coins: b.coins, gems: b.gems, rings: b.rings, pops: b.pops }).coins : 0;
-    if (coins !== hud.coins) { $('run-coins').textContent = K.fmt(coins); hud.coins = coins; }
-    var alt = b ? Math.max(0, Math.floor(b.y)) : 0;
-    if (alt !== hud.alt) {
-      hud.alt = alt; $('alt-meters').textContent = K.fmt(alt);
-      var f = Math.min(1, alt / P.SPACE);
-      $('alt-fill').style.height = (f * 286) + 'px'; $('alt-ball').style.bottom = (f * 292) + 'px';
-    }
-    var total = b ? b.rockets : P.rocketsOf(save.upgrades), left = b ? b.rocketsLeft : total, key = total + '/' + left;
-    if (key !== hud.rockets) {
-      hud.rockets = key;
-      var row = $('rockets'), html = '';
-      for (var n = 0; n < total; n++) html += ROCKET_SVG.replace('<svg', '<svg class="' + (n >= left ? 'spent' : '') + '"');
-      row.innerHTML = html;
-      row.setAttribute('aria-label', 'الصواريخ: ' + left + ' من ' + total);
-    }
-  }
-  function camera(dt) {
-    var c = s.cam, tx, ty, tz;
-    if (s.phase === 'flight' || s.phase === 'landed') {
-      var b = s.ball, ground = P.heightAt(s.course, b.x), speed = Math.hypot(b.vx, b.vy), alt = Math.max(0, b.y - ground);
-      tz = s.phase === 'landed' ? 1.35 : clamp(1.5 - speed * 0.012 - alt * 0.005, 0.32, 1.5);
-      var k = A.PPM * c.zoom;
-      tx = b.x + (s.phase === 'landed' ? 0 : clamp(b.vx * 0.3, -6, 26)) + 150 / k;
-      ty = Math.max(ground + 190 / k, b.y - 170 / k);
-      if (s.phase === 'landed') ty = ground + 90 / k;
-      c.x += (tx - c.x) * Math.min(1, dt * 7);
-      c.y += (ty - c.y) * Math.min(1, dt * 5);
-      c.zoom += (tz - c.zoom) * Math.min(1, dt * 2.2);
-      // The easing may lag behind a rocket; never let the ball leave a safe box.
-      k = A.PPM * c.zoom;
-      var bx = 640 + (b.x - c.x) * k, by = 360 - (b.y - c.y) * k;
-      if (bx < 220) c.x -= (220 - bx) / k; else if (bx > 900) c.x += (bx - 900) / k;
-      if (by < 150) c.y += (150 - by) / k; else if (by > 600) c.y -= (by - 600) / k;
-    } else {
-      tx = TEE_CAM.x; ty = TEE_CAM.y + P.heightAt(s.course, 0); tz = TEE_CAM.zoom;
-      c.x += (tx - c.x) * Math.min(1, dt * 4); c.y += (ty - c.y) * Math.min(1, dt * 4); c.zoom += (tz - c.zoom) * Math.min(1, dt * 4);
-    }
-  }
-  function effects(dt) {
-    for (var n = s.particles.length - 1; n >= 0; n--) {
-      var p = s.particles[n]; p.t += dt;
-      if (p.t >= p.life) { s.particles.splice(n, 1); continue; }
-      p.vy -= p.g * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.rot += p.vr * dt;
-      p.vx *= 1 - dt * 1.5;
-    }
-    for (n = s.popups.length - 1; n >= 0; n--) { s.popups[n].t += dt / s.popups[n].life; if (s.popups[n].t >= 1) s.popups.splice(n, 1); }
-    shake = Math.max(0, shake - dt * 45);
-    s.shake.x = reduced ? 0 : (Math.random() - 0.5) * shake; s.shake.y = reduced ? 0 : (Math.random() - 0.5) * shake;
-    s.flash = Math.max(0, s.flash - dt * 3);
-    if (s.flame > 0) s.flame -= dt;
-    if (s.squash) s.squash.t += dt;
-    if (s.padPulse) { s.padPulse.t += dt; if (s.padPulse.t > 0.5) s.padPulse = null; }
-    if (s.propHit) { s.propHit.t += dt; if (s.propHit.t > 0.5) s.propHit = null; }
-    if (s.landed) s.landed.t += dt;
-    if (toastTimer > 0) { toastTimer -= dt; if (toastTimer <= 0) $('toast').hidden = true; }
-  }
-  function golferPose(dt) {
-    var g = s.golfer;
-    if (s.phase === 'title' || s.phase === 'ready') {
-      gaugeT += dt;
-      var v = s.phase === 'ready' ? 0.5 - 0.5 * Math.cos(gaugeT * Math.PI * 2 / GAUGE_PERIOD) : 0;
-      s.gauge.value = v;
-      // On the title the golfer lines up the ball with a small waggle.
-      g.angle = s.phase === 'ready' ? A.gaugeAngle(v) : A.ADDRESS + 0.12 + (reduced ? 0 : 0.08 * Math.sin(s.time * 2.4));
-      var hot = s.phase === 'ready' && v >= s.gauge.perfect;
-      if (hot && !gaugeHot) sfx.gauge();
-      gaugeHot = hot;
-    } else if (s.phase === 'swing') {
-      swing.t += dt;
-      var k = Math.min(1, swing.t / SWING_TIME);
-      g.angle = swing.from + (A.ADDRESS - swing.from) * k * k;
-      if (k >= 1) contact();
-    } else if (follow >= 0) {
-      follow += dt;
-      var f = Math.min(1, follow / 0.3);
-      g.angle = A.ADDRESS - (1 - Math.pow(1 - f, 3)) * 2.6;
-    }
-    // A little hop of joy after a perfect hit.
-    if (g.jumpT > 0) { g.jumpT += dt; g.jump = Math.sin(Math.min(1, g.jumpT / 0.5) * Math.PI) * 24; if (g.jumpT > 0.5) g.jumpT = g.jump = 0; }
-  }
-  function step(dt) {
-    if (paused || modalMode || document.hidden) { K.keys.endFrame(); return; }
-    s.time += dt;
-    golferPose(dt);
-    if (hitStop > 0) { hitStop -= dt; s.flash = Math.max(0, s.flash - dt * 2); K.keys.endFrame(); return; }
-    if (s.phase === 'flight') flight(dt);
-    else if (s.phase === 'landed') { landedT += dt; if (landedT > 1.6) showResult(); }
-    camera(dt);
-    effects(dt);
-    K.keys.endFrame();
-  }
-  function flight(dt) {
-    var b = s.ball;
-    var events = P.step(s.course, b, save.upgrades, dt * P.pace(b));
-    for (var n = 0; n < events.length; n++) onEvent(events[n]);
-    if (s.time > busyAt) { busyAt = s.time + 1; Kit.stats.busy(); }
-    if (!reduced && !b.done) { s.trail.push({ x: b.x, y: b.y }); if (s.trail.length > 26) s.trail.shift(); }
-    if (b.mode === 'air' && b.vy < 0 && !b.done) {
-      var p = P.predictImpact(s.course, b, P.ARM_WINDOW);
-      s.reticle = p ? { x: p.x, y: p.y, t: p.t } : null;
-    } else s.reticle = null;
-    if (s.unlockX && !unlockSeen && b.maxX >= s.unlockX) {
-      unlockSeen = true; sfx.fanfare();
-      toast('فتحت ' + s.unlockName + '!', 2.2);
-    }
-    updateHud();
-    if (b.done) land();
-  }
-  function render() {
-    // Paused, a menu open or nothing new: keep the last frame.
-    if (!renderDirty && renderedTime === s.time) return;
-    renderDirty = false; renderedTime = s.time;
-    ctx.setTransform(view.scale * view.dpr, 0, 0, view.scale * view.dpr, 0, 0);
-    A.draw(ctx, s);
-  }
+function syncHud(){
+var b=s.ball,pct=(clp((b?b.y:0)/P.SPACE,0,1)*100).toFixed(1)+'%';
+el('meters').textContent=String(b?Math.floor(b.maxX):0);
+el('run-coins').textContent=String(b?(b.coins+b.gems*5+b.rings*3+b.ufos*3+b.tnts*4+b.cannons*5):0);
+el('alt-meters').textContent=String(b?Math.max(0,Math.floor(b.y)):0);
+el('alt-fill').style.height=el('alt-ball').style.bottom=pct;
+el('altimeter').classList.toggle('space',!!(b&&b.space));
+el('hud-diff').textContent=P.diffOf(save.difficulty).label;
+var tot=b?b.rockets:P.rocketsOf(save.upgrades),left=b?b.rocketsLeft:tot;
+rktsEl.setAttribute('aria-label','الصواريخ: '+left+' من '+tot);
+if(rktsEl.childElementCount!==tot)rktsEl.innerHTML=new Array(tot+1).join(RKT_SVG);
+for(var j=0;j<rktsEl.children.length;j++)rktsEl.children[j].classList.toggle('spent',j>=left);
+if(s.phase==='ready'){hintEl.hidden=false;hintEl.className='hint pulse';hintEl.textContent='اضغط في النطاق الذهبي لإطلاق الكرة الصاروخية!';}
+else if(s.phase==='flight'&&b&&s.hints){
+hintEl.hidden=false;hintEl.className=s.reticle?'hint pulse':'hint';
+hintEl.textContent=b.rocketsLeft>0?(s.reticle?'اضغط الآن لقفزة خارقة!':'في الهواء: صاروخ · قرب الأرض: قفزة خارقة'):'اضغط قرب الأرض لقفزة خارقة!';
+}else if(s.phase==='landed'){hintEl.hidden=false;hintEl.className='hint';hintEl.textContent='مسافة أو نقرة لعرض النتيجة';}
+else hintEl.hidden=true;
+}
 
-  /* ------------------------------------------------------------ input */
-  button('play', start); button('pause', togglePause); button('resume', closeModal); button('restart', start);
-  button('again', start); button('menu', menu); button('close-modal', closeModal);
-  button('open-shop', function () { openModal('shop'); }); button('open-worlds', function () { openModal('worlds'); });
-  // Act on press, like Space: a click fires on release, after the gauge has moved on.
-  canvas.addEventListener('pointerdown', function (e) {
-    if (e.button !== 0 || strayPress(e, canvas)) return;
-    e.preventDefault(); A2.unlock(); canvas.focus({ preventScroll: true }); action();
-  });
-  window.addEventListener('keydown', function (e) {
-    if (e.repeat || e.isComposing || e.ctrlKey || e.altKey || e.metaKey) return;
-    // Keep the advertised P and R shortcuts while a modal button has focus,
-    // without taking native Enter/Space activation from that button.
-    var modalShortcut = ((modalMode === 'pause' && e.code === 'KeyP') || (modalMode === 'result' && e.code === 'KeyR')) &&
-      !e.defaultPrevented && !e.target.isContentEditable && e.target.closest && e.target.closest('button');
-    if (!K.isGameKeyEvent(e) && !modalShortcut) return;
-    if (e.code === 'Escape' || e.code === 'KeyP') {
-      e.preventDefault();
-      if (modalMode === 'shop' || modalMode === 'worlds') closeModal(); else togglePause();
-      return;
-    }
-    if (e.code === 'KeyR' && s.phase === 'result') { e.preventDefault(); start(); return; }
-    if (e.code === 'Space' || e.code === 'Enter') {
-      e.preventDefault();
-      if (modalMode === 'result') { if (newWorld >= 0) playWorld(newWorld); else start(); }
-      else if (!modalMode) action();
-    }
-  });
+function setPhase(ph){s.phase=ph;ui.dataset.phase=ph==='swing'?'flight':ph;titleEl.hidden=ph!=='title';hud.hidden=pauseBtn.hidden=(ph==='title'||ph==='result');dirty=true;}
+function closeModal(){
+mKind='';
+if(document.activeElement&&modalEl.contains(document.activeElement))document.activeElement.blur();
+modalEl.hidden=resEl.hidden=shopEl.hidden=wldsEl.hidden=pauseEl.hidden=againBtn.hidden=true;
+panelEl.classList.remove('result-panel','celebrate');dirty=true;
+}
+function focusRes(fb){var ub=!unlkEl.hidden&&unlkEl.querySelector('button');if(ub)ub.focus();else if(fb&&!fb.disabled)fb.focus();else againBtn.focus();}
 
-  resetScene(); stats(); controls(); updateHud();
-  K.loop(step, render);
-  // Losing the frame must neither resume an existing pause nor pull focus back
-  // from the portal into the newly opened pause dialog.
-  K.lifecycle({ pause: function () { pause(false); } });
-  // Canvas text drawn before the fonts arrived is repainted, even while paused.
-  if (document.fonts && document.fonts.addEventListener) {
-    document.fonts.addEventListener('loadingdone', function () { renderDirty = true; });
-    if (document.fonts.load) Promise.all([document.fonts.load('700 40px Fredoka', 'ب'), document.fonts.load('700 40px Fredoka', '0')])
-      .then(function () { renderDirty = true; }, function () {});
-  }
-  K.ready();
+function drawUps(kinds){
+el('shop-coins').textContent=K.fmt(save.coins);
+var cur=upsEl.querySelectorAll('[data-upgrade]'),same=cur.length===kinds.length,i;
+for(i=0;same&&i<kinds.length;i++)if(cur[i].getAttribute('data-upgrade')!==kinds[i])same=false;
+if(!same){
+upsEl.innerHTML='';
+for(i=0;i<kinds.length;i++){
+var btn=document.createElement('button');
+btn.type='button';btn.className='upgrade';btn.setAttribute('data-upgrade',kinds[i]);
+on(btn,'keydown',function(e){if(e.repeat&&(e.code==='Enter'||e.code==='Space'))e.preventDefault();});
+on(btn,'click',buyUp);upsEl.appendChild(btn);
+}
+cur=upsEl.querySelectorAll('[data-upgrade]');
+}
+for(i=0;i<kinds.length;i++){
+var k=kinds[i],m=UP_META[k],sp=P.upgrades[k],lv=save.upgrades[k]||0,c=P.cost(k,lv),mx=lv>=sp.max,can=!mx&&save.coins>=c,b=cur[i],pips='';
+b.disabled=mx||!can;b.classList.toggle('maxed',mx);b.classList.toggle('can',can);
+for(var p=0;p<sp.max;p++)pips+='<i class="'+(p<lv?'on':'')+'"></i>';
+b.innerHTML='<span class="upgrade-icon" aria-hidden="true"><svg viewBox="0 0 40 40">'+m[2]+'</svg></span><strong>'+m[0]+'</strong><span class="explain">'+m[1]+'</span><span class="pips" aria-hidden="true">'+pips+'</span><span class="price">'+(mx?'مكتمل!':'<i class="coin-ico" aria-hidden="true"></i><span>'+K.fmt(c)+'</span>')+'</span>';
+}
+}
+
+function buyUp(e){
+var btn=e.currentTarget,k=btn.getAttribute('data-upgrade'),lv=save.upgrades[k]||0,c=P.cost(k,lv);
+if(lv>=P.upgrades[k].max||save.coins<c)return;
+save.coins-=c;save.upgrades[k]=lv+1;s.magnet=P.magnetOf(save.upgrades);s.gauge.perfect=pBand();
+persist();sfx.buy();syncTitle();drawUps(mKind==='result'?resKinds:P.kinds);
+if(mKind==='shop')drawSkins();
+if(mKind==='result'){if(e.detail===0)focusRes(btn);else btn.blur();}
+else if(e.detail===0&&btn.disabled)closeBtn.focus();
+dirty=true;
+}
+
+function drawSkins(){
+skEl.innerHTML='';
+P.skins.forEach(function(sk){
+var owned=save.skins.indexOf(sk.id)>=0,act=save.skin===sk.id,b=document.createElement('button');
+b.type='button';b.className='skin';b.disabled=!(owned||save.coins>=sk.price);b.setAttribute('aria-pressed',String(act));
+var scv=document.createElement('canvas');scv.width=scv.height=48;A.preview(scv.getContext('2d'),sk.id,48);b.appendChild(scv);
+b.insertAdjacentHTML('beforeend','<strong>'+sk.name+'</strong><span>'+(act?'مختارة':owned?'اختر':K.fmt(sk.price))+'</span>');
+on(b,'click',function(){
+if(!owned){if(save.coins<sk.price)return;save.coins-=sk.price;save.skins.push(sk.id);}
+save.skin=s.skin=sk.id;persist();sfx.buy();syncTitle();drawUps(P.kinds);drawSkins();dirty=true;
+});
+skEl.appendChild(b);
+});
+}
+
+function showModal(kind,title,tip,els){
+closeModal();mKind=kind;modalEl.hidden=closeBtn.hidden=menuBtn.hidden=false;
+hdEl.textContent=title;tipEl.textContent=tip;
+for(var i=0;i<els.length;i++)els[i].hidden=false;
+}
+
+function openShop(e){armG(e);showModal('shop','متجر الصواريخ','طوّر مضربك وصواريخك لتحطيم الأرقام القياسية!',[shopEl,skWrap]);drawUps(P.kinds);drawSkins();}
+
+function openWorlds(e){
+armG(e);showModal('worlds','اختر عالم الإطلاق','جميع العوالم مفتوحة للعب فوراً — اختر عالمك المفضل!',[wldsEl]);wldsEl.innerHTML='';
+P.worlds.forEach(function(w,idx){
+var ws=W_STYLE[idx],b=document.createElement('button'),wBest=save.bests[w.id]||0;
+b.type='button';b.className='world-option'+(save.world===idx?' selected':'');
+b.style.setProperty('--sky',ws[0]);b.style.setProperty('--ground',ws[1]);
+var bdg=(!w.unlock||save.best>=w.unlock)?'أفضل: '+wBest+' م':'وسام: '+w.unlock+' م';
+b.innerHTML='<svg class="world-icon" viewBox="0 0 72 72" aria-hidden="true">'+ws[2]+'</svg><strong>'+w.name+'</strong><span>'+bdg+'</span>';
+on(b,'click',function(ev){if(isG(ev))return;save.world=idx;persist();K.sfx.click();syncCourse();syncTitle();armG(ev);closeModal();});
+wldsEl.appendChild(b);
+});
+}
+
+function resetScene(){
+s.ball=s.reticle=null;s.flame=s.golfer.jump=s.golfer.jumpT=toastT=0;
+s.trail.length=s.particles.length=s.popups.length=0;
+s.golfer.angle=A.ADDRESS;s.cam.x=s.phase==='title'?10:9;s.cam.y=4.5;s.cam.zoom=1;toastEl.hidden=true;
+}
+
+function goTitle(e){
+if(s.phase==='flight'&&!s.committed&&s.ball&&s.ball.maxX>0)commitShot();
+armG(e);closeModal();syncCourse();setPhase('title');s.gauge.show=false;resetScene();syncTitle();
+}
+
+function startReady(e){
+if(s.phase==='flight'&&!s.committed&&s.ball&&s.ball.maxX>0)commitShot();
+armG(e);closeModal();
+if(save.difficulty==='easy'&&dda&&s.lastOutcome>=0){dda.result(s.lastOutcome);s.lastOutcome=-1;}
+syncCourse();s.prevBest=save.best;s.unlockedIndex=-1;s.committed=false;
+gaugeT=swingT=landedT=hitStop=0;
+s.gauge.show=true;s.gauge.value=0;s.gauge.perfect=pBand();
+setPhase('ready');resetScene();syncHud();cv.focus({preventScroll:true});
+if(K.track&&K.track.tier)K.track.tier(save.difficulty==='easy'?0:save.difficulty==='hero'?2:1,'difficulty',true);
+Kit.stats.round(worldId());
+}
+
+function strike(){if(s.phase!=='ready')return;swPwr=s.gauge.value;swingT=0;s.gauge.show=false;setPhase('swing');K.sfx.whoosh();}
+
+function launchBall(pwr){
+var b=P.launch(s.course,save.upgrades,pwr);
+if(save.difficulty==='easy'){
+var bst=dda?dda.value(1.06,0.99):1.03;
+if(b.power>=pBand()&&!b.perfect){b.perfect=true;b.grade='perfect';b.vx*=1.1;b.vy*=1.1;}
+b.vx*=bst;b.vy*=bst;
+}
+s.ball=b;setPhase('flight');sfx.hit(b.grade);
+if(b.perfect){
+if(K.track&&K.track.hit)K.track.hit();
+popup('ضربة ذهبية!',0,b.y+2.4,'#ffd000',34);shake(9);flash(0.28);burst(0,b.y,'#ffd000',16,'spark',11);
+if(!s.reduced){hitStop=0.016;s.golfer.jumpT=0.34;}
+}else if(b.grade==='great'){popup('رائعة!',0,b.y+2.2,'#69f0ae',28);shake(4);burst(0,b.y,'#69f0ae',10,'spark',9);}
+else if(K.track&&K.track.miss)K.track.miss();
+syncHud();
+}
+
+function flightPress(slamOnly){
+if(s.phase!=='flight'||!s.ball)return;
+var r=P.press(s.course,s.ball,save.upgrades,!!slamOnly);
+if(r.type==='rocket'){s.flame=0.42;sfx.rocket();shake(6);burst(r.x,r.y,'#ff9100',14,'flame',10);popup('تيربو صاروخي!',r.x,r.y+2,'#ff9100',26);syncHud();}
+else if(r.type==='arm'){tone(520,740,0.06,'sine',0.14);syncHud();}
+else if(r.type==='late'){sfx.superHit(1);popup('دفعة أرضية!',r.x,r.y+1.8,'#69f0ae',24);syncHud();}
+else if(r.type==='empty'){sfx.empty();rktsEl.classList.remove('empty');void rktsEl.offsetWidth;rktsEl.classList.add('empty');}
+dirty=true;
+}
+
+var EV_FX={
+tnt:['tnt',14,0.32,'#ff3d57',20,'flame','انفجار ديناميت!','#ff5252',32,0],
+cannon:['cannon',12,0.24,'#ffd000',16,'flame','مدفع خارق!','#ffd000',32,0.36],
+ufo:['ufo',7,0,'#76ff03',14,'spark','تحطيم مركبة!','#76ff03',28,0],
+ring:['ring',0,0,'#00e5ff',1,'ring','حلقة تيربو!','#00e5ff',28,0.3],
+pad:[0,0,0,'#00e676',10,'spark','منصة قفز!','#00e676',26,0],
+skip:[0,0,0,'#4fc3f7',8,'spark','تزلج مائي!','#4fc3f7',25,0]
+};
+
+function handleEvents(evs){
+var b=s.ball;
+for(var i=0;i<evs.length;i++){
+var ev=evs[i],t=ev.type,fx=EV_FX[t];
+if(fx){
+if(fx[0])sfx[fx[0]]();else if(t==='pad'){K.sfx.jump();s.padPulse={x:ev.x,t:0};}else K.sfx.pop();
+if(fx[1])shake(fx[1]);
+if(fx[2])flash(fx[2]);
+if(fx[9])s.flame=Math.max(s.flame,fx[9]);
+burst(ev.x,ev.y,fx[3],fx[4],fx[5],fx[5]==='ring'?56:11);
+if(t==='tnt')burst(ev.x,ev.y,'#ffd000',1,'ring',68);
+popup(fx[6],ev.x,ev.y+2.2,fx[7],fx[8]);
+}else if(t==='coin'){K.sfx.coin();if(ev.gem)popup('+5 جوهرة!',ev.x,ev.y+1.2,'#ea80fc',24);burst(ev.x,ev.y,ev.gem?'#ea80fc':'#ffd000',6,'spark',7);}
+else if(t==='super'){
+sfx.superHit(ev.combo||1);shake(ev.quality==='perfect'?9:5);s.squash={t:0};burst(ev.x,ev.y,'#ffd000',14,'spark',9);
+if(ev.quality==='perfect'){if(save.tips<2){save.tips++;s.hints=save.tips<2;}popup(ev.combo>1?'قفزة خارقة! '+ltr('×'+ev.combo):'قفزة خارقة!',ev.x,ev.y+2.2,'#ffd000',31);}
+else popup('قفزة قوية!',ev.x,ev.y+1.8,'#69f0ae',25);
+}else if(t==='bounce'){sfx.bounce(ev.strength||0.3);s.squash={t:0};if((ev.strength||0)>0.25)burst(ev.x,ev.y,'#fff',5,'dust',8);}
+else if(t==='prop'){K.sfx.pop();s.propHit={id:ev.id,t:0};}
+else if(t==='splash'){tone(220,70,0.2,'sine',0.24);burst(ev.x,ev.y,'#29b6f6',14,'spark',9);}
+else if(t==='hole'){K.sfx.win();burst(ev.x,ev.y,'#ffd000',22,'spark',11);toast(ev.ace?'حفرة من ضربة واحدة!':'في الحفرة!');}
+else if(t==='space'){K.sfx.power();toast('وصلت إلى حافة الفضاء!');}
+}
+if(b&&s.unlockX>0&&s.unlockedIndex<0&&b.maxX>=s.unlockX){
+var idx=nextUnlock(s.prevBest);
+if(idx>0&&b.maxX>=P.worlds[idx].unlock){s.unlockedIndex=idx;K.sfx.power();toast('فتحت '+P.worlds[idx].name+'!');}
+}
+}
+
+function commitShot(){
+if(s.committed||!s.ball)return;
+s.committed=true;
+var b=s.ball,dist=Math.floor(clp(b.maxX,0,20000)),parts=P.reward(b),wid=worldId();
+save.coins=Math.min(9999999,save.coins+parts.total);save.shots++;
+save.bests[wid]=Math.max(save.bests[wid]||0,dist);save.best=Math.max(save.best,dist);save.high=Math.max(save.high||0,Math.floor(b.maxY));
+if(b.hole)save.holes++;
+if(b.space)save.spaces++;
+if(s.unlockedIndex<0)for(var w=P.worlds.length - 1;w>=1;w--)if(s.prevBest<P.worlds[w].unlock&&save.best>=P.worlds[w].unlock){s.unlockedIndex=w;break;}
+s.lastOutcome=(b.perfect||b.supers>0||dist>=110)?1:0;
+persist();
+Kit.stats.end('end',dist);
+}
+
+function openResult(){
+if(s.phase==='result'||!s.ball)return;
+commitShot();setPhase('result');
+var b=s.ball,dist=Math.floor(b.maxX),parts=P.reward(b),rec=dist>s.prevBest&&s.prevBest>0;
+var title=b.ace?'حفرة من ضربة واحدة!':b.hole?'في الحفرة!':b.space?'إلى الفضاء!':(rec||s.unlockedIndex>0)?'رقم قياسي جديد!':b.reason==='water'?'سبلاش!':'رحلة رائعة!';
+showModal('result',title,'اضغط مسافة أو R لضربة جديدة',[resEl,shopEl,againBtn]);
+skWrap.hidden=closeBtn.hidden=true;panelEl.classList.add('result-panel');
+if(rec||b.hole||b.space||s.unlockedIndex>0)panelEl.classList.add('celebrate');
+
+var notes=[];
+[['tnts','ديناميت '],['cannons','مدافع '],['ufos','مركبات '],['supers','قفزات خارقة ']].forEach(function(pr){if(b[pr[0]])notes.push(pr[1]+ltr('×'+b[pr[0]]));});
+el('result-note').textContent=notes.length?notes.join(' · '):'أعلى ارتفاع: '+Math.floor(b.maxY)+' م';
+el('result-meters').textContent=K.fmt(dist);
+
+var ch='<span class="chip total"><i class="coin-ico" aria-hidden="true"></i><b>+'+K.fmt(parts.total)+'</b></span><span class="chip">المسافة '+K.fmt(parts.distance)+'</span>';
+[['coins','الغنائم '],['bonus','مكافأة '],['hero','تحدي البطل '],['treasure','الكنز ']].forEach(function(pr){if(parts[pr[0]])ch+='<span class="chip">'+pr[1]+K.fmt(parts[pr[0]])+'</span>';});
+el('result-coins').innerHTML=ch;
+
+if(s.unlockedIndex>0){
+var uw=P.worlds[s.unlockedIndex],goBtn=document.createElement('button');
+unlkEl.hidden=false;unlkEl.innerHTML='<span>وسام جديد: '+uw.name+'!</span>';
+goBtn.type='button';goBtn.className='button primary';goBtn.textContent='انطلق إلى '+uw.name;
+on(goBtn,'keydown',function(e){if(e.repeat&&(e.code==='Enter'||e.code==='Space'))e.preventDefault();});
+on(goBtn,'click',function(ev){save.world=s.unlockedIndex;persist();startReady(ev);});
+unlkEl.appendChild(goBtn);againBtn.className='button secondary';
+}else{unlkEl.hidden=true;unlkEl.innerHTML='';againBtn.className='button primary';}
+
+resKinds=P.kinds.filter(function(k){return(save.upgrades[k]||0)<P.upgrades[k].max;})
+.sort(function(a,k2){return(P.cost(a,save.upgrades[a]||0)- P.cost(k2,save.upgrades[k2]||0))||(P.kinds.indexOf(a)- P.kinds.indexOf(k2));})
+.slice(0,4).sort(function(a,k2){return P.kinds.indexOf(a)- P.kinds.indexOf(k2);});
+drawUps(resKinds);focusRes(null);
+}
+
+function pause(focusResume){
+if(s.phase==='title'||s.phase==='result'||mKind==='pause')return;
+showModal('pause','إيقاف مؤقت','اضغط P أو Esc للمتابعة',[pauseEl]);
+if(focusResume)el('resume').focus();
+dirty=true;
+}
+function resumePlay(e){if(mKind!=='pause')return;armG(e);closeModal();cv.focus({preventScroll:true});}
+K.lifecycle({pause:function(){pause(false);}});
+
+function tickFx(dt){
+var act=false,i;
+if(s.shake.p>0&&!s.reduced){s.shake.p=Math.max(0,s.shake.p - dt*38);s.shake.x=Math.sin(s.time*67)*s.shake.p;s.shake.y=Math.cos(s.time*53)*s.shake.p;act=true;}else s.shake.x=s.shake.y=0;
+if(s.flash>0){s.flash=Math.max(0,s.flash - dt*2.4);act=true;}
+if(s.flame>0){s.flame=Math.max(0,s.flame - dt);act=true;}
+if(s.golfer.jumpT>0&&!s.reduced){s.golfer.jumpT=Math.max(0,s.golfer.jumpT - dt);s.golfer.jump=Math.sin((s.golfer.jumpT/0.34)*Math.PI)*18;act=true;}else s.golfer.jump=0;
+if(s.squash&&(s.squash.t+=dt)>=0.22)s.squash=null;else if(s.squash)act=true;
+if(s.padPulse&&(s.padPulse.t+=dt)>=0.4)s.padPulse=null;else if(s.padPulse)act=true;
+if(s.propHit&&(s.propHit.t+=dt)>=0.35)s.propHit=null;else if(s.propHit)act=true;
+for(i=s.particles.length - 1;i>=0;i--){var p=s.particles[i];p.t+=dt;if(p.t>=p.life)s.particles.splice(i,1);else{p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy-=18*dt;act=true;}}
+for(i=s.popups.length - 1;i>=0;i--){if((s.popups[i].t+=dt*1.1)>=1)s.popups.splice(i,1);else act=true;}
+if(toastT>0&&(toastT-=dt)<=0)toastEl.hidden=true;
+return act;
+}
+
+function update(dt){
+if(!modalEl.hidden)return;
+s.time+=dt;
+var fx=tickFx(dt);
+if(s.phase==='title'){if(!s.reduced||fx)dirty=true;return;}
+if(s.phase==='ready'){
+var hp=gPeriod()*0.5,cyc=((gaugeT+=dt)/hp)% 2;
+s.gauge.value=cyc<=1?cyc:2 - cyc;s.gauge.perfect=pBand();s.golfer.angle=A.gaugeAngle(s.gauge.value);dirty=true;return;
+}
+if(s.phase==='swing'){
+var k=clp((swingT+=dt)/0.08,0,1);
+s.golfer.angle=A.gaugeAngle(swPwr)*(1 - k)+(A.ADDRESS - 1.15)*k;
+dirty=true;if(swingT>=0.08)launchBall(swPwr);return;
+}
+if(s.phase==='flight'&&s.ball){
+dirty=true;
+if(hitStop>0&&!s.reduced){hitStop=Math.max(0,hitStop - dt);return;}
+var b=s.ball,evs=P.step(s.course,b,save.upgrades,P.pace(b)*dt);
+if(!s.reduced){s.trail.push({x:b.x,y:b.y});if(s.trail.length>26)s.trail.shift();}else s.trail.length=0;
+var hadR=!!s.reticle;
+s.reticle=(!b.done&&b.mode==='air'&&b.vy<0)?P.predictImpact(s.course,b,s.course.diff.armWindow):null;
+if(!hadR&&s.reticle&&K.track&&K.track.cue)K.track.cue();
+handleEvents(evs);
+var tz=clp(1.04 - Math.hypot(b.vx,b.vy)*0.008 - Math.max(0,b.y - 12)*0.005,0.46,1);
+s.cam.zoom+=(tz - s.cam.zoom)*Math.min(1,dt*5);
+s.cam.x=b.x+clp(b.vx*0.22,2,11);
+s.cam.y=Math.max(P.heightAt(s.course,b.x)+4.2/s.cam.zoom,b.y+b.vy*0.08+1.5);
+syncHud();
+if(b.done){s.reticle=null;landedT=0;commitShot();setPhase('landed');syncHud();}
+return;
+}
+if(s.phase==='landed'){
+landedT+=dt;s.cam.zoom+=(0.95 - s.cam.zoom)*Math.min(1,dt*4);
+if(s.ball)s.cam.x+=(s.ball.x+2 - s.cam.x)*Math.min(1,dt*4);
+dirty=true;if(landedT>=1.35)openResult();
+}
+}
+
+on(el('play'),'click',startReady);
+on(el('open-shop'),'click',openShop);
+on(el('open-worlds'),'click',openWorlds);
+on(pauseBtn,'click',function(){pause(true);});
+on(el('resume'),'click',resumePlay);
+on(el('restart'),'click',startReady);
+on(againBtn,'click',startReady);
+on(menuBtn,'click',goTitle);
+on(closeBtn,'click',function(e){if(mKind==='pause')resumePlay(e);else{armG(e);closeModal();}});
+on(el('difficulty-bar'),'click',function(e){
+var btn=e.target.closest('[data-difficulty]');
+if(!btn)return;
+var d=btn.getAttribute('data-difficulty');
+if(P.diffIds.indexOf(d)>=0){save.difficulty=d;persist();K.sfx.click();syncCourse();syncTitle();}
+});
+on(cv,'pointerdown',function(e){
+if((e.button&&e.button!==0)||!modalEl.hidden||isG(e))return;
+if(s.phase==='ready')strike();else if(s.phase==='flight')flightPress(false);else if(s.phase==='landed')openResult();
+});
+
+on(modalEl,'keydown',function(e){if((e.code==='Space'||e.code==='Enter')&&(e.repeat||heldKey===e.code)){e.preventDefault();e.stopPropagation();}},true);
+on(window,'keyup',function(e){if(heldKey&&e.code===heldKey){heldKey='';if(!modalEl.hidden){e.preventDefault();e.stopPropagation();}}},true);
+on(window,'blur',function(){heldKey='';});
+
+on(window,'keydown',function(e){
+if(e.isComposing||e.ctrlKey||e.altKey||e.metaKey)return;
+var tag=e.target&&e.target.tagName;
+if(!e.repeat&&mKind==='pause'&&(e.code==='Escape'||e.code==='KeyP')&&tag!=='INPUT'&&tag!=='TEXTAREA'&&tag!=='SELECT'){e.preventDefault();resumePlay();return;}
+if(!e.repeat&&mKind==='result'&&e.code==='KeyR'&&(!K.keys.isNativeTarget(e.target)||tag==='BUTTON')){e.preventDefault();startReady();return;}
+if(!K.isGameKeyEvent(e)||e.repeat)return;
+if(e.code==='Escape'){
+if(mKind==='shop'||mKind==='worlds'){var wk=mKind;e.preventDefault();closeModal();el(wk==='shop'?'open-shop':'open-worlds').focus();}
+else if(mKind==='pause'){e.preventDefault();resumePlay();}
+else if(s.phase!=='title'&&s.phase!=='result'){e.preventDefault();pause(true);}
+return;
+}
+if(e.code==='KeyP'&&modalEl.hidden&&s.phase!=='title'&&s.phase!=='result'){e.preventDefault();pause(true);return;}
+if(mKind==='result'&&(e.code==='Space'||e.code==='Enter')){
+e.preventDefault();var ub=!unlkEl.hidden&&unlkEl.querySelector('button');if(ub)ub.click();else startReady();return;
+}
+if(!modalEl.hidden)return;
+if(e.code==='Space'||e.code==='Enter'){
+e.preventDefault();
+if(s.phase==='title')startReady();else if(s.phase==='ready')strike();
+else if(s.phase==='flight')flightPress(false);else if(s.phase==='landed'){heldKey=e.code;openResult();}
+return;
+}
+if((e.code==='ArrowDown'||e.code==='KeyS')&&s.phase==='flight'){e.preventDefault();flightPress(true);}
+});
+
+syncCourse();setPhase('title');syncTitle();
+K.loop(update,function(){if(!dirty)return;dirty=false;A.draw(ctx,s);},{hz:60});
+K.ready();
 })();

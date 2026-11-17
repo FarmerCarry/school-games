@@ -1,14 +1,19 @@
-/* Recess Kitchen (مطبخ الفسحة): UI screens, 1P keyboard + mouse click-to-walk controls,
- * 2P cooperative shared-goal controls, shop, DDA, telemetry, and render loop. */
+/*
+ * مطبخ الفسحة (Recess Kitchen: Turbo Robo-Chef & Burger Cannon)
+ * Canvas 2D rendering via Kit.art, discrete Kit.juice SFX, UI overlays, DDA & Telemetry.
+ */
 (function () {
   'use strict';
-  var A = RK.art, J = Kit.juice, W = RK.W, H = RK.H;
+
+  var E = window.RKEngine, J = Kit.juice, A = Kit.art;
+  var W = E.W, H = E.H, TILE = E.TILE, TAU = Math.PI * 2, INK = '#1b1640';
   var $ = function (id) { return document.getElementById(id); };
   var canvas = $('game'), ui = $('ui');
   var calm = function () { return Kit.motion.reduced(); };
-  var clamp = Kit.clamp;
-  var dirty = true;
 
+  A.init({ canvas: canvas, mode: '2d', theme: 'day' });
+
+  var dirty = true;
   var view = Kit.fit(canvas, W, H, {
     maxDpr: 1.5,
     onResize: function (v) {
@@ -18,16 +23,13 @@
       dirty = true;
     }
   });
+  var ctx = view.ctx;
 
-  var fx = Kit.particles(), shake = Kit.shake();
-  var pixelScale = function () { return clamp(Math.round(view.scale * view.dpr * 4) / 4, 0.5, 2); };
-  var KEYS_GO = ['Enter', 'NumpadEnter', 'Space'];
-  var CELEBRATE = 1.35;
-
-  /* ----------------------------------------------------------- save & DDA */
+  var fx = Kit.particles(), camShake = Kit.shake();
   var store = Kit.store('recess-kitchen');
   var saveStatus = Kit.saveStatus({ retry: persist });
-  var save = RK.loadSave(store.get('save', null));
+  var save = E.loadSave(store.get('save', null));
+  var dda = Kit.dda('recess-kitchen', { id: 'main', start: 0.35 });
 
   function persist() {
     if (store.set('save', save) === false) {
@@ -38,693 +40,1156 @@
     return true;
   }
 
-  var dda = Kit.dda('recess-kitchen', { id: 'main', start: 0.3 });
+  function sfx(name, arg) {
+    if (J && typeof J[name] === 'function') J[name](arg);
+  }
 
-  /* ---------------------------------------------------------------- state */
-  var screen = 'title', cur = 0, players = 1, world = null, time = 0, activeRound = false;
-  var celebrate = 0, result = null, resultT = 0, resultLock = 0, intro = 0;
-  var floats = [];
-  var ptr = { x: W / 2, y: H / 2, down: false, holdT: 0, inside: false };
-  var clickQ = null;
+  /* -------------------------------------- Bounded Static Sprite Library */
+  var BLINK_SLOTS = [{}, {}, {}, {}, {}, {}];
 
-  var SCREENS = { title: 'scrTitle', map: 'scrMap', pause: 'scrPause', result: 'scrResult', shop: 'scrShop' };
+  function rr(c, x, y, w, h, r) {
+    A.round(c, x, y, w, h, r);
+  }
 
-  function setScreen(name) {
-    screen = name;
-    for (var k in SCREENS) $(SCREENS[k]).hidden = k !== name;
-    $('hud').hidden = name !== 'play';
+  function strokeFill(c, fill, lw) {
+    c.fillStyle = fill;
+    c.fill();
+    c.lineWidth = lw || 3.5;
+    c.strokeStyle = INK;
+    c.lineJoin = 'round';
+    c.stroke();
+  }
+
+  function drawText(c, txt, x, y, size, fill, align) {
+    c.save();
+    c.font = '800 ' + size + 'px Fredoka';
+    c.textAlign = align || 'center';
+    c.textBaseline = 'middle';
+    c.direction = 'rtl';
+    c.lineJoin = 'round';
+    c.lineWidth = Math.max(3.5, size * 0.22);
+    c.strokeStyle = INK;
+    c.strokeText(txt, x, y);
+    c.fillStyle = fill || '#ffffff';
+    c.fillText(txt, x, y);
+    c.restore();
+  }
+
+  function paintFoodArt(c, kind, s) {
+    var cx = s / 2, cy = s / 2;
+    c.lineJoin = 'round';
+    c.lineCap = 'round';
+    if (kind === 'bun' || kind === 'bunCheese') {
+      c.beginPath(); c.ellipse(cx, cy + 4, s * 0.36, s * 0.22, 0, 0, TAU);
+      strokeFill(c, '#f4a261', 3);
+      c.beginPath(); c.ellipse(cx, cy - 2, s * 0.34, s * 0.2, 0, Math.PI, TAU);
+      strokeFill(c, '#f6bd60', 3);
+      c.fillStyle = '#fff8eb';
+      c.beginPath(); c.arc(cx - 6, cy - 8, 2, 0, TAU); c.arc(cx + 5, cy - 9, 2, 0, TAU); c.arc(cx, cy - 5, 2, 0, TAU); c.fill();
+      if (kind === 'bunCheese') {
+        c.beginPath(); c.moveTo(cx - 14, cy + 2); c.lineTo(cx + 14, cy + 2); c.lineTo(cx + 8, cy + 12); c.lineTo(cx - 10, cy + 10); c.closePath();
+        strokeFill(c, '#ffd166', 2.5);
+      }
+    } else if (kind === 'meatRaw' || kind === 'meatCooked' || kind === 'meatCheese') {
+      var mCol = kind === 'meatRaw' ? '#ef6351' : '#7f3718';
+      c.beginPath(); c.ellipse(cx, cy + 2, s * 0.36, s * 0.23, 0, 0, TAU);
+      strokeFill(c, mCol, 3);
+      if (kind !== 'meatRaw') {
+        c.strokeStyle = '#3d1706'; c.lineWidth = 3;
+        c.beginPath(); c.moveTo(cx - 9, cy - 4); c.lineTo(cx - 5, cy + 7); c.moveTo(cx + 3, cy - 5); c.lineTo(cx + 7, cy + 6); c.stroke();
+      } else {
+        c.strokeStyle = '#ffd6d0'; c.lineWidth = 2.5;
+        c.beginPath(); c.moveTo(cx - 7, cy); c.lineTo(cx + 6, cy + 3); c.stroke();
+      }
+      if (kind === 'meatCheese') {
+        c.beginPath(); c.rect(cx - 11, cy - 7, 22, 11);
+        strokeFill(c, '#ffd166', 2.5);
+      }
+    } else if (kind === 'cheese') {
+      c.beginPath(); c.moveTo(cx - 16, cy + 10); c.lineTo(cx + 16, cy + 10); c.lineTo(cx + 6, cy - 13); c.lineTo(cx - 14, cy - 6); c.closePath();
+      strokeFill(c, '#ffd166', 3);
+      c.fillStyle = '#f59e0b';
+      c.beginPath(); c.arc(cx - 4, cy + 3, 3, 0, TAU); c.arc(cx + 5, cy + 5, 2.2, 0, TAU); c.fill();
+    } else if (kind === 'potatoRaw') {
+      c.beginPath(); c.ellipse(cx, cy + 1, s * 0.33, s * 0.24, -0.25, 0, TAU);
+      strokeFill(c, '#d4a373', 3);
+      c.fillStyle = '#8d5b34';
+      c.beginPath(); c.arc(cx - 6, cy - 2, 2, 0, TAU); c.arc(cx + 6, cy + 4, 2, 0, TAU); c.fill();
+    } else if (kind === 'fries') {
+      c.strokeStyle = INK; c.lineWidth = 2.5;
+      var xs = [-10, -4, 2, 8];
+      for (var fi = 0; fi < 4; fi++) {
+        rr(c, cx + xs[fi] - 3, cy - 17 + (fi % 2) * 3, 6, 20, 2);
+        strokeFill(c, '#ffd166', 2.5);
+      }
+      c.beginPath(); c.moveTo(cx - 15, cy - 2); c.lineTo(cx + 15, cy - 2); c.lineTo(cx + 12, cy + 16); c.lineTo(cx - 12, cy + 16); c.closePath();
+      strokeFill(c, '#ef476f', 3);
+      c.fillStyle = '#ffd166'; c.beginPath(); c.arc(cx, cy + 7, 4, 0, TAU); c.fill();
+    } else if (kind === 'fruitRaw') {
+      c.beginPath(); c.moveTo(cx, cy + 15); c.quadraticCurveTo(cx - 17, cy - 3, cx - 7, cy - 11); c.quadraticCurveTo(cx, cy - 14, cx + 7, cy - 11); c.quadraticCurveTo(cx + 17, cy - 3, cx, cy + 15);
+      strokeFill(c, '#ff4d6d', 3);
+      c.beginPath(); c.ellipse(cx, cy - 13, 9, 4, 0, 0, TAU);
+      strokeFill(c, '#3ddc84', 2.5);
+    } else if (kind === 'juice') {
+      c.beginPath(); c.moveTo(cx + 3, cy - 20); c.lineTo(cx + 9, cy - 8); c.strokeStyle = '#00f5d4'; c.lineWidth = 4; c.stroke();
+      c.beginPath(); c.moveTo(cx - 12, cy - 9); c.lineTo(cx + 12, cy - 9); c.lineTo(cx + 9, cy + 16); c.lineTo(cx - 9, cy + 16); c.closePath();
+      strokeFill(c, '#ff5d8f', 3);
+      c.fillStyle = 'rgba(255,255,255,0.55)'; c.fillRect(cx - 6, cy - 5, 4, 17);
+    } else if (kind === 'dough' || kind === 'pizzaRaw') {
+      c.beginPath(); c.arc(cx, cy + 1, s * 0.34, 0, TAU);
+      strokeFill(c, '#fde68a', 3);
+      if (kind === 'pizzaRaw') {
+        c.beginPath(); c.arc(cx, cy + 1, s * 0.26, 0, TAU);
+        strokeFill(c, '#ef476f', 2);
+        c.fillStyle = '#ffd166';
+        c.beginPath(); c.arc(cx - 5, cy - 2, 4, 0, TAU); c.arc(cx + 6, cy + 3, 4, 0, TAU); c.arc(cx - 1, cy + 6, 3.5, 0, TAU); c.fill();
+      }
+    } else if (kind === 'pizza') {
+      c.beginPath(); c.arc(cx, cy + 1, s * 0.38, 0, TAU);
+      strokeFill(c, '#f59e0b', 3);
+      c.beginPath(); c.arc(cx, cy + 1, s * 0.29, 0, TAU);
+      c.fillStyle = '#ffd166'; c.fill();
+      c.fillStyle = '#d90429';
+      c.beginPath(); c.arc(cx - 6, cy - 4, 4, 0, TAU); c.arc(cx + 6, cy - 2, 4, 0, TAU); c.arc(cx, cy + 7, 4, 0, TAU); c.fill();
+    } else if (kind === 'burger' || kind === 'cheeseburger') {
+      // Tray glow underneath finished dish
+      c.beginPath(); c.ellipse(cx, cy + 12, s * 0.41, s * 0.16, 0, 0, TAU);
+      strokeFill(c, '#ffffff', 2.8);
+      c.beginPath(); c.ellipse(cx, cy + 8, s * 0.33, s * 0.13, 0, 0, TAU);
+      strokeFill(c, '#e7984f', 2.6);
+      c.beginPath(); c.ellipse(cx, cy + 2, s * 0.35, s * 0.14, 0, 0, TAU);
+      strokeFill(c, '#7f3718', 2.6);
+      if (kind === 'cheeseburger') {
+        c.beginPath(); c.moveTo(cx - 15, cy - 2); c.lineTo(cx + 15, cy - 2); c.lineTo(cx + 4, cy + 7); c.lineTo(cx - 12, cy + 3); c.closePath();
+        strokeFill(c, '#ffd166', 2.4);
+      }
+      c.beginPath(); c.ellipse(cx, cy - 4, s * 0.34, s * 0.18, 0, Math.PI, TAU);
+      c.closePath();
+      strokeFill(c, '#f6bd60', 2.8);
+      c.fillStyle = '#fff8eb';
+      c.beginPath(); c.arc(cx - 5, cy - 10, 1.8, 0, TAU); c.arc(cx + 5, cy - 10, 1.8, 0, TAU); c.arc(cx, cy - 12, 1.8, 0, TAU); c.fill();
+    } else if (kind === 'burnt') {
+      A.blob(c, cx, cy + 2, s * 0.3, 0.14, 1.2);
+      strokeFill(c, '#334155', 3);
+    }
+  }
+
+  function itemSprite(kind) {
+    return A.sprite('it_' + kind, 52, 52, function (c, bw) {
+      paintFoodArt(c, kind, bw);
+    }, { pad: 4 });
+  }
+
+  function miniIconSprite(kind) {
+    if (E.ITEMS[kind]) return itemSprite(kind);
+    return A.sprite('ic_' + kind, 40, 40, function (c, bw, bh) {
+      rr(c, 4, 4, bw - 8, bh - 8, 10);
+      var col = kind === 'grill' ? '#f97316' : kind === 'fryer' ? '#eab308' : kind === 'blender' ? '#06b6d4' : '#8b5cf6';
+      strokeFill(c, col, 3);
+      c.fillStyle = '#fff';
+      c.beginPath();
+      if (kind === 'blender') { c.moveTo(20, 9); c.lineTo(28, 29); c.lineTo(12, 29); c.closePath(); c.fill(); }
+      else if (kind === 'oven') { c.arc(20, 23, 9, Math.PI, TAU); c.fill(); }
+      else { c.arc(20, 20, 8, 0, TAU); c.fill(); }
+    }, { pad: 3 });
+  }
+
+  function stationSprite(st, worldIdx) {
+    var key = 'st_' + st.type + (st.kind ? '_' + st.kind : '') + (st.dir ? '_' + st.dir : '') + (st.type === 'wall' ? '_w' + worldIdx : '');
+    return A.sprite(key, TILE, TILE, function (c, bw, bh) {
+      var wd = E.WORLDS[worldIdx] || E.WORLDS[0];
+      if (st.type === 'wall') {
+        rr(c, 3, 3, bw - 6, bh - 6, 14);
+        strokeFill(c, A.shade(wd.color, -0.22), 3.5);
+        rr(c, 10, 9, bw - 20, bh - 24, 10);
+        c.fillStyle = wd.color; c.fill();
+        A.gloss(c, 12, 10, bw - 24, 22);
+        return;
+      }
+
+      // Base chunky block with front depth lip
+      rr(c, 2, 6, bw - 4, bh - 8, 16);
+      strokeFill(c, '#8d6e63', 3.5);
+
+      if (st.type === 'counter') {
+        rr(c, 2, 2, bw - 4, bh - 12, 16);
+        strokeFill(c, '#fff3d6', 3.5);
+        rr(c, 12, 12, bw - 24, bh - 32, 10);
+        c.strokeStyle = '#f3d5a5'; c.lineWidth = 2.5; c.stroke();
+      } else if (st.type === 'belt') {
+        rr(c, 2, 2, bw - 4, bh - 12, 16);
+        strokeFill(c, '#334155', 3.5);
+        c.strokeStyle = '#38bdf8'; c.lineWidth = 4.5; c.lineCap = 'round'; c.lineJoin = 'round';
+        for (var bi = -1; bi <= 1; bi++) {
+          var bx = bw / 2 + bi * 18;
+          c.beginPath();
+          c.moveTo(bx - st.dir * 7, 22);
+          c.lineTo(bx + st.dir * 7, 36);
+          c.lineTo(bx - st.dir * 7, 50);
+          c.stroke();
+        }
+      } else if (st.type === 'warp') {
+        rr(c, 2, 2, bw - 4, bh - 12, 16);
+        strokeFill(c, '#3b0764', 3.5);
+        c.beginPath(); c.arc(bw / 2, 36, 24, 0, TAU);
+        strokeFill(c, '#a855f7', 3);
+        c.beginPath(); c.arc(bw / 2, 36, 13, 0, TAU);
+        c.fillStyle = '#00f5d4'; c.fill();
+      } else if (st.type === 'crate') {
+        rr(c, 2, 2, bw - 4, bh - 12, 16);
+        strokeFill(c, '#f6bd60', 3.5);
+        rr(c, 9, 8, bw - 18, bh - 26, 11);
+        strokeFill(c, '#fff8eb', 2.5);
+        var fSpr = itemSprite(st.kind);
+        A.blit(c, fSpr, bw / 2, 33, { sx: 0.92, sy: 0.92 });
+        drawText(c, E.ITEMS[st.kind].name, bw / 2, bh - 13, 13, '#ffffff');
+      } else if (st.type === 'grill') {
+        rr(c, 2, 2, bw - 4, bh - 12, 16);
+        strokeFill(c, '#334155', 3.5);
+        rr(c, 11, 10, bw - 22, bh - 30, 10);
+        strokeFill(c, '#ea580c', 3);
+        c.strokeStyle = '#cbd5e1'; c.lineWidth = 3.5;
+        for (var gi = 0; gi < 4; gi++) {
+          var gx = 20 + gi * 14;
+          c.beginPath(); c.moveTo(gx, 13); c.lineTo(gx, bh - 23); c.stroke();
+        }
+        drawText(c, 'شواية', bw / 2, bh - 12, 13, '#ffd166');
+      } else if (st.type === 'fryer') {
+        rr(c, 2, 2, bw - 4, bh - 12, 16);
+        strokeFill(c, '#475569', 3.5);
+        rr(c, 11, 10, bw - 22, bh - 30, 10);
+        strokeFill(c, '#facc15', 3);
+        c.fillStyle = '#fef08a';
+        c.beginPath(); c.arc(28, 26, 5, 0, TAU); c.arc(48, 34, 6, 0, TAU); c.arc(36, 42, 4, 0, TAU); c.fill();
+        drawText(c, 'مقلاة', bw / 2, bh - 12, 13, '#fef08a');
+      } else if (st.type === 'blender') {
+        rr(c, 2, 2, bw - 4, bh - 12, 16);
+        strokeFill(c, '#0284c7', 3.5);
+        c.beginPath(); c.arc(bw / 2, 34, 21, 0, TAU);
+        strokeFill(c, '#e0f2fe', 3);
+        c.beginPath(); c.arc(bw / 2, 34, 12, 0, TAU);
+        c.fillStyle = '#ff4d6d'; c.fill();
+        drawText(c, 'خلاط', bw / 2, bh - 12, 13, '#ffffff');
+      } else if (st.type === 'oven') {
+        rr(c, 2, 2, bw - 4, bh - 12, 16);
+        strokeFill(c, '#7c2d12', 3.5);
+        c.beginPath(); c.arc(bw / 2, 44, 24, Math.PI, TAU); c.closePath();
+        strokeFill(c, '#ff9f1c', 3);
+        drawText(c, 'فرن', bw / 2, bh - 12, 13, '#ffd166');
+      } else if (st.type === 'cannon') {
+        rr(c, 2, 2, bw - 4, bh - 10, 16);
+        strokeFill(c, '#ef476f', 3.5);
+        // Cannon barrel pointing up toward Serving Window
+        rr(c, bw / 2 - 18, 4, 36, 40, 12);
+        strokeFill(c, '#ffd166', 3.5);
+        c.beginPath(); c.moveTo(bw / 2, 10); c.lineTo(bw / 2 - 9, 25); c.lineTo(bw / 2 + 9, 25); c.closePath();
+        c.fillStyle = '#1b1640'; c.fill();
+        drawText(c, 'أطلق!', bw / 2, bh - 15, 14, '#ffffff');
+      } else if (st.type === 'trash') {
+        rr(c, 2, 2, bw - 4, bh - 12, 16);
+        strokeFill(c, '#10b981', 3.5);
+        c.beginPath(); c.arc(bw / 2, 35, 18, 0, TAU);
+        strokeFill(c, '#064e3b', 3);
+        drawText(c, 'تدوير', bw / 2, bh - 12, 13, '#ffffff');
+      }
+    }, { pad: 4 });
+  }
+
+  function floorPadSprite(fp) {
+    var key = 'fp_' + fp.type + '_' + fp.dir;
+    return A.sprite(key, TILE, TILE, function (c, bw, bh) {
+      if (fp.type === 'boost') {
+        rr(c, 6, 6, bw - 12, bh - 12, 14);
+        strokeFill(c, 'rgba(0, 245, 212, 0.35)', 2.5);
+        c.strokeStyle = '#00bbf9'; c.lineWidth = 5; c.lineCap = 'round';
+        for (var i = -1; i <= 1; i++) {
+          var x = bw / 2 + i * 16;
+          c.beginPath();
+          c.moveTo(x - fp.dir * 7, 26);
+          c.lineTo(x + fp.dir * 7, bh / 2);
+          c.lineTo(x - fp.dir * 7, bh - 26);
+          c.stroke();
+        }
+      } else {
+        c.beginPath(); c.arc(bw / 2, bh / 2, 34, 0, TAU);
+        strokeFill(c, '#bae6fd', 3);
+        c.beginPath(); c.arc(bw / 2, bh / 2, 22, 0, TAU);
+        strokeFill(c, '#38bdf8', 2.5);
+      }
+    }, { pad: 2 });
+  }
+
+  function customerSprite(custId, blink) {
+    var bKey = blink ? '1' : '0';
+    return A.sprite('cust_' + custId + '_' + bKey, 92, 92, function (c, bw, bh) {
+      var cx = bw / 2, cy = bh / 2 + 6;
+      if (custId === 'striker') {
+        // Soccer Athlete
+        c.beginPath(); c.arc(cx, cy, 30, 0, TAU);
+        strokeFill(c, '#ffcfb3', 3.5);
+        // Spiky hair + sporty headband
+        c.beginPath(); c.moveTo(cx - 28, cy - 12); c.lineTo(cx - 18, cy - 36); c.lineTo(cx - 4, cy - 26); c.lineTo(cx + 8, cy - 38); c.lineTo(cx + 20, cy - 25); c.lineTo(cx + 30, cy - 12); c.closePath();
+        strokeFill(c, '#1e293b', 3.5);
+        rr(c, cx - 30, cy - 17, 60, 10, 5);
+        strokeFill(c, '#38bdf8', 3);
+      } else if (custId === 'robo') {
+        // Hungry Friendly Robot
+        c.beginPath(); c.moveTo(cx, cy - 42); c.lineTo(cx, cy - 28); c.strokeStyle = INK; c.lineWidth = 4; c.stroke();
+        c.beginPath(); c.arc(cx, cy - 44, 6, 0, TAU); strokeFill(c, '#00f5d4', 3);
+        rr(c, cx - 30, cy - 28, 60, 56, 16);
+        strokeFill(c, '#a855f7', 3.5);
+        rr(c, cx - 22, cy - 18, 44, 24, 8);
+        strokeFill(c, '#1e1b4b', 2.5);
+      } else if (custId === 'dino') {
+        // Cute Baby T-Rex
+        for (var si = -1; si <= 1; si++) {
+          c.beginPath(); c.moveTo(cx + si * 12 - 6, cy - 26); c.lineTo(cx + si * 12, cy - 40); c.lineTo(cx + si * 12 + 6, cy - 26); c.closePath();
+          strokeFill(c, '#fb923c', 2.8);
+        }
+        c.beginPath(); c.arc(cx, cy, 31, 0, TAU);
+        strokeFill(c, '#22c55e', 3.5);
+      } else {
+        // Recess Ninja
+        c.beginPath(); c.arc(cx, cy, 30, 0, TAU);
+        strokeFill(c, '#ef233c', 3.5);
+        rr(c, cx - 24, cy - 14, 48, 18, 8);
+        strokeFill(c, '#ffe5d9', 3);
+        c.beginPath(); c.arc(cx, cy - 23, 5, 0, TAU);
+        strokeFill(c, '#ffd166', 2.5);
+      }
+
+      // Expressive eyes & happy open mouth
+      var ey = custId === 'ninja' ? cy - 5 : cy - 6;
+      for (var side = -1; side <= 1; side += 2) {
+        var ex = cx + side * 11;
+        if (blink) {
+          c.beginPath(); c.moveTo(ex - 5, ey); c.lineTo(ex + 5, ey);
+          c.strokeStyle = custId === 'robo' ? '#00f5d4' : INK; c.lineWidth = 3.5; c.stroke();
+        } else {
+          c.beginPath(); c.arc(ex, ey, 5.5, 0, TAU);
+          c.fillStyle = custId === 'robo' ? '#00f5d4' : '#ffffff'; c.fill();
+          if (custId !== 'robo') {
+            c.lineWidth = 2.2; c.strokeStyle = INK; c.stroke();
+            c.beginPath(); c.arc(ex + side, ey + 1, 2.8, 0, TAU); c.fillStyle = INK; c.fill();
+          }
+        }
+      }
+      if (custId !== 'ninja') {
+        c.beginPath(); c.arc(cx, cy + 10, 9, 0, Math.PI); c.closePath();
+        strokeFill(c, '#ef476f', 2.8);
+      }
+    }, { pad: 4 });
+  }
+
+  function chefSprite(apronIdx, hatIdx, pIdx) {
+    var aCol = pIdx === 1 ? '#38bdf8' : E.APRONS[apronIdx].color;
+    return A.sprite('chef_' + pIdx + '_' + apronIdx + '_' + hatIdx, 76, 84, function (c, bw, bh) {
+      var cx = bw / 2, cy = bh / 2 + 8;
+      // Apron body
+      c.beginPath(); c.arc(cx, cy + 10, 24, 0, TAU);
+      strokeFill(c, aCol, 3.5);
+      // Cute hands
+      c.beginPath(); c.arc(cx - 23, cy + 8, 7, 0, TAU); strokeFill(c, '#ffd6a5', 3);
+      c.beginPath(); c.arc(cx + 23, cy + 8, 7, 0, TAU); strokeFill(c, '#ffd6a5', 3);
+      // Head
+      c.beginPath(); c.arc(cx, cy - 6, 20, 0, TAU);
+      strokeFill(c, '#ffdbac', 3.5);
+      // Eyes & grin
+      c.fillStyle = INK;
+      c.beginPath(); c.arc(cx - 7, cy - 6, 3.2, 0, TAU); c.arc(cx + 7, cy - 6, 3.2, 0, TAU); c.fill();
+      c.beginPath(); c.arc(cx, cy + 1, 6, 0.15, Math.PI - 0.15); c.strokeStyle = INK; c.lineWidth = 2.8; c.stroke();
+
+      // Hat
+      if (hatIdx === 0) {
+        c.beginPath(); c.arc(cx - 9, cy - 28, 10, 0, TAU); c.arc(cx + 9, cy - 28, 10, 0, TAU); c.arc(cx, cy - 32, 12, 0, TAU);
+        strokeFill(c, '#ffffff', 3.2);
+        rr(c, cx - 15, cy - 24, 30, 8, 4);
+        strokeFill(c, '#ffd166', 2.8);
+      } else if (hatIdx === 1) {
+        // Pirate Hat
+        c.beginPath(); c.moveTo(cx - 24, cy - 18); c.quadraticCurveTo(cx, cy - 42, cx + 24, cy - 18); c.closePath();
+        strokeFill(c, '#1e293b', 3.2);
+        c.beginPath(); c.arc(cx, cy - 26, 4.5, 0, TAU); c.fillStyle = '#ffd166'; c.fill();
+      } else if (hatIdx === 2) {
+        // Space Visor Helmet
+        c.beginPath(); c.arc(cx, cy - 7, 23, Math.PI, TAU);
+        strokeFill(c, 'rgba(56, 189, 248, 0.55)', 3.2);
+        c.beginPath(); c.arc(cx, cy - 32, 4, 0, TAU); strokeFill(c, '#00f5d4', 2.5);
+      } else {
+        // Golden Crown
+        c.beginPath(); c.moveTo(cx - 16, cy - 20); c.lineTo(cx - 18, cy - 36); c.lineTo(cx - 7, cy - 27);
+        c.lineTo(cx, cy - 39); c.lineTo(cx + 7, cy - 27); c.lineTo(cx + 18, cy - 36); c.lineTo(cx + 16, cy - 20); c.closePath();
+        strokeFill(c, '#ffd166', 3.2);
+      }
+    }, { pad: 4 });
+  }
+
+  function sousBotSprite() {
+    return A.sprite('sous_bot', 68, 68, function (c, bw, bh) {
+      var cx = bw / 2, cy = bh / 2 + 4;
+      c.beginPath(); c.moveTo(cx, 8); c.lineTo(cx, 18); c.strokeStyle = INK; c.lineWidth = 4; c.stroke();
+      c.beginPath(); c.arc(cx, 7, 5, 0, TAU); strokeFill(c, '#00f5d4', 2.8);
+      rr(c, cx - 20, 18, 40, 34, 12);
+      strokeFill(c, '#38bdf8', 3.5);
+      rr(c, cx - 14, 24, 28, 14, 6);
+      strokeFill(c, '#0f172a', 2.5);
+      c.fillStyle = '#00f5d4';
+      c.beginPath(); c.arc(cx - 6, 31, 3, 0, TAU); c.arc(cx + 6, 31, 3, 0, TAU); c.fill();
+    }, { pad: 4 });
+  }
+
+  function roomBackdrop(worldIdx) {
+    return A.bake('room_' + worldIdx, W, H, function (c) {
+      var wd = E.WORLDS[worldIdx] || E.WORLDS[0];
+      var g = c.createLinearGradient(0, 0, 0, 196);
+      g.addColorStop(0, A.shade(wd.color, -0.35));
+      g.addColorStop(1, A.shade(wd.color, 0.18));
+      c.fillStyle = g;
+      c.fillRect(0, 0, W, 196);
+
+      // Striped cafeteria awning at very top
+      for (var i = 0; i < 20; i++) {
+        c.fillStyle = i % 2 === 0 ? wd.color : '#fff8eb';
+        c.fillRect(i * 64, 0, 64, 18);
+      }
+      c.fillStyle = INK;
+      c.fillRect(0, 18, W, 4);
+
+      // Serving Window sill
+      c.fillStyle = '#5c3a21';
+      c.fillRect(0, 178, W, 18);
+      c.fillStyle = INK;
+      c.fillRect(0, 176, W, 4);
+      c.fillRect(0, 194, W, 4);
+
+      // Outer floor margin
+      c.fillStyle = '#251e4d';
+      c.fillRect(0, 196, W, H - 196);
+
+      // Checkerboard kitchen floor
+      rr(c, E.GX - 6, E.GY - 6, E.COLS * TILE + 12, E.ROWS * TILE + 12, 20);
+      strokeFill(c, INK, 4);
+      for (var r = 0; r < E.ROWS; r++) {
+        for (var col = 0; col < E.COLS; col++) {
+          c.fillStyle = (r + col) % 2 === 0 ? wd.floorA : wd.floorB;
+          c.fillRect(E.GX + col * TILE, E.GY + r * TILE, TILE, TILE);
+        }
+      }
+    });
+  }
+
+  /* -------------------------------------------- State & UI Screens */
+  var screen = 'title';
+  var menuPlayers = 1;
+  var world = E.create(0, { players: 1, difficulty: save.difficulty, dda: dda.level });
+  var roundOpen = false;
+  var act1Queued = false, act2Queued = false, dash1Queued = false, dash2Queued = false, botQueued = false;
+
+  function syncTopCounters() {
+    var starsStr = E.totalStars(save) + '/36';
+    var coinsStr = Kit.fmt(save.coins);
+    $('titleStars').querySelector('b').textContent = starsStr;
+    $('titleCoins').querySelector('b').textContent = coinsStr;
+    $('mapStars').querySelector('b').textContent = starsStr;
+    $('shopCoins').querySelector('b').textContent = coinsStr;
+
+    var pills = document.querySelectorAll('.diff-pill');
+    for (var i = 0; i < pills.length; i++) {
+      pills[i].classList.toggle('active', pills[i].getAttribute('data-diff') === save.difficulty);
+    }
+    $('mapModeTxt').textContent = menuPlayers === 2 ? 'لاعبان' : 'لاعب واحد';
+  }
+
+  function showScreen(next) {
+    screen = next;
+    $('scrTitle').hidden = next !== 'title';
+    $('scrMap').hidden = next !== 'map';
+    $('scrShop').hidden = next !== 'shop';
+    $('scrPause').hidden = next !== 'pause';
+    $('scrResult').hidden = next !== 'result';
+    $('hud').hidden = next !== 'play';
+    if (next === 'play') $('btnBot').hidden = world.players !== 1;
+    syncTopCounters();
     dirty = true;
-    if (name === 'play') focusGame();
   }
 
-  function focusGame() {
-    try { canvas.focus({ preventScroll: true }); } catch (e) { /* ignore */ }
+  function beginTelemetryRound() {
+    var roundId = (world.players === 2 ? 'rk_coop_' : 'rk_') + (world.levelIndex + 1);
+    Kit.stats.round(roundId);
+    roundOpen = true;
   }
 
-  function say(msg) { $('live').textContent = msg; }
-  function chip(id, val) { $(id).querySelector('b').textContent = String(val); }
-
-  function wiggle(el) {
-    if (calm()) return;
-    el.classList.remove('wiggle');
-    void el.offsetWidth;
-    el.classList.add('wiggle');
-    setTimeout(function () { el.classList.remove('wiggle'); }, 460);
+  function closeTelemetryRound(outcome, includeScore) {
+    if (!roundOpen) return;
+    roundOpen = false;
+    if (includeScore) Kit.stats.end(outcome, world.coins);
+    else Kit.stats.end(outcome);
   }
 
-  function toTitle() {
-    leaveLevel();
-    chip('titleStars', RK.totalStars(save) + '/' + (RK.LEVELS.length * 3));
-    chip('titleCoins', save.coins);
-    setScreen('title');
+  function startGame(lvIdx, players) {
+    closeTelemetryRound('quit', world.players === 1);
+    world = E.create(lvIdx, {
+      players: players || 1,
+      difficulty: save.difficulty,
+      dda: dda.level
+    });
+    act1Queued = act2Queued = dash1Queued = dash2Queued = botQueued = false;
+    fx.clear();
+    Kit.keys.reset();
+    beginTelemetryRound();
+    showScreen('play');
+    try { canvas.focus(); } catch (e) { /* ignore */ }
   }
 
-  function playSolo() {
-    players = 1;
-    J.select();
-    if (!RK.totalStars(save)) startLevel(0); else toMap();
+  function pauseGame() {
+    if (screen !== 'play') return;
+    Kit.keys.reset();
+    showScreen('pause');
   }
 
-  function playCoop() {
-    players = 2;
-    J.select();
-    if (!RK.totalStars(save)) startLevel(0); else toMap();
+  function resumeGame() {
+    if (screen !== 'pause') return;
+    Kit.keys.reset();
+    showScreen('play');
   }
 
-  /* ------------------------------------------------------------------ map */
-  var levelBtns = [], worldRows = [];
+  function restartGame() {
+    startGame(world.levelIndex, world.players);
+  }
 
-  function buildMap() {
-    var box = $('worlds');
-    RK.WORLDS.forEach(function (wd, wi) {
+  function buildMapUI() {
+    var root = $('worlds');
+    root.textContent = '';
+    for (var wIdx = 0; wIdx < E.WORLDS.length; wIdx++) {
+      var wd = E.WORLDS[wIdx];
+      var box = document.createElement('div');
+      box.className = 'world-box';
+      var head = document.createElement('div');
+      head.className = 'world-head';
+      var titleSpan = document.createElement('span');
+      var dot = document.createElement('i');
+      dot.className = 'world-dot';
+      dot.style.background = wd.color;
+      titleSpan.appendChild(dot);
+      titleSpan.appendChild(document.createTextNode((wIdx + 1) + '. ' + wd.name));
+      head.appendChild(titleSpan);
+      box.appendChild(head);
+
       var row = document.createElement('div');
-      row.className = 'wrow';
-      row.style.setProperty('--wc', wd.color);
-      row.innerHTML = '<div class="wname"><i>العالم ' + (wi + 1) + '</i><b>' + wd.name + '</b></div>';
-      for (var k = 0; k < 3; k++) {
-        (function (i) {
-          var R = RK.LEVELS[i];
+      row.className = 'lv-row';
+      for (var sub = 0; sub < 3; sub++) {
+        (function (idx) {
+          var lv = E.LEVELS[idx];
+          var st = save.lv[idx];
           var b = document.createElement('button');
           b.type = 'button';
-          b.className = 'rk-btn lvl';
-          b.innerHTML = '<b>' + R.id + '</b><small>' + R.name + '</small><span class="st">' +
-            '<svg><use href="#i-star"/></svg><svg><use href="#i-star"/></svg><svg><use href="#i-star"/></svg></span>' +
-            '<svg class="lk" aria-hidden="true"><use href="#i-lock"/></svg>';
-          on(b, function () { pickLevel(i, b); });
+          b.className = 'lv-btn';
+          var idSpan = document.createElement('span');
+          idSpan.className = 'lv-id';
+          idSpan.dir = 'ltr';
+          idSpan.textContent = lv.id;
+          var nmSpan = document.createElement('span');
+          nmSpan.className = 'lv-name';
+          nmSpan.textContent = lv.name;
+          var stSpan = document.createElement('span');
+          stSpan.className = 'lv-stars';
+          for (var k = 0; k < 3; k++) {
+            var sEl = document.createElement('span');
+            if (k < st.s) sEl.className = 'lit';
+            sEl.textContent = '★';
+            stSpan.appendChild(sEl);
+          }
+          b.appendChild(idSpan);
+          b.appendChild(nmSpan);
+          b.appendChild(stSpan);
+          b.addEventListener('click', function () {
+            sfx('select');
+            startGame(idx, menuPlayers);
+          });
           row.appendChild(b);
-          levelBtns.push(b);
-        })(wi * 3 + k);
+        })(wIdx * 3 + sub);
       }
       box.appendChild(row);
-      worldRows.push(row);
-    });
+      root.appendChild(box);
+    }
   }
 
-  function refreshModeBtn() {
-    var btn = $('mapMode');
-    btn.classList.toggle('coop', players === 2);
-    $('mapModeTxt').textContent = players === 2 ? 'تعاون اثنين' : 'لاعب واحد';
+  function buildShopUI() {
+    function fillShelf(elId, list, cat, ownedArr, equippedIdx) {
+      var shelf = $(elId);
+      shelf.textContent = '';
+      for (var i = 0; i < list.length; i++) {
+        (function (idx) {
+          var item = list[idx];
+          var owned = !!ownedArr[idx];
+          var active = equippedIdx === idx;
+          var b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'tile' + (active ? ' active' : '');
+          var sw = document.createElement('div');
+          sw.className = 'tile-swatch';
+          sw.style.background = item.color;
+          var nm = document.createElement('div');
+          nm.className = 'tile-name';
+          nm.textContent = item.name;
+          var tag = document.createElement('div');
+          tag.className = 'tile-tag';
+          tag.textContent = active ? 'مُجهّز ✓' : owned ? 'اختر' : item.cost + ' عملة';
+          b.appendChild(sw);
+          b.appendChild(nm);
+          b.appendChild(tag);
+          b.addEventListener('click', function () {
+            var res = E.buyOrEquip(save, cat, idx);
+            if (!res.ok) {
+              sfx('error');
+              return;
+            }
+            if (res.action === 'buy') {
+              sfx('coin', 3);
+              fx.burst(W / 2, H / 2, { count: 18, colors: ['#ffd166', '#3ddc84', '#38bdf8'] });
+              camShake.add(4);
+            } else {
+              sfx('select');
+            }
+            persist();
+            syncTopCounters();
+            buildShopUI();
+            dirty = true;
+          });
+          shelf.appendChild(b);
+        })(i);
+      }
+    }
+    fillShelf('shelfAprons', E.APRONS, 'apron', save.aprons, save.apron);
+    fillShelf('shelfHats', E.HATS, 'hat', save.hats, save.hat);
   }
 
-  function refreshMap() {
-    var next = RK.nextLevel(save);
-    levelBtns.forEach(function (b, i) {
-      var open = RK.isOpen(save, i), st = save.lv[i].s, R = RK.LEVELS[i];
-      b.classList.toggle('locked', !open);
-      b.classList.toggle('next', open && i === next);
-      b.querySelectorAll('.st svg').forEach(function (s, k) { s.classList.toggle('on', k < st); });
-      b.setAttribute('aria-label', R.id + ' ' + R.name + (open ? '، ' + st + ' من 3 نجوم' : ' (مقفلة)'));
-    });
-    worldRows.forEach(function (r, wi) { r.classList.toggle('locked', !RK.isOpen(save, wi * 3)); });
-    chip('mapStars', RK.totalStars(save) + '/' + (RK.LEVELS.length * 3));
-    refreshModeBtn();
+  function handleEvents(evList) {
+    for (var i = 0; i < evList.length; i++) {
+      var ev = evList[i];
+      if (ev.t === 'pickup' || ev.t === 'place' || ev.t === 'putback' || ev.t === 'beltMove') {
+        sfx('tap');
+      } else if (ev.t === 'cookStart') {
+        sfx('pop', 0.35);
+      } else if (ev.t === 'cooked') {
+        sfx('chime', 1);
+        fx.burst(ev.x, ev.y - 20, { count: 8, colors: ['#ffd166', '#3ddc84'] });
+        A.pop('جاهز! ✨', ev.x, ev.y - 34, { color: '#3ddc84', size: 22 });
+      } else if (ev.t === 'combine') {
+        sfx('pop', 0.8);
+        fx.burst(ev.x, ev.y - 12, { count: 16, colors: ['#ffd166', '#38bdf8', '#ff4d6d', '#3ddc84'] });
+        A.pop('دمج رائع!', ev.x, ev.y - 36, { color: '#ffd166', size: 24 });
+      } else if (ev.t === 'warp') {
+        sfx('whoosh', 0.7);
+        fx.burst(ev.x, ev.y, { count: 14, colors: ['#a855f7', '#00f5d4', '#ffffff'] });
+      } else if (ev.t === 'dash' || ev.t === 'botGo') {
+        sfx('whoosh', 0.5);
+        fx.burst(ev.x, ev.y + 10, { count: 8, colors: ['#38bdf8', '#ffffff'] });
+      } else if (ev.t === 'botDrop' || ev.t === 'botRescue') {
+        sfx('chime', 2);
+        A.pop('تفضل يا شيف! 🤖', ev.x, ev.y - 36, { color: '#00f5d4', size: 22 });
+      } else if (ev.t === 'serve') {
+        Kit.track.hit();
+        sfx('impact', 0.45);
+        sfx('streak', Math.min(10, ev.streak));
+        sfx('coin', Math.min(5, ev.mult + 1));
+        fx.burst(330 + ev.slot * 310, 110, { count: 24, colors: ['#ffd166', '#3ddc84', '#38bdf8', '#ff4d6d'] });
+        camShake.add(5);
+        A.pop('+' + ev.coins + (ev.mult > 1 ? ' ×' + ev.mult : ''), 330 + ev.slot * 310, 128, { color: '#ffd166', size: 30 });
+      } else if (ev.t === 'warn') {
+        sfx('tap');
+      } else if (ev.t === 'burn') {
+        Kit.track.miss();
+        sfx('error');
+        fx.burst(ev.x, ev.y - 18, { count: 10, colors: ['#475569', '#94a3b8'] });
+      } else if (ev.t === 'expire') {
+        Kit.track.miss();
+        sfx('error');
+      } else if (ev.t === 'toss') {
+        sfx('pop', 0.25);
+      } else if (ev.t === 'hint') {
+        sfx('error');
+      } else if (ev.t === 'finish') {
+        onRoundFinish();
+      }
+    }
   }
 
-  function toMap() {
-    leaveLevel();
-    refreshMap();
-    setScreen('map');
-    J.whoosh(0.4);
-  }
-
-  function pickLevel(i, el) {
-    if (!RK.isOpen(save, i)) { J.error(); wiggle(el); return; }
-    J.select();
-    startLevel(i);
-  }
-
-  /* ----------------------------------------------------------------- shop */
-  var tiles = { apron: [], hat: [] };
-
-  function buildShop() {
-    [['apron', RK.APRONS, 'shelfAprons'], ['hat', RK.HATS, 'shelfHats']].forEach(function (pair) {
-      var kind = pair[0], list = pair[1], id = pair[2];
-      list.forEach(function (item, k) {
-        var b = document.createElement('button');
-        b.type = 'button';
-        b.className = 'rk-btn tile';
-        b.innerHTML = '<canvas width="236" height="236"></canvas><b>' + item.name + '</b>' +
-          '<span class="price"><i class="coin"></i><em>' + item.price + '</em></span>';
-        on(b, function () { buy(kind, k, b); });
-        $(id).appendChild(b);
-        tiles[kind].push(b);
-      });
-    });
-  }
-
-  function drawShopTile(kind, k, c) {
-    var g = c.getContext('2d');
-    g.setTransform(2, 0, 0, 2, 0, 0);
-    g.clearRect(0, 0, 118, 118);
-    var apIdx = kind === 'apron' ? k : save.apron;
-    var htIdx = kind === 'hat' ? k : save.hat;
-    A.chef(g, { id: 0, x: 59, y: 68, dirX: 0, dirY: 0.4, walk: 0, held: null }, {
-      apron: apIdx, hat: htIdx, t: 0, still: true, scale: 1.55
-    });
-  }
-
-  function refreshShop() {
-    ['apron', 'hat'].forEach(function (kind) {
-      var isHat = kind === 'hat';
-      var own = isHat ? save.hats : save.aprons;
-      var wear = isHat ? save.hat : save.apron;
-      var list = isHat ? RK.HATS : RK.APRONS;
-      tiles[kind].forEach(function (b, k) {
-        drawShopTile(kind, k, b.querySelector('canvas'));
-        b.classList.toggle('own', !!own[k]);
-        b.classList.toggle('wear', wear === k);
-        b.classList.toggle('poor', !own[k] && save.coins < list[k].price);
-        b.setAttribute('aria-label', list[k].name + (wear === k ? ' (قيد الارتداء)' : own[k] ? '' : '، السعر ' + list[k].price));
-      });
-    });
-    chip('shopCoins', save.coins);
-  }
-
-  function openShop() {
-    J.select();
-    refreshShop();
-    setScreen('shop');
-  }
-
-  function buy(kind, k, el) {
-    var did = RK.buy(save, kind, k);
-    if (!did) { J.error(); wiggle(el); return; }
+  function onRoundFinish() {
+    var isNewBest = E.recordRound(save, world);
     persist();
-    if (did === 'bought') {
-      J.coin(3);
-      J.levelUp();
-      if (!calm()) {
-        var r = el.getBoundingClientRect(), p = view.toLogical(r.left + r.width / 2, r.top + r.height / 3);
-        fx.burst(p.x, p.y, { count: 26, colors: ['#ffd23f', '#ffffff', '#ff5d9e', '#34d399'], speed: 320, life: 0.75, size: 8, gravity: 280 });
-      }
+    if (world.players === 1) {
+      dda.result(Kit.clamp(world.stars / 3, 0, 1));
+      closeTelemetryRound(world.stars >= 1 ? 'win' : 'lose', true);
     } else {
-      J.tap();
+      closeTelemetryRound('end', false);
     }
-    refreshShop();
-    dirty = true;
+
+    $('resBest').hidden = !isNewBest;
+    $('resTitle').textContent = world.stars >= 2 ? 'أبدعت يا شيف!' : world.stars === 1 ? 'أحسنت!' : 'حاول مجدداً!';
+    var svgs = $('resStars').querySelectorAll('svg');
+    for (var i = 0; i < 3; i++) svgs[i].classList.toggle('on', i < world.stars);
+    $('resServed').textContent = String(world.served);
+    $('resStreak').textContent = '×' + Math.max(1, world.bestStreak >= 4 ? 3 : world.bestStreak >= 2 ? 2 : 1);
+    $('resCoins').textContent = '+' + Kit.fmt(world.coins);
+
+    if (world.stars >= 1) sfx('levelUp'); else sfx('back');
+    showScreen('result');
   }
 
-  /* ---------------------------------------------------------- round lifecycle */
-  function buildRoundOpts() {
-    if (players === 2) return { players: 2 };
-    var E = RK.EASY, D = RK.HARD;
-    return {
-      players: 1,
-      patienceScale: dda.value(E.patienceScale, D.patienceScale),
-      cookSpeed: dda.value(E.cookSpeed, D.cookSpeed),
-      burnDelay: dda.value(E.burnDelay, D.burnDelay),
-      goalScale: dda.value(E.goalScale, D.goalScale)
-    };
-  }
+  /* -------------------------------------------- Button & Input Bindings */
+  $('btnPlay').addEventListener('click', function () { sfx('select'); menuPlayers = 1; startGame(0, 1); });
+  $('btnCoop').addEventListener('click', function () { sfx('select'); menuPlayers = 2; startGame(0, 2); });
+  $('btnLevels').addEventListener('click', function () { sfx('select'); buildMapUI(); showScreen('map'); });
+  $('btnShop').addEventListener('click', function () { sfx('select'); buildShopUI(); showScreen('shop'); });
 
-  function startLevel(i) {
-    leaveLevel();
-    cur = clamp(i | 0, 0, RK.LEVELS.length - 1);
-    world = RK.create(cur, buildRoundOpts());
-    world.ev.length = 0; // silence initial order spawn events on round start
-    activeRound = true;
-    fx.clear();
-    floats = [];
-    celebrate = 0;
-    result = null;
-    clickQ = null;
-    ptr.down = false;
-    ptr.holdT = 0;
-    intro = 2.4;
-    Kit.keys.reset();
-
-    var rid = players === 2 ? 'coop-' + (cur + 1) : 'L' + (cur + 1);
-    Kit.stats.round(rid);
-
-    setScreen('play');
-    J.whoosh(0.45);
-    say(world.R.id + ' ' + world.R.name);
-  }
-
-  function leaveLevel() {
-    if (activeRound) {
-      Kit.stats.end('quit');
-      activeRound = false;
-    }
-  }
-
-  function restart() {
-    if (!world) return;
-    J.select();
-    startLevel(cur);
-  }
-
-  function pause(byUser) {
-    if (screen !== 'play') return;
-    ptr.down = false;
-    ptr.holdT = 0;
-    clickQ = null;
-    setScreen('pause');
-    if (byUser) J.back();
-  }
-
-  function resume() {
-    if (screen !== 'pause') return;
-    J.select();
-    clickQ = null;
-    ptr.down = false;
-    ptr.holdT = 0;
-    setScreen('play');
-    Kit.keys.reset();
-  }
-
-  /* -------------------------------------------------------- bell & result */
-  function onBell() {
-    var stars = RK.stars(world);
-    var won = stars >= 1;
-    var before = save.lv[cur].s;
-    var res = RK.applyResult(save, cur, stars, world.coins);
-    persist();
-
-    if (players === 1) {
-      dda.result(RK.outcome(world));
-      Kit.stats.end(won ? 'win' : 'lose', world.coins);
-    } else {
-      Kit.stats.end('end');
-    }
-    activeRound = false;
-
-    result = { stars: stars, before: before, res: res, served: world.served, coins: world.coins };
-    celebrate = CELEBRATE;
-    if (won) {
-      J.levelUp();
-      if (!calm()) {
-        fx.burst(W / 2, 220, { count: 34, colors: ['#ffd23f', '#ffffff', '#ff5d9e', '#34d399', '#38bdf8'], speed: 380, life: 1.0, size: 9, gravity: 320 });
-        shake.add(3);
+  var diffBtns = document.querySelectorAll('.diff-pill');
+  for (var di = 0; di < diffBtns.length; di++) {
+    diffBtns[di].addEventListener('click', function () {
+      var d = this.getAttribute('data-diff');
+      if (E.DIFFICULTIES[d]) {
+        save.difficulty = d;
+        sfx('tap');
+        persist();
+        syncTopCounters();
       }
-    } else {
-      J.back();
-    }
-  }
-
-  function showResult() {
-    var r = result, R = RK.LEVELS[cur];
-    resultT = 0;
-    resultLock = 0.45;
-    $('resTitle').textContent = r.stars === 3 ? 'ممتاز!' : r.stars === 2 ? 'رائع!' : r.stars === 1 ? 'أحسنت!' : 'حاول مرة أخرى!';
-    $('resStars').querySelectorAll('svg').forEach(function (s, i) {
-      s.classList.toggle('on', i < Math.min(r.before, r.stars));
-      s.classList.remove('pop');
-    });
-    $('resServed').querySelector('b').textContent = String(r.served);
-    $('resServed').classList.toggle('good', r.served > 0);
-    $('resCoins').querySelector('b').textContent = '+' + r.coins;
-    $('resBest').hidden = true;
-    $('resWorld').hidden = true;
-    $('resNext').hidden = (cur + 1 >= RK.LEVELS.length) || !RK.isOpen(save, cur + 1);
-    say(R.id + '، ' + r.stars + ' نجوم');
-    setScreen('result');
-  }
-
-  function resultStep(dt) {
-    var r = result, prev = resultT;
-    resultT += dt;
-    var at = function (t) { return prev < t && resultT >= t; };
-    for (var i = Math.min(r.before, r.stars); i < r.stars; i++) {
-      if (at(0.3 + (i - Math.min(r.before, r.stars)) * 0.35)) {
-        var s = $('resStars').children[i];
-        s.classList.add('on', 'pop');
-        J.star(i + 1);
-        if (!calm()) fx.burst(530 + i * 108, 250, { count: 16, colors: ['#ffd23f', '#ffffff'], speed: 280, life: 0.7, size: 8, gravity: 280 });
-      }
-    }
-    var late = 0.45 + Math.max(0, r.stars - r.before) * 0.35;
-    if (at(late)) {
-      if (r.res.best) { $('resBest').hidden = false; J.chime(2); }
-      if (r.res.world >= 0) { $('resWorld').hidden = false; J.levelUp(); }
-    }
-  }
-
-  function resultNext() {
-    if (!result || resultLock > 0) return;
-    if (cur + 1 >= RK.LEVELS.length || !RK.isOpen(save, cur + 1)) { J.back(); toMap(); return; }
-    J.select();
-    startLevel(cur + 1);
-  }
-
-  function resultAgain() {
-    if (result && resultLock <= 0) { J.select(); startLevel(cur); }
-  }
-
-  /* --------------------------------------------------------------- inputs */
-  function on(el, fn) {
-    el.addEventListener('click', function (e) {
-      e.stopPropagation();
-      if (e.detail > 1) return;
-      Kit.audio.unlock();
-      if (e.detail > 0) { el.blur(); focusGame(); }
-      fn(e);
     });
   }
 
-  on($('btnPlay'), playSolo);
-  on($('btnCoop'), playCoop);
-  on($('btnLevels'), function () { J.select(); toMap(); });
-  on($('btnShop'), openShop);
-  on($('mapHome'), function () { J.back(); toTitle(); });
-  on($('mapMode'), function () {
-    players = players === 2 ? 1 : 2;
-    J.tap();
-    refreshModeBtn();
+  $('mapHome').addEventListener('click', function () { sfx('back'); showScreen('title'); });
+  $('mapMode').addEventListener('click', function () {
+    menuPlayers = menuPlayers === 1 ? 2 : 1;
+    sfx('tap');
+    syncTopCounters();
   });
-  on($('shopBack'), function () { J.back(); toTitle(); });
-  on($('btnPause'), function () { pause(true); });
-  on($('btnResume'), resume);
-  on($('btnRestart'), restart);
-  on($('btnMap'), function () { J.back(); toMap(); });
-  on($('resNext'), resultNext);
-  on($('resAgain'), resultAgain);
-  on($('resMap'), function () { if (resultLock <= 0) { J.back(); toMap(); } });
+  $('shopBack').addEventListener('click', function () { sfx('back'); showScreen('title'); });
 
-  var toLogical = function (e) { return view.toLogical(e.clientX, e.clientY); };
-  var inFrame = function (p) { return p.x >= 0 && p.x <= W && p.y >= 0 && p.y <= H; };
-
-  canvas.addEventListener('pointerdown', function (e) {
-    focusGame();
-    if (e.button !== 0) return;
-    Kit.audio.unlock();
-    var p = toLogical(e);
-    ptr.x = p.x; ptr.y = p.y; ptr.inside = inFrame(p);
-    if (screen === 'play' && players === 1 && !celebrate && ptr.inside) {
-      ptr.down = true;
-      ptr.holdT = 0;
-      clickQ = { x: p.x, y: p.y };
-    }
+  $('btnPause').addEventListener('click', function () { sfx('tap'); pauseGame(); });
+  $('btnBot').addEventListener('click', function () { botQueued = true; });
+  $('btnResume').addEventListener('click', function () { sfx('select'); resumeGame(); });
+  $('btnRestart').addEventListener('click', function () { sfx('select'); restartGame(); });
+  $('btnMap').addEventListener('click', function () {
+    sfx('back');
+    closeTelemetryRound('quit', world.players === 1);
+    buildMapUI();
+    showScreen('map');
+  });
+  $('btnPauseHome').addEventListener('click', function () {
+    sfx('back');
+    closeTelemetryRound('quit', world.players === 1);
+    showScreen('title');
   });
 
-  window.addEventListener('pointermove', function (e) {
-    var p = toLogical(e);
-    ptr.x = p.x; ptr.y = p.y; ptr.inside = inFrame(p);
-    if (ptr.down && e.buttons === 0) ptr.down = false;
+  $('resNext').addEventListener('click', function () {
+    sfx('select');
+    startGame((world.levelIndex + 1) % E.LEVELS.length, world.players);
   });
-  window.addEventListener('pointerup', function (e) { if (e.button === 0) ptr.down = false; });
-  window.addEventListener('pointercancel', function () { ptr.down = false; });
+  $('resAgain').addEventListener('click', function () {
+    sfx('select');
+    startGame(world.levelIndex, world.players);
+  });
+  $('resMap').addEventListener('click', function () {
+    sfx('select');
+    buildMapUI();
+    showScreen('map');
+  });
 
-  function handleMenuKeys() {
-    var K = Kit.keys, go = K.anyPressed(KEYS_GO);
+  window.addEventListener('keydown', function (e) {
+    if (!Kit.isGameKeyEvent(e) || e.repeat) return;
+    var code = e.code;
+
     if (screen === 'title') {
-      if (go) playSolo();
-    } else if (screen === 'map') {
-      if (go) { J.select(); startLevel(RK.nextLevel(save)); }
-      else if (K.pressed('Escape')) { J.back(); toTitle(); }
-    } else if (screen === 'shop') {
-      if (K.pressed('Escape')) { J.back(); toTitle(); }
-    } else if (screen === 'play') {
-      if (K.anyPressed(['KeyP', 'Escape'])) pause(true);
-      else if (K.pressed('KeyR') && !celebrate) restart();
-    } else if (screen === 'pause') {
-      if (K.anyPressed(['KeyP', 'Escape', 'Enter', 'NumpadEnter', 'Space'])) resume();
-      else if (K.pressed('KeyR')) restart();
-    } else if (screen === 'result' && resultLock <= 0) {
-      if (go) resultNext();
-      else if (K.pressed('KeyR')) resultAgain();
-      else if (K.pressed('Escape')) { J.back(); toMap(); }
-    }
-  }
-
-  function buildChefInputs(dt) {
-    var K = Kit.keys;
-    if (players === 1) {
-      if (ptr.down) ptr.holdT += dt;
-      var mx = (K.anyDown(['KeyD', 'ArrowRight']) ? 1 : 0) - (K.anyDown(['KeyA', 'ArrowLeft']) ? 1 : 0);
-      var my = (K.anyDown(['KeyS', 'ArrowDown']) ? 1 : 0) - (K.anyDown(['KeyW', 'ArrowUp']) ? 1 : 0);
-      var inp = {
-        mx: mx,
-        my: my,
-        interact: K.anyPressed(['Space', 'KeyE']),
-        dash: K.anyPressed(['ShiftLeft', 'ShiftRight', 'KeyQ']),
-        click: clickQ,
-        hold: (ptr.down && ptr.holdT > 0.22 && ptr.inside) ? { x: ptr.x, y: ptr.y } : null
-      };
-      clickQ = null;
-      return [inp];
-    }
-    // 2-Player Co-op: Chef 1 (WASD + Space + Q), Chef 2 (Arrows + Enter/Slash + RightShift)
-    clickQ = null;
-    return [
-      {
-        mx: (K.down('KeyD') ? 1 : 0) - (K.down('KeyA') ? 1 : 0),
-        my: (K.down('KeyS') ? 1 : 0) - (K.down('KeyW') ? 1 : 0),
-        interact: K.anyPressed(['Space', 'KeyE']),
-        dash: K.anyPressed(['KeyQ', 'ShiftLeft'])
-      },
-      {
-        mx: (K.down('ArrowRight') ? 1 : 0) - (K.down('ArrowLeft') ? 1 : 0),
-        my: (K.down('ArrowDown') ? 1 : 0) - (K.down('ArrowUp') ? 1 : 0),
-        interact: K.anyPressed(['Enter', 'NumpadEnter', 'Slash']),
-        dash: K.pressed('ShiftRight')
-      }
-    ];
-  }
-
-  /* --------------------------------------------------------------- events */
-  function addFloat(x, y, text, color, size) {
-    floats.push({ x: x, y: y, text: text, color: color, size: size || 30, t: 0 });
-    if (floats.length > 12) floats.shift();
-  }
-
-  function handleEvents() {
-    for (var i = 0; i < world.ev.length; i++) {
-      var e = world.ev[i];
-      switch (e.t) {
-        case 'pickup': J.pop(0.35); break;
-        case 'place': J.tap(); break;
-        case 'assemble':
-          J.pop(0.5);
-          if (!calm()) fx.burst(e.x, e.y, { count: 8, colors: ['#ffffff', '#ffd23f'], speed: 150, life: 0.4, size: 5, gravity: 120 });
-          break;
-        case 'chop': J.tap(); break;
-        case 'chopped':
-          J.chime(1);
-          addFloat(e.x, e.y - 26, 'جاهز!', '#34d399', 26);
-          if (!calm()) fx.burst(e.x, e.y, { count: 12, colors: ['#ef4444', '#34d399', '#ffffff'], speed: 180, life: 0.45, size: 5, gravity: 180 });
-          break;
-        case 'cookStart': J.pop(0.4); break;
-        case 'cooked':
-          J.chime(2);
-          addFloat(e.x, e.y - 28, 'نضج!', '#ffd23f', 26);
-          break;
-        case 'warn': J.tap(); break;
-        case 'burn':
-          Kit.track.miss();
-          J.error();
-          addFloat(e.x, e.y - 28, 'أوبس!', '#cbd5e1', 26);
-          if (!calm()) shake.add(3);
-          break;
-        case 'toss':
-          J.pop(0.45);
-          addFloat(e.x, e.y - 24, 'بوف!', '#38bdf8', 25);
-          if (!calm()) fx.burst(e.x, e.y, { count: 14, colors: ['#38bdf8', '#ff5d9e', '#ffd23f', '#34d399'], speed: 210, life: 0.5, size: 6, gravity: 200 });
-          break;
-        case 'plateReturn': J.pop(0.25); break;
-        case 'dash':
-          J.whoosh(0.35);
-          if (!calm()) fx.burst(e.x, e.y + 12, { count: 7, colors: ['#ffffff', '#bae6fd'], speed: 120, life: 0.3, size: 5, gravity: 0 });
-          break;
-        case 'wrongOrder':
-          J.error();
-          addFloat(e.x, e.y - 22, '؟', '#fda4af', 32);
-          break;
-        case 'serve':
-          Kit.track.hit();
-          J.coin(Math.min(5, world.streak));
-          J.chime(2);
-          addFloat(e.x, e.y - 28, '+' + e.coins, '#ffd23f', 34);
-          if (!calm()) {
-            fx.burst(e.x, e.y - 10, { count: 22, colors: ['#ffd23f', '#ffffff', '#34d399', '#ff5d9e'], speed: 290, life: 0.7, size: 7, gravity: 240 });
-            shake.add(2.5);
-          }
-          break;
-        case 'expire':
-          Kit.track.miss();
-          J.error();
-          break;
-        case 'bell':
-          onBell();
-          break;
-      }
-    }
-    world.ev.length = 0;
-  }
-
-  /* ----------------------------------------------------------- main loop */
-  function playStep(dt) {
-    if (celebrate > 0) {
-      celebrate -= dt;
-      if (celebrate <= 0) showResult();
+      if (code === 'Enter') { sfx('select'); startGame(0, 1); }
       return;
     }
-    var inputs = buildChefInputs(dt);
-    RK.step(world, dt, inputs);
-    handleEvents();
-    if (intro > 0) intro = Math.max(0, intro - dt);
+    if (screen === 'map' || screen === 'shop') {
+      if (code === 'Escape') { sfx('back'); showScreen('title'); }
+      return;
+    }
+    if (screen === 'pause') {
+      if (code === 'Escape' || code === 'KeyP') { sfx('select'); resumeGame(); }
+      else if (code === 'KeyR') { sfx('select'); restartGame(); }
+      return;
+    }
+    if (screen === 'result') {
+      if (code === 'Enter') { sfx('select'); startGame((world.levelIndex + 1) % E.LEVELS.length, world.players); }
+      else if (code === 'KeyR') { sfx('select'); startGame(world.levelIndex, world.players); }
+      else if (code === 'Escape') { sfx('back'); buildMapUI(); showScreen('map'); }
+      return;
+    }
+    if (screen === 'play') {
+      if (code === 'Escape' || code === 'KeyP') { sfx('tap'); pauseGame(); return; }
+      if (code === 'KeyR') { sfx('select'); restartGame(); return; }
+      if (world.players === 1) {
+        if (code === 'Space' || code === 'Enter') act1Queued = true;
+        else if (code === 'ShiftLeft' || code === 'ShiftRight' || code === 'KeyQ' || code === 'KeyE') dash1Queued = true;
+        else if (code === 'KeyF') botQueued = true;
+      } else {
+        if (code === 'Space') act1Queued = true;
+        else if (code === 'ShiftLeft' || code === 'KeyQ' || code === 'KeyE') dash1Queued = true;
+        else if (code === 'Enter') act2Queued = true;
+        else if (code === 'ShiftRight' || code === 'Slash') dash2Queued = true;
+      }
+    }
+  });
+
+  canvas.addEventListener('pointerdown', function (e) {
+    if (screen !== 'play') return;
+    if (e.button === 2) {
+      dash1Queued = true;
+      return;
+    }
+    if (world.players === 1 && e.button === 0) {
+      var pt = view.toLogical(e.clientX, e.clientY);
+      if (pt.y >= E.GY - 24) {
+        world.ev.length = 0;
+        E.clickAt(world, 0, pt.x, pt.y);
+        handleEvents(world.ev);
+        dirty = true;
+      }
+    }
+  });
+
+  /* -------------------------------------------- Simulation & Render Loop */
+  function readInputs() {
+    var K = Kit.keys;
+    if (world.players === 1) {
+      var mx1 = (K.anyDown(['KeyD', 'ArrowRight']) ? 1 : 0) - (K.anyDown(['KeyA', 'ArrowLeft']) ? 1 : 0);
+      var my1 = (K.anyDown(['KeyS', 'ArrowDown']) ? 1 : 0) - (K.anyDown(['KeyW', 'ArrowUp']) ? 1 : 0);
+      var inp = { mx: mx1, my: my1, act: act1Queued, dash: dash1Queued, bot: botQueued };
+      act1Queued = dash1Queued = botQueued = false;
+      return [inp];
+    }
+    var p1x = (K.down('KeyD') ? 1 : 0) - (K.down('KeyA') ? 1 : 0);
+    var p1y = (K.down('KeyS') ? 1 : 0) - (K.down('KeyW') ? 1 : 0);
+    var p2x = (K.down('ArrowRight') ? 1 : 0) - (K.down('ArrowLeft') ? 1 : 0);
+    var p2y = (K.down('ArrowDown') ? 1 : 0) - (K.down('ArrowUp') ? 1 : 0);
+    var pair = [
+      { mx: p1x, my: p1y, act: act1Queued, dash: dash1Queued },
+      { mx: p2x, my: p2y, act: act2Queued, dash: dash2Queued }
+    ];
+    act1Queued = act2Queued = dash1Queued = dash2Queued = botQueued = false;
+    return pair;
   }
 
   function update(dt) {
-    handleMenuKeys();
-    if (screen === 'pause') {
-      Kit.keys.endFrame();
-      return;
-    }
-    time += dt;
-    if (screen === 'play' && world) playStep(dt);
-    if (!calm()) {
+    if (screen === 'play') {
+      world.ev.length = 0;
+      E.step(world, dt, readInputs());
+      handleEvents(world.ev);
+      if (world.sousBot) {
+        var bBtn = $('btnBot');
+        var cooling = world.sousBot.state !== 'ready';
+        bBtn.classList.toggle('cooling', cooling);
+        $('botLabel').textContent = cooling ? 'يشحن... ' + Math.ceil(world.sousBot.cd) : 'المساعد الآلي';
+      }
       fx.update(dt);
-      shake.update(dt);
-    } else {
-      fx.clear();
+      camShake.update(dt);
+      A.pop.update(dt);
+      dirty = true;
+    } else if (screen !== 'pause') {
+      if (fx.list.length > 0 || camShake.power > 0) {
+        fx.update(dt);
+        camShake.update(dt);
+        dirty = true;
+      }
+      A.pop.update(dt);
     }
-    for (var i = floats.length - 1; i >= 0; i--) {
-      floats[i].t += dt;
-      if (!calm()) floats[i].y -= dt * 36;
-      if (floats[i].t > 1.05) floats.splice(i, 1);
-    }
-    if (screen === 'result' && result) resultStep(dt);
-    if (resultLock > 0) resultLock = Math.max(0, resultLock - dt);
     Kit.keys.endFrame();
   }
 
-  /* --------------------------------------------------------------- render */
-  function drawIntroBanner(ctx, still) {
-    if (intro <= 0 || world.done) return;
-    var a = Math.min(1, intro / 0.45, (2.4 - intro) / 0.25 + 0.25);
+  function drawServingWindow() {
+    for (var i = 0; i < world.orders.length; i++) {
+      var ord = world.orders[i];
+      var sx = 330 + ord.slot * 310;
+      var bob = calm() ? 0 : Math.sin(world.time * 4.2 + ord.slot * 1.7) * 4;
+      var blink = !calm() && A.blink(BLINK_SLOTS[ord.slot]) > 0.5;
+
+      // VIP golden halo
+      if (ord.vip) {
+        ctx.save();
+        ctx.beginPath(); ctx.arc(sx - 66, 118 + bob, 44, 0, TAU);
+        ctx.fillStyle = 'rgba(255, 209, 102, 0.38)'; ctx.fill();
+        ctx.restore();
+      }
+
+      var cSpr = customerSprite(ord.customer, blink);
+      A.blit(ctx, cSpr, sx - 66, 120 + bob);
+      if (ord.vip) drawText(ctx, '👑 ×2', sx - 66, 68 + bob, 16, '#ffd166');
+
+      // Visual Recipe Bubble right beside customer
+      var bx = sx - 16, by = 34, bw = 166, bh = 128;
+      ctx.save();
+      rr(ctx, bx, by, bw, bh, 20);
+      strokeFill(ctx, ord.vip ? '#fffbeb' : '#ffffff', 3.5);
+
+      // Finished dish icon + Arabic name
+      var dSpr = itemSprite(ord.dish);
+      A.blit(ctx, dSpr, bx + bw - 34, by + 34, { sx: 0.95, sy: 0.95 });
+      drawText(ctx, E.DISHES[ord.dish].name, bx + 66, by + 32, 16, '#ffffff');
+
+      // 2-3 clear step icons equation bar
+      rr(ctx, bx + 10, by + 62, bw - 20, 38, 12);
+      ctx.fillStyle = '#f1f5f9'; ctx.fill();
+      var steps = ord.steps;
+      var stepStart = bx + bw / 2 - ((steps.length - 1) * 24);
+      for (var si = 0; si < steps.length; si++) {
+        var ic = miniIconSprite(steps[si]);
+        var ix = stepStart + si * 48;
+        A.blit(ctx, ic, ix, by + 81, { sx: 0.68, sy: 0.68 });
+        if (si + 1 < steps.length) {
+          var sym = (steps[si + 1] === 'blender' || steps[si + 1] === 'fryer' || steps[si + 1] === 'oven') ? '←' : '+';
+          drawText(ctx, sym, ix + 24, by + 81, 15, '#ffd166');
+        }
+      }
+
+      // Patience bar
+      var patRatio = Kit.clamp(ord.patience / ord.maxPatience, 0, 1);
+      rr(ctx, bx + 14, by + bh - 18, bw - 28, 10, 5);
+      ctx.fillStyle = '#e2e8f0'; ctx.fill();
+      rr(ctx, bx + 14, by + bh - 18, (bw - 28) * patRatio, 10, 5);
+      ctx.fillStyle = patRatio > 0.5 ? '#22c55e' : patRatio > 0.25 ? '#f59e0b' : '#ef4444';
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  function drawHudMeters() {
+    // Left meter: Coins + 3-Star Goals + Fever Streak
     ctx.save();
-    ctx.globalAlpha = clamp(a, 0, 1);
-    var wd = RK.WORLDS[world.world];
-    var y = 430 + (still ? 0 : Math.max(0, intro - 2.1) * 40);
-    var bw = players === 2 ? 560 : 490, bx = (W - bw) / 2;
-    A.rr(ctx, bx, y - 42, bw, 84, 30);
-    ctx.fillStyle = 'rgba(35,20,12,0.9)'; ctx.fill();
-    ctx.lineWidth = 4.5; ctx.strokeStyle = wd.color; ctx.stroke();
-    A.text(ctx, world.R.name, W / 2, y - 12, 34, '#fffdf7', { stroke: false });
-    var sub = players === 2 ? 'طاهي 1: WASD + مسافة   |   طاهي 2: الأسهم + Enter' : 'تحرّك بالأسهم أو الفأرة • مسافة للتفاعل';
-    A.text(ctx, sub, W / 2, y + 22, 20, '#fde047', { stroke: false });
+    rr(ctx, 82, 12, 178, 72, 18);
+    strokeFill(ctx, 'rgba(27, 22, 64, 0.85)', 3);
+    drawText(ctx, 'العملات: ' + world.coins, 171, 34, 20, '#ffd166');
+    var gMax = world.goals[2];
+    var pRatio = Kit.clamp(world.coins / gMax, 0, 1);
+    rr(ctx, 96, 54, 150, 14, 7);
+    ctx.fillStyle = '#334155'; ctx.fill();
+    rr(ctx, 96, 54, 150 * pRatio, 14, 7);
+    ctx.fillStyle = '#3ddc84'; ctx.fill();
+    for (var gi = 0; gi < 3; gi++) {
+      var gx = 96 + 150 * (world.goals[gi] / gMax);
+      drawText(ctx, '★', gx, 60, 15, world.coins >= world.goals[gi] ? '#ffd166' : '#94a3b8');
+    }
+
+    if (world.streak >= 2) {
+      rr(ctx, 82, 92, 178, 40, 14);
+      strokeFill(ctx, world.fever ? '#ff9f1c' : '#38bdf8', 3);
+      drawText(ctx, world.fever ? 'حماس تيربو ×3 🔥' : 'سلسلة حماس ×2 ⚡', 171, 112, 17, '#ffffff');
+    }
+
+    // Right meter: Stage & Timer (left of mute button)
+    rr(ctx, W - 216, 12, 152, 74, 18);
+    strokeFill(ctx, 'rgba(27, 22, 64, 0.85)', 3);
+    drawText(ctx, world.id + ' ' + E.WORLDS[world.world].name, W - 140, 32, 15, '#bae6fd');
+    var secs = Math.ceil(world.timeLeft);
+    drawText(ctx, '⏱ ' + secs, W - 140, 62, 26, secs <= 10 ? '#ff5d8f' : '#ffffff');
     ctx.restore();
   }
 
-  function drawWorld(ctx) {
-    var still = calm();
-    ctx.drawImage(A.room(world, pixelScale()), 0, 0, W, H);
-    A.orders(ctx, world, time, still);
-    A.stations(ctx, world, time, still);
+  function drawWorld() {
+    var bg = roomBackdrop(world.world);
+    if (bg.canvas) ctx.drawImage(bg.canvas, 0, 0, W, H);
 
-    // Sort chefs by Y for clean overlap depth
-    var sorted = world.chefs.slice().sort(function (a, b) { return a.y - b.y; });
-    for (var i = 0; i < sorted.length; i++) {
-      var ch = sorted[i];
-      var apIdx = ch.id === 0 ? save.apron : (save.apron + 2) % RK.APRONS.length;
-      var htIdx = ch.id === 0 ? save.hat : (save.hat + (save.hat === 0 ? 1 : 0)) % RK.HATS.length;
-      A.chef(ctx, ch, { apron: apIdx, hat: htIdx, t: time, still: still, twoPlayer: world.players === 2 });
+    drawServingWindow();
+
+    // Floor pads (boost & sousPad)
+    for (var fi = 0; fi < world.floorPads.length; fi++) {
+      var fp = world.floorPads[fi];
+      A.blit(ctx, floorPadSprite(fp), fp.x, fp.y);
     }
 
-    if (!still) fx.draw(ctx);
-    for (var j = 0; j < floats.length; j++) {
-      var f = floats[j];
-      ctx.globalAlpha = Math.max(0, 1 - Math.max(0, f.t - 0.6) / 0.45);
-      A.text(ctx, f.text, f.x, f.y, f.size, f.color);
+    // Highlighted prompts for Chef 1 & Chef 2
+    var prompts = [];
+    for (var pi = 0; pi < world.chefs.length; pi++) {
+      var pr = E.promptFor(world, pi);
+      if (pr) prompts.push({ p: pr, ci: pi });
     }
-    ctx.globalAlpha = 1;
-    A.hud(ctx, world, time, still);
-    drawIntroBanner(ctx, still);
+
+    // Stations & placed/cooking items
+    for (var i = 0; i < world.stations.length; i++) {
+      var st = world.stations[i];
+      var wob = (!calm() && st.wobble > 0) ? Math.sin(st.wobble * 28) * 0.12 : 0;
+      A.blit(ctx, stationSprite(st, world.world), st.x, st.y, { rot: wob, sx: 1 + Math.abs(wob) * 0.4, sy: 1 - Math.abs(wob) * 0.3 });
+
+      if (st.item) {
+        A.blit(ctx, itemSprite(st.item.kind), st.x, st.y - 6);
+      } else if (st.prep) {
+        A.blit(ctx, itemSprite(st.prep), st.x, st.y - 4, { sx: 0.85, sy: 0.85 });
+      } else if (st.cook && st.cook.state !== 'idle') {
+        var ap = E.APPLIANCES[st.type], ck = st.cook;
+        var showKind = ck.state === 'burnt' ? 'burnt' : ck.state === 'cooking' ? ap.inKind : ap.outKind;
+        A.blit(ctx, itemSprite(showKind), st.x, st.y - 6);
+
+        // Progress or warning badge above appliance
+        if (ck.state === 'cooking') {
+          rr(ctx, st.x - 28, st.y - 44, 56, 10, 5);
+          strokeFill(ctx, '#1e293b', 2);
+          rr(ctx, st.x - 26, st.y - 42, 52 * ck.prog, 6, 3);
+          ctx.fillStyle = world.fever ? '#ffd166' : '#3ddc84';
+          ctx.fill();
+        } else if (ck.state === 'done') {
+          drawText(ctx, 'جاهز ✓', st.x, st.y - 40, 15, '#3ddc84');
+        } else if (ck.state === 'warning') {
+          var pulse = calm() ? 1 : (1 + Math.sin(world.time * 16) * 0.12);
+          ctx.save();
+          ctx.translate(st.x, st.y - 42);
+          ctx.scale(pulse, pulse);
+          drawText(ctx, 'سريع! 🔥', 0, 0, 17, '#ff9f1c');
+          ctx.restore();
+        } else if (ck.state === 'burnt') {
+          drawText(ctx, 'نظّف! 💨', st.x, st.y - 40, 16, '#cbd5e1');
+        }
+      }
+    }
+
+    // Glowing target ring + floating action pill
+    for (var qi = 0; qi < prompts.length; qi++) {
+      var pst = prompts[qi].p.station;
+      var ringCol = prompts[qi].ci === 1 ? '#38bdf8' : '#ffd166';
+      ctx.save();
+      rr(ctx, pst.x - TILE / 2 - 2, pst.y - TILE / 2 - 2, TILE + 4, TILE + 4, 18);
+      ctx.lineWidth = 4.5;
+      ctx.strokeStyle = ringCol;
+      ctx.stroke();
+      ctx.restore();
+      drawText(ctx, prompts[qi].p.label, pst.x, pst.y - 48, 16, ringCol);
+    }
+
+    // Mini Sous-Bot
+    if (world.sousBot) {
+      var bot = world.sousBot;
+      A.shadow(ctx, bot.x - 26, bot.y - 26, 52, 52, 0.38);
+      A.blit(ctx, sousBotSprite(), bot.x, bot.y - 4);
+      if (bot.state === 'go' && bot.gift) {
+        A.blit(ctx, itemSprite(bot.gift), bot.x, bot.y - 38, { sx: 0.78, sy: 0.78 });
+      }
+    }
+
+    // Chefs
+    for (var ci = 0; ci < world.chefs.length; ci++) {
+      var ch = world.chefs[ci];
+      var bobY = (!calm() && (ch.vx || ch.vy)) ? Math.sin(world.time * 18 + ci) * 3 : 0;
+      A.shadow(ctx, ch.x - 28, ch.y - 26, 56, 54, 0.45);
+      A.blit(ctx, chefSprite(save.apron, save.hat, ci), ch.x, ch.y - 10 + bobY);
+      if (world.players === 2) {
+        drawText(ctx, ci === 0 ? 'طاهي 1' : 'طاهي 2', ch.x, ch.y + 34, 14, ci === 0 ? '#ffd166' : '#38bdf8');
+      }
+      if (ch.held) {
+        A.blit(ctx, itemSprite(ch.held.kind), ch.x + ch.faceX * 16, ch.y - 44 + bobY, { sx: 0.96, sy: 0.96 });
+      }
+    }
+
+    // Flying Burger-Cannon shots!
+    for (var si = 0; si < world.shots.length; si++) {
+      var sh = world.shots[si];
+      var u = Kit.clamp(sh.t / sh.dur, 0, 1);
+      var sx = Kit.lerp(sh.x0, sh.x1, u);
+      var sy = Kit.lerp(sh.y0, sh.y1, u) - Math.sin(u * Math.PI) * 90;
+      var sc = 1 + Math.sin(u * Math.PI) * 0.45;
+      A.blit(ctx, itemSprite(sh.dish), sx, sy, { sx: sc, sy: sc, rot: u * 0.6 });
+    }
+
+    // Non-silent friendly guidance bubbles + target station arrow!
+    for (var hi = 0; hi < world.hints.length; hi++) {
+      var h = world.hints[hi];
+      var alpha = Kit.clamp(h.life / 0.35, 0, 1);
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      if (h.targetX != null && h.targetY != null) {
+        ctx.strokeStyle = '#ffd166';
+        ctx.lineWidth = 5;
+        ctx.setLineDash([10, 8]);
+        ctx.beginPath();
+        ctx.moveTo(h.x, h.y + 16);
+        ctx.lineTo(h.targetX, h.targetY);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.arc(h.targetX, h.targetY, 44, 0, TAU);
+        ctx.stroke();
+      }
+      ctx.font = '800 18px Fredoka';
+      var tw = Math.max(150, ctx.measureText(h.text).width + 32);
+      var by = clampY(h.y);
+      var bx = Kit.clamp(h.x, tw / 2 + 16, W - tw / 2 - 16);
+      rr(ctx, bx - tw / 2, by - 22, tw, 44, 16);
+      strokeFill(ctx, '#fff8eb', 3.5);
+      drawText(ctx, h.text, bx, by, 18, '#ff9f1c');
+      ctx.restore();
+    }
+
+    fx.draw(ctx);
+    A.pop.draw(ctx);
+    if (screen === 'play' || screen === 'pause' || screen === 'result') drawHudMeters();
   }
 
-  function drawMenu(ctx) {
-    var still = calm(), ps = pixelScale();
-    if (screen === 'title') {
-      A.titleScene(ctx, save, time, still, ps);
-    } else {
-      var wdIdx = screen === 'map' ? Math.floor(RK.nextLevel(save) / 3) : 1;
-      ctx.drawImage(A.backdrop(wdIdx, ps), 0, 0, W, H);
-    }
-    if (!still) fx.draw(ctx);
+  function clampY(y) {
+    return y < 44 ? 44 : y > H - 44 ? H - 44 : y;
   }
 
   function render() {
     if (screen === 'pause' && !dirty) return;
+    if (!dirty && calm()) return;
     dirty = false;
-    var ctx = view.ctx;
+
     ctx.save();
-    if (!calm()) ctx.translate(shake.x, shake.y);
-    if (world && (screen === 'play' || screen === 'pause' || screen === 'result')) drawWorld(ctx);
-    else drawMenu(ctx);
+    if (screen === 'play' && !calm()) ctx.translate(camShake.x, camShake.y);
+    drawWorld();
     ctx.restore();
   }
 
-  canvas.addEventListener('contextrestored', function () {
-    A.reset();
-    dirty = true;
-    if (screen === 'shop') refreshShop();
-  });
-  if (document.fonts && document.fonts.load) {
-    document.fonts.load('700 40px Fredoka', 'مطبخ 5').then(function () {
-      dirty = true;
-      if (screen === 'shop') refreshShop();
-    }, function () { /* fallback fonts */ });
-  }
-
-  /* --------------------------------------------------- test & debug hook */
-  var pagePoint = function (x, y) {
-    var r = canvas.getBoundingClientRect();
-    return { x: r.left + x * view.scale, y: r.top + y * view.scale };
-  };
-  var r1 = function (v) { return Math.round(v * 10) / 10; };
-  var clone = function (v) { return v == null ? null : JSON.parse(JSON.stringify(v)); };
-
+  /* -------------------------------------------- Public Test & Scenario API */
   window.__game = {
     get state() {
-      var w = world;
       return {
         screen: screen,
         paused: screen === 'pause',
-        players: players,
-        level: cur,
-        id: w ? w.R.id : '',
-        time: w ? Math.round(w.t * 100) / 100 : 0,
-        timeLeft: w ? Math.round(w.timeLeft * 100) / 100 : 0,
-        chefs: w ? w.chefs.map(function (c) {
-          return {
-            id: c.id, x: r1(c.x), y: r1(c.y), vx: r1(c.vx), vy: r1(c.vy),
-            held: clone(c.held), onIce: c.onIce, dashT: r1(c.dashT), moved: c.moved, focus: clone(c.focus)
-          };
-        }) : [],
-        orders: w ? clone(w.orders) : [],
-        served: w ? w.served : 0,
-        coins: w ? w.coins : 0,
-        goals: w ? w.goals.slice() : [],
-        stars: result ? result.stars : (w ? RK.stars(w) : 0),
-        atStart: !!(w && w.served === 0 && w.coins === 0 && w.chefs.every(function (c) {
-          return !c.moved && Math.hypot(c.x - c.sx, c.y - c.sy) < 0.5;
-        })),
-        fx: fx.list.length,
-        shake: shake.power,
-        celebrate: celebrate > 0
+        id: world.id,
+        levelIndex: world.levelIndex,
+        difficulty: world.difficulty,
+        players: world.players,
+        time: world.time,
+        timeLeft: world.timeLeft,
+        atStart: world.atStart,
+        served: world.served,
+        coins: world.coins,
+        score: world.score,
+        streak: world.streak,
+        fever: world.fever,
+        stars: world.stars,
+        goals: world.goals,
+        chefs: world.chefs.map(function (c) {
+          return { x: c.x, y: c.y, vx: c.vx, vy: c.vy, held: c.held, moved: c.moved, dashT: c.dashT };
+        }),
+        orders: world.orders.map(function (o) {
+          return { id: o.id, slot: o.slot, dish: o.dish, customer: o.customer, vip: o.vip, patience: o.patience, maxPatience: o.maxPatience };
+        }),
+        hints: world.hints,
+        sousBot: world.sousBot,
+        fx: calm() ? 0 : fx.list.length,
+        shake: calm() ? 0 : camShake.power
       };
     },
     get stations() {
-      return world ? world.stations.map(function (s) {
-        return {
-          c: s.c, r: s.r, x: s.x, y: s.y, type: s.type, kind: s.kind || null,
-          plates: s.plates || 0, item: clone(s.item), cook: clone(s.cook)
-        };
-      }) : [];
+      return world.stations;
     },
-    get save() { return clone(save); },
-    point: pagePoint
+    get save() {
+      return save;
+    },
+    point: function (lx, ly) {
+      var r = canvas.getBoundingClientRect();
+      return { x: r.left + lx * view.scale, y: r.top + ly * view.scale };
+    }
   };
 
-  buildMap();
-  buildShop();
   Kit.muteButton();
   Kit.lifecycle({
-    pause: function () { pause(false); },
-    reset: function () { ptr.down = false; ptr.holdT = 0; clickQ = null; }
+    pause: function () {
+      if (screen === 'play') pauseGame();
+    }
   });
-  toTitle();
-  Kit.loop(update, render);
+  syncTopCounters();
+  showScreen('title');
+  A.loop(update, render);
   Kit.ready();
 })();

@@ -9,119 +9,134 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<!-- Icons: every button is a picture, so a child who cannot read yet can play. -->
-<svg class="defs" aria-hidden="true" focusable="false" width="0" height="0">
-  <symbol id="i-play" viewBox="0 0 64 64"><path d="M22 11 Q18 9 18 14 L18 50 Q18 55 22 53 L52 35 Q56 32 52 29 Z"/></symbol>
-  <symbol id="i-pause" viewBox="0 0 64 64"><rect x="15" y="12" width="12" height="40" rx="5"/><rect x="37" y="12" width="12" height="40" rx="5"/></symbol>
-  <symbol id="i-again" viewBox="0 0 64 64"><path d="M50 30 A19 19 0 1 1 41 15" fill="none" stroke="currentColor" stroke-width="9" stroke-linecap="round"/><path d="M33 4 L52 13 L37 27 Z"/></symbol>
-  <symbol id="i-map" viewBox="0 0 64 64"><path d="M6 15 L22 8 L42 15 L58 8 L58 49 L42 56 L22 49 L6 56 Z"/><path d="M22 10 L22 47 M42 17 L42 54" stroke="#2a1d3e" stroke-width="4" opacity=".35"/><circle cx="32" cy="30" r="6" fill="#ff5d6c"/></symbol>
-  <symbol id="i-home" viewBox="0 0 64 64"><path d="M8 32 L32 10 L56 32 L49 32 L49 54 L37 54 L37 40 L27 40 L27 54 L15 54 L15 32 Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></symbol>
-  <symbol id="i-two" viewBox="0 0 64 64"><circle cx="21" cy="20" r="10" fill="#ffcc9e" stroke="#2a1d3e" stroke-width="3.5"/><path d="M6 54 Q6 34 21 34 Q36 34 36 54 Z" fill="#3f8cff" stroke="#2a1d3e" stroke-width="3.5" stroke-linejoin="round"/><circle cx="43" cy="20" r="10" fill="#ffcc9e" stroke="#2a1d3e" stroke-width="3.5"/><path d="M28 54 Q28 34 43 34 Q58 34 58 54 Z" fill="#ff5a5f" stroke="#2a1d3e" stroke-width="3.5" stroke-linejoin="round"/></symbol>
-  <symbol id="i-barn" viewBox="0 0 64 64"><path d="M6 28 L32 8 L58 28 L58 56 L6 56 Z" fill="#e8473f" stroke="#2a1d3e" stroke-width="3.5" stroke-linejoin="round"/><path d="M22 56 L22 34 L42 34 L42 56" fill="#fff1d6" stroke="#2a1d3e" stroke-width="3.5" stroke-linejoin="round"/><path d="M22 34 L42 56 M42 34 L22 56" stroke="#2a1d3e" stroke-width="3"/><circle cx="32" cy="22" r="5" fill="#fff1d6" stroke="#2a1d3e" stroke-width="3"/></symbol>
-  <symbol id="i-hat" viewBox="0 0 64 64"><ellipse cx="32" cy="44" rx="28" ry="9" fill="#f6d47a" stroke="#2a1d3e" stroke-width="3.5"/><path d="M17 44 Q17 18 32 18 Q47 18 47 44 Z" fill="#f2c25e" stroke="#2a1d3e" stroke-width="3.5" stroke-linejoin="round"/><path d="M17 36 L47 36 L47 42 L17 42 Z" fill="#e8473f"/></symbol>
-  <symbol id="i-star" viewBox="0 0 64 64"><path d="M32 5 L39 23.3 L58.6 24.4 L43.4 36.7 L48.5 55.6 L32 45 L15.5 55.6 L20.6 36.7 L5.4 24.4 L25 23.3 Z" stroke-linejoin="round"/></symbol>
-  <symbol id="i-lock" viewBox="0 0 64 64"><path d="M20 28 L20 20 A12 12 0 0 1 44 20 L44 28" fill="none" stroke="currentColor" stroke-width="7"/><rect x="12" y="28" width="40" height="30" rx="7"/></symbol>
-  <symbol id="i-crown" viewBox="0 0 64 64"><path d="M8 20 L20 34 L32 12 L44 34 L56 20 L52 50 L12 50 Z" stroke-linejoin="round"/><circle cx="32" cy="38" r="4" fill="#ff5d6c"/></symbol>
-  <symbol id="i-clock" viewBox="0 0 64 64"><circle cx="32" cy="34" r="24" fill="#ffffff" stroke="#2a1d3e" stroke-width="5"/><path d="M32 34 L32 18 M32 34 L43 40" stroke="#2a1d3e" stroke-width="5" stroke-linecap="round"/><rect x="26" y="3" width="12" height="7" rx="3" fill="#2a1d3e"/></symbol>
-  <symbol id="i-egg" viewBox="0 0 64 64"><path d="M32 5 C50 5 54 40 32 58 C10 40 14 5 32 5 Z" fill="#fff6e2" stroke="#2a1d3e" stroke-width="4.5"/><ellipse cx="25" cy="22" rx="4" ry="7" fill="#ffffff"/></symbol>
-  <symbol id="i-chick" viewBox="0 0 64 64"><ellipse cx="32" cy="36" rx="22" ry="20" fill="#ffe14d" stroke="#2a1d3e" stroke-width="4"/><circle cx="25" cy="30" r="3.5" fill="#2a1d3e"/><circle cx="39" cy="30" r="3.5" fill="#2a1d3e"/><path d="M28 37 L36 37 L32 44 Z" fill="#ff9a2e" stroke="#2a1d3e" stroke-width="2.5" stroke-linejoin="round"/><path d="M30 16 Q32 6 37 15" fill="none" stroke="#2a1d3e" stroke-width="3.5" stroke-linecap="round"/></symbol>
-</svg>
-
 <canvas id="game" tabindex="0" aria-label="سباق البيض"></canvas>
 
-<!-- A 1280x720 layer laid exactly over the canvas (scaled by game.js). -->
 <div id="ui">
+  <!-- Active Play HUD -->
   <div id="hud" hidden>
-    <button type="button" id="btnPause" class="er-btn er-round" aria-label="استراحة" title="استراحة (P)"><svg aria-hidden="true"><use href="#i-pause"/></svg></button>
+    <button type="button" id="btnPause" class="er-hud-btn" aria-label="إيقاف مؤقت" title="إيقاف مؤقت (P)">❚❚</button>
+    <div class="er-hud-bar">
+      <div class="er-pill er-pill-eggs" id="hudEggs">🥚 0 / 5</div>
+      <div class="er-pill er-pill-chain" id="hudChain">⚡ تيربو السلسلة 1.0×</div>
+      <div class="er-pill er-pill-time" id="hudTime">⏱️ 1:20</div>
+      <div class="er-pill er-pill-score" id="hudScore">⭐ 0 · 🪙 0</div>
+    </div>
   </div>
 
-  <section id="scrTitle" class="screen" aria-label="سباق البيض">
-    <h1 class="logo"><span class="l1">سباق</span><span class="l2">البيض</span></h1>
-    <button type="button" id="btnPlay" class="er-btn er-play ring" aria-label="العب"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
-    <div class="chip" id="titleStars" aria-label="النجوم"><svg aria-hidden="true"><use href="#i-star"/></svg><b>0</b></div>
-    <div class="side-row">
-      <button type="button" id="btnDuo" class="er-btn er-side" aria-label="سباق اثنين"><svg aria-hidden="true"><use href="#i-two"/></svg><span>لاعبان</span></button>
-      <button type="button" id="btnBarn" class="er-btn er-side" aria-label="حظيرتي"><svg aria-hidden="true"><use href="#i-barn"/></svg><span>حظيرتي</span></button>
-      <button type="button" id="btnCloset" class="er-btn er-side" aria-label="خزانتي"><svg aria-hidden="true"><use href="#i-hat"/></svg><span>خزانتي</span></button>
-    </div>
-  </section>
-
-  <section id="scrMap" class="screen" aria-label="العوالم" hidden>
-    <button type="button" id="mapHome" class="er-btn er-round" aria-label="البداية"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
-    <div class="chip" id="mapStars" aria-label="النجوم"><svg aria-hidden="true"><use href="#i-star"/></svg><b>0</b></div>
-    <div id="cards"></div>
-  </section>
-
-  <section id="scrPause" class="screen dim" aria-label="استراحة" hidden>
-    <div class="card">
-      <button type="button" id="btnResume" class="er-btn er-go ring" aria-label="تابع اللعب"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
-      <div class="row">
-        <button type="button" id="btnMenu" class="er-btn er-round big" aria-label="الخريطة"><svg aria-hidden="true"><use href="#i-map"/></svg></button>
-        <button type="button" id="btnRestart" class="er-btn er-round big" aria-label="ابدأ من جديد"><svg aria-hidden="true"><use href="#i-again"/></svg></button>
+  <!-- First-visit quick rule coach (dismisses immediately on any arrow/WASD/Space/click) -->
+  <div id="introCard" class="er-intro" hidden>
+    <div class="er-intro-box sg-panel">
+      <div class="er-badge">دليل الانطلاق السريع</div>
+      <h2 class="er-intro-title">اجمع سلاسل البيض واشحن التيربو!</h2>
+      <div class="er-intro-steps">
+        <div class="er-step"><b>🥚 سلسلة التيربو</b><span>احمل 2 أو 3 بيضات معاً لتزداد سرعتك وتتفجّر المكافآت في الحاضنة!</span></div>
+        <div class="er-step"><b>🦆 اندفاعة وخداع</b><span>اضغط <span class="sg-key" dir="ltr">Space</span> أو انقر للاندفاع السريع ورمي بطة صفّارة تلهي الحراس!</span></div>
+        <div class="er-step"><b>🌿 اختبئ وانطلق</b><span>اختبئ داخل القش والأدغال، ولا قلق من اللمس: مجرّد قفزة كرتونية سريعة!</span></div>
       </div>
+      <div class="er-intro-go">اضغط أي سهم أو <span class="sg-key" dir="ltr">WASD</span> أو انقر للانطلاق فوراً!</div>
     </div>
-  </section>
-
-  <section id="scrResult" class="screen" aria-label="النتيجة" hidden>
-    <div class="card result">
-      <div class="stars3" id="resStars" aria-hidden="true"><svg><use href="#i-star"/></svg><svg><use href="#i-star"/></svg><svg><use href="#i-star"/></svg></div>
-      <div class="duo-score" id="resDuo" hidden>
-        <div class="side p1"><span class="who">1</span><b id="resP1">0</b></div>
-        <div class="vs" id="resWinner"></div>
-        <div class="side p2"><span class="who">2</span><b id="resP2">0</b></div>
-      </div>
-      <div class="facts" id="resFacts">
-        <span class="fact"><svg aria-hidden="true"><use href="#i-clock"/></svg><b id="resTime">0</b></span>
-        <span class="fact"><svg aria-hidden="true"><use href="#i-chick"/></svg><b id="resEggs">0</b></span>
-      </div>
-      <div class="newbest" id="resNewBest" hidden><svg aria-hidden="true"><use href="#i-crown"/></svg><span>رقم جديد!</span></div>
-      <button type="button" class="er-btn gift" id="resGift" aria-label="شيء جديد في خزانتي" hidden><canvas id="giftCanvas" width="132" height="132"></canvas><span>جديد!</span></button>
-      <div class="row">
-        <button type="button" id="resMenu" class="er-btn er-round big" aria-label="الخريطة"><svg aria-hidden="true"><use href="#i-map"/></svg></button>
-        <button type="button" id="resNext" class="er-btn er-go ring" aria-label="التالي"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
-        <button type="button" id="resAgain" class="er-btn er-round big" aria-label="مرة أخرى"><svg aria-hidden="true"><use href="#i-again"/></svg></button>
-      </div>
-    </div>
-  </section>
-
-  <section id="scrBarn" class="screen" aria-label="حظيرتي" hidden>
-    <button type="button" id="barnBack" class="er-btn er-round" aria-label="رجوع"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
-    <div class="sign"><svg aria-hidden="true"><use href="#i-barn"/></svg><span>حظيرتي</span></div>
-    <div class="barn-panel" id="barnTiles"></div>
-  </section>
-
-  <section id="scrCloset" class="screen" aria-label="خزانتي" hidden>
-    <button type="button" id="closetBack" class="er-btn er-round" aria-label="رجوع"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
-    <div class="chip" id="closetStars" aria-label="النجوم"><svg aria-hidden="true"><use href="#i-star"/></svg><b>0</b></div>
-    <div class="closet-panel">
-      <div class="shelf" id="colors" role="group" aria-label="الألوان"></div>
-      <div class="shelf" id="hats" role="group" aria-label="القبعات"></div>
-    </div>
-  </section>
-
-  <!-- The wordless coach on the menus: a hand that shows what to press. -->
-  <div id="ghost" aria-hidden="true" hidden>
-    <svg viewBox="0 0 80 100" width="84" height="105">
-      <g fill="#2a1d3e" stroke="#2a1d3e" stroke-width="9" stroke-linejoin="round">
-        <rect x="22" y="5" width="17" height="54" rx="8.5"/><rect x="37" y="36" width="15" height="30" rx="7.5"/>
-        <rect x="50" y="40" width="14" height="28" rx="7"/><rect x="3" y="52" width="27" height="14" rx="7" transform="rotate(38 16 59)"/>
-        <rect x="14" y="46" width="52" height="48" rx="19"/>
-      </g>
-      <g fill="#ffffff">
-        <rect x="22" y="5" width="17" height="54" rx="8.5"/><rect x="37" y="36" width="15" height="30" rx="7.5"/>
-        <rect x="50" y="40" width="14" height="28" rx="7"/><rect x="3" y="52" width="27" height="14" rx="7" transform="rotate(38 16 59)"/>
-        <rect x="14" y="46" width="52" height="48" rx="19"/>
-      </g>
-    </svg>
   </div>
+
+  <!-- Title Screen -->
+  <section id="scrTitle" class="er-screen">
+    <div class="er-title-card sg-panel">
+      <div class="er-top-row">
+        <span class="er-badge">مغامرة الديناصورات والمزرعة الآلية</span>
+        <span class="er-wallet">⭐ <b id="titleStars">0</b> · 🪙 <b id="titleCoins">0</b></span>
+      </div>
+
+      <h1 class="sg-title er-logo">سباق البيض</h1>
+      <p class="er-tagline">كوّن سلسلة بيض متوهجة لسرعة التيربو، واخدع تي ريكس والحراس الآليين بالبطة الصفّارة!</p>
+
+      <div class="er-selectors">
+        <div class="er-sel-group">
+          <span class="er-sel-lbl">طور اللعب</span>
+          <div class="er-chips" id="modeBar" role="group" aria-label="طور اللعب">
+            <button type="button" class="er-chip on" data-mode="solo" id="modeSolo">لاعب 1</button>
+            <button type="button" class="er-chip" data-mode="coop" id="modeCoop">لاعبان · تعاون</button>
+            <button type="button" class="er-chip" data-mode="vs" id="modeVs">لاعبان · سباق</button>
+          </div>
+        </div>
+        <div class="er-sel-group">
+          <span class="er-sel-lbl">الصعوبة</span>
+          <div class="er-chips" id="diffBar" role="group" aria-label="مستوى الصعوبة">
+            <button type="button" class="er-chip" data-diff="easy">سهل</button>
+            <button type="button" class="er-chip on" data-diff="normal">متوسط</button>
+            <button type="button" class="er-chip" data-diff="hero">بطل</button>
+          </div>
+        </div>
+      </div>
+      <p class="er-diff-desc" id="diffDesc">حراس يقظون · سلاسل تيربو ثلاثية · خدع البطة الصفّارة!</p>
+
+      <div class="er-worlds" id="worldGrid" role="group" aria-label="العوالم المفتوحة"></div>
+
+      <div class="er-actions">
+        <button type="button" id="btnPlay" class="sg-btn good er-btn-play">انطلق للسباق!</button>
+        <button type="button" id="btnShop" class="sg-btn secondary er-btn-shop">خزانة الأبطال · 🪙 <b id="shopBtnCoins">0</b></button>
+      </div>
+
+      <div class="er-howto" id="howtoSolo">
+        <span>الحركة: <span class="sg-key" dir="ltr">WASD</span> أو الأسهم أو الفأرة</span>
+        <span>تيربو + بطة الخداع: <span class="sg-key" dir="ltr">Space</span> أو نقر</span>
+        <span>إيقاف: <span class="sg-key" dir="ltr">P</span></span>
+      </div>
+      <div class="er-howto" id="howtoDuo" hidden>
+        <span>لاعب 1: <span class="sg-key" dir="ltr">WASD</span> + <span class="sg-key" dir="ltr">Space</span></span>
+        <span>لاعب 2: <span class="sg-key" dir="ltr">←↑↓→</span> + <span class="sg-key" dir="ltr">Enter</span></span>
+        <span>إيقاف: <span class="sg-key" dir="ltr">P</span></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Costume Barn Shop -->
+  <section id="scrShop" class="er-screen" hidden>
+    <div class="er-shop-card sg-panel">
+      <div class="er-top-row">
+        <h2 class="sg-title er-modal-title">خزانة الأبطال</h2>
+        <span class="er-wallet">رصيدك: 🪙 <b id="shopCoins">0</b></span>
+      </div>
+      <p class="er-tagline">افقس البيض واجمع العملات الذهبية لارتداء أروع الأزياء الخارقة!</p>
+      <div class="er-skins" id="skinGrid"></div>
+      <div class="er-actions">
+        <button type="button" id="btnShopBack" class="sg-btn secondary">رجوع للقائمة</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Pause Overlay -->
+  <section id="scrPause" class="er-screen" hidden>
+    <div class="er-modal sg-panel">
+      <h2 class="sg-title er-modal-title">استراحة</h2>
+      <p class="er-tagline" id="pauseSub">خذ نفساً واستعد لإكمال السلسلة!</p>
+      <div class="er-stack">
+        <button type="button" id="btnResume" class="sg-btn good">متابعة اللعب</button>
+        <button type="button" id="btnRestart" class="sg-btn">إعادة المرحلة</button>
+        <button type="button" id="btnMenu" class="sg-btn secondary">القائمة الرئيسية</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Result Overlay -->
+  <section id="scrResult" class="er-screen" hidden>
+    <div class="er-modal sg-panel">
+      <div class="er-badge" id="resBadge">نتيجة الجولة</div>
+      <h2 class="sg-title er-modal-title" id="resTitle">فقس خارق!</h2>
+      <div class="er-stars" id="resStars">★ ★ ★</div>
+      <p class="er-res-stats" id="resStats"></p>
+      <div class="er-actions">
+        <button type="button" id="btnNext" class="sg-btn good">المرحلة التالية</button>
+        <button type="button" id="btnAgain" class="sg-btn">العب مجدداً</button>
+        <button type="button" id="btnResShop" class="sg-btn secondary">خزانة الأبطال</button>
+        <button type="button" id="btnResMenu" class="sg-btn secondary">القائمة</button>
+      </div>
+    </div>
+  </section>
 </div>
-<div id="live" class="sr" aria-live="polite"></div>
 
 <script src="../../shared/kit.js"></script>
+<script src="../../shared/artkit.js"></script>
 <script src="../../shared/juice.js"></script>
-<script src="levels.js"></script>
 <script src="engine.js"></script>
-<script src="art.js"></script>
 <script src="game.js"></script>
 </body>
 </html>

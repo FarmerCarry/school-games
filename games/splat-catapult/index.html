@@ -10,160 +10,172 @@
 </head>
 <body>
 <svg class="defs" aria-hidden="true" focusable="false" width="0" height="0">
-  <defs>
-    <radialGradient id="g-balloon" cx=".36" cy=".32">
-      <stop offset="0" stop-color="#fff"/>
-      <stop offset=".35" stop-color="#ff7ab6"/>
-      <stop offset="1" stop-color="#e11d74"/>
-    </radialGradient>
-    <radialGradient id="g-berry" cx=".36" cy=".32">
-      <stop offset="0" stop-color="#fff"/>
-      <stop offset=".4" stop-color="#58dcff"/>
-      <stop offset="1" stop-color="#0284c7"/>
-    </radialGradient>
-  </defs>
   <symbol id="i-play" viewBox="0 0 64 64"><path d="M22 11 Q18 9 18 14 L18 50 Q18 55 22 53 L52 35 Q56 32 52 29 Z"/></symbol>
   <symbol id="i-pause" viewBox="0 0 64 64"><rect x="15" y="12" width="12" height="40" rx="5"/><rect x="37" y="12" width="12" height="40" rx="5"/></symbol>
   <symbol id="i-again" viewBox="0 0 64 64"><path d="M50 30 A19 19 0 1 1 41 15" fill="none" stroke="currentColor" stroke-width="9" stroke-linecap="round"/><path d="M33 4 L52 13 L37 27 Z"/></symbol>
-  <symbol id="i-levels" viewBox="0 0 64 64"><rect x="6" y="10" width="15" height="15" rx="4"/><rect x="25" y="10" width="15" height="15" rx="4"/><rect x="44" y="10" width="15" height="15" rx="4"/><rect x="6" y="36" width="15" height="15" rx="4"/><rect x="25" y="36" width="15" height="15" rx="4"/><rect x="44" y="36" width="15" height="15" rx="4" opacity=".45"/></symbol>
+  <symbol id="i-levels" viewBox="0 0 64 64"><rect x="7" y="10" width="14" height="14" rx="4"/><rect x="25" y="10" width="14" height="14" rx="4"/><rect x="43" y="10" width="14" height="14" rx="4"/><rect x="7" y="36" width="14" height="14" rx="4"/><rect x="25" y="36" width="14" height="14" rx="4"/><rect x="43" y="36" width="14" height="14" rx="4"/></symbol>
   <symbol id="i-home" viewBox="0 0 64 64"><path d="M8 32 L32 10 L56 32 L49 32 L49 54 L37 54 L37 40 L27 40 L27 54 L15 54 L15 32 Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></symbol>
   <symbol id="i-star" viewBox="0 0 64 64"><path d="M32 5 L39 23.3 L58.6 24.4 L43.4 36.7 L48.5 55.6 L32 45 L15.5 55.6 L20.6 36.7 L5.4 24.4 L25 23.3 Z" stroke-linejoin="round"/></symbol>
-  <symbol id="i-lock" viewBox="0 0 64 64"><path d="M20 28 L20 20 A12 12 0 0 1 44 20 L44 28" fill="none" stroke="currentColor" stroke-width="7"/><rect x="12" y="28" width="40" height="30" rx="7"/></symbol>
-  <symbol id="i-check" viewBox="0 0 64 64"><path d="M12 34 L26 48 L52 18" fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/></symbol>
-  <symbol id="i-palette" viewBox="0 0 64 64"><path d="M32 6 C12 6 4 22 6 34 C8 46 18 56 30 56 C36 56 36 50 33 47 C30 44 32 40 37 40 L46 40 C54 40 59 34 58 26 C56 14 46 6 32 6 Z" fill="#fff" stroke="#18163a" stroke-width="4"/><circle cx="20" cy="30" r="5" fill="#ff4d8d"/><circle cx="26" cy="18" r="5" fill="#ffd23f"/><circle cx="40" cy="16" r="5" fill="#24c8ff"/><circle cx="49" cy="27" r="5" fill="#3ddc84"/></symbol>
-  <symbol id="i-duel" viewBox="0 0 64 64">
-    <path d="M18 54 V34 M18 35 L9 18 M18 35 L27 18" fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M46 54 V34 M46 35 L37 18 M46 35 L55 18" fill="none" stroke="#ffd23f" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
-    <circle cx="27" cy="14" r="6" fill="#ff4d8d" stroke="#18163a" stroke-width="3"/>
-    <circle cx="37" cy="14" r="6" fill="#38bdf8" stroke="#18163a" stroke-width="3"/>
-  </symbol>
-  <symbol id="i-balloon" viewBox="0 0 64 64">
-    <circle cx="32" cy="29" r="20" fill="url(#g-balloon)" stroke="#18163a" stroke-width="4"/>
-    <path d="M29 49 L35 49 L38 56 L26 56 Z" fill="#ff4d8d" stroke="#18163a" stroke-width="3" stroke-linejoin="round"/>
-    <ellipse cx="25" cy="21" rx="5" ry="7" transform="rotate(-24 25 21)" fill="#fff" opacity=".65"/>
-  </symbol>
-  <symbol id="i-trophy" viewBox="0 0 64 64">
-    <path d="M18 12 H46 V28 C46 39 39 44 32 44 C25 44 18 39 18 28 Z" fill="#ffd23f" stroke="#18163a" stroke-width="4" stroke-linejoin="round"/>
-    <path d="M18 16 H10 C10 28 14 32 19 32 M46 16 H54 C54 28 50 32 45 32" fill="none" stroke="#ffd23f" stroke-width="5" stroke-linecap="round"/>
-    <rect x="27" y="44" width="10" height="9" fill="#f59e0b" stroke="#18163a" stroke-width="3"/>
-    <rect x="19" y="52" width="26" height="7" rx="3" fill="#ffd23f" stroke="#18163a" stroke-width="3.5"/>
-  </symbol>
+  <symbol id="i-swap" viewBox="0 0 64 64"><path d="M14 24 H48 L38 14 M50 40 H16 L26 50" fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-trophy" viewBox="0 0 64 64"><path d="M18 11 H46 V27 C46 38 39 43 32 43 C25 43 18 38 18 27 Z" fill="#ffd23f" stroke="#1b1640" stroke-width="4" stroke-linejoin="round"/><path d="M18 16 H10 C10 27 14 31 19 31 M46 16 H54 C54 27 50 31 45 31" fill="none" stroke="#ffd23f" stroke-width="5" stroke-linecap="round"/><rect x="27" y="43" width="10" height="9" fill="#f59e0b" stroke="#1b1640" stroke-width="3"/><rect x="19" y="51" width="26" height="7" rx="3" fill="#ffd23f" stroke="#1b1640" stroke-width="3.5"/></symbol>
+  <symbol id="i-duel" viewBox="0 0 64 64"><path d="M17 53 V33 M17 34 L9 18 M17 34 L25 18" fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/><path d="M47 53 V33 M47 34 L39 18 M47 34 L55 18" fill="none" stroke="#ffe033" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="26" cy="14" r="6" fill="#ff3877" stroke="#1b1640" stroke-width="3"/><circle cx="38" cy="14" r="6" fill="#00c8ff" stroke="#1b1640" stroke-width="3"/></symbol>
+  <symbol id="i-shop" viewBox="0 0 64 64"><path d="M32 7 C13 7 5 22 7 34 C9 46 19 56 30 56 C36 56 36 50 33 47 C30 44 32 40 37 40 H46 C54 40 59 34 57 26 C55 14 45 7 32 7 Z" fill="#fff" stroke="#1b1640" stroke-width="4"/><circle cx="20" cy="30" r="5" fill="#ff3877"/><circle cx="26" cy="18" r="5" fill="#ffe033"/><circle cx="40" cy="16" r="5" fill="#00c8ff"/><circle cx="48" cy="27" r="5" fill="#34d85c"/></symbol>
 </svg>
 
 <canvas id="game" tabindex="0" aria-label="مقلاع الألوان"></canvas>
 
 <div id="ui">
   <div id="hud" hidden>
-    <button type="button" id="btnPause" class="sc-btn sc-round" aria-label="استراحة" title="استراحة (P)"><svg aria-hidden="true"><use href="#i-pause"/></svg></button>
+    <button type="button" id="btnPause" class="sc-btn sc-round" aria-label="استراحة" title="استراحة">
+      <svg aria-hidden="true"><use href="#i-pause"/></svg>
+      <span class="sg-key mini-key" dir="ltr" aria-hidden="true">P</span>
+    </button>
+    <button type="button" id="btnSwap" class="sc-btn hud-swap" aria-label="تبديل القذيفة" title="تبديل القذيفة">
+      <svg aria-hidden="true"><use href="#i-swap"/></svg>
+      <span>تبديل</span>
+      <span class="sg-key mini-key" dir="ltr" aria-hidden="true">C</span>
+    </button>
   </div>
 
   <section id="scrTitle" class="screen" aria-label="مقلاع الألوان">
-    <div class="chips">
-      <div class="chip" id="titleStars" aria-label="النجوم"><svg aria-hidden="true"><use href="#i-star"/></svg><b>0/48</b></div>
-      <div class="chip" id="titleCoins" aria-label="العملات"><i class="coin"></i><b>0</b></div>
-    </div>
-    <h1 class="logo">مقلاع الألوان</h1>
-
-    <div class="howto" aria-label="طريقة اللعب">
-      <figure class="card">
-        <svg viewBox="0 0 210 124" aria-hidden="true">
-          <path d="M84 112 V72 M84 74 L68 42 M84 74 L100 42" fill="none" stroke="#c97a3d" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M68 44 L36 74 L100 44" fill="none" stroke="#ff4d8d" stroke-width="5" stroke-linecap="round"/>
-          <circle cx="36" cy="74" r="17" fill="url(#g-balloon)" stroke="#18163a" stroke-width="4"/>
-          <path d="M96 42 Q142 12 186 44" fill="none" stroke="#ffd23f" stroke-width="5" stroke-dasharray="3 11" stroke-linecap="round"/>
-          <path d="M56 96 L24 96 M34 87 L22 96 L34 105" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-        <figcaption>اسحب وأطلِق</figcaption>
-      </figure>
-      <figure class="card">
-        <svg viewBox="0 0 210 124" aria-hidden="true">
-          <path d="M22 86 Q66 48 96 58" fill="none" stroke="#fff" stroke-opacity=".55" stroke-width="5" stroke-dasharray="4 9" stroke-linecap="round"/>
-          <circle cx="96" cy="58" r="22" fill="#ffd23f" opacity=".35"/>
-          <path d="M104 52 L156 26 M106 58 L164 58 M104 64 L156 90" fill="none" stroke="#58dcff" stroke-width="5" stroke-linecap="round"/>
-          <circle cx="164" cy="24" r="13" fill="url(#g-berry)" stroke="#18163a" stroke-width="3.5"/>
-          <circle cx="172" cy="58" r="13" fill="url(#g-berry)" stroke="#18163a" stroke-width="3.5"/>
-          <circle cx="164" cy="92" r="13" fill="url(#g-berry)" stroke="#18163a" stroke-width="3.5"/>
-          <rect x="28" y="84" width="66" height="28" rx="9" fill="#fff" stroke="#18163a" stroke-width="3.5"/>
-          <text x="61" y="103" text-anchor="middle" font-size="16" font-weight="700" fill="#18163a">Space</text>
-        </svg>
-        <figcaption>قوّة بالجو!</figcaption>
-      </figure>
-      <figure class="card">
-        <svg viewBox="0 0 210 124" aria-hidden="true">
-          <circle cx="106" cy="64" r="44" fill="#ff4d8d" opacity=".28"/>
-          <circle cx="68" cy="42" r="11" fill="#ffd23f"/><circle cx="148" cy="38" r="12" fill="#3ddc84"/>
-          <circle cx="62" cy="88" r="10" fill="#24c8ff"/><circle cx="150" cy="88" r="11" fill="#a855f7"/>
-          <rect x="64" y="92" width="84" height="16" rx="5" fill="#d88c46" stroke="#6e3b14" stroke-width="3.5"/>
-          <circle cx="106" cy="62" r="25" fill="#9ee8ff" stroke="#18163a" stroke-width="4"/>
-          <line x1="106" y1="37" x2="106" y2="23" stroke="#18163a" stroke-width="4" stroke-linecap="round"/>
-          <circle cx="106" cy="20" r="6" fill="#ffd23f" stroke="#18163a" stroke-width="3"/>
-          <path d="M92 56 L100 64 M100 56 L92 64 M112 56 L120 64 M120 56 L112 64" stroke="#18163a" stroke-width="4" stroke-linecap="round"/>
-          <circle cx="106" cy="74" r="6" fill="#18163a"/>
-        </svg>
-        <figcaption>لوِّن الحصون</figcaption>
-      </figure>
+    <div class="top-chips">
+      <div class="chip" id="titleStars" aria-label="النجوم"><svg aria-hidden="true"><use href="#i-star"/></svg><b dir="ltr">0/48</b></div>
+      <div class="chip" id="titleCoins" aria-label="العملات"><i class="coin"></i><b dir="ltr">0</b></div>
     </div>
 
-    <div class="title-actions">
-      <button type="button" id="btnLevels" class="sc-btn sc-side" aria-label="المراحل"><svg aria-hidden="true"><use href="#i-levels"/></svg><span>المراحل</span></button>
-      <button type="button" id="btnPlay" class="sc-btn sc-play ring" aria-label="العب" title="العب (Enter)"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
-      <button type="button" id="btnDuel" class="sc-btn sc-side duel" aria-label="مواجهة اثنين"><svg aria-hidden="true"><use href="#i-duel"/></svg><span>مواجهة اثنين</span></button>
-      <button type="button" id="btnShop" class="sc-btn sc-side shop" aria-label="المتجر"><svg aria-hidden="true"><use href="#i-palette"/></svg><span>المتجر</span></button>
+    <div class="hero-card">
+      <span class="hero-badge">مدفع الألوان وتدمير الأبراج!</span>
+      <h1 class="logo">مقلاع الألوان</h1>
+      <p class="hero-sub">اهدم حصون الغوبلن الرمادي وفجّر براميل الطلاء في تفاعلات متسلسلة!</p>
+
+      <div class="diff-bar" role="group" aria-label="مستوى التحدي">
+        <span class="diff-lbl">مستوى التحدي:</span>
+        <button type="button" class="sc-btn diff-pill" data-diff="easy" id="diffEasy">سهل</button>
+        <button type="button" class="sc-btn diff-pill active" data-diff="mid" id="diffMid">متوسط</button>
+        <button type="button" class="sc-btn diff-pill" data-diff="hero" id="diffHero">بطل</button>
+      </div>
+
+      <div class="title-actions">
+        <button type="button" id="btnPlay" class="sc-btn btn-main ring" aria-label="ابدأ اللعب">
+          <svg aria-hidden="true"><use href="#i-play"/></svg>
+          <span>ابدأ اللعب!</span>
+        </button>
+        <button type="button" id="btnDuel" class="sc-btn btn-duel" aria-label="مبارزة القلعتين">
+          <svg aria-hidden="true"><use href="#i-duel"/></svg>
+          <span>مبارزة القلعتين</span>
+        </button>
+      </div>
+
+      <div class="title-sub-actions">
+        <button type="button" id="btnLevels" class="sc-btn btn-sub" aria-label="العوالم والمراحل">
+          <svg aria-hidden="true"><use href="#i-levels"/></svg>
+          <span>العوالم الأربعة</span>
+        </button>
+        <button type="button" id="btnShop" class="sc-btn btn-sub shop" aria-label="ورشة المقلاع">
+          <svg aria-hidden="true"><use href="#i-shop"/></svg>
+          <span>ورشة المقلاع</span>
+        </button>
+      </div>
+
+      <div class="ctrl-strip" aria-label="طريقة التحكم">
+        <span>اسحب في أي مكان أو صوّب <span class="sg-key" dir="ltr">↑ ↓ ← →</span></span>
+        <span>إطلاق وقوة جوية خارقة <span class="sg-key" dir="ltr">Space</span></span>
+      </div>
     </div>
   </section>
 
-  <section id="scrMap" class="screen" aria-label="المراحل" hidden>
-    <button type="button" id="mapHome" class="sc-btn sc-round" aria-label="البداية" title="البداية (Esc)"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
-    <div class="chip" id="mapStars" aria-label="النجوم"><svg aria-hidden="true"><use href="#i-star"/></svg><b>0/48</b></div>
-    <div id="worlds"></div>
+  <section id="scrMap" class="screen dim" aria-label="العوالم والمراحل" hidden>
+    <div class="modal-card map-card">
+      <div class="modal-head">
+        <button type="button" id="mapHome" class="sc-btn sc-round" aria-label="الرئيسية"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
+        <h2>العوالم الأربعة المفتوحة</h2>
+        <div class="chip" id="mapStars" aria-label="النجوم"><svg aria-hidden="true"><use href="#i-star"/></svg><b dir="ltr">0/48</b></div>
+      </div>
+      <div id="worlds" class="worlds-grid"></div>
+    </div>
   </section>
 
   <section id="scrPause" class="screen dim" aria-label="استراحة" hidden>
-    <div class="card panel">
+    <div class="modal-card pause-card">
       <h2>استراحة</h2>
-      <button type="button" id="btnResume" class="sc-btn sc-go" aria-label="تابع" title="تابع (P)"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
-      <div class="row">
-        <button type="button" id="btnMap" class="sc-btn sc-round big" aria-label="المراحل"><svg aria-hidden="true"><use href="#i-levels"/></svg></button>
-        <button type="button" id="btnRestart" class="sc-btn sc-round big" aria-label="ابدأ من جديد" title="ابدأ من جديد (R)"><svg aria-hidden="true"><use href="#i-again"/></svg></button>
+      <button type="button" id="btnResume" class="sc-btn btn-main" aria-label="متابعة اللعب">
+        <svg aria-hidden="true"><use href="#i-play"/></svg>
+        <span>متابعة اللعب</span>
+      </button>
+      <div class="row-btns">
+        <button type="button" id="btnRestart" class="sc-btn btn-sub" aria-label="إعادة المرحلة">
+          <svg aria-hidden="true"><use href="#i-again"/></svg>
+          <span>إعادة</span>
+        </button>
+        <button type="button" id="btnMap" class="sc-btn btn-sub" aria-label="المراحل">
+          <svg aria-hidden="true"><use href="#i-levels"/></svg>
+          <span>المراحل</span>
+        </button>
+        <button type="button" id="btnPauseHome" class="sc-btn btn-sub" aria-label="الرئيسية">
+          <svg aria-hidden="true"><use href="#i-home"/></svg>
+          <span>الرئيسية</span>
+        </button>
       </div>
     </div>
   </section>
 
   <section id="scrResult" class="screen dim" aria-label="النتيجة" hidden>
-    <div class="card panel result">
-      <div class="ribbon" id="resBest" hidden>رقم جديد!</div>
-      <h2 id="resTitle">أحسنت!</h2>
-      <div class="stars3" id="resStars" aria-hidden="true"><svg><use href="#i-star"/></svg><svg><use href="#i-star"/></svg><svg><use href="#i-star"/></svg></div>
-      <div class="duel-badge" id="resDuel" hidden><svg aria-hidden="true"><use href="#i-trophy"/></svg><b id="resDuelText">فاز اللاعب 1!</b></div>
-      <div class="facts" id="resFacts">
-        <span class="fact" id="resScore"><svg aria-hidden="true"><use href="#i-trophy"/></svg><b dir="ltr">0</b></span>
-        <span class="fact" id="resLeft"><svg aria-hidden="true"><use href="#i-balloon"/></svg><b dir="ltr">0</b><svg class="ok" aria-hidden="true"><use href="#i-check"/></svg></span>
-        <span class="fact" id="resCoins"><i class="coin"></i><b dir="ltr">+0</b></span>
+    <div class="modal-card result-card">
+      <div class="ribbon" id="resBest" hidden>رقم قياسي جديد!</div>
+      <h2 id="resTitle">انتصار ملوّن!</h2>
+      <div class="stars3" id="resStars" aria-hidden="true">
+        <svg><use href="#i-star"/></svg>
+        <svg><use href="#i-star"/></svg>
+        <svg><use href="#i-star"/></svg>
       </div>
-      <div class="newworld" id="resWorld" hidden>عالم جديد!</div>
-      <div class="row">
-        <button type="button" id="resMap" class="sc-btn sc-round big" aria-label="المراحل" title="المراحل (Esc)"><svg aria-hidden="true"><use href="#i-levels"/></svg></button>
-        <button type="button" id="resNext" class="sc-btn sc-go ring" aria-label="المرحلة التالية" title="التالي (Enter)"><svg aria-hidden="true"><use href="#i-play"/></svg><span class="sg-key cap" aria-hidden="true">Enter</span></button>
-        <button type="button" id="resAgain" class="sc-btn sc-round big" aria-label="مرة أخرى" title="مرة أخرى (R)"><svg aria-hidden="true"><use href="#i-again"/></svg><span class="sg-key cap" aria-hidden="true">R</span></button>
+      <div class="duel-badge" id="resDuel" hidden>
+        <svg aria-hidden="true"><use href="#i-trophy"/></svg>
+        <b id="resDuelText">فاز اللاعب 1!</b>
+      </div>
+      <div class="facts" id="resFacts">
+        <div class="fact"><span>النقاط</span><b id="resScore" dir="ltr">0</b></div>
+        <div class="fact"><span>الرميات</span><b id="resShots" dir="ltr">0</b></div>
+        <div class="fact"><span>المكافأة</span><b id="resCoins" dir="ltr">+0</b></div>
+      </div>
+      <div class="row-btns">
+        <button type="button" id="resNext" class="sc-btn btn-main ring" aria-label="المرحلة التالية">
+          <svg aria-hidden="true"><use href="#i-play"/></svg>
+          <span>التالي</span>
+          <span class="sg-key mini-key" dir="ltr" aria-hidden="true">Enter</span>
+        </button>
+        <button type="button" id="resAgain" class="sc-btn btn-sub" aria-label="إعادة المرحلة">
+          <svg aria-hidden="true"><use href="#i-again"/></svg>
+          <span>إعادة</span>
+          <span class="sg-key mini-key" dir="ltr" aria-hidden="true">R</span>
+        </button>
+        <button type="button" id="resMap" class="sc-btn btn-sub" aria-label="المراحل">
+          <svg aria-hidden="true"><use href="#i-levels"/></svg>
+          <span>المراحل</span>
+        </button>
       </div>
     </div>
   </section>
 
-  <section id="scrShop" class="screen" aria-label="المتجر" hidden>
-    <button type="button" id="shopBack" class="sc-btn sc-round" aria-label="رجوع" title="رجوع (Esc)"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
-    <div class="chip" id="shopCoins" aria-label="العملات"><i class="coin"></i><b>0</b></div>
-    <h2 class="shop-title">ألوان البالون</h2>
-    <div class="shelf" id="shelfSkins"></div>
-    <h2 class="shop-title small">إطار المقلاع</h2>
-    <div class="shelf" id="shelfFrames"></div>
+  <section id="scrShop" class="screen dim" aria-label="ورشة المقلاع" hidden>
+    <div class="modal-card shop-card">
+      <div class="modal-head">
+        <button type="button" id="shopBack" class="sc-btn sc-round" aria-label="رجوع"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
+        <h2>ورشة المقلاع</h2>
+        <div class="chip" id="shopCoins" aria-label="العملات"><i class="coin"></i><b dir="ltr">0</b></div>
+      </div>
+      <h3 class="shelf-title">قاذفات المقلاع الخارقة</h3>
+      <div class="shelf" id="shelfLaunchers"></div>
+      <h3 class="shelf-title">سمات الطلاء النيون</h3>
+      <div class="shelf" id="shelfPalettes"></div>
+    </div>
   </section>
 </div>
 <div id="live" class="sr" aria-live="polite"></div>
 
 <script src="../../shared/kit.js"></script>
+<script src="../../shared/artkit.js"></script>
 <script src="../../shared/juice.js"></script>
 <script src="engine.js"></script>
-<script src="art.js"></script>
 <script src="game.js"></script>
 </body>
 </html>

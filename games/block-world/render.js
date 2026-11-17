@@ -1,447 +1,419 @@
-/* Block World — rendering: cached chunk canvases, parallax sky, smooth light overlay, sprites. */
+/* Block World — render: cached 16x16 chunks, zero-ImageData lightmap, sky, hero, animals & cave mobs. */
 (function () {
   'use strict';
   var BW = window.BW;
-  var B = BW.B, BLOCKS = BW.BLOCKS, TEX = BW.TEX, W = BW.W, H = BW.H;
-  var TS = 32, CS = 16, CPX = CS * 16; // tile px (logical), chunk tiles, chunk texture px
-  var CW = Math.ceil(W / CS), CH = Math.ceil(H / CS);
-  BW.TS = TS;
+  var B = BW.B, BLOCKS = BW.BLOCKS, TEX = BW.TEX, WALL_TEX = BW.WALL_TEX, TS = BW.TS;
+  var CS = 16, CPX = CS * TS; // 16x16 tiles = 256x256 px chunk
 
-  function Renderer(world) {
-    this.world = world;
-    this.cache = {};        // ci -> canvas
-    this.lru = [];
-    this.dirty = new Uint8Array(CW * CH).fill(1);
-    this.maxCache = 44;
-    this.pool = [];
-    this.doorOpen = null;   // fn(x,y) -> bool
-    var self = this;
-    world.onChange = function (x, y) { self.markTile(x, y); };
-    this.lm = document.createElement('canvas');
-    this.lmCtx = this.lm.getContext('2d');
-    this.lmData = null;
-  }
-  BW.Renderer = Renderer;
-  var R = Renderer.prototype;
-  R.setWorld = function (world) {
-    var self = this;
-    this.world = world;
-    world.onChange = function (x, y) { self.markTile(x, y); };
-    this.dirty.fill(1);
-  };
-  R.markTile = function (x, y) {
-    var cx = Math.floor(x / CS), cy = Math.floor(y / CS);
-    this.markChunk(cx, cy);
-    var lx = x % CS, ly = y % CS;
-    if (lx === 0) this.markChunk(cx - 1, cy);
-    if (lx === CS - 1) this.markChunk(cx + 1, cy);
-    if (ly === 0) this.markChunk(cx, cy - 1);
-    if (ly === CS - 1) this.markChunk(cx, cy + 1);
-  };
-  R.markChunk = function (cx, cy) { if (cx >= 0 && cy >= 0 && cx < CW && cy < CH) this.dirty[cy * CW + cx] = 1; };
-
-  R.getChunk = function (cx, cy, budget) {
-    var ci = cy * CW + cx, c = this.cache[ci];
-    if (c && !this.dirty[ci]) return c;
-    if (c && budget.n <= 0) return c; // stale but fine for a frame
-    if (!c) {
-      c = this.pool.pop() || (function () { var k = document.createElement('canvas'); k.width = k.height = CPX; return k; })();
-      this.cache[ci] = c;
-      this.lru.push(ci);
-      if (this.lru.length > this.maxCache) {
-        var old = this.lru.shift();
-        if (old !== ci && this.cache[old]) { this.pool.push(this.cache[old]); delete this.cache[old]; this.dirty[old] = 1; }
-      }
-    } else {
-      var li = this.lru.indexOf(ci); if (li >= 0) { this.lru.splice(li, 1); this.lru.push(ci); }
-    }
-    this.renderChunk(c, cx, cy);
-    this.dirty[ci] = 0;
-    budget.n--;
-    return c;
-  };
-
-  R.renderChunk = function (c, cx, cy) {
-    var g = c.getContext('2d'), wd = this.world, t = wd.tiles, wl = wd.walls;
-    g.imageSmoothingEnabled = false;
-    g.clearRect(0, 0, CPX, CPX);
-    var x0 = cx * CS, y0 = cy * CS;
-    for (var ly = 0; ly < CS; ly++) {
-      var y = y0 + ly; if (y >= H) break;
-      for (var lx = 0; lx < CS; lx++) {
-        var x = x0 + lx; if (x >= W) break;
-        var i = y * W + x, id = t[i], d = BLOCKS[id], wid = wl[i], px = lx * 16, py = ly * 16;
-        if (wid && !(d.opaque && d.solid)) {
-          g.drawImage(BW.WALL_TEX[wid], px, py);
-          // soft occlusion from neighbouring solid tiles
-          g.fillStyle = 'rgba(0,0,0,0.28)';
-          if (solidOp(wd, x, y - 1)) g.fillRect(px, py, 16, 3);
-          if (solidOp(wd, x - 1, y)) g.fillRect(px, py, 3, 16);
-          if (solidOp(wd, x + 1, y)) g.fillRect(px + 13, py, 3, 16);
-        }
-        if (!id) continue;
-        if (id === B.WATER) {
-          var above = wd.get(x, y - 1);
-          if (above !== B.WATER) {
-            g.fillStyle = 'rgba(48,130,230,0.62)'; g.fillRect(px, py + 3, 16, 13);
-            g.fillStyle = 'rgba(190,235,255,0.8)'; g.fillRect(px, py + 3, 16, 1);
-            g.fillStyle = 'rgba(120,190,255,0.5)'; g.fillRect(px, py + 4, 16, 1);
-          } else g.drawImage(TEX[id], px, py);
-          continue;
-        }
-        if ((id === B.DOOR_B || id === B.DOOR_T) && this.doorOpen && this.doorOpen(x, id === B.DOOR_B ? y : y + 1)) {
-          g.fillStyle = '#6a4526'; g.fillRect(px + 1, py, 3, 16);
-          g.fillStyle = '#b98549'; g.fillRect(px + 2, py, 2, 16);
-          continue;
-        }
-        g.drawImage(TEX[id], px, py);
-        if (id === B.LEAVES || id === B.PINE_LEAVES) leafEdges(g, wd, x, y, px, py);
-        if (d.solid && d.opaque && !d.noEdge) {
-          g.fillStyle = 'rgba(0,0,0,0.35)';
-          if (!solidOp(wd, x, y - 1)) { if (id === B.GRASS || id === B.SNOW_GRASS) { g.fillStyle = 'rgba(255,255,255,0.22)'; g.fillRect(px, py, 16, 1); g.fillStyle = 'rgba(0,0,0,0.35)'; } else g.fillRect(px, py, 16, 1); }
-          if (!solidOp(wd, x, y + 1)) g.fillRect(px, py + 15, 16, 1);
-          if (!solidOp(wd, x - 1, y)) g.fillRect(px, py, 1, 16);
-          if (!solidOp(wd, x + 1, y)) g.fillRect(px + 15, py, 1, 16);
-        }
-      }
-    }
-  };
-  function isLeafy(id) { return id === B.LEAVES || id === B.PINE_LEAVES || id === B.TRUNK || (BLOCKS[id].solid && BLOCKS[id].opaque); }
-  // Bumpy, rounded canopy edges where leaves meet open air.
-  function leafEdges(g, wd, x, y, px, py) {
-    var up = !isLeafy(wd.get(x, y - 1)), dn = !isLeafy(wd.get(x, y + 1)), lf = !isLeafy(wd.get(x - 1, y)), rt = !isLeafy(wd.get(x + 1, y));
-    var h = (x * 73856093 ^ y * 19349663) >>> 0;
-    for (var k = 0; k < 16; k++) {
-      var d = ((h >> (k % 13)) & 3) === 0 ? 2 : (((h >> (k % 11)) & 1) ? 1 : 0);
-      if (up && d) g.clearRect(px + k, py, 1, d);
-      if (dn && d) g.clearRect(px + k, py + 16 - d, 1, d);
-      if (lf && d) g.clearRect(px, py + k, d, 1);
-      if (rt && d) g.clearRect(px + 16 - d, py + k, d, 1);
-    }
-    var c = [[up && lf, 0, 0], [up && rt, 12, 0], [dn && lf, 0, 12], [dn && rt, 12, 12]];
-    for (var i = 0; i < 4; i++) if (c[i][0]) {
-      var ox = c[i][1], oy = c[i][2], fx = ox === 0, fy = oy === 0;
-      for (var yy = 0; yy < 4; yy++) for (var xx = 0; xx < 4; xx++) {
-        var dx = fx ? xx : 3 - xx, dy = fy ? yy : 3 - yy;
-        if (dx + dy < 4) g.clearRect(px + ox + xx, py + oy + yy, 1, 1);
-      }
-    }
-  }
-  function solidOp(wd, x, y) {
-    if (x < 0 || x >= W || y < 0 || y >= H) return true;
-    var d = BLOCKS[wd.tiles[y * W + x]]; return d.solid && d.opaque;
+  function lerp(a, b, t) { return a + (b - a) * t; }
+  function lerpRGB(c1, c2, t) {
+    return 'rgb(' + Math.round(lerp(c1[0], c2[0], t)) + ',' + Math.round(lerp(c1[1], c2[1], t)) + ',' + Math.round(lerp(c1[2], c2[2], t)) + ')';
   }
 
-  // Draw visible chunks directly in device pixels (no seams).
-  R.drawChunks = function (ctx, camX, camY, vw, vh, S, budget) {
-    var x0 = Math.floor(camX / CS), x1 = Math.floor((camX + vw) / CS), y0 = Math.floor(camY / CS), y1 = Math.floor((camY + vh) / CS);
-    ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.imageSmoothingEnabled = false;
-    var cpx = CS * TS * S, ox = camX * TS * S, oy = camY * TS * S;
-    for (var cy = Math.max(0, y0); cy <= Math.min(CH - 1, y1); cy++) {
-      for (var cx = Math.max(0, x0); cx <= Math.min(CW - 1, x1); cx++) {
-        var c = this.getChunk(cx, cy, budget);
-        var dx0 = Math.round(cx * cpx - ox), dx1 = Math.round((cx + 1) * cpx - ox);
-        var dy0 = Math.round(cy * cpx - oy), dy1 = Math.round((cy + 1) * cpx - oy);
-        ctx.drawImage(c, dx0, dy0, dx1 - dx0, dy1 - dy0);
-      }
-    }
-    ctx.restore();
-  };
-  // Pre-render chunks around a point (after loading) so the first frames are smooth.
-  R.warm = function (camX, camY, vw, vh) {
-    var budget = { n: 999 };
-    var x0 = Math.floor(camX / CS), x1 = Math.floor((camX + vw) / CS), y0 = Math.floor(camY / CS), y1 = Math.floor((camY + vh) / CS);
-    for (var cy = Math.max(0, y0); cy <= Math.min(CH - 1, y1); cy++) for (var cx = Math.max(0, x0); cx <= Math.min(CW - 1, x1); cx++) this.getChunk(cx, cy, budget);
-  };
-
-  // ----------------------------------------------------------- light map
-  // Returns nothing; draws a smooth darkness/tint overlay over what is already on ctx (source-atop).
-  R.drawLight = function (ctx, camX, camY, vw, vh, env, S) {
-    var wd = this.world, x0 = Math.floor(camX) - 1, y0 = Math.floor(camY) - 1;
-    var nw = Math.ceil(vw) + 3, nh = Math.ceil(vh) + 3;
-    if (this.lm.width !== nw || this.lm.height !== nh) { this.lm.width = nw; this.lm.height = nh; this.lmData = this.lmCtx.createImageData(nw, nh); }
-    var data = this.lmData.data, sky = wd.sky, blk = wd.blk;
-    var day = env.day, dc = env.darkCol, tc = env.tintCol, ta = env.tintA, amb = env.ambient;
-    var pxC = env.px, pyC = env.py, pr = env.pglow;
-    for (var ly = 0; ly < nh; ly++) {
-      var y = y0 + ly;
-      for (var lx = 0; lx < nw; lx++) {
-        var x = x0 + lx, o = (ly * nw + lx) * 4, s, b;
-        if (x < 0 || x >= W || y >= H) { s = 0; b = 0; }
-        else if (y < 0) { s = 15; b = 0; }
-        else { var i = y * W + x; s = sky[i]; b = blk[i]; }
-        var sl = (s / 15) * day, bl = b / 15;
-        bl = bl * bl * 0.35 + bl * 0.65;
-        var dx = x + 0.5 - pxC, dy = y + 0.5 - pyC, pg = pr * (1 - Math.sqrt(dx * dx + dy * dy) / 5.5);
-        var light = sl > bl ? sl : bl;
-        if (pg > light) light = pg;
-        if (amb > light) light = amb;
-        light = Math.sqrt(light) * 0.55 + light * 0.45;
-        var dark = 1 - light;
-        var r, g, bb, a;
-        if (bl > sl && bl > 0.25) {
-          // warm torch light
-          var k = Math.min(1, dark * 1.8);
-          r = 255 * (1 - k) + 12 * k; g = 150 * (1 - k) + 8 * k; bb = 50 * (1 - k) + 4 * k;
-          a = Math.max(dark, 0.13 * bl);
-        } else if (dark >= ta * (s / 15)) { r = dc[0]; g = dc[1]; bb = dc[2]; a = dark; }
-        else { r = tc[0]; g = tc[1]; bb = tc[2]; a = ta * (s / 15); }
-        data[o] = r; data[o + 1] = g; data[o + 2] = bb; data[o + 3] = a * 255;
-      }
-    }
-    this.lmCtx.putImageData(this.lmData, 0, 0);
-    ctx.save();
-    ctx.globalCompositeOperation = 'source-atop';
-    ctx.imageSmoothingEnabled = true;
-    ctx.drawImage(this.lm, (x0 - camX) * TS, (y0 - camY) * TS, nw * TS, nh * TS);
-    ctx.restore();
-  };
-
-  // ---------------------------------------------------------------- sky
-  var KEYS = [
-    // tod, top, bottom
-    [0.00, [74, 150, 245], [190, 232, 255]],
-    [0.44, [74, 150, 245], [190, 232, 255]],
-    [0.52, [72, 84, 176], [255, 150, 96]],
-    [0.57, [36, 38, 100], [214, 96, 110]],
-    [0.63, [10, 16, 48], [30, 40, 88]],
-    [0.90, [10, 16, 48], [30, 40, 88]],
-    [0.95, [90, 110, 200], [255, 180, 150]],
-    [1.00, [74, 150, 245], [190, 232, 255]]
-  ];
-  function lerpC(a, b, t) { return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]; }
-  function rgb(c, a) { return a == null ? 'rgb(' + (c[0] | 0) + ',' + (c[1] | 0) + ',' + (c[2] | 0) + ')' : 'rgba(' + (c[0] | 0) + ',' + (c[1] | 0) + ',' + (c[2] | 0) + ',' + a + ')'; }
-  BW.rgb = rgb; BW.lerpC = lerpC;
-  BW.skyAt = function (tod) {
-    for (var i = 0; i < KEYS.length - 1; i++) {
-      if (tod >= KEYS[i][0] && tod <= KEYS[i + 1][0]) {
-        var t = (tod - KEYS[i][0]) / (KEYS[i + 1][0] - KEYS[i][0]);
-        return { top: lerpC(KEYS[i][1], KEYS[i + 1][1], t), bot: lerpC(KEYS[i][2], KEYS[i + 1][2], t) };
-      }
-    }
-    return { top: KEYS[0][1], bot: KEYS[0][2] };
-  };
-  // Environment light values for a time of day.
+  // Day/night atmosphere curve (tod in 0..1)
   BW.envAt = function (tod) {
-    var day;
-    if (tod < 0.47) day = 1;
-    else if (tod < 0.62) day = 1 - (tod - 0.47) / 0.15 * 0.78;
-    else if (tod < 0.9) day = 0.22;
-    else day = 0.22 + (tod - 0.9) / 0.1 * 0.78;
-    var sunset = 0;
-    if (tod > 0.45 && tod < 0.62) sunset = Math.sin((tod - 0.45) / 0.17 * Math.PI);
-    if (tod > 0.9) sunset = Math.sin((tod - 0.9) / 0.1 * Math.PI) * 0.7;
-    var night = 1 - (day - 0.22) / 0.78;
+    tod = ((tod % 1) + 1) % 1;
+    var sun = 1, dusk = 0;
+    if (tod < 0.48) { sun = 1; dusk = 0; }
+    else if (tod < 0.60) { var u = (tod - 0.48) / 0.12; sun = 1 - u * 0.82; dusk = Math.sin(u * Math.PI); }
+    else if (tod < 0.86) { sun = 0.18; dusk = 0; }
+    else { var u2 = (tod - 0.86) / 0.14; sun = 0.18 + u2 * 0.82; dusk = Math.sin(u2 * Math.PI) * 0.85; }
+    var night = 1 - (sun - 0.18) / 0.82;
+    var dayTop = [74, 168, 255], dayBot = [190, 236, 255];
+    var dskTop = [64, 44, 118], dskBot = [255, 138, 76];
+    var ngtTop = [11, 14, 38], ngtBot = [28, 36, 78];
+    var top = [lerp(dayTop[0], ngtTop[0], night), lerp(dayTop[1], ngtTop[1], night), lerp(dayTop[2], ngtTop[2], night)];
+    var bot = [lerp(dayBot[0], ngtBot[0], night), lerp(dayBot[1], ngtBot[1], night), lerp(dayBot[2], ngtBot[2], night)];
+    if (dusk > 0.01) {
+      top = [lerp(top[0], dskTop[0], dusk), lerp(top[1], dskTop[1], dusk), lerp(top[2], dskTop[2], dusk)];
+      bot = [lerp(bot[0], dskBot[0], dusk), lerp(bot[1], dskBot[1], dusk), lerp(bot[2], dskBot[2], dusk)];
+    }
     return {
-      day: day, night: night, sunset: sunset,
-      darkCol: lerpC([6, 4, 20], [8, 14, 48], night),
-      tintCol: [255, 110, 60], tintA: 0.2 * sunset
+      sun: sun, night: night, dusk: dusk,
+      skyTop: lerpRGB(top, top, 0),
+      skyBot: lerpRGB(bot, bot, 0)
     };
   };
 
-  // Pre-rendered pieces
-  function mkCanvas(w, h) { var c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
-  var clouds = [];
-  (function () {
-    var rnd = BW.mulberry(77);
-    for (var k = 0; k < 5; k++) {
-      var c = mkCanvas(260, 110), g = c.getContext('2d');
-      var puffs = 5 + Math.floor(rnd() * 4);
-      var pts = [];
-      for (var i = 0; i < puffs; i++) pts.push([40 + i * (170 / puffs) + rnd() * 20, 70 - Math.sin(i / (puffs - 1) * Math.PI) * 25 - rnd() * 8, 22 + rnd() * 18 + Math.sin(i / (puffs - 1) * Math.PI) * 10]);
-      g.fillStyle = '#c8d8ee';
-      pts.forEach(function (p) { g.beginPath(); g.arc(p[0], p[1] + 6, p[2], 0, Math.PI * 2); g.fill(); });
-      g.fillStyle = '#ffffff';
-      pts.forEach(function (p) { g.beginPath(); g.arc(p[0], p[1], p[2], 0, Math.PI * 2); g.fill(); });
-      g.fillRect(40, 70, 170, 22);
-      g.fillStyle = '#c8d8ee'; g.fillRect(30, 88, 190, 8);
-      g.clearRect(0, 96, 260, 20);
-      clouds.push(c);
-    }
-  })();
-  var stars = [];
-  (function () { var rnd = BW.mulberry(99); for (var i = 0; i < 140; i++) stars.push([rnd() * 1280, rnd() * 520, rnd() * 1.8 + 0.6, rnd() * 6]); })();
-  function ridge(seed, n, amp, freq) {
-    var pts = [], rnd = BW.mulberry(seed);
-    var ph = [rnd() * 10, rnd() * 10, rnd() * 10];
-    for (var i = 0; i <= n; i++) {
-      var x = i / n;
-      pts.push(amp * (0.5 + 0.3 * Math.sin(x * freq * 6.28 + ph[0]) + 0.15 * Math.sin(x * freq * 15 + ph[1]) + 0.05 * Math.sin(x * freq * 40 + ph[2])));
-    }
-    return pts;
+  // Pre-baked radial glow sprites (bounded static canvases, zero per-frame allocations)
+  function bakeRadial(size, stops) {
+    var c = document.createElement('canvas');
+    c.width = c.height = size;
+    var g = c.getContext('2d'), r = size / 2;
+    var grd = g.createRadialGradient(r, r, 0, r, r, r);
+    for (var i = 0; i < stops.length; i++) grd.addColorStop(stops[i][0], stops[i][1]);
+    g.fillStyle = grd;
+    g.fillRect(0, 0, size, size);
+    return c;
   }
-  var farRidge = ridge(5, 200, 190, 3), nearRidge = ridge(9, 200, 120, 5);
-  var glowWarm = (function () { var c = mkCanvas(128, 128), g = c.getContext('2d'); var gr = g.createRadialGradient(64, 64, 0, 64, 64, 64); gr.addColorStop(0, 'rgba(255,190,90,0.9)'); gr.addColorStop(0.4, 'rgba(255,140,40,0.35)'); gr.addColorStop(1, 'rgba(255,120,20,0)'); g.fillStyle = gr; g.fillRect(0, 0, 128, 128); return c; })();
-  var glowCyan = (function () { var c = mkCanvas(128, 128), g = c.getContext('2d'); var gr = g.createRadialGradient(64, 64, 0, 64, 64, 64); gr.addColorStop(0, 'rgba(120,255,255,0.8)'); gr.addColorStop(0.4, 'rgba(60,220,255,0.3)'); gr.addColorStop(1, 'rgba(40,200,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 128, 128); return c; })();
-  BW.glowWarm = glowWarm; BW.glowCyan = glowCyan;
+  BW.GLOW_WARM = bakeRadial(64, [[0, 'rgba(255,214,90,0.55)'], [0.45, 'rgba(255,150,40,0.22)'], [1, 'rgba(255,120,20,0)']]);
+  BW.GLOW_CYAN = bakeRadial(64, [[0, 'rgba(80,250,245,0.50)'], [0.5, 'rgba(60,180,255,0.18)'], [1, 'rgba(40,120,255,0)']]);
+  BW.GLOW_RUBY = bakeRadial(64, [[0, 'rgba(255,60,120,0.55)'], [0.5, 'rgba(255,40,90,0.20)'], [1, 'rgba(255,20,60,0)']]);
+  var LIGHT_PUNCH = bakeRadial(64, [[0, 'rgba(0,0,0,0.95)'], [0.5, 'rgba(0,0,0,0.48)'], [1, 'rgba(0,0,0,0)']]);
 
-  // Paints the sky BEHIND whatever is already on ctx (destination-over), front-most layer first.
-  R.drawSky = function (ctx, camX, camY, vw, vh, tod, time) {
-    var sk = BW.skyAt(tod), env = BW.envAt(tod);
-    var VW = vw * TS, VH = vh * TS;
-    var hy = (58 - camY) * TS * 0.55 + VH * 0.3;
-    ctx.save();
-    ctx.globalCompositeOperation = 'destination-over';
-    // parallax ridges (near first)
-    var farCol = lerpC(lerpC(sk.bot, [120, 150, 200], 0.45), [20, 26, 60], env.night * 0.6);
-    var nearCol = lerpC(lerpC(sk.bot, [70, 140, 90], 0.65), [14, 26, 40], env.night * 0.7);
-    this.drawRidge(ctx, nearRidge, camX * TS * 0.2, hy + 70, VW, VH, rgb(nearCol), 1100);
-    this.drawRidge(ctx, farRidge, camX * TS * 0.08, hy - 10, VW, VH, rgb(farCol), 1400);
-    if (env.sunset > 0.02) { ctx.fillStyle = 'rgba(255,140,90,' + (env.sunset * 0.25) + ')'; ctx.fillRect(0, 0, VW, VH); }
-    // clouds
-    ctx.globalAlpha = 0.95 - env.night * 0.55;
-    for (var c = 8; c >= 0; c--) {
-      var img = clouds[c % clouds.length];
-      var span = VW + 400;
-      var cx = ((c * 347 + time * (6 + c % 3 * 3) - camX * TS * 0.18) % span + span) % span - 300;
-      var cy = 30 + (c * 71) % 150 - (camY - 50) * TS * 0.12;
-      var sc = 0.6 + (c % 4) * 0.18;
-      if (cy > VH || cy + 110 * sc < 0) continue;
-      ctx.drawImage(img, cx, cy, 260 * sc, 110 * sc);
+  // Precomputed destination-out alpha strings for quantized light levels 0..16
+  var PUNCH_ALPHA = [];
+  for (var qi = 0; qi <= 16; qi++) PUNCH_ALPHA[qi] = 'rgba(0,0,0,' + (qi / 16).toFixed(3) + ')';
+
+  function Renderer(world, openDoors) {
+    this.world = world;
+    this.openDoors = openDoors || {};
+    this.CW = Math.ceil(world.W / CS);
+    this.CH = Math.ceil(world.H / CS);
+    this.chunks = {};
+    this.lru = [];
+    this.maxCache = 44;
+    this.lightCv = document.createElement('canvas');
+    this.lightCtx = this.lightCv.getContext('2d');
+  }
+
+  Renderer.prototype.setOpenDoors = function (od) { this.openDoors = od || {}; };
+
+  Renderer.prototype.markTile = function (tx, ty) {
+    var cx = (tx / CS) | 0, cy = (ty / CS) | 0;
+    for (var dy = -1; dy <= 1; dy++) for (var dx = -1; dx <= 1; dx++) {
+      if (dx !== 0 && dy !== 0) continue;
+      if (dx === -1 && (tx % CS) !== 0) continue;
+      if (dx === 1 && (tx % CS) !== CS - 1) continue;
+      if (dy === -1 && (ty % CS) !== 0) continue;
+      if (dy === 1 && (ty % CS) !== CS - 1) continue;
+      var k = (cy + dy) * this.CW + (cx + dx);
+      if (this.chunks[k]) this.chunks[k].dirty = true;
     }
-    ctx.globalAlpha = 1;
-    // sun & moon on an arc
-    var mt = (tod - 0.56) / 0.44;
-    if (mt > 0 && mt < 1) { var ma = mt * Math.PI; this.drawMoon(ctx, VW * 0.5 - Math.cos(ma) * VW * 0.42, hy + 40 - Math.sin(ma) * (hy + 10) * 0.9); }
-    var sunA = (tod / 0.58) * Math.PI;
-    if (tod < 0.6) this.drawSun(ctx, VW * 0.5 - Math.cos(sunA) * VW * 0.42, hy + 40 - Math.sin(sunA) * (hy + 10) * 0.95, env);
-    // stars
-    if (env.night > 0.05) {
-      ctx.fillStyle = '#fff';
-      for (var i = 0; i < stars.length; i++) {
-        var st = stars[i];
-        ctx.globalAlpha = env.night * (0.6 + 0.4 * Math.sin(time * 2 + st[3]));
-        var sx = ((st[0] - camX * 2) % VW + VW) % VW, sy = st[1] - (camY - 40) * 1.5;
-        if (sy < hy + 40 && sy > -4) ctx.fillRect(sx, sy, st[2], st[2]);
+  };
+
+  Renderer.prototype.markAll = function () {
+    for (var k in this.chunks) if (this.chunks[k]) this.chunks[k].dirty = true;
+  };
+
+  Renderer.prototype.buildChunk = function (cx, cy) {
+    var k = cy * this.CW + cx, ent = this.chunks[k];
+    if (!ent) {
+      var cv;
+      if (this.lru.length >= this.maxCache) {
+        var oldKey = this.lru.shift();
+        var old = this.chunks[oldKey];
+        delete this.chunks[oldKey];
+        cv = old ? old.cv : document.createElement('canvas');
+      } else {
+        cv = document.createElement('canvas');
+        cv.width = cv.height = CPX;
+      }
+      ent = { cv: cv, ctx: cv.getContext('2d'), dirty: true };
+      ent.ctx.imageSmoothingEnabled = false;
+      this.chunks[k] = ent;
+    }
+    var idx = this.lru.indexOf(k);
+    if (idx >= 0) this.lru.splice(idx, 1);
+    this.lru.push(k);
+
+    var g = ent.ctx, wd = this.world, w = wd.W, h = wd.H;
+    var tiles = wd.tiles, walls = wd.walls, od = this.openDoors;
+    g.clearRect(0, 0, CPX, CPX);
+
+    var x0 = cx * CS, y0 = cy * CS;
+    var x1 = Math.min(w, x0 + CS), y1 = Math.min(h, y0 + CS);
+    for (var ty = y0; ty < y1; ty++) {
+      var py = (ty - y0) * TS, row = ty * w;
+      for (var tx = x0; tx < x1; tx++) {
+        var px = (tx - x0) * TS, ti = row + tx;
+        var id = tiles[ti], d = BLOCKS[id];
+        var wid = walls[ti];
+        if (wid && (!d || !d.opaque) && WALL_TEX[wid]) {
+          g.drawImage(WALL_TEX[wid], px, py);
+          if (ty > 0 && BLOCKS[tiles[ti - w]].solid) {
+            g.fillStyle = 'rgba(0,0,0,0.28)';
+            g.fillRect(px, py, TS, 3);
+          }
+        }
+        if (!id) continue;
+        if ((id === B.DOOR_B || id === B.DOOR_T)) {
+          var dk = tx + ',' + (id === B.DOOR_T ? ty + 1 : ty);
+          if (od[dk]) {
+            g.fillStyle = '#9a6b3b';
+            g.fillRect(px, py, 4, TS);
+            g.fillStyle = '#6e4720';
+            g.fillRect(px + 3, py, 1, TS);
+            continue;
+          }
+        }
+        var sp = TEX[id];
+        if (sp) g.drawImage(sp, px, py);
+        if (d && d.solid && !d.noEdge) {
+          if (ty > 0 && !BLOCKS[tiles[ti - w]].solid) {
+            g.fillStyle = 'rgba(255,255,255,0.13)';
+            g.fillRect(px, py, TS, 1);
+          }
+          if (ty < h - 1 && !BLOCKS[tiles[ti + w]].solid) {
+            g.fillStyle = 'rgba(0,0,0,0.22)';
+            g.fillRect(px, py + TS - 1, TS, 1);
+          }
+        }
+      }
+    }
+    ent.dirty = false;
+    return ent;
+  };
+
+  Renderer.prototype.warm = function (cx, cy, vw, vh) {
+    var c0 = Math.max(0, Math.floor(cx / CS)), c1 = Math.min(this.CW - 1, Math.floor((cx + vw) / CS));
+    var r0 = Math.max(0, Math.floor(cy / CS)), r1 = Math.min(this.CH - 1, Math.floor((cy + vh) / CS));
+    for (var r = r0; r <= r1; r++) for (var c = c0; c <= c1; c++) this.buildChunk(c, r);
+  };
+
+  Renderer.prototype.drawChunks = function (ctx, cx, cy, vw, vh, S, budget) {
+    ctx.setTransform(S, 0, 0, S, 0, 0);
+    ctx.imageSmoothingEnabled = false;
+    var c0 = Math.max(0, Math.floor(cx / CS)), c1 = Math.min(this.CW - 1, Math.floor((cx + vw) / CS));
+    var r0 = Math.max(0, Math.floor(cy / CS)), r1 = Math.min(this.CH - 1, Math.floor((cy + vh) / CS));
+    for (var r = r0; r <= r1; r++) {
+      for (var c = c0; c <= c1; c++) {
+        var k = r * this.CW + c, ent = this.chunks[k];
+        if (!ent) {
+          ent = this.buildChunk(c, r);
+          if (budget) budget.n--;
+        } else if (ent.dirty && (!budget || budget.n > 0)) {
+          this.buildChunk(c, r);
+          if (budget) budget.n--;
+        }
+        var dx = (c * CS - cx) * TS, dy = (r * CS - cy) * TS;
+        ctx.drawImage(ent.cv, dx, dy, CPX, CPX);
+      }
+    }
+  };
+
+  // Pure 2D canvas composited lightmap (span-batched destination-out punches)
+  Renderer.prototype.drawLight = function (ctx, cx, cy, vw, vh, env, S) {
+    var LP = 3; // 3px per tile on offscreen lightmap, hardware bilinear-upscaled
+    var tx0 = Math.floor(cx) - 1, ty0 = Math.floor(cy) - 1;
+    var cols = Math.ceil(vw) + 3, rows = Math.ceil(vh) + 3;
+    var lw = cols * LP, lh = rows * LP;
+    if (this.lightCv.width !== lw || this.lightCv.height !== lh) {
+      this.lightCv.width = lw;
+      this.lightCv.height = lh;
+    }
+    var g = this.lightCtx, wd = this.world, w = wd.W, h = wd.H;
+    var sky = wd.sky, blk = wd.blk, sun = env.sun, amb = env.ambient || 0.12;
+
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.globalCompositeOperation = 'source-over';
+    g.clearRect(0, 0, lw, lh);
+    g.fillStyle = 'rgba(7,9,26,0.92)';
+    g.fillRect(0, 0, lw, lh);
+
+    g.globalCompositeOperation = 'destination-out';
+
+    // Fast path: clear pure sky rows above highest terrain column in view in 1 rect!
+    var minSurf = h;
+    var cStart = Math.max(0, tx0), cEnd = Math.min(w - 1, tx0 + cols);
+    for (var sc = cStart; sc <= cEnd; sc++) if (wd.surf[sc] < minSurf) minSurf = wd.surf[sc];
+    var skyRows = Math.max(0, Math.min(rows, minSurf - ty0 - 1));
+    if (skyRows > 0) {
+      var skyQ = Math.min(16, Math.max(0, Math.round(Math.max(sun, amb) * 16)));
+      if (skyQ >= 16) g.clearRect(0, 0, lw, skyRows * LP);
+      else if (skyQ > 0) { g.fillStyle = PUNCH_ALPHA[skyQ]; g.fillRect(0, 0, lw, skyRows * LP); }
+    }
+
+    // Horizontal span batching for remaining rows
+    for (var r = skyRows; r < rows; r++) {
+      var ty = ty0 + r;
+      var py = r * LP;
+      if (ty < 0) {
+        var qTop = Math.min(16, Math.round(Math.max(sun, amb) * 16));
+        if (qTop > 0) { g.fillStyle = PUNCH_ALPHA[qTop]; g.fillRect(0, py, lw, LP); }
+        continue;
+      }
+      if (ty >= h) continue;
+      var rowOff = ty * w, spanStart = 0, curQ = -1;
+      for (var c = 0; c < cols; c++) {
+        var tx = tx0 + c, lv;
+        if (tx < 0 || tx >= w) lv = amb;
+        else {
+          var sLv = sky[rowOff + tx] * sun, bLv = blk[rowOff + tx];
+          lv = Math.max(amb, (sLv > bLv ? sLv : bLv) / 15);
+        }
+        var q = lv >= 0.99 ? 16 : (lv * 16 + 0.5) | 0;
+        if (q !== curQ) {
+          if (curQ > 0) {
+            g.fillStyle = PUNCH_ALPHA[curQ];
+            g.fillRect(spanStart * LP, py, (c - spanStart) * LP, LP);
+          }
+          curQ = q;
+          spanStart = c;
+        }
+      }
+      if (curQ > 0) {
+        g.fillStyle = PUNCH_ALPHA[curQ];
+        g.fillRect(spanStart * LP, py, (cols - spanStart) * LP, LP);
+      }
+    }
+
+    // Smooth radial punch around player & active TNT fuses
+    if (env.pglow > 0) {
+      var pr = (env.prad || 5.2) * LP;
+      var ppx = (env.px - tx0) * LP, ppy = (env.py - ty0) * LP;
+      g.globalAlpha = Math.min(1, env.pglow);
+      g.drawImage(LIGHT_PUNCH, ppx - pr, ppy - pr, pr * 2, pr * 2);
+      g.globalAlpha = 1;
+    }
+    if (env.fuses && env.fuses.length) {
+      for (var fi = 0; fi < env.fuses.length; fi++) {
+        var f = env.fuses[fi], fr = 6.5 * LP;
+        g.drawImage(LIGHT_PUNCH, (f.x + 0.5 - tx0) * LP - fr, (f.y + 0.5 - ty0) * LP - fr, fr * 2, fr * 2);
+      }
+    }
+
+    g.globalCompositeOperation = 'source-over';
+    ctx.save();
+    ctx.setTransform(S, 0, 0, S, 0, 0);
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(this.lightCv, (tx0 - cx) * TS, (ty0 - cy) * TS, cols * TS, rows * TS);
+    ctx.restore();
+  };
+
+  var fr = BW.fr;
+  Renderer.prototype.drawSky = function (ctx, cx, cy, vw, vh, tod, time) {
+    var W2 = vw * TS, H2 = vh * TS, env = BW.envAt(tod);
+    var grd = ctx.createLinearGradient(0, 0, 0, H2);
+    grd.addColorStop(0, env.skyTop); grd.addColorStop(1, env.skyBot);
+    fr(ctx, grd, 0, 0, W2, H2);
+
+    if (env.night > 0.2) {
+      ctx.globalAlpha = (env.night - 0.2) * 1.1;
+      ctx.fillStyle = '#fffbe8';
+      for (var si = 0; si < 38; si++) {
+        var sz = (si % 3 === 0) ? 3 : 2;
+        ctx.fillRect((si * 173 + 29) % 1260, (si * 97 + 13) % 340, sz, sz);
       }
       ctx.globalAlpha = 1;
     }
-    var gr = ctx.createLinearGradient(0, 0, 0, VH);
-    gr.addColorStop(0, rgb(sk.top)); gr.addColorStop(1, rgb(sk.bot));
-    ctx.fillStyle = gr; ctx.fillRect(0, 0, VW, VH);
-    ctx.restore();
-  };
-  R.drawRidge = function (ctx, pts, off, base, VW, VH, col, period) {
-    ctx.fillStyle = col;
-    ctx.beginPath();
-    ctx.moveTo(0, VH + 10);
-    var n = pts.length - 1;
-    for (var sx = -10; sx <= VW + 20; sx += 16) {
-      var u = (((sx + off) % period) + period) % period / period * n;
-      var i = Math.floor(u), f = u - i;
-      var v = pts[i] + (pts[Math.min(n, i + 1)] - pts[i]) * f;
-      ctx.lineTo(sx, base - v);
+
+    var ang = tod * Math.PI * 2, sunX = W2 * 0.5 - Math.cos(ang) * W2 * 0.38, sunY = H2 * 0.58 - Math.sin(ang) * H2 * 0.46;
+    if (sunY < H2 + 40) {
+      fr(ctx, 'rgba(255,230,110,0.25)', sunX - 30, sunY - 30, 60, 60);
+      fr(ctx, '#ffe45e', sunX - 18, sunY - 18, 36, 36);
+      fr(ctx, '#fff9c4', sunX - 12, sunY - 12, 24, 24);
     }
-    ctx.lineTo(VW + 20, VH + 10);
-    ctx.closePath();
-    ctx.fill();
-  };
-  R.drawSun = function (ctx, x, y, env) {
-    ctx.fillStyle = env.sunset > 0.3 ? '#ffd27a' : '#fff4a8';
-    ctx.fillRect(x - 22, y - 22, 44, 44);
-    ctx.fillStyle = env.sunset > 0.3 ? '#ffb347' : '#ffe45c';
-    ctx.fillRect(x - 30, y - 30, 60, 60);
-    ctx.globalAlpha = 0.55;
-    ctx.drawImage(glowWarm, x - 110, y - 110, 220, 220);
-    ctx.globalAlpha = 1;
-  };
-  R.drawMoon = function (ctx, x, y) {
-    ctx.fillStyle = '#c8d0ea'; ctx.fillRect(x - 12, y - 14, 12, 12); ctx.fillRect(x + 6, y + 4, 10, 10); ctx.fillRect(x - 16, y + 8, 7, 7);
-    ctx.fillStyle = '#eef2ff'; ctx.fillRect(x - 24, y - 24, 48, 48);
-    ctx.globalAlpha = 0.3; ctx.drawImage(glowCyan, x - 80, y - 80, 160, 160); ctx.globalAlpha = 1;
+    var moonX = W2 * 0.5 + Math.cos(ang) * W2 * 0.38, moonY = H2 * 0.58 + Math.sin(ang) * H2 * 0.46;
+    if (moonY < H2 + 40) {
+      fr(ctx, 'rgba(190,220,255,0.22)', moonX - 24, moonY - 24, 48, 48);
+      fr(ctx, '#eef6ff', moonX - 14, moonY - 14, 28, 28);
+      fr(ctx, '#c5d8f0', moonX - 6, moonY - 8, 6, 6, moonX + 3, moonY + 2, 5, 5);
+    }
+
+    var baseH = (BW.SEA - cy) * TS + 40;
+    ctx.fillStyle = env.night > 0.5 ? 'rgba(24,32,68,0.65)' : 'rgba(92,146,214,0.42)';
+    for (var mx = -1; mx < 16; mx++) {
+      var mh = 70 + ((mx * 37) & 63);
+      ctx.fillRect(mx * 110 - ((cx * 2.2) % 110), baseH - mh, 112, mh + 260);
+    }
+
+    ctx.fillStyle = env.night > 0.5 ? 'rgba(180,200,240,0.22)' : 'rgba(255,255,255,0.78)';
+    for (var ci = 0; ci < 7; ci++) {
+      var clx = (ci * 230 + time * 7 - cx * 4) % (W2 + 180);
+      if (clx < -160) clx += W2 + 180;
+      var cly = 42 + (ci % 3) * 38;
+      fr(ctx, null, clx, cly, 88, 18, clx + 16, cly - 12, 52, 12);
+    }
   };
 
-  // ------------------------------------------------------------ sprites
-  function rr(ctx, x, y, w, h, col) { ctx.fillStyle = col; ctx.fillRect(x, y, w, h); }
-  // Player: feet at (0,0), facing right; logical px. p: {walk, swing, look, skin, held, blink}
-  BW.drawPlayer = function (ctx, p) {
-    var s = p.skin;
-    var legA = Math.sin(p.walk) * 0.6 * p.walkAmt, armA = -Math.sin(p.walk) * 0.5 * p.walkAmt;
-    // back leg
-    ctx.save(); ctx.translate(-2, -22); ctx.rotate(-legA); rr(ctx, -4, 0, 8, 17, shadeHex(s.pants, 0.8)); rr(ctx, -4, 16, 9, 6, shadeHex(s.shoes, 0.8)); ctx.restore();
-    // back arm
-    ctx.save(); ctx.translate(-1, -40); ctx.rotate(-armA * 0.8); rr(ctx, -3, 0, 6, 16, shadeHex(s.shirt, 0.75)); rr(ctx, -3, 14, 6, 4, shadeHex(s.skin, 0.85)); ctx.restore();
-    // body
-    rr(ctx, -9, -42, 18, 21, s.shirt);
-    rr(ctx, -9, -42, 18, 3, shadeHex(s.shirt, 1.15));
-    rr(ctx, -9, -24, 18, 3, shadeHex(s.pants, 0.9));
-    if (s.gold) { rr(ctx, -2, -38, 4, 4, '#fff08a'); }
-    if (s.robot) { rr(ctx, -5, -37, 10, 6, '#39424e'); rr(ctx, -4, -36, 3, 2, '#ff5a5f'); rr(ctx, 0, -36, 3, 2, '#3ddc84'); }
-    // front leg
-    ctx.save(); ctx.translate(2, -22); ctx.rotate(legA); rr(ctx, -4, 0, 8, 17, s.pants); rr(ctx, -4, 16, 9, 6, s.shoes); ctx.restore();
-    // head
-    var hy = -62;
-    ctx.save(); ctx.translate(0, hy + 20); ctx.rotate(p.look * 0.15); ctx.translate(0, -20);
-    if (s.robot) {
-      rr(ctx, -10, 0, 20, 20, s.skin); rr(ctx, -10, 0, 20, 3, '#ffffff'); rr(ctx, -2, 7, 12, 7, '#1f2a3a'); rr(ctx, 1, 9, 3, 3, p.blink ? '#1f2a3a' : '#4ff0ff'); rr(ctx, 6, 9, 3, 3, p.blink ? '#1f2a3a' : '#4ff0ff');
-      rr(ctx, -1, -6, 2, 6, '#6b7888'); rr(ctx, -3, -9, 6, 4, '#ff5a5f');
-    } else {
-      rr(ctx, -10, 0, 20, 20, s.skin);
-      if (s.frog) {
-        rr(ctx, -11, -2, 22, 9, s.hair); rr(ctx, -9, -8, 8, 8, s.hair); rr(ctx, 2, -8, 8, 8, s.hair);
-        rr(ctx, -7, -6, 4, 4, '#fff'); rr(ctx, 4, -6, 4, 4, '#fff'); rr(ctx, -5, -5, 2, 2, '#1d2340'); rr(ctx, 6, -5, 2, 2, '#1d2340');
-      } else {
-        rr(ctx, -11, -2, 22, 7, s.hair); rr(ctx, -11, -2, 6, 13, s.hair); rr(ctx, 4, 4, 5, 2, s.hair);
+  BW.drawPlayer = function (ctx, o) {
+    var sk = o.skin || BW.SKINS[0], w = Math.sin(o.walk || 0) * (o.walkAmt || 0);
+    if (o.jet) {
+      fr(ctx, '#3a86ff', -7, -20, 3, 9); fr(ctx, '#00f5d4', -7, -17, 2, 4);
+      if (o.jetting) {
+        fr(ctx, '#ff6d00', -7, -10, 4, 7 + Math.sin((o.walk || 0) * 6) * 2);
+        fr(ctx, '#ffe66d', -6, -10, 2, 4);
       }
-      if (s.gold) { rr(ctx, -9, -8, 18, 6, '#ffd23a'); rr(ctx, -9, -11, 3, 4, '#ffd23a'); rr(ctx, -2, -12, 4, 5, '#ffd23a'); rr(ctx, 6, -11, 3, 4, '#ffd23a'); rr(ctx, -1, -7, 2, 2, '#ff5a5f'); }
-      // eye
-      if (p.blink) rr(ctx, 3, 10, 6, 2, '#1d2340');
-      else { rr(ctx, 3, 7, 6, 6, '#ffffff'); rr(ctx, 5 + (p.lookX || 0), 8 + (p.lookY || 0), 3, 4, '#1d2340'); }
-      rr(ctx, 1, 14, 5, 2, 'rgba(255,120,120,0.45)');
-      rr(ctx, 7, 16, 3, 1, 'rgba(90,40,30,0.6)');
     }
+    ctx.save(); ctx.translate(0, -10); ctx.rotate(-w * 0.65);
+    fr(ctx, BW.shade(sk.pants, 0.78), -3, 0, 5, 10);
+    if (o.jet) fr(ctx, '#00f5d4', -3, 7, 6, 3);
     ctx.restore();
-    // front arm + held item
-    ctx.save(); ctx.translate(1, -40); ctx.rotate(armA + p.swing);
-    if (p.held && TEX[p.held]) {
-      ctx.save(); ctx.translate(2, 16); ctx.rotate(-0.6);
-      ctx.drawImage(TEX[p.held], -4, -18, 20, 20);
+
+    ctx.save(); ctx.translate(0, -20); ctx.rotate(w * 0.55);
+    fr(ctx, BW.shade(sk.shirt, 0.8), -2, 0, 4, 9);
+    fr(ctx, BW.shade(sk.skin, 0.88), -2, 7, 4, 3);
+    ctx.restore();
+
+    fr(ctx, sk.shirt, -4, -21, 8, 11);
+    fr(ctx, 'rgba(255,255,255,0.18)', -4, -21, 8, 2);
+
+    ctx.save(); ctx.translate(0, -10); ctx.rotate(w * 0.65);
+    fr(ctx, sk.pants, -2, 0, 5, 10);
+    if (o.jet) { fr(ctx, '#3a86ff', -2, 6, 6, 4); fr(ctx, '#00f5d4', -2, 8, 6, 2); }
+    ctx.restore();
+
+    ctx.save(); ctx.translate(0, -21); ctx.rotate(o.look || 0);
+    fr(ctx, sk.skin, -5, -10, 10, 10);
+    fr(ctx, sk.hair, -5, -11, 10, 3, -5, -9, 3, 5);
+    if (sk.hat === 'crown') {
+      fr(ctx, '#ffd60a', -5, -13, 10, 3, -5, -15, 2, 2, -1, -15, 2, 2, 3, -15, 2, 2);
+      fr(ctx, '#ff2a6d', -1, -12, 2, 2);
+    } else if (sk.hat) {
+      fr(ctx, sk.hat, -6, -12, 12, 3, -4, -14, 8, 2);
+    }
+    var lx = o.lookX || 0, ly = o.lookY || 0;
+    if (o.blink) fr(ctx, '#2b1e16', 0, -5, 4, 1);
+    else { fr(ctx, '#ffffff', 0, -6, 4, 3); fr(ctx, '#1b1640', 1 + Math.max(0, lx), -5 + Math.max(-1, Math.min(1, ly)), 2, 2); }
+    ctx.restore();
+
+    ctx.save(); ctx.translate(1, -19); ctx.rotate((o.swing || 0) - w * 0.55);
+    fr(ctx, sk.shirt, -2, -1, 4, 8); fr(ctx, sk.skin, -2, 6, 4, 3);
+    if (o.held && TEX[o.held]) {
+      ctx.save(); ctx.translate(1, 8);
+      if (o.held >= 110) { ctx.rotate(0.65); ctx.drawImage(TEX[o.held], -3, -13, 15, 15); }
+      else ctx.drawImage(TEX[o.held], -2, -5, 10, 10);
       ctx.restore();
     }
-    rr(ctx, -3, 0, 6, 16, shadeHex(s.shirt, 0.92)); rr(ctx, -3, 14, 6, 5, s.skin);
     ctx.restore();
   };
-  var shadeCache = {};
-  function shadeHex(h, f) { var k = h + f; return shadeCache[k] || (shadeCache[k] = BW.shade(h, f)); }
 
-  // Animals: feet at (0,0), facing right.
-  BW.drawAnimal = function (ctx, a, time) {
-    var leg = Math.sin(a.walk) * 3 * a.walkAmt;
-    if (a.type === 'pig') {
-      rr(ctx, -12, -8, 5, 8 + leg * 0.3, '#e0899c'); rr(ctx, 6, -8, 5, 8 - leg * 0.3, '#e0899c');
-      rr(ctx, -9, -8, 5, 8 - leg * 0.3, '#f09aae'); rr(ctx, 9, -8, 5, 8 + leg * 0.3, '#f09aae');
-      rr(ctx, -15, -24, 28, 17, '#f7a8ba'); rr(ctx, -15, -24, 28, 3, '#ffc4d2');
-      rr(ctx, -18, -22, 3, 2, '#e0899c'); rr(ctx, -19, -24, 2, 3, '#e0899c');
-      var hb = a.headDown ? 4 : 0;
-      rr(ctx, 9, -30 + hb, 14, 14, '#f7a8ba'); rr(ctx, 10, -33 + hb, 4, 4, '#e0899c');
-      rr(ctx, 19, -23 + hb, 7, 6, '#ee7f98'); rr(ctx, 21, -21 + hb, 1, 2, '#8a3a4a'); rr(ctx, 24, -21 + hb, 1, 2, '#8a3a4a');
-      rr(ctx, 17, -27 + hb, 3, 3, a.blink ? '#f7a8ba' : '#1d2340');
-    } else if (a.type === 'sheep') {
-      var wool = a.sheared ? '#f2dccc' : '#fbfbff', woolD = a.sheared ? '#dcc2b0' : '#dde2ee';
-      rr(ctx, -12, -9, 5, 9 + leg * 0.3, '#44444c'); rr(ctx, 7, -9, 5, 9 - leg * 0.3, '#44444c');
-      rr(ctx, -9, -9, 5, 9 - leg * 0.3, '#55555e'); rr(ctx, 10, -9, 5, 9 + leg * 0.3, '#55555e');
-      if (a.sheared) { rr(ctx, -13, -24, 26, 16, wool); rr(ctx, -13, -12, 26, 3, woolD); }
-      else {
-        rr(ctx, -16, -28, 32, 21, wool); rr(ctx, -14, -31, 10, 5, wool); rr(ctx, -2, -32, 12, 6, wool);
-        rr(ctx, -16, -10, 32, 3, woolD); rr(ctx, -18, -24, 3, 12, wool); rr(ctx, -10, -22, 4, 3, woolD); rr(ctx, 2, -18, 4, 3, woolD);
-      }
-      var sb = a.headDown ? 6 : 0;
-      rr(ctx, 11, -30 + sb, 12, 13, '#5a5a62'); rr(ctx, 9, -31 + sb, 5, 5, a.sheared ? wool : '#fbfbff');
-      rr(ctx, 17, -26 + sb, 3, 3, a.blink ? '#5a5a62' : '#ffffff'); rr(ctx, 18, -25 + sb, 2, 2, a.blink ? '#5a5a62' : '#1d2340');
-      rr(ctx, 8, -27 + sb, 4, 3, '#44444c');
+  BW.drawAnimal = function (ctx, a) {
+    var leg = Math.sin(a.walk || 0) * 3;
+    if (a.type === 'sheep') {
+      fr(ctx, '#5a4638', -7, -5, 3, 5 + leg * 0.3, 4, -5, 3, 5 - leg * 0.3);
+      fr(ctx, a.sheared ? '#e6ccb2' : '#f7f7fb', -9, -15, 17, 11);
+      if (!a.sheared) fr(ctx, '#dfe4f2', -9, -7, 17, 3, -8, -16, 14, 2);
+      fr(ctx, '#6d5444', 6, -15, 6, 7); fr(ctx, '#ffffff', 9, -13, 2, 2); fr(ctx, '#1b1640', 10, -13, 1, 2);
+    } else if (a.type === 'pig') {
+      fr(ctx, '#d97b93', -6, -4, 3, 4 + leg * 0.3, 3, -4, 3, 4 - leg * 0.3);
+      fr(ctx, '#ff9ebb', -8, -13, 15, 9, 5, -14, 7, 8);
+      fr(ctx, '#ff7aa2', 10, -11, 3, 4); fr(ctx, '#1b1640', 9, -12, 2, 2);
     } else {
-      // chicken
-      var flap = a.onGround ? 0 : Math.sin(time * 30) * 4;
-      rr(ctx, -3, -6, 2, 6 + leg * 0.3, '#ff9f1a'); rr(ctx, 2, -6, 2, 6 - leg * 0.3, '#ff9f1a');
-      rr(ctx, -9, -17, 16, 11, '#ffffff'); rr(ctx, -11, -19, 4, 6, '#f0f0f0');
-      rr(ctx, -5, -15 - flap, 9, 6, '#e8e8f0');
-      var cb = a.headDown ? 5 : 0;
-      rr(ctx, 3, -26 + cb, 9, 10, '#ffffff'); rr(ctx, 5, -29 + cb, 5, 3, '#ff4a4a'); rr(ctx, 12, -22 + cb, 4, 3, '#ffb020'); rr(ctx, 8, -19 + cb, 3, 3, '#ff4a4a');
-      rr(ctx, 8, -24 + cb, 2, 2, a.blink ? '#fff' : '#1d2340');
+      fr(ctx, '#f59e0b', -2, -3, 2, 3 + leg * 0.25, 1, -3, 2, 3 - leg * 0.25);
+      fr(ctx, '#ffffff', -5, -10, 9, 7, 1, -14, 5, 6);
+      fr(ctx, '#ef4444', 3, -16, 3, 2); fr(ctx, '#fbbf24', 6, -12, 3, 2); fr(ctx, '#1b1640', 4, -13, 1, 2);
     }
   };
 
-  BW.CS = CS; BW.CW = CW; BW.CH = CH;
+  BW.drawMob = function (ctx, m, t) {
+    var hurt = m.hurtT > 0;
+    if (m.type === 'mole') {
+      fr(ctx, hurt ? '#ffffff' : '#3a4466', -9, -14, 18, 12);
+      fr(ctx, '#1b1640', -10, -3, 20, 3); fr(ctx, '#ffd60a', -8, -15, 14, 3);
+      fr(ctx, '#ff2a6d', 2, -11, 6, 3); fr(ctx, '#ffffff', 5, -11, 2, 1);
+      fr(ctx, ((t * 18) | 0) % 2 ? '#dce4ff' : '#94a3b8', 9, -10, 4, 6, 13, -9, 3, 4, 16, -8, 2, 2);
+      return;
+    }
+    var isBoss = m.type === 'boss', sz = isBoss ? 15 : 9;
+    var sq = 1 + Math.sin(t * 7 + (m.bob || 0)) * 0.08 + (m.sq || 0);
+    ctx.save(); ctx.scale(1 / sq, sq);
+    fr(ctx, hurt ? '#ffffff' : (isBoss ? 'rgba(199,125,255,0.88)' : 'rgba(0,245,212,0.85)'), -sz, -sz * 1.6, sz * 2, sz * 1.6);
+    fr(ctx, isBoss ? '#ff4d94' : '#3bf6ee', -sz + 2, -sz * 1.6 + 2, sz * 2 - 4, 3);
+    fr(ctx, isBoss ? '#ffd60a' : '#7209b7', -3, -sz - 1, 6, 6); fr(ctx, '#ffffff', -2, -sz, 2, 2);
+    fr(ctx, '#1b1640', 1, -sz - 2, 3, 4, sz - 4, -sz - 2, 3, 4);
+    fr(ctx, '#ffffff', 2, -sz - 2, 1, 2, sz - 3, -sz - 2, 1, 2);
+    if (isBoss) {
+      fr(ctx, '#ffd60a', -8, -sz * 1.6 - 5, 16, 5, -8, -sz * 1.6 - 8, 3, 3, -1, -sz * 1.6 - 9, 3, 4, 5, -sz * 1.6 - 8, 3, 3);
+      fr(ctx, '#ff2a6d', -1, -sz * 1.6 - 4, 3, 2);
+    }
+    ctx.restore();
+    if (isBoss && m.hp < m.maxHp) {
+      fr(ctx, 'rgba(16,20,48,0.85)', -18, -34, 36, 5);
+      fr(ctx, '#ff2a6d', -17, -33, Math.max(0, 34 * (m.hp / m.maxHp)), 3);
+    }
+  };
+
+  BW.Renderer = Renderer;
 })();

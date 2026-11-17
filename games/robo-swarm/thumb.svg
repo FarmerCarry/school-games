@@ -1,58 +1,86 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
   <defs>
-    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#7a5cff"/>
-      <stop offset="1" stop-color="#ffb15a"/>
+    <radialGradient id="bg" cx="50%" cy="54%" r="65%">
+      <stop offset="0%" stop-color="#1c3166"/>
+      <stop offset="100%" stop-color="#0b1228"/>
+    </radialGradient>
+    <linearGradient id="beam" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#fff8b0"/>
+      <stop offset="50%" stop-color="#28e7ff"/>
+      <stop offset="100%" stop-color="#28e7ff" stop-opacity="0"/>
     </linearGradient>
   </defs>
-  <rect width="400" height="400" fill="url(#sky)"/>
-  <rect y="210" width="400" height="190" fill="#e7b45a"/>
-  <rect y="250" width="400" height="28" fill="#f0c36e"/>
-  <rect y="306" width="400" height="28" fill="#f0c36e"/>
-  <rect x="36" y="268" width="46" height="32" rx="6" fill="#ff5a7a"/>
-  <rect x="300" y="236" width="40" height="28" rx="6" fill="#3ec6ff"/>
-  <rect x="250" y="330" width="54" height="30" rx="6" fill="#5dcc4a"/>
-  <!-- popping robot -->
-  <g transform="translate(300 150)">
-    <ellipse cx="0" cy="46" rx="28" ry="8" fill="#000" opacity="0.15"/>
-    <rect x="-22" y="-8" width="44" height="40" rx="14" fill="#c06bff"/>
-    <circle cx="-10" cy="6" r="7" fill="#fff"/><circle cx="10" cy="6" r="7" fill="#fff"/>
-    <circle cx="-8" cy="7" r="3" fill="#24304a"/><circle cx="12" cy="7" r="3" fill="#24304a"/>
-    <path d="M-6 18 q6 8 12 0" fill="none" stroke="#24304a" stroke-width="2"/>
-    <circle cx="8" cy="-28" r="5" fill="#ffe14a"/>
-    <rect x="4" y="-22" width="4" height="12" fill="#d8deea"/>
+
+  <rect width="400" height="400" fill="url(#bg)"/>
+  <!-- Neon Arena Grid -->
+  <g stroke="#24427a" stroke-width="2" opacity="0.65">
+    <path d="M0 140H400M0 200H400M0 260H400M0 320H400M0 380H400"/>
+    <path d="M50 110V400M125 110V400M200 110V400M275 110V400M350 110V400"/>
   </g>
+  <rect x="16" y="108" width="368" height="276" rx="18" fill="none" stroke="#28e7ff" stroke-width="4" opacity="0.5"/>
+
+  <!-- Orbiting Saw Shield -->
+  <circle cx="138" cy="252" r="78" fill="none" stroke="#ffe14a" stroke-width="3" stroke-dasharray="14 10" opacity="0.7"/>
+  <g transform="translate(138 174)">
+    <circle r="15" fill="#ffe14a" stroke="#0d1326" stroke-width="3"/>
+    <circle r="6" fill="#28e7ff"/>
+  </g>
+  <g transform="translate(62 272)">
+    <circle r="15" fill="#ffe14a" stroke="#0d1326" stroke-width="3"/>
+    <circle r="6" fill="#28e7ff"/>
+  </g>
+
+  <!-- Twin Plasma Blaster Beams -->
+  <polygon points="182,226 355,172 365,196 182,240" fill="url(#beam)"/>
+  <polygon points="182,262 368,266 364,290 182,276" fill="url(#beam)"/>
+
+  <!-- Explosion & Blasted Mini-Bots -->
+  <g transform="translate(316 188) rotate(-16)">
+    <circle r="30" fill="#ff8a24" opacity="0.38"/>
+    <path d="M-24-8 L-36-24 M0-16 L4-34 M18-8 L34-20 M-20 14 L-34 28 M16 14 L32 28" stroke="#70e4ff" stroke-width="4" stroke-linecap="round"/>
+    <circle r="20" fill="#d92648" stroke="#0d1021" stroke-width="4"/>
+    <circle cx="-6" cy="-3" r="5" fill="#ffe14a"/>
+    <circle cx="7" cy="-3" r="5" fill="#ffe14a"/>
+  </g>
+  <g transform="translate(324 286) rotate(12)">
+    <rect x="-22" y="-18" width="44" height="36" rx="10" fill="#ff6b2b" stroke="#0d1021" stroke-width="4"/>
+    <polygon points="-28,0 -12,-14 -12,14" fill="#ffe14a" stroke="#0d1021" stroke-width="3"/>
+    <circle cx="4" cy="-4" r="4.5" fill="#fff"/>
+  </g>
+  <g transform="translate(262 340)">
+    <circle r="15" fill="#a64dff" stroke="#0d1021" stroke-width="3.5"/>
+    <circle cx="-4" cy="0" r="5" fill="#ff3864"/>
+  </g>
+
+  <!-- Sparks -->
   <g fill="#ffe14a">
-    <circle cx="268" cy="128" r="5"/><circle cx="246" cy="150" r="4"/><circle cx="338" cy="120" r="6"/>
-    <rect x="250" y="112" width="10" height="4" transform="rotate(20 250 112)"/>
-    <rect x="340" y="148" width="12" height="4" transform="rotate(-30 340 148)"/>
+    <circle cx="272" cy="176" r="6"/><circle cx="354" cy="222" r="5"/><circle cx="288" cy="242" r="4.5"/>
+    <circle cx="290" cy="306" r="5"/><circle cx="362" cy="154" r="4"/>
   </g>
-  <!-- ducks orbiting the hero -->
-  <g fill="#ffe14a" stroke="#ff8a24" stroke-width="3">
-    <circle cx="168" cy="168" r="16"/><circle cx="250" cy="210" r="16"/>
-    <circle cx="150" cy="250" r="16"/><circle cx="230" cy="150" r="14"/>
+
+  <!-- Hero Armored Mech -->
+  <g transform="translate(138 252)">
+    <ellipse cx="0" cy="54" rx="48" ry="12" fill="#050814" opacity="0.55"/>
+    <!-- Thruster Flame -->
+    <polygon points="-44,-14 -76,0 -44,14" fill="#28e7ff"/>
+    <polygon points="-44,-7 -62,0 -44,7" fill="#fff6a8"/>
+    <!-- Shoulder Pads -->
+    <rect x="-36" y="-48" width="54" height="24" rx="11" fill="#1254a1" stroke="#090d1a" stroke-width="4"/>
+    <rect x="-36" y="24" width="54" height="24" rx="11" fill="#1254a1" stroke="#090d1a" stroke-width="4"/>
+    <!-- Twin Cannons -->
+    <rect x="16" y="-34" width="46" height="16" rx="7" fill="#1b2845" stroke="#090d1a" stroke-width="4"/>
+    <rect x="16" y="18" width="46" height="16" rx="7" fill="#1b2845" stroke="#090d1a" stroke-width="4"/>
+    <circle cx="64" cy="-26" r="10" fill="#fff8b0"/>
+    <circle cx="64" cy="26" r="10" fill="#fff8b0"/>
+    <!-- Main Mech Body -->
+    <rect x="-38" y="-36" width="74" height="72" rx="22" fill="#2596ff" stroke="#090d1a" stroke-width="5"/>
+    <rect x="-26" y="-26" width="32" height="16" rx="8" fill="#70e4ff" opacity="0.55"/>
+    <!-- Glowing Visor -->
+    <rect x="0" y="-20" width="26" height="40" rx="10" fill="#0d1428"/>
+    <rect x="5" y="-15" width="16" height="30" rx="7" fill="#ffe14a"/>
   </g>
-  <!-- hero -->
-  <g transform="translate(200 230)">
-    <ellipse cx="0" cy="78" rx="36" ry="10" fill="#000" opacity="0.18"/>
-    <rect x="-26" y="8" width="52" height="46" rx="16" fill="#ff8a24"/>
-    <circle cx="0" cy="-8" r="22" fill="#ffd2b8"/>
-    <rect x="-20" y="-28" width="40" height="16" rx="8" fill="#24304a"/>
-    <rect x="-16" y="-16" width="32" height="10" rx="5" fill="#9af0ff"/>
-    <circle cx="-8" cy="-6" r="2.4" fill="#24304a"/>
-    <circle cx="8" cy="-6" r="2.4" fill="#24304a"/>
-    <path d="M-8 4 q8 8 16 0" fill="none" stroke="#c47a58" stroke-width="2"/>
-    <rect x="24" y="18" width="36" height="16" rx="7" fill="#ff8a24"/>
-    <rect x="46" y="4" width="16" height="18" rx="6" fill="#14b8c8"/>
-    <circle cx="58" cy="26" r="7" fill="#ffe14a"/>
-  </g>
-  <!-- little walker -->
-  <g transform="translate(70 300)">
-    <rect x="-18" y="-6" width="36" height="34" rx="12" fill="#3ec6ff"/>
-    <circle cx="-8" cy="6" r="6" fill="#fff"/><circle cx="8" cy="6" r="6" fill="#fff"/>
-    <circle cx="-6" cy="7" r="2.5" fill="#24304a"/><circle cx="10" cy="7" r="2.5" fill="#24304a"/>
-    <circle cx="4" cy="-24" r="4" fill="#ffe14a"/>
-  </g>
-  <text x="200" y="64" text-anchor="middle" font-size="40" fill="#1b1640" stroke="#1b1640" stroke-width="12" stroke-linejoin="round">هجوم الروبوتات</text>
-  <text x="200" y="64" text-anchor="middle" font-size="40" fill="#ffffff">هجوم الروبوتات</text>
+
+  <!-- Arabic Title -->
+  <text x="200" y="68" text-anchor="middle" direction="rtl" font-family="Fredoka, Tajawal, sans-serif" font-weight="700" font-size="42" fill="#091024" stroke="#091024" stroke-width="12" stroke-linejoin="round">هجوم الروبوتات</text>
+  <text x="200" y="68" text-anchor="middle" direction="rtl" font-family="Fredoka, Tajawal, sans-serif" font-weight="700" font-size="42" fill="#ffe14a">هجوم الروبوتات</text>
 </svg>

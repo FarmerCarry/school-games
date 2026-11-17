@@ -1,1309 +1,712 @@
-/* هجوم الروبوتات — deterministic sim. No DOM, no Kit, no per-frame allocation.
-   Pools, a 64px spatial hash, and fixed caps: 300 robots, 250 shots, 200 bolts. */
-(function (RS) {
+/* هجوم الروبوتات — Pure arena simulation (1P/2P, auto-aim, EMP dash, weapon pods, waves, Mega-Boss). */
+(function () {
   'use strict';
 
-  const D = globalThis.RSD;
-  const W = D.W, H = D.H, CELL = D.CELL;
-  const COLS = Math.ceil(W / CELL), ROWS = Math.ceil(H / CELL), HASH = COLS * ROWS;
-  const CAP_R = 300, CAP_P = 250, CAP_B = 200, CAP_Z = 80, HIT_N = 6, EV = 96;
-  const KING = 8, SPLIT = 4, MINI = 6, MINIBOSS = 7;
-  const ZERO = { x: 0, y: 0, dash: 0 };
+  var D = globalThis.RSData || (typeof require === 'function' ? require('./data.js') : null);
+  var MAX_ENEMIES = 88, MAX_SHOTS = 140, MAX_BOLTS = 110, MAX_PODS = 8, MAX_ARCS = 20, MAX_EVENTS = 64;
 
-  RS.CAP_R = CAP_R;
-  RS.CAP_P = CAP_P;
-  RS.CAP_B = CAP_B;
-  RS.CAP_Z = CAP_Z;
-  RS.W = W;
-  RS.H = H;
-  RS.CELL = CELL;
-
-  function mulberry(run) {
+  function makeRng(seed) {
+    var s = (seed >>> 0) || 1;
     return function () {
-      let s = (run.seed + 0x6D2B79F5) | 0;
-      run.seed = s;
-      let t = Math.imul(s ^ (s >>> 15), 1 | s);
+      s = (s + 0x6D2B79F5) | 0;
+      var t = Math.imul(s ^ (s >>> 15), 1 | s);
       t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
       return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
   }
+  function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
 
-  function tierMul(tier, a, b) {
-    const t = (Math.max(1, Math.min(5, tier | 0)) - 1) / 4;
-    return a + (b - a) * t;
+  function findByKey(list, key, fallback) {
+    if (typeof key === 'number') return list[clamp(key | 0, 0, list.length - 1)];
+    for (var i = 0; i < list.length; i++) if (list[i].id === key) return list[i];
+    return list[fallback];
   }
+  function emit(run, ev) { if (run.events.length < MAX_EVENTS) run.events.push(ev); }
+  function pushArc(run, arc) { if (run.arcs.length >= MAX_ARCS) run.arcs.shift(); run.arcs.push(arc); }
 
-  function allocOf(free, freeN, alive) {
-    return function (run) {
-      const n = run[freeN];
-      if (n <= 0) return -1;
-      const id = run[free][n - 1];
-      run[freeN] = n - 1;
-      run[alive][id] = 1;
-      return id;
+  function createMech(idx, players, diff, skinIdx) {
+    return {
+      id: idx, x: players === 2 ? (idx === 0 ? D.W * 0.5 - 56 : D.W * 0.5 + 56) : D.W * 0.5, y: D.H * 0.5,
+      vx: 0, vy: 0, r: 24, hp: diff.hearts, maxHp: diff.hearts, alive: true, down: false, revive: 0,
+      aim: idx === 1 ? Math.PI : 0, recoil: 0, muzzleT: 0, dashT: 0, dashCd: 0, dashMaxCd: diff.dashCd,
+      dashDx: idx === 1 ? -1 : 1, dashDy: 0, knockVx: 0, knockVy: 0, invuln: 0, hurtFlash: 0, warpCd: 0,
+      lv: [1, 0, 0, 0, 0], fireCd: 0.04, missileCd: 0.45, zapCd: 0.55, sawAng: idx * 1.57,
+      skin: clamp(skinIdx | 0, 0, D.skins.length - 1)
     };
   }
-  const allocR = allocOf('rFree', 'rFreeN', 'rAlive');
-  const allocP = allocOf('pFree', 'pFreeN', 'pAlive');
-  const allocB = allocOf('bFree', 'bFreeN', 'bAlive');
-  const allocZ = allocOf('zFree', 'zFreeN', 'zAlive');
 
-  function freeOf(free, freeN, alive) {
-    return function (run, id) {
-      if (!run[alive][id]) return;
-      run[alive][id] = 0;
-      run[free][run[freeN]++] = id;
-    };
-  }
-  const freeR = freeOf('rFree', 'rFreeN', 'rAlive');
-  const freeP = freeOf('pFree', 'pFreeN', 'pAlive');
-  const freeB = freeOf('bFree', 'bFreeN', 'bAlive');
-  const freeZ = freeOf('zFree', 'zFreeN', 'zAlive');
-
-  function fillFree(buf, n) {
-    for (let i = 0; i < n; i++) buf[i] = n - 1 - i;
-  }
-
-  RS.newRun = function (opts) {
+  function createRun(opts) {
     opts = opts || {};
-    const players = opts.players === 2 ? 2 : 1;
-    const tier = Math.max(1, Math.min(5, opts.tier == null ? 1 : opts.tier | 0));
-    const map = Math.max(1, Math.min(3, opts.map == null ? 1 : opts.map | 0)) - 1;
-    const quick = !!opts.quick && !opts.endless;
-    const run = {
-      seed: (opts.seed == null ? 1 : opts.seed) >>> 0,
-      players: players, map: map, quick: quick, endless: !!opts.endless,
-      tier: tier,
-      spawnMul: opts.spawnMul == null ? tierMul(tier, 0.7, 1.25) : opts.spawnMul,
-      hpMul: opts.hpMul == null ? tierMul(tier, 0.8, 1.3) : opts.hpMul,
-      bossMul: opts.bossMul == null ? tierMul(tier, 0.82, 1.28) : opts.bossMul,
-      timeScale: quick ? 2 : 1,
-      cardsOn: opts.cards !== false,
-      immortal: !!opts.immortal,
-      noWeapons: !!opts.noWeapons,
-      t: 0, xp: 0, level: 1, next: 16, queue: 0, cards: 0, combo: 0, comboT: 0,
-      pops: 0, bolts: 0, revives: 0, bossPopped: 0, over: '',
-      kingAlive: 0, kingId: -1, miniCount: 0, spawnT: 0.85, frame: 0, maxR: 20,
-      evN: 0, offerFor: 0
+    var arena = findByKey(D.arenas, opts.arena, 0);
+    var diff = findByKey(D.difficulties, opts.difficulty, 1);
+    var players = opts.players === 2 ? 2 : 1;
+    var skins = Array.isArray(opts.skins) ? opts.skins : [0, 1];
+    var ddaMul = typeof opts.ddaMul === 'number' && isFinite(opts.ddaMul) ? clamp(opts.ddaMul, 0.75, 1.3) : 1.0;
+    var mechs = [];
+    for (var i = 0; i < players; i++) mechs.push(createMech(i, players, diff, skins[i] != null ? skins[i] : i));
+
+    var run = {
+      uid: 1, seed: (opts.seed == null ? 2026 : opts.seed) >>> 0, rng: makeRng(opts.seed == null ? 2026 : opts.seed),
+      arena: arena, diff: diff, players: players, ddaMul: ddaMul, state: 'play', t: 0, wave: 1, spawnT: 0.45,
+      score: 0, kills: 0, bolts: 0, combo: 0, comboT: 0, revives: 0, heartsLost: 0,
+      xp: 0, level: 1, xpNext: 12, stars: 0, mechs: mechs, cam: { x: D.W * 0.5, y: D.H * 0.5 },
+      enemies: [], shots: [], boltDrops: [], pods: [], arcs: [], events: [],
+      coilCycle: [-1, -1, -1, -1], bossSpawned: false, bossDefeated: false, bossId: 0
     };
-    run.rng = mulberry(run);
-    run.bossAt = 240 / run.timeScale;
-    run.nextMini = 90 / run.timeScale;
-    run.nextKing = run.bossAt;
-
-    run.rAlive = new Uint8Array(CAP_R);
-    run.rGen = new Uint16Array(CAP_R);
-    run.rType = new Uint8Array(CAP_R);
-    run.rx = new Float32Array(CAP_R);
-    run.ry = new Float32Array(CAP_R);
-    run.rvx = new Float32Array(CAP_R);
-    run.rvy = new Float32Array(CAP_R);
-    run.rhp = new Float32Array(CAP_R);
-    run.rmax = new Float32Array(CAP_R);
-    run.rr = new Float32Array(CAP_R);
-    run.rsp = new Float32Array(CAP_R);
-    run.rMode = new Uint8Array(CAP_R);
-    run.rT = new Float32Array(CAP_R);
-    run.rHurt = new Float32Array(CAP_R);
-    run.rFree = new Uint16Array(CAP_R);
-    run.rFreeN = CAP_R;
-    fillFree(run.rFree, CAP_R);
-
-    run.pAlive = new Uint8Array(CAP_P);
-    run.pKind = new Uint8Array(CAP_P);
-    run.pOwner = new Int8Array(CAP_P);
-    run.pPierce = new Uint8Array(CAP_P);
-    run.px = new Float32Array(CAP_P);
-    run.py = new Float32Array(CAP_P);
-    run.pvx = new Float32Array(CAP_P);
-    run.pvy = new Float32Array(CAP_P);
-    run.plife = new Float32Array(CAP_P);
-    run.pdmg = new Float32Array(CAP_P);
-    run.pr = new Float32Array(CAP_P);
-    run.ptx = new Float32Array(CAP_P);
-    run.pty = new Float32Array(CAP_P);
-    run.pAge = new Float32Array(CAP_P);
-    run.pRet = new Uint8Array(CAP_P);
-    run.pHit = new Uint16Array(CAP_P * HIT_N);
-    run.pHitG = new Uint16Array(CAP_P * HIT_N);
-    run.pFree = new Uint16Array(CAP_P);
-    run.pFreeN = CAP_P;
-    fillFree(run.pFree, CAP_P);
-
-    run.bAlive = new Uint8Array(CAP_B);
-    run.bx = new Float32Array(CAP_B);
-    run.by = new Float32Array(CAP_B);
-    run.bvx = new Float32Array(CAP_B);
-    run.bvy = new Float32Array(CAP_B);
-    run.bFree = new Uint16Array(CAP_B);
-    run.bFreeN = CAP_B;
-    fillFree(run.bFree, CAP_B);
-
-    run.zAlive = new Uint8Array(CAP_Z);
-    run.zKind = new Uint8Array(CAP_Z);
-    run.zx = new Float32Array(CAP_Z);
-    run.zy = new Float32Array(CAP_Z);
-    run.zr = new Float32Array(CAP_Z);
-    run.zdps = new Float32Array(CAP_Z);
-    run.zlife = new Float32Array(CAP_Z);
-    run.zFree = new Uint16Array(CAP_Z);
-    run.zFreeN = CAP_Z;
-    fillFree(run.zFree, CAP_Z);
-
-    run.hHead = new Int16Array(HASH);
-    run.hNext = new Int16Array(CAP_R);
-    run.hHead.fill(-1);
-
-    run.x = new Float32Array(2);
-    run.y = new Float32Array(2);
-    run.hp = new Float32Array(2);
-    run.maxHp = new Float32Array(2);
-    run.speed = new Float32Array(2);
-    run.inv = new Float32Array(2);
-    run.dashT = new Float32Array(2);
-    run.dashCd = new Float32Array(2);
-    run.ang = new Float32Array(2);
-    run.aim = new Float32Array(2);
-    run.shield = new Float32Array(2);
-    run.shieldMax = new Float32Array(2);
-    run.shieldT = new Float32Array(2);
-    run.hurtN = new Float32Array(2);
-    run.dashN = new Float32Array(2);
-    run.revT = new Float32Array(2);
-    run.wcd = [new Float32Array(10), new Float32Array(10)];
-    run.lv = [new Uint8Array(10), new Uint8Array(10)];
-    run.evo = [new Uint8Array(2), new Uint8Array(2)];
-    run.reroll = new Uint8Array(2);
-    run.pick = new Int16Array(2);
-    run.pick[0] = run.pick[1] = -1;
-    run.offers = [[], []];
-    run.prad = 18;
-
-    run.ev = new Array(EV);
-    for (let i = 0; i < EV; i++) run.ev[i] = { k: 0, a: 0, b: 0, x: 0, y: 0 };
-
-    const meta = opts.meta || {};
-    const heart = clamp(meta.heart | 0, 0, 5);
-    const spd = clamp(meta.speed | 0, 0, 5);
-    const reroll = clamp(meta.reroll | 0, 0, 5);
-    const heroes = opts.hero || [0, 0];
-    run.x[0] = players === 2 ? 1080 : 1200;
-    run.y[0] = 700;
-    run.x[1] = 1320;
-    run.y[1] = 700;
-    for (let p = 0; p < players; p++) {
-      const hero = D.heroes[clamp(heroes[p] | 0, 0, D.heroes.length - 1)];
-      run.maxHp[p] = hero.hp + heart;
-      run.hp[p] = run.maxHp[p];
-      run.speed[p] = hero.speed * (1 + 0.05 * spd);
-      run.reroll[p] = reroll;
-      for (let u = 0; u < 10; u++) run.lv[p][u] = hero.start[u] || 0;
-      run.shieldMax[p] = run.lv[p][D.SHIELD];
-      run.shield[p] = run.shieldMax[p];
-      run.aim[p] = p === 0 ? 0 : Math.PI;
-    }
-    loadBlocks(run);
-    // Toys already near the kid, outside a tight circle, so the opening is busy.
-    const sx = players > 1 ? (run.x[0] + run.x[1]) * 0.5 : run.x[0];
-    const sy = players > 1 ? (run.y[0] + run.y[1]) * 0.5 : run.y[0];
-    for (let n = 0; n < 4; n++) {
-      const side = n < 2 ? -1 : 1;
-      const yoff = n % 2 === 0 ? -140 : 140;
-      RS.spawnRobot(run, n % 2 === 0 ? 0 : 1, sx + side * 560, sy + yoff);
-    }
-    if (opts.levels) {
-      for (let u = 0; u < 10; u++) if (opts.levels[u]) run.lv[0][u] = opts.levels[u];
-      run.shieldMax[0] = run.lv[0][D.SHIELD];
-      run.shield[0] = run.shieldMax[0];
-      run.maxHp[0] += Math.max(0, run.lv[0][D.HEART] - (D.heroes[clamp(heroes[0] | 0, 0, 5)].start[D.HEART] || 0));
-      run.hp[0] = run.maxHp[0];
+    if (opts.opening !== false) {
+      var angs = [0.78, 1.55, 2.42, -2.38, -1.48];
+      for (var k = 0; k < angs.length; k++) {
+        spawnEnemy(run, k % 2, D.W * 0.5 + Math.cos(angs[k]) * 380, D.H * 0.5 + Math.sin(angs[k]) * 260);
+      }
+      spawnPod(run, 1, D.W * 0.5 - 190, D.H * 0.5 - 120);
+      run.events.length = 0;
     }
     return run;
-  };
-
-  function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
-
-  function emit(run, k, a, b, x, y) {
-    let i = run.evN;
-    if (k === 12 && i >= EV - 28) return;
-    if (i >= EV) {
-      if (k < 3 || k === 12) return;
-      i = EV - 1;
-    } else run.evN = i + 1;
-    const e = run.ev[i];
-    e.k = k; e.a = a; e.b = b; e.x = x; e.y = y;
   }
 
-  function cellAt(x, y) {
-    let c = (x / CELL) | 0, r = (y / CELL) | 0;
-    if (c < 0) c = 0; else if (c >= COLS) c = COLS - 1;
-    if (r < 0) r = 0; else if (r >= ROWS) r = ROWS - 1;
-    return r * COLS + c;
-  }
-
-  function buildHash(run) {
-    const head = run.hHead, next = run.hNext, alive = run.rAlive;
-    head.fill(-1);
-    let maxR = 16;
-    const rr = run.rr, rx = run.rx, ry = run.ry;
-    for (let i = 0; i < CAP_R; i++) {
-      if (!alive[i]) continue;
-      if (rr[i] > maxR) maxR = rr[i];
-      const cell = cellAt(rx[i], ry[i]);
-      next[i] = head[cell];
-      head[cell] = i;
-    }
-    run.maxR = maxR;
-  }
-
-  // Visit every robot whose center can overlap a circle. The callback does the exact test.
-  function queryRobots(run, x, y, rad, fn) {
-    const reach = rad + run.maxR;
-    let c0 = ((x - reach) / CELL) | 0, c1 = ((x + reach) / CELL) | 0;
-    let r0 = ((y - reach) / CELL) | 0, r1 = ((y + reach) / CELL) | 0;
-    if (c0 < 0) c0 = 0; if (c1 >= COLS) c1 = COLS - 1;
-    if (r0 < 0) r0 = 0; if (r1 >= ROWS) r1 = ROWS - 1;
-    const head = run.hHead, next = run.hNext;
-    for (let r = r0; r <= r1; r++) {
-      const row = r * COLS;
-      for (let c = c0; c <= c1; c++) {
-        let i = head[row + c], guard = 0;
-        while (i >= 0 && guard++ < CAP_R) {
-          const nextId = next[i];
-          if (fn(i) === false) return;
-          i = nextId;
-        }
-      }
-    }
-  }
-
-  function overlap(ax, ay, ar, bx, by, br) {
-    const dx = ax - bx, dy = ay - by;
-    const s = ar + br;
-    return dx * dx + dy * dy <= s * s;
-  }
-
-  function pairKey(a, b) { return a * 1024 + b; }
-
-  // Geometric overlaps the hash must not miss or invent: every projectile↔robot
-  // and every player↔robot circle pair. Enemy shots are projectiles too.
-  RS.robotHits = function (run) {
-    buildHash(run);
-    const out = [];
-    for (let pi = 0; pi < CAP_P; pi++) {
-      if (!run.pAlive[pi]) continue;
-      const rad = run.pr[pi];
-      queryRobots(run, run.px[pi], run.py[pi], rad, function (ri) {
-        if (overlap(run.px[pi], run.py[pi], rad, run.rx[ri], run.ry[ri], run.rr[ri])) out.push(pairKey(pi, ri));
-      });
-    }
-    for (let p = 0; p < run.players; p++) {
-      queryRobots(run, run.x[p], run.y[p], run.prad, function (ri) {
-        if (overlap(run.x[p], run.y[p], run.prad, run.rx[ri], run.ry[ri], run.rr[ri])) out.push(pairKey(1000 + p, ri));
-      });
-    }
-    out.sort(function (a, b) { return a - b; });
-    return dedupe(out);
-  };
-
-  RS.robotHitsBrute = function (run) {
-    const out = [];
-    for (let pi = 0; pi < CAP_P; pi++) {
-      if (!run.pAlive[pi]) continue;
-      for (let ri = 0; ri < CAP_R; ri++) {
-        if (!run.rAlive[ri]) continue;
-        if (overlap(run.px[pi], run.py[pi], run.pr[pi], run.rx[ri], run.ry[ri], run.rr[ri])) out.push(pairKey(pi, ri));
-      }
-    }
-    for (let p = 0; p < run.players; p++) {
-      for (let ri = 0; ri < CAP_R; ri++) {
-        if (!run.rAlive[ri]) continue;
-        if (overlap(run.x[p], run.y[p], run.prad, run.rx[ri], run.ry[ri], run.rr[ri])) out.push(pairKey(1000 + p, ri));
-      }
-    }
-    out.sort(function (a, b) { return a - b; });
-    return dedupe(out);
-  };
-
-  function dedupe(out) {
-    // Query visits each robot once per projectile (one cell). Keep this as a guard.
-    if (out.length < 2) return out;
-    let n = 1;
-    for (let i = 1; i < out.length; i++) if (out[i] !== out[n - 1]) out[n++] = out[i];
-    out.length = n;
-    return out;
-  }
-  RS.spawnRobot = function (run, type, x, y) {
-    if (run.rFreeN <= 0) return -1;
-    const spec = D.bots[type];
-    if (!spec) return -1;
-    const id = allocR(run);
-    run.rGen[id] = (run.rGen[id] + 1) & 65535;
-    run.rType[id] = type;
-    run.rx[id] = x;
-    run.ry[id] = y;
-    run.rvx[id] = 0;
-    run.rvy[id] = 0;
-    const mapHp = type === KING ? 1 : D.maps[run.map].hp;
-    const hp = Math.max(1, Math.round(spec.hp * run.hpMul * mapHp));
-    run.rhp[id] = hp;
-    run.rmax[id] = hp;
-    run.rr[id] = spec.r;
-    run.rsp[id] = spec.speed * (type === KING ? 1 : D.maps[run.map].speed);
-    run.rMode[id] = 0;
-    run.rT[id] = 0.4 + (id % 7) * 0.05;
-    run.rHurt[id] = 0;
-    if (type === KING) {
-      run.kingAlive = 1;
-      run.kingId = id;
-      emit(run, 11, 1, 0, x, y);
-    } else if (type === MINIBOSS) emit(run, 11, 0, 0, x, y);
-    return id;
-  };
-
-  function makeRoom(run) {
-    if (run.rFreeN > 0) return;
-    for (let i = 0; i < CAP_R; i++) {
-      if (run.rAlive[i] && run.rType[i] !== KING) { freeR(run, i); return; }
-    }
-  }
-
-  const EDGE = { x: 0, y: 0 };
-  const SLIDE = { x: 0, y: 0 };
-
-  function loadBlocks(run) {
-    const src = D.blocks[run.map] || D.blocks[0];
-    run.blockN = src.length;
-    run.blocks = new Float32Array(src.length * 4);
-    for (let i = 0; i < src.length; i++) {
-      run.blocks[i * 4] = src[i][0];
-      run.blocks[i * 4 + 1] = src[i][1];
-      run.blocks[i * 4 + 2] = src[i][2];
-      run.blocks[i * 4 + 3] = src[i][3];
-    }
-  }
-
-  function blocked(run, x, y, r) {
-    const b = run.blocks;
-    for (let i = 0; i < run.blockN; i++) {
-      const o = i * 4;
-      const bx = b[o], by = b[o + 1], bw = b[o + 2], bh = b[o + 3];
-      const cx = x < bx ? bx : x > bx + bw ? bx + bw : x;
-      const cy = y < by ? by : y > by + bh ? by + bh : y;
-      const dx = x - cx, dy = y - cy;
-      if (dx === 0 && dy === 0) return true;
-      if (dx * dx + dy * dy < r * r) return true;
-    }
-    return false;
-  }
-
-  function slideBlocks(run, x, y, r, out) {
-    const b = run.blocks;
-    for (let i = 0; i < run.blockN; i++) {
-      const o = i * 4;
-      const bx = b[o], by = b[o + 1], bw = b[o + 2], bh = b[o + 3];
-      let cx = x < bx ? bx : x > bx + bw ? bx + bw : x;
-      let cy = y < by ? by : y > by + bh ? by + bh : y;
-      let dx = x - cx, dy = y - cy;
-      if (dx === 0 && dy === 0) {
-        const dl = x - bx, dr = bx + bw - x, dt = y - by, db = by + bh - y;
-        if (dl <= dr && dl <= dt && dl <= db) x = bx - r;
-        else if (dr <= dt && dr <= db) x = bx + bw + r;
-        else if (dt <= db) y = by - r;
-        else y = by + bh + r;
-      } else {
-        const d2 = dx * dx + dy * dy;
-        if (d2 < r * r && d2 > 0.0001) {
-          const inv = 1 / Math.sqrt(d2);
-          const push = (r - d2 * inv);
-          x += dx * inv * push;
-          y += dy * inv * push;
-        }
-      }
-    }
-    out.x = x;
-    out.y = y;
-  }
-  function edgeInto(run, rng, out) {
-    const side = (rng() * 4) | 0;
-    let x, y;
-    if (side === 0) { x = 28; y = 40 + rng() * (H - 80); }
-    else if (side === 1) { x = W - 28; y = 40 + rng() * (H - 80); }
-    else if (side === 2) { x = 40 + rng() * (W - 80); y = 28; }
-    else { x = 40 + rng() * (W - 80); y = H - 28; }
-    let best = 1e12, px = run.x[0], py = run.y[0];
-    for (let p = 0; p < run.players; p++) {
-      const dx = x - run.x[p], dy = y - run.y[p], d = dx * dx + dy * dy;
-      if (d < best) { best = d; px = run.x[p]; py = run.y[p]; }
-    }
-    if (best < 280 * 280) {
-      const dx = x - px, dy = y - py;
-      const inv = 1 / (Math.sqrt(best) || 1);
-      x = clamp(px + dx * inv * 460, 28, W - 28);
-      y = clamp(py + dy * inv * 460, 28, H - 28);
-    }
-    out.x = x; out.y = y;
-  }
-
-  function breakIndex(sched) {
-    const br = D.spawn.breaks;
-    let bi = 0;
-    while (bi < br.length - 1 && sched >= br[bi + 1]) bi++;
-    return bi;
-  }
-
-  function pickType(run, rng, bi) {
-    const w = D.spawn.weights[bi];
-    const add = D.maps[run.map].add;
-    let sum = 0;
-    for (let i = 0; i < 6; i++) sum += w[i] + add[i];
-    let r = rng() * sum;
-    for (let i = 0; i < 6; i++) {
-      r -= w[i] + add[i];
-      if (r <= 0) return i;
-    }
-    return 0;
-  }
-
-  function nearestPlayer(run, x, y) {
-    let best = 0, bd = 1e12;
-    for (let p = 0; p < run.players; p++) {
-      if (run.hp[p] <= 0) continue;
-      const dx = run.x[p] - x, dy = run.y[p] - y, d = dx * dx + dy * dy;
-      if (d < bd) { bd = d; best = p; }
+  function nearestMech(run, x, y) {
+    var best = null, bestD2 = Infinity;
+    for (var i = 0; i < run.mechs.length; i++) {
+      var m = run.mechs[i];
+      if (!m.alive) continue;
+      var d2 = (m.x - x) * (m.x - x) + (m.y - y) * (m.y - y);
+      if (d2 < bestD2) { bestD2 = d2; best = m; }
     }
     return best;
   }
 
-  function addXp(run, n) {
-    if (!run.cardsOn || n <= 0) return;
-    run.xp += n;
-    while (run.level < 22 && run.xp >= run.next) {
-      run.xp -= run.next;
-      run.level++;
-      run.next = 10 + run.level * 6;
-      run.queue++;
+  function spawnEnemy(run, kind, x, y) {
+    var spec = D.enemies[clamp(kind | 0, 0, D.enemies.length - 1)];
+    if (kind !== 5 && run.enemies.length >= MAX_ENEMIES) return null;
+    var hpScale = (kind === 5 ? run.diff.bossHpMul : run.diff.botHpMul) * run.ddaMul * (run.players === 2 ? 1.28 : 1.0);
+    var hp = Math.max(4, Math.round(spec.hp * hpScale));
+    var sh = spec.shield ? Math.round(spec.shield * hpScale) : 0;
+    var e = {
+      id: run.uid++, kind: spec.kind,
+      x: clamp(x, D.PAD + spec.r, D.W - D.PAD - spec.r), y: clamp(y, D.PAD + spec.r, D.H - D.PAD - spec.r),
+      vx: 0, vy: 0, r: spec.r, hp: hp, maxHp: hp, shield: sh, maxShield: sh,
+      speed: spec.speed * (kind === 5 ? 1 : run.diff.botSpeedMul), flash: 0, sawCd: 0, bonkCd: 0, bumperCd: 0,
+      aiState: 0, aiT: kind === 5 ? 1.5 : 0.7 + run.rng() * 0.8, aim: Math.atan2(D.H * 0.5 - y, D.W * 0.5 - x),
+      weakOpen: false, phase2: false, nextAttack: 0, beamLen: 740
+    };
+    run.enemies.push(e);
+    if (kind === 5) { run.bossSpawned = true; run.bossId = e.id; emit(run, { type: 'bossSpawn', x: e.x, y: e.y }); }
+    return e;
+  }
+
+  function spawnWaveBot(run, kind) {
+    var ang = run.rng() * Math.PI * 2;
+    var dx = D.VIEW_W * 0.52 + 30 + run.rng() * 70, dy = D.VIEW_H * 0.52 + 30 + run.rng() * 55;
+    var sx = run.cam.x + Math.cos(ang) * dx, sy = run.cam.y + Math.sin(ang) * dy;
+    if (sx < D.PAD + 30 || sx > D.W - D.PAD - 30) sx = run.cam.x - Math.cos(ang) * 410;
+    if (sy < D.PAD + 30 || sy > D.H - D.PAD - 30) sy = run.cam.y - Math.sin(ang) * 290;
+    return spawnEnemy(run, kind, sx, sy);
+  }
+
+  function choosePodKind(run, mech) {
+    var onFloor = [0, 0, 0, 0, 0];
+    for (var i = 0; i < run.pods.length; i++) onFloor[run.pods[i].kind] = 1;
+    var pool = [], weights = [], total = 0;
+    for (var k = 0; k < D.pods.length; k++) {
+      var lv = mech ? mech.lv[k] : 0;
+      if (lv >= 5) continue;
+      var w = (lv === 0 ? 5 : 6 - lv) * (onFloor[k] ? 0.25 : 1);
+      pool.push(k); weights.push(w); total += w;
+    }
+    if (!pool.length) return (run.rng() * D.pods.length) | 0;
+    var roll = run.rng() * total;
+    for (var j = 0; j < pool.length; j++) { roll -= weights[j]; if (roll <= 0) return pool[j]; }
+    return pool[pool.length - 1];
+  }
+
+  function safePodSpot(run, ox, oy) {
+    for (var a = 0; a < 8; a++) {
+      var ang = run.rng() * Math.PI * 2, d = 135 + run.rng() * 65;
+      var tx = clamp(clamp(ox + Math.cos(ang) * d, D.PAD + 80, D.W - D.PAD - 80), run.cam.x - 480, run.cam.x + 480);
+      var ty = clamp(clamp(oy + Math.sin(ang) * d, D.PAD + 80, D.H - D.PAD - 80), run.cam.y - 250, run.cam.y + 250);
+      var ok = true, c;
+      for (c = 0; c < run.arena.coils.length; c++) if (Math.hypot(tx - run.arena.coils[c].x, ty - run.arena.coils[c].y) < 85) ok = false;
+      for (c = 0; c < run.arena.bumpers.length; c++) if (Math.hypot(tx - run.arena.bumpers[c].x, ty - run.arena.bumpers[c].y) < 85) ok = false;
+      if (ok) return { x: tx, y: ty };
+    }
+    return { x: clamp(ox + 120, 140, D.W - 140), y: clamp(oy, 140, D.H - 140) };
+  }
+
+  function spawnPod(run, kind, x, y) {
+    if (run.pods.length >= MAX_PODS) run.pods.shift();
+    var pod = { id: run.uid++, kind: clamp(kind | 0, 0, D.pods.length - 1), x: clamp(x, D.PAD + 48, D.W - D.PAD - 48), y: clamp(y, D.PAD + 48, D.H - D.PAD - 48), r: 28, age: 0 };
+    run.pods.push(pod);
+    emit(run, { type: 'podSpawn', podKind: pod.kind, x: pod.x, y: pod.y });
+    return pod;
+  }
+
+  function spawnPodForPlayers(run) {
+    for (var i = 0; i < run.mechs.length; i++) {
+      var m = run.mechs[i];
+      if (!m.alive && run.players === 2) continue;
+      var pos = safePodSpot(run, m.x, m.y);
+      spawnPod(run, choosePodKind(run, m), pos.x, pos.y);
     }
   }
 
-  function dropBolts(run, x, y, n) {
-    const rng = run.rng;
-    for (let i = 0; i < n; i++) {
-      if (run.bFreeN <= 0) return;
-      const id = allocB(run);
-      const a = rng() * 6.2831853;
-      const sp = 40 + rng() * 90;
-      run.bx[id] = x;
-      run.by[id] = y;
-      run.bvx[id] = Math.cos(a) * sp;
-      run.bvy[id] = Math.sin(a) * sp;
+  function dropBolts(run, x, y, count, xpVal) {
+    run.xp += xpVal;
+    while (run.xp >= run.xpNext) {
+      run.xp -= run.xpNext; run.level++; run.xpNext = Math.round(12 + run.level * 8);
+      spawnPodForPlayers(run);
+    }
+    for (var i = 0; i < count && run.boltDrops.length < MAX_BOLTS; i++) {
+      var ang = run.rng() * Math.PI * 2, sp = 8 + run.rng() * 24;
+      run.boltDrops.push({ x: clamp(x + Math.cos(ang) * sp, D.PAD + 16, D.W - D.PAD - 16), y: clamp(y + Math.sin(ang) * sp, D.PAD + 16, D.H - D.PAD - 16), val: 1 });
     }
   }
 
-  function killRobot(run, id) {
-    if (!run.rAlive[id]) return;
-    const type = run.rType[id];
-    const x = run.rx[id], y = run.ry[id];
-    const spec = D.bots[type];
-    freeR(run, id);
-    run.pops++;
-    run.combo++;
-    run.comboT = 1.7;
-    const bonus = run.combo >= 12 ? 1 : 0;
-    addXp(run, spec.xp + bonus);
-    dropBolts(run, x, y, spec.bolts);
-    emit(run, 1, type, spec.xp, x, y);
-    if (type === SPLIT) {
-      RS.spawnRobot(run, MINI, x + 16, y);
-      RS.spawnRobot(run, MINI, x - 16, y);
-    }
-    if (type === KING) {
-      run.kingAlive = 0;
-      run.kingId = -1;
-      run.bossPopped = 1;
-      emit(run, 7, 1, 0, x, y);
-      if (run.endless) run.nextKing = run.t + 120;
-      else run.over = 'win';
-    }
+  function computeStars(run) {
+    var hp = 0, mx = 0;
+    for (var i = 0; i < run.mechs.length; i++) { hp += Math.max(0, run.mechs[i].hp); mx += run.mechs[i].maxHp; }
+    var r = mx > 0 ? hp / mx : 0;
+    return (r >= 0.5 && run.t <= 98) ? 3 : (r >= 0.34 || run.t <= 95) ? 2 : 1;
   }
 
-  function damageRobot(run, id, dmg, owner, sx, sy) {
-    if (!run.rAlive[id] || dmg <= 0) return;
-    run.rhp[id] -= dmg;
-    run.rHurt[id] = 0.16;
-    if (sx != null && run.rType[id] !== KING) {
-      const dx = run.rx[id] - sx, dy = run.ry[id] - sy;
-      const inv = 1 / (Math.sqrt(dx * dx + dy * dy) || 1);
-      const kick = run.rType[id] === 3 ? 8 : 18;
-      run.rx[id] += dx * inv * kick;
-      run.ry[id] += dy * inv * kick;
-    }
-    if (run.rType[id] === KING) {
-      run.bossHits = (run.bossHits || 0) + 1;
-      emit(run, 5, Math.round(dmg), owner, run.rx[id], run.ry[id]);
-    } else emit(run, 12, Math.round(dmg), 0, run.rx[id], run.ry[id]);
-    if (run.rhp[id] <= 0) killRobot(run, id);
+  function spawnPlayerShot(run, mech, kind, ang, speed, dmg, pierce, r) {
+    if (run.shots.length >= MAX_SHOTS) return;
+    run.shots.push({ team: 0, owner: mech.id, kind: kind, x: mech.x + Math.cos(ang) * 26, y: mech.y + Math.sin(ang) * 26, vx: Math.cos(ang) * speed, vy: Math.sin(ang) * speed, ang: ang, speed: speed, dmg: dmg, pierce: pierce, r: r, life: kind === 1 ? 2.2 : 1.05, hitIds: [] });
+  }
+  function spawnEnemyShot(run, x, y, ang, speed, r) {
+    if (run.shots.length >= MAX_SHOTS) return;
+    run.shots.push({ team: 1, owner: -1, kind: 2, x: x + Math.cos(ang) * 20, y: y + Math.sin(ang) * 20, vx: Math.cos(ang) * speed, vy: Math.sin(ang) * speed, ang: ang, speed: speed, dmg: 1, pierce: 1, r: r || 10, life: 3.2, hitIds: null });
   }
 
-  function alreadyHit(run, pi, ri) {
-    const b = pi * HIT_N, g = run.rGen[ri];
-    for (let k = 0; k < HIT_N; k++) if (run.pHit[b + k] === ri + 1 && run.pHitG[b + k] === g) return true;
+  function damageEnemy(run, e, dmg, kx, ky) {
+    if (e.hp <= 0) return false;
+    var crit = e.kind === 5 && e.weakOpen;
+    var actual = crit ? Math.round(dmg * 2.0) : dmg;
+    if (e.shield > 0) {
+      var ab = Math.min(e.shield, actual);
+      e.shield -= ab; actual -= ab; e.flash = 0.1;
+      if (actual <= 0) { emit(run, { type: 'hit', x: e.x, y: e.y, shield: true, crit: false }); return false; }
+    }
+    e.hp -= actual; e.flash = 0.12;
+    if (kx || ky) {
+      var ks = e.kind === 5 ? 0.08 : (e.kind === 4 ? 0.35 : 1.0);
+      e.x = clamp(e.x + kx * ks, D.PAD + e.r, D.W - D.PAD - e.r);
+      e.y = clamp(e.y + ky * ks, D.PAD + e.r, D.H - D.PAD - e.r);
+    }
+    emit(run, { type: 'hit', x: e.x, y: e.y, shield: false, crit: crit, dmg: actual });
+    if (e.hp <= 0) {
+      var spec = D.enemies[e.kind];
+      run.kills++; run.combo++; run.comboT = 2.6;
+      run.score += spec.score + Math.min(25, run.combo * 2);
+      dropBolts(run, e.x, e.y, spec.bolts, spec.xp);
+      emit(run, { type: 'kill', x: e.x, y: e.y, enemyKind: e.kind, isBoss: e.kind === 5 });
+      pushArc(run, { kind: 'ring', x: e.x, y: e.y, r: e.kind === 5 ? 160 : e.r * 1.9, color: e.kind === 5 ? '#ffe14a' : '#ff7b3a', t: 0.22 });
+      if (e.kind === 5) {
+        run.bossDefeated = true; run.bolts += 20; run.score += 400; run.stars = computeStars(run);
+        run.enemies.length = 0; run.shots.length = 0; run.state = 'win';
+        emit(run, { type: 'win', x: e.x, y: e.y });
+      }
+      return true;
+    }
+    if (e.kind === 5 && run.diff.bossPhases >= 2 && !e.phase2 && e.hp <= e.maxHp * 0.5) {
+      e.phase2 = true; e.aiState = 0; e.aiT = 0.6;
+      pushArc(run, { kind: 'ring', x: e.x, y: e.y, r: 190, color: '#ff3ea5', t: 0.32 });
+      for (var k = 0; k < 8; k++) spawnEnemyShot(run, e.x, e.y, (Math.PI * 2 * k) / 8, 250, 12);
+      emit(run, { type: 'bossPhase2', x: e.x, y: e.y });
+    }
     return false;
   }
-  function markHit(run, pi, ri) {
-    const b = pi * HIT_N, g = run.rGen[ri];
-    for (let k = 0; k < HIT_N; k++) if (run.pHit[b + k] === 0) {
-      run.pHit[b + k] = ri + 1;
-      run.pHitG[b + k] = g;
-      return;
+
+  function shockwave(run, x, y, radius, dmg, pushDist, color) {
+    pushArc(run, { kind: 'ring', x: x, y: y, r: radius, color: color || '#28e7ff', t: 0.22 });
+    for (var s = run.shots.length - 1; s >= 0; s--) {
+      if (run.shots[s].team === 1 && Math.hypot(run.shots[s].x - x, run.shots[s].y - y) <= radius) run.shots.splice(s, 1);
+    }
+    for (var i = run.enemies.length - 1; i >= 0; i--) {
+      var e = run.enemies[i], dx = e.x - x, dy = e.y - y, d = Math.hypot(dx, dy);
+      if (d <= radius + e.r) {
+        var nx = d > 0.01 ? dx / d : 1, ny = d > 0.01 ? dy / d : 0;
+        var dead = damageEnemy(run, e, dmg, nx * pushDist, ny * pushDist);
+        if (run.state === 'win') return;
+        if (dead) run.enemies.splice(i, 1);
+      }
     }
   }
-  function clearHits(run, pi) {
-    const b = pi * HIT_N;
-    for (let k = 0; k < HIT_N; k++) run.pHit[b + k] = 0;
+
+  function hurtMech(run, mech) {
+    if (!mech.alive || mech.invuln > 0 || mech.dashT > 0) return false;
+    mech.hp = Math.max(0, mech.hp - 1); mech.invuln = 1.25; mech.hurtFlash = 0.3;
+    run.heartsLost++; run.combo = 0;
+    emit(run, { type: 'hurt', player: mech.id, x: mech.x, y: mech.y });
+    shockwave(run, mech.x, mech.y, 105, 16, 42, '#ff5a7a');
+    if (run.state === 'win') return true;
+    if (mech.hp <= 0) {
+      mech.alive = false; mech.down = true; mech.revive = 0;
+      var any = false;
+      for (var i = 0; i < run.mechs.length; i++) if (run.mechs[i].alive) any = true;
+      if (!any) { run.state = 'over'; emit(run, { type: 'over' }); }
+    }
+    return true;
   }
 
-  function launch(run, owner, kind, x, y, vx, vy, dmg, pierce, life, rad, tx, ty) {
-    if (run.pFreeN <= 0) return -1;
-    const id = allocP(run);
-    run.pKind[id] = kind;
-    run.pOwner[id] = owner;
-    run.pPierce[id] = pierce;
-    run.px[id] = x;
-    run.py[id] = y;
-    run.pvx[id] = vx;
-    run.pvy[id] = vy;
-    run.pdmg[id] = dmg;
-    run.plife[id] = life;
-    run.pr[id] = rad;
-    run.ptx[id] = tx;
-    run.pty[id] = ty;
-    run.pAge[id] = 0;
-    run.pRet[id] = 0;
-    clearHits(run, id);
-    return id;
+  function applyPod(run, mech, pod) {
+    var k = pod.kind, spec = D.pods[k];
+    if (mech.lv[k] < 5) mech.lv[k]++;
+    else { mech.hp = Math.min(mech.maxHp, mech.hp + 1); run.score += 50; }
+    if (k === 4) { if (mech.hp < mech.maxHp) mech.hp++; else mech.invuln = Math.max(mech.invuln, 1.5); }
+    run.score += 35;
+    emit(run, { type: 'pod', player: mech.id, podKind: k, x: pod.x, y: pod.y, text: mech.lv[k] >= 3 ? spec.evoPopup : spec.popup });
+    shockwave(run, mech.x, mech.y, 130, 26, 48, spec.color);
   }
 
-  function lvRow(run, p, id) {
-    const n = run.lv[p][id];
-    return n > 0 ? n - 1 : -1;
-  }
+  function updateWeapons(run, mech, dt) {
+    var best = null, bestScore = Infinity;
+    for (var i = 0; i < run.enemies.length; i++) {
+      var e = run.enemies[i], d = Math.hypot(e.x - mech.x, e.y - mech.y);
+      if (d > 680) continue;
+      var w = e.kind === 5 && e.weakOpen ? d * 0.6 : d;
+      if (w < bestScore) { bestScore = w; best = e; }
+    }
+    if (best) mech.aim = Math.atan2(best.y - mech.y, best.x - mech.x);
+    else if (Math.hypot(mech.vx, mech.vy) > 25) mech.aim = Math.atan2(mech.vy, mech.vx);
 
-  function weapons(run, dt) {
-    if (run.noWeapons) return;
-    for (let p = 0; p < run.players; p++) {
-      if (run.hp[p] <= 0) continue;
-      const cds = run.wcd[p];
-      for (let u = 0; u < 10; u++) cds[u] -= dt;
-      const foam = lvRow(run, p, D.FOAM);
-      if (foam >= 0 && cds[D.FOAM] <= 0) {
-        const spec = D.weapons[D.FOAM];
-        const aim = nearestRobot(run, run.x[p], run.y[p], 440);
-        if (aim >= 0) {
-          const dx = run.rx[aim] - run.x[p], dy = run.ry[aim] - run.y[p];
-          const inv = 1 / (Math.sqrt(dx * dx + dy * dy) || 1);
-          run.aim[p] = Math.atan2(dy, dx);
-          let pierce = spec.pierce[foam];
-          let dmg = spec.dmg[foam];
-          if (run.evo[p][1]) { pierce += 2; dmg += 8; }
-          launch(run, p, 0, run.x[p] + dx * inv * 28, run.y[p] + dy * inv * 28, dx * inv * spec.speed, dy * inv * spec.speed, dmg, pierce, 0.9, 8, 0, 0);
-          cds[D.FOAM] = spec.cd[foam];
+    mech.fireCd -= dt;
+    if (best && mech.fireCd <= 0) {
+      var plLv = clamp(mech.lv[0] - 1, 0, 4), pl = D.pods[0], n = pl.shots[plLv];
+      mech.fireCd = pl.cd[plLv]; mech.recoil = 6; mech.muzzleT = 0.065;
+      for (var s = 0; s < n; s++) {
+        spawnPlayerShot(run, mech, 0, mech.aim + (s - (n - 1) * 0.5) * 0.12, 830, pl.dmg[plLv], pl.pierce[plLv], plLv >= 2 ? 10 : 8);
+      }
+    }
+
+    if (mech.lv[1] > 0) {
+      var sawLv = clamp(mech.lv[1] - 1, 0, 4), sawSpec = D.pods[1], sawN = sawSpec.count[sawLv];
+      mech.sawAng += dt * 4.8;
+      for (var j = 0; j < sawN; j++) {
+        var sa = mech.sawAng + (Math.PI * 2 * j) / sawN;
+        var sx = mech.x + Math.cos(sa) * sawSpec.orbit, sy = mech.y + Math.sin(sa) * sawSpec.orbit;
+        for (var q = run.shots.length - 1; q >= 0; q--) {
+          if (run.shots[q].team === 1 && Math.hypot(run.shots[q].x - sx, run.shots[q].y - sy) < 28) run.shots.splice(q, 1);
         }
-      }
-      const fr = lvRow(run, p, D.FRISBEE);
-      if (fr >= 0 && cds[D.FRISBEE] <= 0) {
-        const spec = D.weapons[D.FRISBEE];
-        const aim = nearestRobot(run, run.x[p], run.y[p], 900);
-        let dx = Math.cos(run.aim[p]), dy = Math.sin(run.aim[p]);
-        if (aim >= 0) {
-          dx = run.rx[aim] - run.x[p]; dy = run.ry[aim] - run.y[p];
-          const inv = 1 / (Math.sqrt(dx * dx + dy * dy) || 1);
-          dx *= inv; dy *= inv;
-        }
-        launch(run, p, 1, run.x[p], run.y[p], dx * spec.speed, dy * spec.speed, spec.dmg[fr], spec.pierce[fr], 2.4, 12, run.x[p], run.y[p]);
-        cds[D.FRISBEE] = spec.cd[fr];
-      }
-      const bal = lvRow(run, p, D.BALLOON);
-      if (bal >= 0 && cds[D.BALLOON] <= 0) {
-        const spec = D.weapons[D.BALLOON];
-        const aim = nearestRobot(run, run.x[p], run.y[p], 760);
-        if (aim >= 0) {
-          const tx = run.rx[aim], ty = run.ry[aim];
-          const dx = tx - run.x[p], dy = ty - run.y[p];
-          const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-          const sp = Math.max(180, dist / 0.55);
-          launch(run, p, 2, run.x[p], run.y[p], dx / dist * sp, dy / dist * sp, spec.dmg[bal], 1, 1.3, 10, tx, ty);
-          // stash radius in pAge's partner: use pty already tx. Radius stored by overloading plife? Keep rad on a side channel: pHit unused. Use pr after travel. Store splash in ptx? ptx is target.
-          // Splash radius rides in the high byte via a parallel use of pPierce's neighbor: store in pAge after launch? I'll put splash in run and read spec at explode from owner level.
-          cds[D.BALLOON] = spec.cd[bal];
-        }
-      }
-      const paint = lvRow(run, p, D.PAINT);
-      if (paint >= 0 && cds[D.PAINT] <= 0) {
-        const moved = run._moved && run._moved[p];
-        if (moved) {
-          const spec = D.weapons[D.PAINT];
-          const id = allocZ(run);
-          if (id >= 0) {
-            run.zKind[id] = 0;
-            run.zx[id] = run.x[p];
-            run.zy[id] = run.y[p];
-            run.zr[id] = spec.rad[paint];
-            run.zdps[id] = spec.dmg[paint];
-            run.zlife[id] = 1.55;
-          }
-          cds[D.PAINT] = spec.cd[paint];
-        }
-      }
-    }
-  }
-
-  function nearestRobot(run, x, y, maxDist) {
-    let best = -1, bd = maxDist * maxDist;
-    const alive = run.rAlive, rx = run.rx, ry = run.ry;
-    for (let i = 0; i < CAP_R; i++) {
-      if (!alive[i]) continue;
-      const dx = rx[i] - x, dy = ry[i] - y, d = dx * dx + dy * dy;
-      if (d < bd) { bd = d; best = i; }
-    }
-    return best;
-  }
-
-  function tickOrbit(run, p, dt) {
-    if (run.noWeapons) return;
-    const ring = lvRow(run, p, D.RING);
-    const ducks = lvRow(run, p, D.DUCKS);
-    const tornado = run.evo[p][0] === 1;
-    run.ang[p] += dt * (tornado ? 5.2 : 2.4);
-    if (ring >= 0 && run.wcd[p][D.RING] <= 0) {
-      const spec = D.weapons[D.RING];
-      orbitDamage(run, p, spec.n[ring], spec.orbit, spec.dmg[ring], 16);
-      run.wcd[p][D.RING] = spec.cd[ring];
-    }
-    if (ducks >= 0 && run.wcd[p][D.DUCKS] <= 0) {
-      const spec = D.weapons[D.DUCKS];
-      if (tornado) tornadoTick(run, p, spec.dmg[4] + 10);
-      else orbitDamage(run, p, spec.n[ducks], spec.orbit, spec.dmg[ducks], 14);
-      run.wcd[p][D.DUCKS] = tornado ? 0.22 : spec.cd[ducks];
-    } else if (tornado && ducks < 0 && run.wcd[p][D.DUCKS] <= 0) {
-      tornadoTick(run, p, 20);
-      run.wcd[p][D.DUCKS] = 0.22;
-    }
-  }
-
-  function orbitDamage(run, p, n, orbit, dmg, rad) {
-    const base = run.ang[p];
-    for (let i = 0; i < n; i++) {
-      const a = base + i * 6.2831853 / n;
-      const x = run.x[p] + Math.cos(a) * orbit;
-      const y = run.y[p] + Math.sin(a) * orbit;
-      hurtCircle(run, x, y, rad, dmg, p);
-    }
-  }
-
-  function tornadoTick(run, p, dmg) {
-    const R = 168;
-    queryRobots(run, run.x[p], run.y[p], R, function (ri) {
-      const dx = run.x[p] - run.rx[ri], dy = run.y[p] - run.ry[ri];
-      const d2 = dx * dx + dy * dy;
-      if (d2 > R * R || d2 < 1) return;
-      const inv = 1 / Math.sqrt(d2);
-      if (run.rType[ri] !== KING) {
-        run.rx[ri] += dx * inv * 36;
-        run.ry[ri] += dy * inv * 36;
-      }
-        if (d2 < (R * 0.72) * (R * 0.72)) damageRobot(run, ri, dmg, p, run.x[p], run.y[p]);
-    });
-  }
-
-  function hurtCircle(run, x, y, rad, dmg, owner) {
-    queryRobots(run, x, y, rad, function (ri) {
-      if (overlap(x, y, rad, run.rx[ri], run.ry[ri], run.rr[ri] * 0.65)) damageRobot(run, ri, dmg, owner, x, y);
-    });
-  }
-
-  function moveProjectiles(run, dt) {
-    for (let i = 0; i < CAP_P; i++) {
-      if (!run.pAlive[i]) continue;
-      run.pAge[i] += dt;
-      run.plife[i] -= dt;
-      if (run.pKind[i] === 1 && run.pAge[i] > 0.48) run.pRet[i] = 1;
-      if (run.pKind[i] === 1 && run.pRet[i]) {
-        const o = run.pOwner[i];
-        if (o >= 0) {
-          const dx = run.x[o] - run.px[i], dy = run.y[o] - run.py[i];
-          const inv = 1 / (Math.sqrt(dx * dx + dy * dy) || 1);
-          run.pvx[i] = dx * inv * 520;
-          run.pvy[i] = dy * inv * 520;
-          if (dx * dx + dy * dy < 24 * 24) { freeP(run, i); continue; }
-        }
-      }
-      run.px[i] += run.pvx[i] * dt;
-      run.py[i] += run.pvy[i] * dt;
-      if (run.pKind[i] !== 4 && blocked(run, run.px[i], run.py[i], 6)) {
-        if (run.pKind[i] === 2) { run.pKind[i] = 4; continue; }
-        freeP(run, i);
-        continue;
-      }
-      if (run.pKind[i] === 2) {
-        const dx = run.ptx[i] - run.px[i], dy = run.pty[i] - run.py[i];
-        if (dx * dx + dy * dy < 18 * 18 || run.plife[i] <= 0) {
-          run.pKind[i] = 4;
-          continue;
-        }
-      }
-      if (run.plife[i] <= 0 || run.px[i] < -40 || run.py[i] < -40 || run.px[i] > W + 40 || run.py[i] > H + 40) freeP(run, i);
-    }
-  }
-
-  function explodeBalloon(run, i) {
-    const o = run.pOwner[i];
-    const row = o >= 0 ? lvRow(run, o, D.BALLOON) : 2;
-    const rad = D.weapons[D.BALLOON].rad[row < 0 ? 2 : row];
-    const x = run.px[i], y = run.py[i], dmg = run.pdmg[i];
-    queryRobots(run, x, y, rad, function (ri) {
-      if (overlap(x, y, rad, run.rx[ri], run.ry[ri], run.rr[ri] * 0.4)) damageRobot(run, ri, dmg, o, x, y);
-    });
-    const z = allocZ(run);
-    if (z >= 0) {
-      run.zKind[z] = 1;
-      run.zx[z] = x; run.zy[z] = y; run.zr[z] = rad; run.zdps[z] = 0; run.zlife[z] = 0.35;
-    }
-    if (o >= 0 && run.evo[o][1]) {
-      const pz = allocZ(run);
-      if (pz >= 0) {
-        run.zKind[pz] = 0; run.zx[pz] = x; run.zy[pz] = y; run.zr[pz] = 48; run.zdps[pz] = 36; run.zlife[pz] = 1.4;
-      }
-    }
-    emit(run, 1, 3, 0, x, y);
-  }
-
-  function hitProjectiles(run) {
-    for (let i = 0; i < CAP_P; i++) {
-      if (!run.pAlive[i]) continue;
-      const kind = run.pKind[i];
-      const owner = run.pOwner[i];
-      if (owner < 0) {
-        for (let p = 0; p < run.players; p++) {
-          if (run.hp[p] <= 0) continue;
-          if (!overlap(run.px[i], run.py[i], run.pr[i], run.x[p], run.y[p], run.prad)) continue;
-          if (run.dashT[p] > 0) {
-            emit(run, 4, Math.min(2000, run.pAge[i] * 1000), p, run.px[i], run.py[i]);
-            freeP(run, i);
-            break;
-          }
-          if (run.inv[p] > 0) { freeP(run, i); break; }
-          hurtPlayer(run, p);
-          freeP(run, i);
-          break;
-        }
-        continue;
-      }
-      if (kind === 2) continue;
-      let hit = false;
-      queryRobots(run, run.px[i], run.py[i], run.pr[i], function (ri) {
-        if (hit || !run.pAlive[i]) return;
-        if (!overlap(run.px[i], run.py[i], run.pr[i], run.rx[ri], run.ry[ri], run.rr[ri])) return;
-        if (alreadyHit(run, i, ri)) return;
-        markHit(run, i, ri);
-        const cannon = run.evo[owner][1] && kind === 0;
-        damageRobot(run, ri, run.pdmg[i], owner, run.px[i], run.py[i]);
-        if (cannon && run.zFreeN > 0 && (ri & 1) === 0) {
-          const z = allocZ(run);
-          if (z >= 0) {
-            run.zKind[z] = 0; run.zx[z] = run.rx[ri]; run.zy[z] = run.ry[ri];
-            run.zr[z] = 36; run.zdps[z] = 28; run.zlife[z] = 1.1;
+        for (var ei = run.enemies.length - 1; ei >= 0; ei--) {
+          var en = run.enemies[ei];
+          if (en.sawCd <= 0 && Math.hypot(en.x - sx, en.y - sy) <= en.r + 18) {
+            en.sawCd = 0.25;
+            var dead = damageEnemy(run, en, sawSpec.dmg[sawLv], Math.cos(sa) * 18, Math.sin(sa) * 18);
+            if (run.state === 'win') return;
+            if (dead) run.enemies.splice(ei, 1);
           }
         }
-        run.pPierce[i]--;
-        if (run.pPierce[i] <= 0) { freeP(run, i); hit = true; }
-      });
-    }
-  }
-
-  function zones(run, dt) {
-    for (let i = 0; i < CAP_Z; i++) {
-      if (!run.zAlive[i]) continue;
-      run.zlife[i] -= dt;
-      if (run.zlife[i] <= 0) { freeZ(run, i); continue; }
-      if (run.zKind[i] !== 0 || run.zdps[i] <= 0) continue;
-      const x = run.zx[i], y = run.zy[i], rad = run.zr[i], dmg = run.zdps[i] * dt;
-      queryRobots(run, x, y, rad, function (ri) {
-        if (overlap(x, y, rad, run.rx[ri], run.ry[ri], run.rr[ri] * 0.5)) damageRobot(run, ri, dmg, 0, x, y);
-      });
-    }
-  }
-
-  function hurtPlayer(run, p) {
-    if (run.immortal || run.hp[p] <= 0 || run.inv[p] > 0 || run.dashT[p] > 0) return;
-    if (run.shield[p] > 0) {
-      run.shield[p]--;
-      run.inv[p] = 0.35;
-      emit(run, 3, 0, p, run.x[p], run.y[p]);
-      return;
-    }
-    run.hp[p]--;
-    run.hurtN[p]++;
-    run.inv[p] = 1;
-    emit(run, 3, 1, p, run.x[p], run.y[p]);
-    if (run.hp[p] <= 0) {
-      run.hp[p] = 0;
-      emit(run, 8, p, 0, run.x[p], run.y[p]);
-    }
-  }
-
-  function movePlayers(run, dt, inputs) {
-    if (!run._moved) run._moved = [0, 0];
-    for (let p = 0; p < run.players; p++) {
-      run.inv[p] = Math.max(0, run.inv[p] - dt);
-      run.dashT[p] = Math.max(0, run.dashT[p] - dt);
-      run.dashCd[p] = Math.max(0, run.dashCd[p] - dt);
-      if (run.shield[p] < run.shieldMax[p]) {
-        run.shieldT[p] -= dt;
-        if (run.shieldT[p] <= 0) {
-          run.shield[p]++;
-          run.shieldT[p] = 8;
-        }
-      }
-      if (run.hp[p] <= 0) { run._moved[p] = 0; continue; }
-      const inp = (inputs && inputs[p]) || ZERO;
-      let ix = inp.x || 0, iy = inp.y || 0;
-      if (ix > 1) ix = 1; else if (ix < -1) ix = -1;
-      if (iy > 1) iy = 1; else if (iy < -1) iy = -1;
-      const m2 = ix * ix + iy * iy;
-      if (m2 > 1) { const inv = 1 / Math.sqrt(m2); ix *= inv; iy *= inv; }
-      if (inp.dash && run.dashCd[p] <= 0 && run.dashT[p] <= 0) {
-        run.dashT[p] = 0.16;
-        run.dashCd[p] = 1.5;
-        run.dashN[p]++;
-        if (m2 > 0.04) run.aim[p] = Math.atan2(iy, ix);
-        else { ix = Math.cos(run.aim[p]); iy = Math.sin(run.aim[p]); }
-        emit(run, 10, p, 0, run.x[p], run.y[p]);
-      }
-      const sneaker = lvRow(run, p, D.SNEAK);
-      let sp = run.speed[p];
-      if (sneaker >= 0) sp *= 1 + D.weapons[D.SNEAK].bonus[sneaker];
-      if (run.dashT[p] > 0) sp = 780;
-      run.x[p] = clamp(run.x[p] + ix * sp * dt, 26, W - 26);
-      run.y[p] = clamp(run.y[p] + iy * sp * dt, 26, H - 26);
-      slideBlocks(run, run.x[p], run.y[p], run.prad, SLIDE);
-      run.x[p] = clamp(SLIDE.x, 26, W - 26);
-      run.y[p] = clamp(SLIDE.y, 26, H - 26);
-      run._moved[p] = m2 > 0.04 ? 1 : 0;
-      if (m2 > 0.04 && run.dashT[p] <= 0) run.aim[p] = Math.atan2(iy, ix);
-    }
-    if (run.players === 2 && run.hp[0] > 0 && run.hp[1] > 0) {
-      const dx = run.x[1] - run.x[0], dy = run.y[1] - run.y[0];
-      const d2 = dx * dx + dy * dy;
-      if (d2 > 1 && d2 < 36 * 36) {
-        const inv = 1 / Math.sqrt(d2);
-        const push = (36 - d2 * inv) * 0.5;
-        run.x[0] = clamp(run.x[0] - dx * inv * push, 26, W - 26);
-        run.y[0] = clamp(run.y[0] - dy * inv * push, 26, H - 26);
-        run.x[1] = clamp(run.x[1] + dx * inv * push, 26, W - 26);
-        run.y[1] = clamp(run.y[1] + dy * inv * push, 26, H - 26);
       }
     }
-  }
 
-  function moveRobots(run, dt) {
-    const alive = run.rAlive;
-    for (let i = 0; i < CAP_R; i++) {
-      if (!alive[i]) continue;
-      run.rHurt[i] = Math.max(0, run.rHurt[i] - dt);
-      const type = run.rType[i];
-      const p = nearestPlayer(run, run.rx[i], run.ry[i]);
-      const tx = run.x[p], ty = run.y[p];
-      let dx = tx - run.rx[i], dy = ty - run.ry[i];
-      let d2 = dx * dx + dy * dy;
-      const inv = 1 / (Math.sqrt(d2) || 1);
-      let sp = run.rsp[i];
-      if (run.t < 50 && type <= 1 && d2 < 760 * 760) sp *= 0.42;
-      run.rT[i] -= dt;
-      if (type === 1) {
-        if (run.rMode[i] === 0 && run.rT[i] <= 0) { run.rMode[i] = 1; run.rT[i] = 0.22; }
-        else if (run.rMode[i] === 1 && run.rT[i] <= 0) {
-          run.rvx[i] = dx * inv * 300;
-          run.rvy[i] = dy * inv * 300;
-          run.rMode[i] = 2;
-          run.rT[i] = 0.28;
-        } else if (run.rMode[i] === 2 && run.rT[i] <= 0) { run.rMode[i] = 0; run.rT[i] = 1.15; }
-        if (run.rMode[i] === 2) {
-          run.rx[i] += run.rvx[i] * dt;
-          run.ry[i] += run.rvy[i] * dt;
-          run.rvx[i] *= 1 - 1.6 * dt;
-          run.rvy[i] *= 1 - 1.6 * dt;
-        } else if (run.rMode[i] === 0) {
-          run.rx[i] += dx * inv * sp * dt;
-          run.ry[i] += dy * inv * sp * dt;
-        }
-      } else if (type === 2) {
-        if (run.rT[i] <= 0 || run.rMode[i] === 0) {
-          run.rvx[i] = dx * inv * sp;
-          run.rvy[i] = dy * inv * sp;
-          run.rMode[i] = 1;
-          run.rT[i] = 1.25;
-        }
-        run.rx[i] += run.rvx[i] * dt;
-        run.ry[i] += run.rvy[i] * dt;
-      } else if (type === 5) {
-        if (d2 < 520 * 520 && run.rT[i] <= 0) {
-          const s = 150;
-          launch(run, -1, 3, run.rx[i], run.ry[i], dx * inv * s, dy * inv * s, 1, 1, 2.4, 9, 0, 0);
-          run.rT[i] = 2.15;
-        }
-        const creep = d2 < 260 * 260 ? -0.35 : 1;
-        run.rx[i] += dx * inv * sp * creep * dt;
-        run.ry[i] += dy * inv * sp * creep * dt;
-      } else if (type === MINIBOSS) {
-        run.rx[i] += dx * inv * sp * dt;
-        run.ry[i] += dy * inv * sp * dt;
-        if (run.rT[i] <= 0) {
-          const n = 8;
-          for (let k = 0; k < n; k++) {
-            const a = k / n * 6.2831853 + run.t;
-            launch(run, -1, 3, run.rx[i], run.ry[i], Math.cos(a) * 150, Math.sin(a) * 150, 1, 1, 2.2, 9, 0, 0);
-          }
-          run.rT[i] = 2.4 / run.bossMul;
-        }
-      } else if (type === KING) {
-        const ratio = run.rmax[i] > 0 ? run.rhp[i] / run.rmax[i] : 1;
-        const freq = run.bossMul;
-        if (run.rMode[i] === 0 && run.rT[i] <= 0) { run.rMode[i] = 1; run.rT[i] = 0.32 / freq; }
-        else if (run.rMode[i] === 1 && run.rT[i] <= 0) {
-          run.rvx[i] = dx * inv * (240 + (ratio < 0.35 ? 80 : 0));
-          run.rvy[i] = dy * inv * (240 + (ratio < 0.35 ? 80 : 0));
-          run.rMode[i] = 2;
-          run.rT[i] = 0.42;
-        } else if (run.rMode[i] === 2 && run.rT[i] <= 0) {
-          run.rMode[i] = 0;
-          run.rT[i] = (ratio < 0.6 ? 1.7 : 2.5) / freq;
-          if (ratio < 0.65) {
-            const n = ratio < 0.35 ? 12 : 8;
-            for (let k = 0; k < n; k++) {
-              const a = k / n * 6.2831853;
-              const s = 130 * freq;
-              launch(run, -1, 3, run.rx[i], run.ry[i], Math.cos(a) * s, Math.sin(a) * s, 1, 1, 2.6, 10, 0, 0);
+    if (mech.lv[2] > 0) {
+      mech.missileCd -= dt;
+      if (run.enemies.length > 0 && mech.missileCd <= 0) {
+        var mLv = clamp(mech.lv[2] - 1, 0, 4), mSpec = D.pods[2], mc = mSpec.count[mLv];
+        mech.missileCd = mSpec.cd[mLv];
+        for (var mi = 0; mi < mc; mi++) spawnPlayerShot(run, mech, 1, mech.aim + (mi - (mc - 1) * 0.5) * 0.38, 490, mSpec.dmg[mLv], 1, 11);
+      }
+    }
+
+    if (mech.lv[3] > 0) {
+      mech.zapCd -= dt;
+      if (mech.zapCd <= 0 && run.enemies.length > 0) {
+        var zLv = clamp(mech.lv[3] - 1, 0, 4), zSpec = D.pods[3], curX = mech.x, curY = mech.y, hitSet = {}, zapped = 0;
+        for (var c = 0; c < zSpec.chains[zLv]; c++) {
+          var pickIdx = -1, pickD = c === 0 ? zSpec.range : 230;
+          for (var zi = 0; zi < run.enemies.length; zi++) {
+            var cand = run.enemies[zi];
+            if (!hitSet[cand.id]) {
+              var zd = Math.hypot(cand.x - curX, cand.y - curY);
+              if (zd < pickD) { pickD = zd; pickIdx = zi; }
             }
           }
+          if (pickIdx < 0) break;
+          var target = run.enemies[pickIdx];
+          hitSet[target.id] = 1;
+          pushArc(run, { kind: 'zap', x1: curX, y1: curY, x2: target.x, y2: target.y, color: '#d580ff', t: 0.16 });
+          curX = target.x; curY = target.y; zapped++;
+          var killed = damageEnemy(run, target, zSpec.dmg[zLv], 0, 0);
+          if (run.state === 'win') return;
+          if (killed) run.enemies.splice(pickIdx, 1);
         }
-        if (run.rMode[i] === 2) {
-          run.rx[i] += run.rvx[i] * dt;
-          run.ry[i] += run.rvy[i] * dt;
-        } else if (run.rMode[i] === 0) {
-          const chase = sp * (ratio < 0.35 ? 1.35 : 1) * freq;
-          run.rx[i] += dx * inv * chase * dt;
-          run.ry[i] += dy * inv * chase * dt;
-        }
-      } else {
-        run.rx[i] += dx * inv * sp * dt;
-        run.ry[i] += dy * inv * sp * dt;
-      }
-      if (run.rx[i] < run.rr[i]) run.rx[i] = run.rr[i];
-      else if (run.rx[i] > W - run.rr[i]) run.rx[i] = W - run.rr[i];
-      if (run.ry[i] < run.rr[i]) run.ry[i] = run.rr[i];
-      else if (run.ry[i] > H - run.rr[i]) run.ry[i] = H - run.rr[i];
-      if ((i & 3) === (run.frame & 3) && blocked(run, run.rx[i], run.ry[i], run.rr[i] * 0.8)) {
-        slideBlocks(run, run.rx[i], run.ry[i], run.rr[i] * 0.8, SLIDE);
-        run.rx[i] = SLIDE.x;
-        run.ry[i] = SLIDE.y;
+        mech.zapCd = zapped > 0 ? zSpec.cd[zLv] : 0.25;
       }
     }
   }
 
-  function separate(run) {
-    // Soft push inside each hash cell. Overlaps across a cell border wait a
-    // frame; a full cap stays a short walk instead of an N² search.
-    const head = run.hHead, next = run.hNext;
-    const alive = run.rAlive, rx = run.rx, ry = run.ry, rr = run.rr, rType = run.rType;
-    for (let i = 0; i < CAP_R; i++) {
-      if (!alive[i] || rType[i] === KING) continue;
-      const xi = rx[i], yi = ry[i], ri = rr[i];
-      let j = head[cellAt(xi, yi)], guard = 0, seen = 0;
-      while (j >= 0 && seen < 3 && guard++ < 6) {
-        const nextJ = next[j];
-        if (j > i && alive[j] && rType[j] !== KING) {
-          const dx = rx[j] - xi, dy = ry[j] - yi;
-          const min = (ri + rr[j]) * 0.85;
-          const d2 = dx * dx + dy * dy;
-          if (d2 < min * min && d2 > 0.01) {
-            seen++;
-            const inv = 1 / Math.sqrt(d2);
-            const push = (min - d2 * inv) * 0.5;
-            const px = dx * inv * push, py = dy * inv * push;
-            rx[j] += px; ry[j] += py;
-            rx[i] -= px; ry[i] -= py;
+  function distToSegment(px, py, x1, y1, x2, y2) {
+    var dx = x2 - x1, dy = y2 - y1, len2 = dx * dx + dy * dy;
+    if (len2 <= 1) return Math.hypot(px - x1, py - y1);
+    var u = clamp(((px - x1) * dx + (py - y1) * dy) / len2, 0, 1);
+    return Math.hypot(px - (x1 + u * dx), py - (y1 + u * dy));
+  }
+
+  function updateBoss(run, e, dt, target) {
+    var sm = e.phase2 ? 1.25 : 1.0, dx = target.x - e.x, dy = target.y - e.y, dist = Math.hypot(dx, dy) || 1;
+    e.aiT -= dt * sm;
+    if (e.aiState === 0) {
+      e.weakOpen = false;
+      e.x += (dx / dist) * e.speed * sm * dt; e.y += (dy / dist) * e.speed * sm * dt; e.aim = Math.atan2(dy, dx);
+      if (e.aiT <= 0) {
+        e.aiState = e.nextAttack === 0 ? 1 : 4; e.aiT = 0.92; e.aim = Math.atan2(dy, dx); e.nextAttack = 1 - e.nextAttack;
+      }
+    } else if (e.aiState === 1) {
+      e.weakOpen = false; if (e.aiT <= 0) { e.aiState = 2; e.aiT = 0.62; }
+    } else if (e.aiState === 2) {
+      e.weakOpen = false;
+      e.x += Math.cos(e.aim) * 660 * sm * dt; e.y += Math.sin(e.aim) * 660 * sm * dt;
+      if (e.aiT <= 0) { e.aiState = 3; e.aiT = 2.2; e.weakOpen = true; }
+    } else if (e.aiState === 3) {
+      e.weakOpen = true;
+      if (e.aiT <= 0) {
+        e.weakOpen = false; e.aiState = 0; e.aiT = 1.65;
+        for (var k = -1; k <= 1; k++) spawnEnemyShot(run, e.x, e.y, Math.atan2(dy, dx) + k * 0.28, 285, 11);
+      }
+    } else if (e.aiState === 4) {
+      e.weakOpen = false; if (e.aiT <= 0) { e.aiState = 5; e.aiT = 1.1; }
+    } else if (e.aiState === 5) {
+      e.weakOpen = false; e.aim += 0.55 * dt * sm;
+      var beams = e.phase2 ? [-0.26, 0.26] : [0];
+      for (var b = 0; b < beams.length; b++) {
+        var ba = e.aim + beams[b], bx = e.x + Math.cos(ba) * e.beamLen, by = e.y + Math.sin(ba) * e.beamLen;
+        for (var m = 0; m < run.mechs.length; m++) {
+          var mech = run.mechs[m];
+          if (mech.alive && distToSegment(mech.x, mech.y, e.x, e.y, bx, by) < mech.r + 14) {
+            hurtMech(run, mech); if (run.state === 'over') return;
           }
         }
-        j = nextJ;
+      }
+      if (e.aiT <= 0) { e.aiState = 3; e.aiT = 1.6; e.weakOpen = true; }
+    }
+  }
+
+  function updateArenas(run, dt) {
+    var arena = run.arena, i, j, m, e;
+    for (i = 0; i < arena.boosts.length; i++) {
+      var st = arena.boosts[i];
+      for (j = 0; j < run.mechs.length; j++) {
+        m = run.mechs[j];
+        if (m.alive && m.x >= st.x && m.x <= st.x + st.w && m.y >= st.y && m.y <= st.y + st.h) { m.x += st.vx * dt; m.y += st.vy * dt; }
+      }
+      for (j = 0; j < run.enemies.length; j++) {
+        e = run.enemies[j];
+        if (e.kind !== 5 && e.x >= st.x && e.x <= st.x + st.w && e.y >= st.y && e.y <= st.y + st.h) { e.x += st.vx * 0.75 * dt; e.y += st.vy * 0.75 * dt; }
       }
     }
-  }
-
-  function touchPlayers(run) {
-    for (let p = 0; p < run.players; p++) {
-      if (run.hp[p] <= 0 || run.inv[p] > 0 || run.dashT[p] > 0) continue;
-      let hit = false;
-      queryRobots(run, run.x[p], run.y[p], run.prad, function (ri) {
-        if (hit) return;
-        if (!overlap(run.x[p], run.y[p], run.prad, run.rx[ri], run.ry[ri], run.rr[ri])) return;
-        hurtPlayer(run, p);
-        hit = true;
-      });
-    }
-  }
-
-  function revive(run, dt) {
-    if (run.players < 2) return;
-    for (let p = 0; p < 2; p++) {
-      if (run.hp[p] > 0) { run.revT[p] = 0; continue; }
-      const o = 1 - p;
-      if (run.hp[o] <= 0) { run.revT[p] = 0; continue; }
-      const dx = run.x[o] - run.x[p], dy = run.y[o] - run.y[p];
-      if (dx * dx + dy * dy <= 74 * 74) run.revT[p] += dt;
-      else run.revT[p] = 0;
-      if (run.revT[p] >= 2) {
-        run.hp[p] = Math.min(2, run.maxHp[p]);
-        run.inv[p] = 1.2;
-        run.revT[p] = 0;
-        run.revives++;
-        emit(run, 9, p, 0, run.x[p], run.y[p]);
+    for (i = 0; i < arena.coils.length; i++) {
+      var coil = arena.coils[i], cyc = Math.floor((run.t + i * 0.9) / 3.6), ph = (run.t + i * 0.9) % 3.6;
+      for (j = 0; j < run.mechs.length; j++) {
+        m = run.mechs[j];
+        var cdx = m.x - coil.x, cdy = m.y - coil.y, cd = Math.hypot(cdx, cdy);
+        if (cd < m.r + coil.r && cd > 0.01) { m.x = coil.x + (cdx / cd) * (m.r + coil.r); m.y = coil.y + (cdy / cd) * (m.r + coil.r); }
+      }
+      if (ph >= 3.35 && run.coilCycle[i] !== cyc) {
+        run.coilCycle[i] = cyc; shockwave(run, coil.x, coil.y, 146, 46, 36, '#28e7ff');
+        if (run.state === 'win') return;
       }
     }
-  }
-
-  function magnets(run, dt) {
-    for (let i = 0; i < CAP_B; i++) {
-      if (!run.bAlive[i]) continue;
-      run.bx[i] += run.bvx[i] * dt;
-      run.by[i] += run.bvy[i] * dt;
-      run.bvx[i] *= 1 - 2.2 * dt;
-      run.bvy[i] *= 1 - 2.2 * dt;
-      let taken = false;
-      for (let p = 0; p < run.players; p++) {
-        if (run.hp[p] <= 0) continue;
-        const row = lvRow(run, p, D.MAGNET);
-        let rad = 340;
-        if (row >= 0) rad = D.weapons[D.MAGNET].rad[row];
-        if (run.evo[p][0]) rad += 80;
-        const dx = run.x[p] - run.bx[i], dy = run.y[p] - run.by[i];
-        const d2 = dx * dx + dy * dy;
-        if (d2 > rad * rad) continue;
-        if (d2 < 26 * 26) {
-          run.bolts++;
-          addXp(run, 1);
-          emit(run, 2, p, 0, run.bx[i], run.by[i]);
-          freeB(run, i);
-          taken = true;
-          break;
+    for (i = 0; i < arena.vents.length; i++) {
+      var v = arena.vents[i];
+      if (((run.t + i * 0.7) % 4.2) >= 3.25) {
+        for (j = run.enemies.length - 1; j >= 0; j--) {
+          e = run.enemies[j];
+          if (Math.hypot(e.x - v.x, e.y - v.y) <= v.r + e.r * 0.6) {
+            var killed = damageEnemy(run, e, 85 * dt, 0, 0);
+            if (run.state === 'win') return;
+            if (killed) run.enemies.splice(j, 1);
+          }
         }
-        const inv = 1 / (Math.sqrt(d2) || 1);
-        const pull = (row >= 0 ? 680 : 420) * dt;
-        run.bx[i] += dx * inv * pull;
-        run.by[i] += dy * inv * pull;
+        for (j = 0; j < run.mechs.length; j++) {
+          m = run.mechs[j];
+          if (m.alive && Math.hypot(m.x - v.x, m.y - v.y) <= v.r - 10) { hurtMech(run, m); if (run.state === 'over') return; }
+        }
       }
-      if (!taken && (run.bx[i] < -20 || run.by[i] < -20 || run.bx[i] > W + 20 || run.by[i] > H + 20)) freeB(run, i);
+    }
+    for (i = 0; i < arena.warps.length; i++) {
+      var wp = arena.warps[i];
+      for (j = 0; j < run.mechs.length; j++) {
+        m = run.mechs[j];
+        if (m.alive && m.warpCd <= 0 && Math.hypot(m.x - wp.x, m.y - wp.y) <= wp.r) {
+          var dest = arena.warps[wp.to];
+          m.x = dest.x; m.y = dest.y; m.warpCd = 2.4; m.invuln = Math.max(m.invuln, 0.55);
+          shockwave(run, dest.x, dest.y, 138, 48, 46, '#3df5ff');
+          if (run.state === 'win') return;
+        }
+      }
+    }
+    for (i = 0; i < arena.bumpers.length; i++) {
+      var bp = arena.bumpers[i];
+      for (j = 0; j < run.mechs.length; j++) {
+        m = run.mechs[j];
+        var bdx = m.x - bp.x, bdy = m.y - bp.y, bd = Math.hypot(bdx, bdy);
+        if (bd < m.r + bp.r && bd > 0.01) {
+          var bnx = bdx / bd, bny = bdy / bd;
+          m.x = bp.x + bnx * (m.r + bp.r + 2); m.y = bp.y + bny * (m.r + bp.r + 2);
+          m.knockVx = bnx * 360; m.knockVy = bny * 360;
+        }
+      }
+      for (j = run.enemies.length - 1; j >= 0; j--) {
+        e = run.enemies[j];
+        var edx = e.x - bp.x, edy = e.y - bp.y, ed = Math.hypot(edx, edy);
+        if (ed < e.r + bp.r && ed > 0.01) {
+          var enx = edx / ed, eny = edy / ed;
+          e.x = bp.x + enx * (e.r + bp.r + 2); e.y = bp.y + eny * (e.r + bp.r + 2);
+          if (e.bumperCd <= 0) {
+            e.bumperCd = 0.35;
+            var bDead = damageEnemy(run, e, 24, enx * 24, eny * 24);
+            if (run.state === 'win') return;
+            if (bDead) run.enemies.splice(j, 1);
+          }
+        }
+      }
     }
   }
 
-  function spawnWave(run, dt) {
-    run.spawnT -= dt;
-    const sched = run.t * run.timeScale;
-    const bi = breakIndex(sched);
-    const interval = D.spawn.interval[bi] / run.spawnMul;
-    if (run.spawnT <= 0) {
-      run.spawnT += interval;
-      if (run.spawnT < 0) run.spawnT = 0;
-      if (run.rFreeN > 0) {
-        edgeInto(run, run.rng, EDGE);
-        RS.spawnRobot(run, pickType(run, run.rng, bi), EDGE.x, EDGE.y);
-      }
-    }
-    const miniCap = run.endless ? 99 : 2;
-    if (run.miniCount < miniCap && run.t >= run.nextMini) {
-      makeRoom(run);
-      edgeInto(run, run.rng, EDGE);
-      if (RS.spawnRobot(run, MINIBOSS, EDGE.x, EDGE.y) >= 0) {
-        run.miniCount++;
-        run.nextMini += 90 / run.timeScale;
-      }
-    }
-    if (!run.kingAlive && run.t >= run.nextKing && (run.endless || !run.bossPopped)) {
-      makeRoom(run);
-      edgeInto(run, run.rng, EDGE);
-      if (RS.spawnRobot(run, KING, EDGE.x, EDGE.y) >= 0 && run.endless) run.nextKing = run.t + 150;
-    }
-  }
+  function coilState(run, index) { var ph = (run.t + index * 0.9) % 3.6; return ph >= 2.45 ? (ph >= 3.32 ? 2 : 1) : 0; }
+  function ventState(run, index) { var ph = (run.t + index * 0.7) % 4.2; return ph >= 2.2 ? (ph >= 3.25 ? 2 : 1) : 0; }
 
-  function living(run) {
-    let n = 0;
-    for (let p = 0; p < run.players; p++) if (run.hp[p] > 0) n++;
-    return n;
-  }
-
-  RS.offerCards = function (run, rng) {
-    const p = run.offerFor || 0;
-    const rand = rng || run.rng;
-    const pool = [];
-    const evos = [];
-    for (let id = 0; id < 10; id++) {
-      if (run.lv[p][id] >= 5) continue;
-      if (id === D.SHIELD && run.hurtN[p] < 1) continue;
-      if (id === D.HEART && run.level < 3) continue;
-      pool.push(id);
-    }
-    if (!run.evo[p][0] && run.lv[p][D.DUCKS] >= 5 && run.lv[p][D.MAGNET] >= 5) evos.push(D.TORNADO);
-    if (!run.evo[p][1] && run.lv[p][D.FOAM] >= 5 && run.lv[p][D.PAINT] >= 5) evos.push(D.CANNON);
-    for (let i = pool.length - 1; i > 0; i--) {
-      const j = (rand() * (i + 1)) | 0;
-      const t = pool[i]; pool[i] = pool[j]; pool[j] = t;
-    }
-    const out = [];
-    for (let i = 0; i < evos.length && out.length < 3; i++) out.push(evos[i]);
-    for (let i = 0; i < pool.length && out.length < 3; i++) out.push(pool[i]);
-    return out;
-  };
-
-  function openCards(run) {
-    for (let p = 0; p < run.players; p++) {
-      run.offerFor = p;
-      run.offers[p] = RS.offerCards(run, run.rng);
-      run.pick[p] = -1;
-    }
-    if (!run.offers[0].length && (run.players < 2 || !run.offers[1].length)) {
-      run.queue = 0;
-      run.cards = 0;
-      return;
-    }
-    run.cards = 1;
-    emit(run, 6, run.level, 0, run.x[0], run.y[0]);
-  }
-
-  RS.applyCard = function (run, player, id) {
-    if (player < 0 || player >= run.players) return false;
-    if (id === D.TORNADO) {
-      if (run.evo[player][0] || run.lv[player][D.DUCKS] < 5 || run.lv[player][D.MAGNET] < 5) return false;
-      run.evo[player][0] = 1;
-      return true;
-    }
-    if (id === D.CANNON) {
-      if (run.evo[player][1] || run.lv[player][D.FOAM] < 5 || run.lv[player][D.PAINT] < 5) return false;
-      run.evo[player][1] = 1;
-      return true;
-    }
-    if (id < 0 || id >= 10 || run.lv[player][id] >= 5) return false;
-    run.lv[player][id]++;
-    if (id === D.HEART) {
-      run.maxHp[player]++;
-      if (run.hp[player] > 0) run.hp[player] = Math.min(run.maxHp[player], run.hp[player] + 1);
-    }
-    if (id === D.SHIELD) {
-      run.shieldMax[player] = run.lv[player][id];
-      run.shield[player] = run.shieldMax[player];
-    }
-    return true;
-  };
-
-  RS.choose = function (run, player, id) {
-    if (!run.cards || player < 0 || player >= run.players || run.pick[player] >= 0) return false;
-    const offer = run.offers[player];
-    if (!offer || offer.indexOf(id) < 0) return false;
-    if (!RS.applyCard(run, player, id)) return false;
-    run.pick[player] = id;
-    for (let i = 0; i < run.players; i++) if (run.pick[i] < 0) return true;
-    run.queue = Math.max(0, run.queue - 1);
-    run.cards = 0;
-    if (run.queue > 0) openCards(run);
-    return true;
-  };
-
-  RS.reroll = function (run, player) {
-    if (!run.cards || player < 0 || player >= run.players || run.pick[player] >= 0 || run.reroll[player] <= 0) return false;
-    run.reroll[player]--;
-    run.offerFor = player;
-    run.offers[player] = RS.offerCards(run, run.rng);
-    return true;
-  };
-
-  RS.resolveCards = function (run) {
-    if (!run.cards) return false;
-    for (let p = 0; p < run.players; p++) {
-      const offer = run.offers[p];
-      if (offer && offer.length) RS.applyCard(run, p, offer[0]);
-      run.pick[p] = 0;
-    }
-    run.queue = Math.max(0, run.queue - 1);
-    run.cards = 0;
-    if (run.queue > 0) openCards(run);
-    return true;
-  };
-
-  RS.counts = function (run) {
-    let robots = 0, projectiles = 0, bolts = 0, zones = 0;
-    for (let i = 0; i < CAP_R; i++) robots += run.rAlive[i];
-    for (let i = 0; i < CAP_P; i++) projectiles += run.pAlive[i];
-    for (let i = 0; i < CAP_B; i++) bolts += run.bAlive[i];
-    for (let i = 0; i < CAP_Z; i++) zones += run.zAlive[i];
-    return { robots: robots, projectiles: projectiles, bolts: bolts, zones: zones };
-  };
-
-  RS.stress = function (run) {
-    for (let i = 0; i < CAP_R; i++) if (run.rAlive[i]) freeR(run, i);
-    const cols = 20, rows = 15;
-    let n = 0;
-    for (let r = 0; r < rows && n < CAP_R; r++) {
-      for (let c = 0; c < cols && n < CAP_R; c++) {
-        const x = run.x[0] - 560 + c * 58;
-        const y = run.y[0] - 400 + r * 56;
-        RS.spawnRobot(run, n % 6, clamp(x, 30, W - 30), clamp(y, 30, H - 30));
-        n++;
-      }
-    }
-    run.inv[0] = 999;
-    run.inv[1] = 999;
-  };
-
-  RS.step = function (run, dt, inputs) {
-    if (!run || run.over) return;
-    if (run.cards) return;
-    if (!(dt > 0)) return;
-    if (dt > 0.05) dt = 0.05;
-    run.evN = 0;
-    run.frame++;
+  function step(run, dt, inputs) {
+    if (!run || run.state !== 'play') return;
+    dt = clamp(dt || 0, 0, 0.05);
+    if (dt <= 0) return;
     run.t += dt;
-    run.comboT -= dt;
-    if (run.comboT <= 0) run.combo = 0;
-    spawnWave(run, dt);
-    movePlayers(run, dt, inputs);
-    weapons(run, dt);
-    moveProjectiles(run, dt);
-    moveRobots(run, dt);
-    buildHash(run);
-    for (let p = 0; p < run.players; p++) if (run.hp[p] > 0) tickOrbit(run, p, dt);
-    for (let i = 0; i < CAP_P; i++) if (run.pAlive[i] && run.pKind[i] === 4) {
-      explodeBalloon(run, i);
-      freeP(run, i);
+    if (run.comboT > 0 && (run.comboT -= dt) <= 0) run.combo = 0;
+    for (var a = run.arcs.length - 1; a >= 0; a--) if ((run.arcs[a].t -= dt) <= 0) run.arcs.splice(a, 1);
+
+    var prevWave = run.wave;
+    run.wave = run.t < 24 ? 1 : run.t < 48 ? 2 : run.t < D.BOSS_AT ? 3 : 4;
+    if (run.wave !== prevWave && (run.wave === 2 || run.wave === 3)) {
+      emit(run, { type: 'wave', waveId: run.wave, title: D.waves[run.wave - 1].title });
+      spawnPodForPlayers(run);
     }
-    hitProjectiles(run);
-    zones(run, dt);
-    touchPlayers(run);
-    separate(run);
-    magnets(run, dt);
-    revive(run, dt);
-    if (!run.over && living(run) === 0) run.over = 'lose';
-    if (run.cardsOn && !run.cards && run.queue > 0 && !run.over) openCards(run);
+    if (run.t >= D.BOSS_AT && !run.bossSpawned) {
+      var bAng = run.rng() * Math.PI * 2;
+      spawnEnemy(run, 5, run.cam.x + Math.cos(bAng) * 340, run.cam.y + Math.sin(bAng) * 220);
+    }
+    if ((run.spawnT -= dt) <= 0) {
+      if (!run.bossSpawned) {
+        var wSpec = D.waves[clamp(run.wave - 1, 0, 2)];
+        run.spawnT = Math.max(0.2, wSpec.interval / (run.diff.spawnMul * run.ddaMul * (run.players === 2 ? 1.2 : 1.0)));
+        var wSum = 0, wi, chosen = 0;
+        for (wi = 0; wi < wSpec.weights.length; wi++) wSum += wSpec.weights[wi];
+        var wr = run.rng() * wSum;
+        for (wi = 0; wi < wSpec.weights.length; wi++) { wr -= wSpec.weights[wi]; if (wr <= 0) { chosen = wi; break; } }
+        spawnWaveBot(run, chosen);
+      } else {
+        run.spawnT = 2.1;
+        if (run.enemies.length < 12) spawnWaveBot(run, run.rng() < 0.65 ? 0 : 1);
+      }
+    }
+
+    inputs = inputs || [];
+    for (var p = 0; p < run.mechs.length; p++) {
+      var m = run.mechs[p], inp = inputs[p] || {};
+      if (m.invuln > 0) m.invuln = Math.max(0, m.invuln - dt);
+      if (m.hurtFlash > 0) m.hurtFlash = Math.max(0, m.hurtFlash - dt);
+      if (m.dashCd > 0) m.dashCd = Math.max(0, m.dashCd - dt);
+      if (m.warpCd > 0) m.warpCd = Math.max(0, m.warpCd - dt);
+      if (m.recoil > 0) m.recoil = Math.max(0, m.recoil - dt * 36);
+      if (m.muzzleT > 0) m.muzzleT = Math.max(0, m.muzzleT - dt);
+
+      if (!m.alive) {
+        if (run.players === 2) {
+          var partner = run.mechs[1 - p];
+          if (partner && partner.alive && Math.hypot(partner.x - m.x, partner.y - m.y) <= 74) {
+            m.revive += dt;
+            if (m.revive >= 1.5) {
+              m.alive = true; m.down = false; m.revive = 0;
+              m.hp = Math.max(2, Math.ceil(m.maxHp * 0.5)); m.invuln = 2.2; run.revives++;
+              emit(run, { type: 'revive', player: m.id, x: m.x, y: m.y });
+              shockwave(run, m.x, m.y, 155, 36, 55, '#3ddc84');
+              if (run.state === 'win') return;
+            }
+          } else m.revive = Math.max(0, m.revive - dt * 0.35);
+        }
+        continue;
+      }
+
+      var ix = inp.x || 0, iy = inp.y || 0, mag = Math.hypot(ix, iy), steerScale = 1;
+      if (mag > 0.01) { ix /= mag; iy /= mag; }
+      else if (inp.mouse && typeof inp.tx === 'number' && typeof inp.ty === 'number') {
+        var mdx = inp.tx - m.x, mdy = inp.ty - m.y, md = Math.hypot(mdx, mdy);
+        if (md > 16) { ix = mdx / md; iy = mdy / md; steerScale = clamp((md - 14) / 38, 0.2, 1); }
+        else { ix = 0; iy = 0; }
+      }
+
+      if (inp.dash && m.dashCd <= 0 && m.dashT <= 0) {
+        if (Math.hypot(ix, iy) > 0.05) { m.dashDx = ix; m.dashDy = iy; }
+        else { m.dashDx = Math.cos(m.aim); m.dashDy = Math.sin(m.aim); }
+        m.dashT = 0.22; m.dashCd = m.dashMaxCd; m.invuln = Math.max(m.invuln, 0.32);
+        emit(run, { type: 'dash', player: m.id, x: m.x, y: m.y });
+        shockwave(run, m.x, m.y, 126, 34, 48, '#28e7ff');
+        if (run.state === 'win') return;
+      }
+
+      var baseSpeed = 338 * (1 + (m.lv[4] > 0 ? D.pods[4].speedBonus[m.lv[4] - 1] : 0));
+      if (m.dashT > 0) {
+        m.dashT = Math.max(0, m.dashT - dt);
+        m.vx = m.dashDx * 880; m.vy = m.dashDy * 880;
+        for (var di = run.enemies.length - 1; di >= 0; di--) {
+          var de = run.enemies[di];
+          if (de.bonkCd <= 0 && Math.hypot(de.x - m.x, de.y - m.y) <= de.r + m.r + 12) {
+            de.bonkCd = 0.28;
+            var dDead = damageEnemy(run, de, 30, m.dashDx * 44, m.dashDy * 44);
+            if (run.state === 'win') return;
+            if (dDead) run.enemies.splice(di, 1);
+          }
+        }
+      } else {
+        m.vx = ix * baseSpeed * steerScale + m.knockVx;
+        m.vy = iy * baseSpeed * steerScale + m.knockVy;
+      }
+      m.knockVx *= Math.pow(0.02, dt); m.knockVy *= Math.pow(0.02, dt);
+      m.x = clamp(m.x + m.vx * dt, D.PAD + m.r, D.W - D.PAD - m.r);
+      m.y = clamp(m.y + m.vy * dt, D.PAD + m.r, D.H - D.PAD - m.r);
+      updateWeapons(run, m, dt);
+      if (run.state !== 'play') return;
+    }
+
+    var sumX = 0, sumY = 0, liveN = 0;
+    for (p = 0; p < run.mechs.length; p++) if (run.mechs[p].alive) { sumX += run.mechs[p].x; sumY += run.mechs[p].y; liveN++; }
+    if (liveN > 0) {
+      run.cam.x += (clamp(sumX / liveN, D.VIEW_W * 0.5, D.W - D.VIEW_W * 0.5) - run.cam.x) * Math.min(1, dt * 10);
+      run.cam.y += (clamp(sumY / liveN, D.VIEW_H * 0.5, D.H - D.VIEW_H * 0.5) - run.cam.y) * Math.min(1, dt * 10);
+    }
+    if (run.players === 2) {
+      for (p = 0; p < run.mechs.length; p++) {
+        run.mechs[p].x = clamp(run.mechs[p].x, run.cam.x - 560, run.cam.x + 560);
+        run.mechs[p].y = clamp(run.mechs[p].y, run.cam.y - 300, run.cam.y + 300);
+      }
+    }
+
+    updateArenas(run, dt);
+    if (run.state !== 'play') return;
+
+    for (var s = run.shots.length - 1; s >= 0; s--) {
+      var sh = run.shots[s];
+      if ((sh.life -= dt) <= 0) { run.shots.splice(s, 1); continue; }
+      if (sh.kind === 1 && run.enemies.length > 0) {
+        var nearE = null, nearD = 520;
+        for (var hi = 0; hi < run.enemies.length; hi++) {
+          var hd = Math.hypot(run.enemies[hi].x - sh.x, run.enemies[hi].y - sh.y);
+          if (hd < nearD) { nearD = hd; nearE = run.enemies[hi]; }
+        }
+        if (nearE) {
+          var da = Math.atan2(Math.sin(Math.atan2(nearE.y - sh.y, nearE.x - sh.x) - sh.ang), Math.cos(Math.atan2(nearE.y - sh.y, nearE.x - sh.x) - sh.ang));
+          sh.ang += clamp(da, -6.2 * dt, 6.2 * dt); sh.vx = Math.cos(sh.ang) * sh.speed; sh.vy = Math.sin(sh.ang) * sh.speed;
+        }
+      }
+      sh.x += sh.vx * dt; sh.y += sh.vy * dt;
+      if (sh.x < D.PAD || sh.x > D.W - D.PAD || sh.y < D.PAD || sh.y > D.H - D.PAD) { run.shots.splice(s, 1); continue; }
+      if (sh.team === 0) {
+        var consumed = false;
+        for (var ei = run.enemies.length - 1; ei >= 0; ei--) {
+          var e = run.enemies[ei];
+          if (sh.hitIds.indexOf(e.id) >= 0) continue;
+          if (Math.hypot(e.x - sh.x, e.y - sh.y) <= e.r + sh.r) {
+            sh.hitIds.push(e.id);
+            if (sh.kind === 1) { shockwave(run, sh.x, sh.y, 94, sh.dmg, 26, '#ff6b35'); if (run.state === 'win') return; consumed = true; break; }
+            var killed = damageEnemy(run, e, sh.dmg, Math.cos(sh.ang) * 8, Math.sin(sh.ang) * 8);
+            if (run.state === 'win') return;
+            if (killed) run.enemies.splice(ei, 1);
+            if (--sh.pierce <= 0) { consumed = true; break; }
+          }
+        }
+        if (consumed) run.shots.splice(s, 1);
+      } else {
+        for (p = 0; p < run.mechs.length; p++) {
+          var pm = run.mechs[p];
+          if (pm.alive && Math.hypot(pm.x - sh.x, pm.y - sh.y) <= pm.r + sh.r - 4) {
+            run.shots.splice(s, 1); hurtMech(run, pm); if (run.state === 'over') return; break;
+          }
+        }
+      }
+    }
+
+    for (var k = run.enemies.length - 1; k >= 0; k--) {
+      var en = run.enemies[k];
+      if (en.flash > 0) en.flash = Math.max(0, en.flash - dt);
+      if (en.sawCd > 0) en.sawCd = Math.max(0, en.sawCd - dt);
+      if (en.bonkCd > 0) en.bonkCd = Math.max(0, en.bonkCd - dt);
+      if (en.bumperCd > 0) en.bumperCd = Math.max(0, en.bumperCd - dt);
+      var tgt = nearestMech(run, en.x, en.y);
+      if (!tgt) continue;
+      var tdx = tgt.x - en.x, tdy = tgt.y - en.y, td = Math.hypot(tdx, tdy) || 1;
+      if (en.kind === 5) {
+        updateBoss(run, en, dt, tgt); if (run.state !== 'play') return;
+      } else if (en.kind === 2) {
+        en.aiT -= dt;
+        if (en.aiState === 0) {
+          en.x += (tdx / td) * en.speed * dt; en.y += (tdy / td) * en.speed * dt; en.aim = Math.atan2(tdy, tdx);
+          if (td < 380 && en.aiT <= 0) { en.aiState = 1; en.aiT = 0.52; en.aim = Math.atan2(tdy, tdx); }
+        } else if (en.aiState === 1) { if (en.aiT <= 0) { en.aiState = 2; en.aiT = 0.62; } }
+        else {
+          var rs = D.enemies[2].chargeSpeed * run.diff.botSpeedMul;
+          en.x += Math.cos(en.aim) * rs * dt; en.y += Math.sin(en.aim) * rs * dt;
+          if (en.aiT <= 0) { en.aiState = 0; en.aiT = 1.4; }
+        }
+      } else if (en.kind === 3) {
+        en.aiT -= dt;
+        var push = clamp((td - 290) / 90, -0.7, 1), nx = tdx / td, ny = tdy / td;
+        en.x += (nx * push - ny * 0.65) * en.speed * dt; en.y += (ny * push + nx * 0.65) * en.speed * dt;
+        en.aim = Math.atan2(tdy, tdx);
+        if (en.aiT <= 0 && td < 560) { en.aiT = 2.15; spawnEnemyShot(run, en.x, en.y, en.aim, 290 * run.diff.botSpeedMul, 10); }
+      } else {
+        var ang = Math.atan2(tdy, tdx) + (en.kind === 1 ? Math.sin(run.t * 9 + en.id) * 0.45 : 0);
+        en.aim = ang; en.x += Math.cos(ang) * en.speed * dt; en.y += Math.sin(ang) * en.speed * dt;
+      }
+      en.x = clamp(en.x, D.PAD + en.r, D.W - D.PAD - en.r);
+      en.y = clamp(en.y, D.PAD + en.r, D.H - D.PAD - en.r);
+      for (var o = k - 1; o >= Math.max(0, k - 8); o--) {
+        var other = run.enemies[o], sdx = en.x - other.x, sdy = en.y - other.y, sd = Math.hypot(sdx, sdy), minD = en.r + other.r;
+        if (sd > 0.01 && sd < minD) {
+          var ov = (minD - sd) * 0.35, snx = sdx / sd, sny = sdy / sd;
+          if (en.kind !== 5) { en.x += snx * ov; en.y += sny * ov; }
+          if (other.kind !== 5) { other.x -= snx * ov; other.y -= sny * ov; }
+        }
+      }
+      for (p = 0; p < run.mechs.length; p++) {
+        if (run.mechs[p].alive && Math.hypot(run.mechs[p].x - en.x, run.mechs[p].y - en.y) <= run.mechs[p].r + en.r - 4) {
+          hurtMech(run, run.mechs[p]); if (run.state !== 'play') return;
+        }
+      }
+    }
+
+    for (var b = run.boltDrops.length - 1; b >= 0; b--) {
+      var bolt = run.boltDrops[b], puller = null, pullD = Infinity;
+      for (p = 0; p < run.mechs.length; p++) {
+        var mp = run.mechs[p];
+        if (!mp.alive) continue;
+        var magR = run.diff.magnetBase + (mp.lv[4] > 0 ? D.pods[4].pullBonus[mp.lv[4] - 1] : 0);
+        var bd2 = Math.hypot(mp.x - bolt.x, mp.y - bolt.y);
+        if (bd2 < magR && bd2 < pullD) { pullD = bd2; puller = mp; }
+      }
+      if (puller) {
+        if (pullD <= puller.r + 18) { run.bolts += bolt.val; run.score += 5; emit(run, { type: 'bolt', x: bolt.x, y: bolt.y }); run.boltDrops.splice(b, 1); }
+        else { bolt.x += ((puller.x - bolt.x) / pullD) * 580 * dt; bolt.y += ((puller.y - bolt.y) / pullD) * 580 * dt; }
+      }
+    }
+
+    for (var pd = run.pods.length - 1; pd >= 0; pd--) {
+      var pod = run.pods[pd]; pod.age += dt;
+      for (p = 0; p < run.mechs.length; p++) {
+        var col = run.mechs[p];
+        if (col.alive && Math.hypot(col.x - pod.x, col.y - pod.y) <= col.r + pod.r + 14) {
+          run.pods.splice(pd, 1); applyPod(run, col, pod); if (run.state !== 'play') return; break;
+        }
+      }
+    }
+  }
+
+  var RSEngine = {
+    MAX_ENEMIES: MAX_ENEMIES, MAX_SHOTS: MAX_SHOTS, MAX_BOLTS: MAX_BOLTS, MAX_PODS: MAX_PODS,
+    createRun: createRun, step: step, spawnEnemy: spawnEnemy, spawnPod: spawnPod,
+    spawnPodForPlayers: spawnPodForPlayers, damageEnemy: damageEnemy, hurtMech: hurtMech,
+    coilState: coilState, ventState: ventState
   };
 
-  // A readable snapshot for the determinism test. Rounded so a 0 ulp tie is exact anyway.
-  RS.fingerprint = function (run) {
-    let s = run.t.toFixed(4) + '|' + run.pops + '|' + run.over + '|' + run.level + '|' + (run.bossPopped || 0);
-    for (let p = 0; p < run.players; p++) s += '|' + run.x[p].toFixed(3) + ',' + run.y[p].toFixed(3) + ',' + run.hp[p];
-    let n = 0;
-    for (let i = 0; i < CAP_R && n < 8; i++) {
-      if (!run.rAlive[i]) continue;
-      s += '|' + i + ':' + run.rx[i].toFixed(2) + ',' + run.ry[i].toFixed(2) + ',' + run.rhp[i].toFixed(1);
-      n++;
-    }
-    return s;
-  };
-})(globalThis.RS = globalThis.RS || {});
+  globalThis.RSEngine = RSEngine;
+  if (typeof window !== 'undefined') window.RSEngine = RSEngine;
+  if (typeof module !== 'undefined' && module.exports) module.exports = RSEngine;
+})();

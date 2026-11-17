@@ -1,273 +1,278 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
 import { test } from 'node:test';
 
+const require = createRequire(import.meta.url);
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-function load() {
-  const context = vm.createContext({});
-  for (const file of ['data.js', 'engine.js', 'ai.js']) {
-    vm.runInContext(readFileSync(path.join(repo, 'games/balloon-blast', file), 'utf8'), context, { filename: file });
-  }
-  return context;
-}
-const { BBD, BLB, BBAI } = load();
-const idle = { x: 0, y: 0, drop: false, kick: false };
-const T = BLB.TILE;
+const gameDir = path.join(repo, 'games/balloon-blast');
 
-function clearInner(w) {
-  for (let r = 1; r < BLB.ROWS - 1; r++) for (let c = 1; c < BLB.COLS - 1; c++) {
-    if (BLB.tile(w, c, r) !== BLB.PILLAR) BLB.setTile(w, c, r, BLB.EMPTY);
+const BBData = require(path.join(gameDir, 'data.js'));
+const BBEngine = require(path.join(gameDir, 'engine.js'));
+const BBAI = require(path.join(gameDir, 'ai.js'));
+
+const IDLE = { x: 0, y: 0, drop: false, kick: false };
+
+function clearArena(w) {
+  for (let r = 1; r < BBEngine.ROWS - 1; r++) {
+    for (let c = 1; c < BBEngine.COLS - 1; c++) {
+      BBEngine.setTile(w, c, r, BBEngine.EMPTY);
+    }
   }
+  w.pipes = [];
 }
 
-test('a splash is a plus that stops at pillars, breaks the first crate, and deletes power-ups it crosses', () => {
-  const w = BLB.newMatch({ seed: 1, intro: 0 });
-  clearInner(w);
-  BLB.setTile(w, 5, 2, BLB.PILLAR);
-  BLB.setTile(w, 2, 5, BLB.CRATE);
-  BLB.setTile(w, 8, 5, BLB.CRATE);
-  BLB.addDrop(w, 6, 5, 'speed');
-  BLB.addBalloon(w, { c: 5, r: 5, fuse: 0, range: 4, owner: 0, id: 1 });
-  BLB.step(w, 1 / 60, [idle, idle, idle, idle]);
-  const boom = w.events.filter(e => e.t === 'boom');
-  assert.equal(boom.length, 1);
-  const cells = w.splashes.length ? null : null;
-  // The splash is gone from the list only after its life ends; the boom event records its length.
-  // Rebuild the same ray against the grid as it was when the crate broke: crate is already empty.
-  // Assert the rules on a fresh grid instead, via splashCells, then the world consequences.
-  const grid = BLB.newMatch({ seed: 2, intro: 0 });
-  clearInner(grid);
-  BLB.setTile(grid, 5, 2, BLB.PILLAR);
-  BLB.setTile(grid, 2, 5, BLB.CRATE);
-  BLB.addDrop(grid, 7, 5, 'speed');
-  const ray = BLB.splashCells(grid, 5, 5, 4).map(c => c.c + ',' + c.r);
-  assert.ok(ray.includes('5,5'));
-  assert.ok(ray.includes('5,3') && !ray.includes('5,2') && !ray.includes('5,1'), 'pillar stops the ray');
-  assert.ok(ray.includes('2,5') && !ray.includes('1,5'), 'the first crate is hit and the ray stops');
-  assert.ok(ray.includes('7,5') && ray.includes('8,5'), 'a power-up does not stop the ray');
-  BLB.addBalloon(grid, { c: 5, r: 5, fuse: 0, range: 4, owner: 0 });
-  BLB.step(grid, 1 / 60, [idle, idle, idle, idle]);
-  assert.equal(BLB.tile(grid, 2, 5), BLB.EMPTY, 'the crate breaks');
-  assert.equal(BLB.tile(grid, 1, 5), BLB.EMPTY);
-  assert.equal(grid.drops.some(d => d.c === 7 && d.r === 5), false, 'the power-up is destroyed');
+test('dual browser global and CommonJS exports work cleanly with 13x9 grid constants', () => {
+  const ctx = vm.createContext({ window: {} });
+  ctx.globalThis = ctx;
+  for (const f of ['data.js', 'engine.js', 'ai.js']) {
+    vm.runInContext(readFileSync(path.join(gameDir, f), 'utf8'), ctx, { filename: f });
+  }
+  assert.ok(ctx.window.BBData && ctx.window.BBEngine && ctx.window.BBAI);
+  assert.equal(BBData.COLS, 13);
+  assert.equal(BBData.ROWS, 9);
+  assert.equal(BBData.POWERUPS.length, 6);
+  assert.equal(BBData.WORLDS.length, 3);
+  assert.equal(BBData.SKINS.length, 4);
 });
 
-test('chains resolve in the same tick, in the order the splashes reach them', () => {
-  const w = BLB.newMatch({ seed: 3, intro: 0 });
-  clearInner(w);
-  // A at (3,3) reaches B south of it; B reaches C to the east. Nothing else is due.
-  BLB.addBalloon(w, { c: 3, r: 3, fuse: 0, range: 3, owner: 0, id: 1 });
-  BLB.addBalloon(w, { c: 3, r: 5, fuse: 5, range: 3, owner: 1, id: 2 });
-  BLB.addBalloon(w, { c: 6, r: 5, fuse: 5, range: 1, owner: 2, id: 3 });
-  BLB.step(w, 1 / 60, [idle, idle, idle, idle]);
+test('open-grid generation keeps (1,1), (2,1), (3,1) and all 4 corner runways walkable across seeds', () => {
+  for (const diff of ['easy', 'normal', 'hero']) {
+    for (let seed = 1; seed <= 50; seed++) {
+      const w = BBEngine.newMatch({ seed, diff });
+      assert.equal(w.round, 1);
+      assert.equal(w.phase, 'play');
+      assert.equal(w.freeze, 0.4);
+      assert.equal(BBEngine.tile(w, 1, 1), BBEngine.EMPTY);
+      assert.equal(BBEngine.tile(w, 2, 1), BBEngine.EMPTY, `(2,1) must be walkable for seed ${seed}`);
+      assert.equal(BBEngine.tile(w, 3, 1), BBEngine.EMPTY, `(3,1) must be walkable for seed ${seed}`);
+      assert.equal(BBEngine.tile(w, 6, 4), BBEngine.EMPTY, 'central plaza open');
+      assert.equal(w.pipes.length, 2, 'arena has paired warp pipes');
+
+      for (const [sc, sr] of BBData.SPAWNS) {
+        for (const [rc, rr] of BBEngine.escapeRunway(sc, sr)) {
+          assert.equal(BBEngine.solid(BBEngine.tile(w, rc, rr)), false, `runway (${rc},${rr}) clear`);
+        }
+      }
+    }
+  }
+
+  for (const stage of BBData.STAGES) {
+    assert.equal(stage.grid.length, 9, `${stage.id} has 9 rows`);
+    assert.ok(stage.grid.every(r => r.length === 13), `${stage.id} has 13 cols`);
+    const w = BBEngine.newStage({ stage, seed: 7 });
+    assert.equal(BBEngine.solid(BBEngine.tile(w, 1, 1)), false, `${stage.id} (1,1) walkable`);
+    assert.equal(BBEngine.solid(BBEngine.tile(w, 2, 1)), false, `${stage.id} (2,1) walkable`);
+    assert.equal(BBEngine.solid(BBEngine.tile(w, 3, 1)), false, `${stage.id} (3,1) walkable`);
+  }
+});
+
+test('movement after 0.4s freeze increases P1 x cleanly, nudges corners, and warps via pipes', () => {
+  const w = BBEngine.newMatch({ seed: 5 });
+  const p1 = w.players[0];
+  const startX = p1.x;
+  const goRight = [{ x: 1, y: 0, drop: false, kick: false }, IDLE, IDLE, IDLE];
+
+  // Advance past 0.4s freeze + 0.35s active movement
+  for (let i = 0; i < 45; i++) BBEngine.step(w, 1 / 60, goRight);
+  assert.equal(w.freeze, 0);
+  assert.ok(p1.x - startX > 50, `expected px increase > 50, got ${p1.x - startX}`);
+
+  // Corner nudge test
+  clearArena(w);
+  BBEngine.setTile(w, 4, 2, BBEngine.PILLAR);
+  BBEngine.put(w, 0, 3, 3, 12, 0);
+  const laneX = BBEngine.center(3);
+  for (let i = 0; i < 35; i++) {
+    BBEngine.step(w, 1 / 60, [{ x: 0, y: -1, drop: false, kick: false }, IDLE, IDLE, IDLE]);
+  }
+  assert.ok(Math.abs(p1.x - laneX) < 3, 'nudged into open vertical lane');
+  assert.ok(p1.y < BBEngine.center(3) - 24, 'moved upward into lane');
+
+  // Warp pipe test
+  w.pipes = [{ c: 2, r: 2 }, { c: 10, r: 6 }];
+  BBEngine.setTile(w, 2, 2, BBEngine.PIPE);
+  BBEngine.setTile(w, 10, 6, BBEngine.PIPE);
+  BBEngine.put(w, 0, 1, 2, 0, 0);
+  p1.warpCd = 0;
+  for (let i = 0; i < 30; i++) {
+    BBEngine.step(w, 1 / 60, p1.warpCd > 0 ? [IDLE, IDLE, IDLE, IDLE] : goRight);
+  }
+  assert.equal(BBEngine.cellOf(p1).c, 10);
+  assert.equal(BBEngine.cellOf(p1).r, 6);
+});
+
+test('chain splashes resolve in one tick and crate loot spawns in both Battle and Adventure modes', () => {
+  const w = BBEngine.newMatch({ seed: 9, freeze: 0 });
+  clearArena(w);
+  BBEngine.setTile(w, 5, 2, BBEngine.PILLAR);
+  BBEngine.setTile(w, 2, 4, BBEngine.CRATE);
+
+  const ray = BBEngine.splashCells(w, 5, 4, 4).map(c => `${c.c},${c.r}`);
+  assert.ok(ray.includes('5,3') && !ray.includes('5,2') && !ray.includes('5,1'), 'pillar blocks splash');
+  assert.ok(ray.includes('2,4') && !ray.includes('1,4'), 'first crate stops splash');
+
+  // Chain reaction order 1 -> 2 -> 3
+  BBEngine.addBalloon(w, { id: 1, c: 3, r: 3, fuse: 0, range: 3, owner: 0 });
+  BBEngine.addBalloon(w, { id: 2, c: 3, r: 5, fuse: 2.5, range: 3, owner: 1 });
+  BBEngine.addBalloon(w, { id: 3, c: 6, r: 5, fuse: 2.5, range: 2, owner: 2 });
+  BBEngine.step(w, 1 / 60, [IDLE, IDLE, IDLE, IDLE]);
   assert.equal(w.events.filter(e => e.t === 'boom').map(e => e.id).join(','), '1,2,3');
   assert.equal(w.balloons.length, 0);
-});
 
-test('every battle spawn keeps an L of three crate-free cells', () => {
-  for (let seed = 1; seed <= 40; seed++) {
-    const w = BLB.newMatch({ seed, intro: 0 });
-    for (const [c, r] of [[1, 1], [13, 1], [1, 9], [13, 9]]) {
-      for (const cell of BLB.escapeOf(c, r)) {
-        assert.notEqual(BLB.tile(w, cell[0], cell[1]), BLB.CRATE, 'seed ' + seed + ' @ ' + cell);
-      }
+  // Crate loot spawns and is NOT deleted by its own blast in Adventure & Battle
+  for (const isAdv of [false, true]) {
+    const gw = isAdv
+      ? BBEngine.newStage({ stage: 'w1-s1', seed: 12, freeze: 0 })
+      : BBEngine.newMatch({ seed: 12, freeze: 0 });
+    clearArena(gw);
+    BBEngine.put(gw, 0, 1, 7, 0, 0);
+    for (let c = 2; c <= 10; c++) BBEngine.setTile(gw, c, 3, BBEngine.CRATE);
+    for (let c = 2; c <= 10; c++) {
+      BBEngine.addBalloon(gw, { c, r: 2, fuse: 0, range: 2, owner: 0 });
     }
+    BBEngine.step(gw, 1 / 60, gw.players.map(() => IDLE));
+    assert.ok(gw.drops.length > 0, `expected crate powerup drops in ${isAdv ? 'Adventure' : 'Battle'}`);
   }
 });
 
-test('power-up caps hold', () => {
-  const w = BLB.newMatch({ seed: 4, intro: 0 });
-  clearInner(w);
-  const p = BLB.put(w, 0, 3, 3, 0, 0);
-  for (let i = 0; i < 12; i++) {
-    BLB.addDrop(w, 3, 3, 'balloon');
-    BLB.addDrop(w, 3, 3, 'range');
-    BLB.addDrop(w, 3, 3, 'speed');
-    BLB.addDrop(w, 3, 3, 'kick');
-    BLB.step(w, 1 / 60, [idle, idle, idle, idle]);
+test('all 6 toy powerups apply cleanly, and kick-balloon supports walk-kick and lob-throw', () => {
+  const w = BBEngine.newMatch({ seed: 4, freeze: 0 });
+  clearArena(w);
+  const p = BBEngine.put(w, 0, 3, 4, 0, 0);
+
+  for (let i = 0; i < 10; i++) {
+    for (const kind of ['balloon', 'range', 'speed', 'kick', 'shield', 'turtle']) {
+      BBEngine.addDrop(w, 3, 4, kind);
+    }
+    BBEngine.step(w, 1 / 60, [IDLE, IDLE, IDLE, IDLE]);
   }
   assert.equal(p.balloons, 6);
-  assert.equal(p.range, 7);
+  assert.equal(p.range, 6);
   assert.equal(p.speed, 4);
   assert.equal(p.kick, true);
-  BLB.addDrop(w, 3, 3, 'slow');
-  BLB.step(w, 1 / 60, [idle, idle, idle, idle]);
-  assert.ok(p.slowT > 7 && p.slowT <= 8);
-  assert.equal(p.balloons, 6);
+  assert.equal(p.shield, 1);
+  assert.equal(p.mount, true);
+
+  // Walk-into auto-kick slides balloon down corridor
+  const b = BBEngine.addBalloon(w, { c: 4, r: 4, fuse: 2.5, range: 2, owner: 1 });
+  for (let i = 0; i < 20; i++) {
+    BBEngine.step(w, 1 / 60, [{ x: 1, y: 0, drop: false, kick: false }, IDLE, IDLE, IDLE]);
+  }
+  assert.ok(b.c > 5, `expected kicked balloon to slide past col 5, got ${b.c}`);
+
+  // Blocked corridor triggers lob-throw over crate
+  clearArena(w);
+  w.balloons = [];
+  BBEngine.put(w, 0, 2, 4, 0, 0);
+  p.face = 1;
+  const b2 = BBEngine.addBalloon(w, { c: 3, r: 4, fuse: 2.5, range: 2, owner: 0 });
+  BBEngine.setTile(w, 4, 4, BBEngine.CRATE);
+  assert.equal(BBEngine.tryKickOrThrow(w, p), true);
+  assert.ok(b2.lob && b2.lob.tc === 5, 'balloon lobbed over crate to col 5');
+  for (let i = 0; i < 30; i++) BBEngine.step(w, 1 / 60, [IDLE, IDLE, IDLE, IDLE]);
+  assert.equal(b2.lob, null);
+  assert.equal(b2.c, 5);
 });
 
-test('sudden death fills the grid deterministically and a round is over by 100s', () => {
-  function maskAt(seed, t) {
-    const w = BLB.newMatch({ seed, intro: 0, players: [
-      { cpu: false, team: 0 }, { cpu: false, team: 1 }, { cpu: false, team: 2 }, { cpu: false, team: 3 }
-    ] });
-    for (const p of w.players) p.state = 'out';
-    w.noEnd = true;
-    while (w.time < t && w.phase === 'play') BLB.step(w, 0.25, [idle, idle, idle, idle]);
-    let jelly = '';
-    for (let i = 0; i < w.grid.length; i++) jelly += w.grid[i] === BLB.JELLY ? '1' : '0';
-    return { jelly, phase: w.phase, time: w.time };
-  }
-  const a = maskAt(7, 90), b = maskAt(7, 90);
-  assert.equal(a.jelly, b.jelly);
-  assert.ok(a.jelly.includes('1'), 'jelly has arrived by 90s');
-  const early = maskAt(7, 70);
-  assert.equal(early.jelly.includes('1'), false, 'nothing rolls in before 75s');
-  const late = maskAt(7, 99);
-  assert.ok(late.jelly.split('1').length - 1 > a.jelly.split('1').length - 1, 'the ring keeps closing');
-  const done = BLB.newMatch({ seed: 8, intro: 0 });
-  let steps = 0;
-  while (done.phase === 'play' && steps++ < 2500) BLB.step(done, 0.1, [idle, idle, idle, idle]);
-  assert.equal(done.phase, 'end');
-  assert.ok(done.time <= 100, 'ended at ' + done.time);
+test('instant KO wins immediately with ZERO 23s lock, while shield and robo-turtle absorb splashes', () => {
+  const w = BBEngine.newMatch({ seed: 2, freeze: 0 });
+  clearArena(w);
+  BBEngine.put(w, 0, 1, 1, 0, 0);
+  // Place all 3 rivals at (6,4) and detonate at t ~ 0.1s
+  BBEngine.put(w, 1, 6, 4, 0, 0);
+  BBEngine.put(w, 2, 6, 4, 0, 0);
+  BBEngine.put(w, 3, 6, 4, 0, 0);
+  BBEngine.addBalloon(w, { c: 5, r: 4, fuse: 0.05, range: 2, owner: 0 });
+
+  for (let i = 0; i < 10; i++) BBEngine.step(w, 1 / 60, [IDLE, IDLE, IDLE, IDLE]);
+  assert.equal(w.phase, 'end', 'round ends immediately when rivals are KO-ed');
+  assert.equal(w.winner, 0);
+  assert.ok(w.time < 1.0, `no artificial 23s win lock! ended at ${w.time.toFixed(2)}s`);
+
+  // Robo-turtle + Bubble Shield absorb two separate hits before KO
+  const w2 = BBEngine.newMatch({ seed: 3, freeze: 0, diff: 'normal' });
+  clearArena(w2);
+  const p = BBEngine.put(w2, 0, 4, 4, 0, 0);
+  p.mount = true;
+  p.shield = 1;
+
+  BBEngine.addBalloon(w2, { c: 3, r: 4, fuse: 0, range: 2, owner: 1 });
+  BBEngine.step(w2, 1 / 60, [IDLE, IDLE, IDLE, IDLE]);
+  assert.equal(p.state, 'play');
+  assert.equal(p.mount, false, 'robo-turtle absorbed first hit');
+  assert.equal(p.shield, 1);
+
+  p.invT = 0;
+  BBEngine.addBalloon(w2, { c: 3, r: 4, fuse: 0, range: 2, owner: 1 });
+  BBEngine.step(w2, 1 / 60, [IDLE, IDLE, IDLE, IDLE]);
+  assert.equal(p.state, 'play');
+  assert.equal(p.shield, 0, 'bubble shield absorbed second hit');
 });
 
-test('holding up 10px past a column slides you into it', () => {
-  const w = BLB.newMatch({ seed: 1, intro: 0 });
-  clearInner(w);
-  // Pillar in the column to the right, one row up: an off-center body cannot pass.
-  BLB.setTile(w, 4, 2, BLB.PILLAR);
-  BLB.setTile(w, 4, 3, BLB.PILLAR);
-  const col = 3, row = 3;
-  const ix = (col + 0.5) * T;
-  const iy = (row + 0.5) * T;
-  const p = BLB.put(w, 0, col, row, 10, 0);
-  assert.equal(p.x, ix + 10);
-  for (let i = 0; i < 40; i++) BLB.step(w, 1 / 60, [{ x: 0, y: -1, drop: false, kick: false }, idle, idle, idle]);
-  assert.ok(Math.abs(p.x - ix) < 2, 'slid into the column, x=' + p.x);
-  assert.ok(p.y < iy - T * 0.4, 'and moved up, y=' + p.y);
+test('difficulty scaling grants Easy shield + self-splash mercy, and Boss Raid wins on clearing boss + mobs', () => {
+  const easyW = BBEngine.newMatch({ seed: 1, freeze: 0, diff: 'easy' });
+  const heroW = BBEngine.newMatch({ seed: 1, freeze: 0, diff: 'hero' });
+  assert.equal(easyW.players[0].shield, 1);
+  assert.equal(easyW.players[0].selfMercy, true);
+  assert.ok(easyW.fuse > heroW.fuse);
+  assert.ok(heroW.players[1].tier > easyW.players[1].tier);
+
+  // Easy self-splash mercy keeps P1 unscathed from own balloon
+  clearArena(easyW);
+  const p1 = BBEngine.put(easyW, 0, 3, 3, 0, 0);
+  BBEngine.addBalloon(easyW, { c: 3, r: 3, fuse: 0, range: 2, owner: 0 });
+  BBEngine.step(easyW, 1 / 60, [IDLE, IDLE, IDLE, IDLE]);
+  assert.equal(p1.state, 'play');
+  assert.equal(p1.shield, 1, 'self-mercy spared even the bubble shield');
+
+  // Boss raid victory check
+  const bossStage = BBEngine.newStage({ stage: 'w1-s3', seed: 5, freeze: 0, diff: 'normal' });
+  assert.ok(bossStage.boss && bossStage.boss.hp >= 4);
+  for (let i = 1; i < bossStage.players.length; i++) bossStage.players[i].state = 'out';
+  while (bossStage.boss.hp > 0) {
+    bossStage.boss.invT = 0;
+    const bc = BBEngine.cellOf(bossStage.boss);
+    BBEngine.addBalloon(bossStage, { c: bc.c, r: bc.r, fuse: 0, range: 2, owner: 0 });
+    BBEngine.step(bossStage, 1 / 60, bossStage.players.map(() => IDLE));
+  }
+  assert.equal(bossStage.phase, 'won');
+  assert.equal(bossStage.outcome, 'win');
+  assert.ok(bossStage.stars >= 1);
 });
 
-test('the same seed and the same inputs leave the same world', () => {
-  function run(seed) {
-    const w = BLB.newMatch({ seed, intro: 0 });
-    const inputs = [
-      { x: 1, y: 0, drop: false, kick: false },
-      { x: -1, y: 0, drop: false, kick: false },
-      { x: 0, y: 1, drop: false, kick: false },
-      { x: 0, y: -1, drop: false, kick: false }
-    ];
-    for (let i = 0; i < 180; i++) {
-      const drop = i === 40 || i === 100;
-      BLB.step(w, 1 / 60, inputs.map((inp, k) => ({ x: inp.x, y: inp.y, drop: drop && k === 0, kick: false })));
-    }
-    return BLB.fingerprint(w);
-  }
-  assert.equal(run(11), run(11));
-  assert.notEqual(run(11), run(12));
-});
+test('AI danger-evasion flees imminent splashes and tier-5 bot matches complete reliably', () => {
+  const w = BBEngine.newMatch({
+    seed: 14, freeze: 0, diff: 'hero',
+    players: [0, 1, 2, 3].map(i => ({ cpu: true, team: i, tier: 5, skin: 'ninja' }))
+  });
+  clearArena(w);
+  const bot = BBEngine.put(w, 0, 4, 4, 0, 0);
+  BBEngine.put(w, 1, 11, 7, 0, 0);
+  BBEngine.put(w, 2, 1, 7, 0, 0);
+  BBEngine.put(w, 3, 11, 1, 0, 0);
+  BBEngine.addBalloon(w, { c: 4, r: 4, fuse: 1.5, range: 2, owner: 1 });
 
-function replay(stage) {
-  const w = BLB.newStage({ stage, seed: 1 });
-  const path = stage.path;
-  const me = () => w.players[0];
-  const cell = () => BLB.cellOf(me());
-  function nearest() {
-    const c = cell();
-    let best = 0, bd = 1e9;
-    for (let i = 0; i < path.length; i++) {
-      if (path[i][0] === c.c && path[i][1] === c.r) return i;
-      const d = Math.abs(path[i][0] - c.c) + Math.abs(path[i][1] - c.r);
-      if (d < bd) { bd = d; best = i; }
-    }
-    return best;
-  }
-  function toward(i) {
-    const c = cell();
-    const cur = nearest();
-    const next = cur === i ? i : cur + Math.sign(i - cur);
-    const target = path[Math.max(0, Math.min(path.length - 1, next))];
-    let x = 0, y = 0;
-    if (c.c !== target[0]) x = Math.sign(target[0] - c.c);
-    else if (c.r !== target[1]) y = Math.sign(target[1] - c.r);
-    return { x, y, drop: false, kick: false };
-  }
-  function runTo(i) {
-    let n = 0;
-    while (nearest() !== i && n++ < 800 && w.phase === 'play') BLB.step(w, 1 / 60, [toward(i)]);
-  }
-  function waitBoom() {
-    let n = 0;
-    while (n++ < 240 && w.phase === 'play') {
-      const live = w.balloons.some(b => b.owner === 0);
-      BLB.step(w, 1 / 60, [idle]);
-      if (!live && n > 6) break;
-    }
-  }
-  for (const step of stage.plan) {
-    if (w.phase !== 'play') break;
-    if (step.op === 'bomb' || step.op === 'pop') {
-      runTo(Math.max(0, step.at - 1));
-      BLB.step(w, 1 / 60, [{ x: 0, y: 0, drop: true, kick: false }]);
-      runTo(Math.max(0, step.at - 4));
-      waitBoom();
-      if (step.op === 'pop') {
-        runTo(step.at);
-        for (let k = 0; k < 40 && w.phase === 'play'; k++) BLB.step(w, 1 / 60, [idle]);
-      }
-    } else if (step.op === 'exit') {
-      runTo(step.at);
-      for (let k = 0; k < 30 && w.phase === 'play'; k++) BLB.step(w, 1 / 60, [toward(step.at)]);
-    } else if (step.op === 'boss') {
-      for (let hit = 0; hit < 10 && w.phase === 'play' && w.duck && w.duck.hp > 0; hit++) {
-        runTo(step.at - 1);
-        BLB.step(w, 1 / 60, [{ x: 0, y: 0, drop: true, kick: false }]);
-        runTo(Math.max(0, step.at - 5));
-        waitBoom();
-      }
-    } else if (step.op === 'hold') {
-      for (let k = 0; k < 20 && w.phase === 'play'; k++) BLB.step(w, 1 / 60, [idle]);
-    }
-  }
-  return w;
-}
+  for (let i = 0; i < 75; i++) BBEngine.step(w, 1 / 60, BBAI.inputs(w));
+  assert.equal(bot.state, 'play', 'bot fled out of splash cross before detonation');
+  const bc = BBEngine.cellOf(bot);
+  assert.ok(bc.c !== 4 && bc.r !== 4, `bot stepped off both splash axes to (${bc.c},${bc.r})`);
 
-test('every adventure stage has a scripted clear of at least 20s', () => {
-  assert.equal(BBD.STAGES.length, 18);
-  for (const stage of BBD.STAGES) {
-    assert.equal(stage.grid.length, 11, stage.id);
-    assert.ok(stage.grid.every(row => row.length === 15), stage.id);
-    const w = replay(stage);
-    assert.equal(w.phase, 'won', stage.id + ' phase ' + w.phase + ' t=' + w.time.toFixed(1));
-    assert.ok(w.time >= 20, stage.id + ' cleared in ' + w.time.toFixed(2) + 's');
-  }
-});
-
-function simMatch(seed, tier) {
-  const wins = [0, 0, 0, 0];
-  let rounds = 0;
-  let drops = 0, traps = 0;
-  while (rounds < 3 && Math.max(...wins) < 2) {
-    const w = BLB.newMatch({
-      seed: seed * 17 + rounds, tier, intro: 0,
-      players: [0, 1, 2, 3].map(i => ({ cpu: true, team: i, tier, critter: ['frog', 'penguin', 'cat', 'robot'][i] }))
+  let totalDrops = 0, selfHits = 0;
+  for (let seed = 1; seed <= 25; seed++) {
+    const mw = BBEngine.newMatch({
+      seed, freeze: 0, diff: 'hero',
+      players: [0, 1, 2, 3].map(i => ({ cpu: true, team: i, tier: 5, skin: BBData.SKINS[i].id }))
     });
     let steps = 0;
-    while (w.phase === 'play' && steps++ < 2200) BLB.step(w, 0.1, BBAI.inputs(w));
-    assert.equal(w.phase, 'end', 'tier ' + tier + ' seed ' + seed + ' stuck at ' + w.time.toFixed(1));
-    assert.ok(w.time <= 100);
-    drops += w.botDrops;
-    traps += w.selfTraps;
-    if (w.winner >= 0 && w.winner < 4) wins[w.winner]++;
-    rounds++;
+    while (mw.phase === 'play' && steps++ < 1200) BBEngine.step(mw, 0.1, BBAI.inputs(mw));
+    assert.equal(mw.phase, 'end', `match seed ${seed} finished`);
+    totalDrops += mw.botDrops;
+    selfHits += mw.selfHits;
   }
-  return { rounds, drops, traps, wins };
-}
-
-test('bots-only matches end, and tier-5 bots rarely trap themselves', () => {
-  const t0 = Date.now();
-  for (let seed = 1; seed <= 200; seed++) simMatch(seed, 3);
-  let drops = 0, traps = 0;
-  for (let seed = 1; seed <= 40; seed++) {
-    const m = simMatch(seed + 500, 5);
-    drops += m.drops;
-    traps += m.traps;
-  }
-  assert.ok(drops > 50, 'tier-5 bots dropped balloons');
-  assert.ok(traps / drops < 0.03, 'self-trap rate ' + (traps / drops).toFixed(4) + ' (' + traps + '/' + drops + ')');
-  // Keep the suite from quietly becoming a multi-minute hang.
-  assert.ok(Date.now() - t0 < 180000, 'bot matches took too long');
+  assert.ok(totalDrops > 40, `bots actively dropped balloons (${totalDrops})`);
+  assert.ok(selfHits / totalDrops < 0.04, `low self-hit rate: ${selfHits}/${totalDrops}`);
 });

@@ -1,956 +1,903 @@
-/* Shortcut Factory (مصنع الاختصارات): screens, the mouse and the real keyboard shortcuts,
- * the shortcut demos, the coach (glowing keys and a pointing hand), effects, saves and sound.
- * engine.js runs the factory; art.js draws it. This is the UI layer: it reads Kit.dda when a
- * level starts (belt speed, the clock, the gremlin) and reports each finished or timed-out
- * level back to it.
- * Shortcuts are matched by KeyboardEvent.code plus Ctrl (or ⌘), so Ctrl+C is KeyC even while
- * Windows types Arabic and event.key is «ؤ». Only the factory's own shortcuts are taken:
- * Ctrl+W, Ctrl+T, Ctrl+N, Ctrl+P, Ctrl+R and F5 stay the browser's. */
+/* Shortcut Factory (مصنع الاختصارات) — Cyber-Bot Cloner & Blaster Arcade.
+ * Canvas 2D renderer using Kit.art sprites, Kit.juice discrete SFX, Kit.dda, Kit.stats & Kit.track. */
 (function () {
   'use strict';
-  const SF = window.SF, A = SF.art, J = Kit.juice, W = SF.W, H = SF.H, BOX = SF.BOX;
+
+  const E = window.SFEngine, J = Kit.juice, W = E.W, H = E.H, INK = '#081026';
   const $ = id => document.getElementById(id);
   const canvas = $('game'), ui = $('ui');
-  const calm = () => Kit.motion.reduced();
-  let dirty = true, ps = 1;
-  const pxScale = v => Math.min(2, Math.max(0.5, Math.round(v.scale * v.dpr * 4) / 4));
-  const view = Kit.fit(canvas, W, H, { maxDpr: 1.5, onResize: v => {
-    ui.style.left = canvas.style.left; ui.style.top = canvas.style.top; ui.style.transform = 'scale(' + v.scale + ')';
-    ps = pxScale(v); A.setScale(ps); dirty = true;
-  } });
-  const fx = Kit.particles(), shake = Kit.shake();
-  const COPIER = { x: 1182, y: 296 }, BIN = { x: 92, y: 330 }, KB = { x: 226, y: 536, u: 36 };
-  const SHEET = { x: 440, y: 112, w: 400, h: 356 };
-  const ease = k => k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
-  const back = k => { const c = 1.9; return 1 + (c + 1) * Math.pow(k - 1, 3) + c * Math.pow(k - 1, 2); };
+  const reduced = () => Kit.motion.reduced();
 
-  /* ---------------------------------------------------------------- save */
+  if (Kit.art && typeof Kit.art.init === 'function') {
+    Kit.art.init({ canvas: canvas, mode: '2d', theme: 'neon' });
+  }
+
+  let dirty = true;
+  const view = Kit.fit(canvas, W, H, {
+    maxDpr: 1.5,
+    onResize: v => {
+      ui.style.left = canvas.style.left; ui.style.top = canvas.style.top;
+      ui.style.transform = 'scale(' + v.scale + ')'; dirty = true;
+    }
+  });
+
+  const fx = Kit.particles(), shake = Kit.shake();
   const store = Kit.store('shortcut-factory');
   const saveStatus = Kit.saveStatus({ retry: persist });
-  let save = SF.loadSave(store.get('save', null));
+  let save = E.loadSave(store.get('save', null));
   function persist() {
     if (store.set('save', save) === false) { saveStatus.failed(); return false; }
-    saveStatus.saved();
-    return true;
+    saveStatus.saved(); return true;
   }
-  // One difficulty for the whole factory, kept on this PC by Kit.
   const dda = Kit.dda('shortcut-factory', { id: 'main' });
 
-  /* --------------------------------------------------------------- state */
-  let screen = 'title', world = null, li = 0, time = 0, demo = null, ending = 0, result = null, resultT = 0, resultLock = 0;
-  let idle = 0, hint = null, streak = 0, lastOk = -9, stampAnim = -1, sheetT = 0, typing = 0, tier = 1, menuOff = 0, nudge = 0;
-  const queue = [], held = {}, demoSeen = {}, lessons = [];
-  let floats = [], flyers = [], poofs = [], toast = null;
-  let appear = {}, flash = {}, boxShake = {};
-  const bump = { copier: 0, bin: 0 }, mood = { m: '', t: 0 }, hand = { on: false, x: 0, y: 0, t: 0 };
+  let screen = 'title', world = null, currentLevel = 0, demo = null, endingTimer = 0;
+  let resultData = null, resultT = 0, appTime = 0, idleTime = 0, roundOpen = false;
+  let dockRects = [], dockPress = {}, podShake = {};
+  const held = {};
+  let beams = [], flyers = [], floats = [];
+  let clonerPulse = 0, turretPulse = 0, chronoWave = 0;
 
-  /* ------------------------------------------------------------ screens */
-  const SCREENS = { title: 'scrTitle', map: 'scrMap', shop: 'scrShop', pause: 'scrPause', result: 'scrResult' };
-  function setScreen(name) {
-    screen = name;
-    for (const k in SCREENS) $(SCREENS[k]).hidden = k !== name;
-    $('hud').hidden = name !== 'play';
-    dirty = true;
-    if (name === 'play') focusGame();
+  /* ---- Bounded Static Kit.art Sprites ---- */
+  function rr(g, x, y, w, h, r) {
+    r = Math.max(0, Math.min(r, w / 2, h / 2));
+    g.beginPath(); g.moveTo(x + r, y);
+    g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r);
+    g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath();
   }
-  function focusGame() { try { canvas.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }
-  function say(text) { $('live').textContent = text; }
 
-  /* -------------------------------------------------------------- voice */
-  // The youngest players cannot read yet: an Arabic voice (when the PC has one) says what a
-  // new shortcut does and which keys to press, the coach's next step after a quiet moment,
-  // and a word of praise. Muting the game mutes it too; without an Arabic voice it is silent.
-  const voice = (() => {
-    const S = window.speechSynthesis;
-    let ar = null, last = '', at = -99;
-    const pick = () => { try { return S.getVoices().find(v => /^ar/i.test(v.lang)) || null; } catch (e) { return null; } };
-    if (S && S.addEventListener) S.addEventListener('voiceschanged', () => { ar = pick(); });
-    return {
-      say(text) {
-        if (!S || !text || Kit.audio.muted || (text === last && time - at < 4)) return;
-        ar = ar || pick();
-        if (!ar || typeof SpeechSynthesisUtterance !== 'function') return;
-        try {
-          S.cancel();
-          const u = new SpeechSynthesisUtterance(text);
-          u.voice = ar; u.lang = ar.lang; u.rate = 0.85;
-          S.speak(u);
-          last = text; at = time;
-        } catch (e) { /* no voice */ }
-      },
-      stop() { try { if (S) S.cancel(); } catch (e) { /* ignore */ } }
-    };
-  })();
-  // Keys as a child hears them: «كنترول» and the letter's name.
-  const CTRL_SAY = l => 'اضغط كنترول، ومعه حرف ' + l;
-  const SPEAK = {
-    copy: 'انسخ! ' + CTRL_SAY('سي'), paste: 'الصق! ' + CTRL_SAY('في'), place: 'انقر على الصندوق',
-    save: 'احفظ واختم! ' + CTRL_SAY('إس'), cut: 'قُصّ! ' + CTRL_SAY('إكس'), tab: 'اضغط زر تاب',
-    del: 'أرسل اللعبة المكسورة للتدوير! اضغط زر ديليت', undo: 'تراجع! ' + CTRL_SAY('زد'),
-    gremlin: 'بُرغي خرّب الصندوق! ' + CTRL_SAY('زد'), redo: 'أعد! ' + CTRL_SAY('واي'),
-    multi: 'اضغط شِفت وانقر على الألعاب', all: 'اختر الكل! ' + CTRL_SAY('إيه'), ship: 'أرسل الصندوق! اضغط إنتر'
+  function strokeInk(g, lw, col) {
+    g.lineWidth = lw || 4; g.strokeStyle = col || INK;
+    g.lineJoin = 'round'; g.lineCap = 'round'; g.stroke();
+  }
+
+  function drawTxt(g, str, x, y, size, color, opts) {
+    opts = opts || {};
+    g.font = '700 ' + size + 'px Fredoka, sans-serif';
+    g.textAlign = opts.align || 'center'; g.textBaseline = opts.base || 'middle';
+    g.direction = /[؀-ۿ]/.test(str) ? 'rtl' : 'ltr';
+    if (opts.stroke !== false) {
+      g.lineJoin = 'round'; g.lineWidth = opts.stroke || Math.max(4, Math.round(size * 0.2));
+      g.strokeStyle = opts.ink || INK; g.strokeText(str, x, y);
+    }
+    g.fillStyle = color || '#ffffff'; g.fillText(str, x, y);
+  }
+
+  const fallbackCache = new Map();
+  function getSprite(key, w, h, drawFn) {
+    if (Kit.art && typeof Kit.art.sprite === 'function') {
+      const s = Kit.art.sprite(key, w, h, drawFn);
+      if (s) return s.canvas || s;
+    }
+    let c = fallbackCache.get(key);
+    if (!c) {
+      c = document.createElement('canvas'); c.width = w; c.height = h;
+      drawFn(c.getContext('2d'), w, h); fallbackCache.set(key, c);
+    }
+    return c;
+  }
+
+  const getThemeObj = id => E.THEMES.find(t => t.id === id) || E.THEMES[0];
+  const getArmorObj = id => E.ARMORS.find(a => a.id === id) || E.ARMORS[0];
+
+  function paintHeroBot(g, kind, armorId) {
+    const bot = E.BOTS[kind] || E.BOTS.laser, arm = getArmorObj(armorId);
+    const bodyCol = arm.id === 'stealth' ? '#263238' : bot.color;
+    const visorCol = arm.id === 'std' ? bot.color : arm.visor;
+    g.save(); g.translate(56, 60);
+    if (arm.crest === 'crown') {
+      g.beginPath(); g.moveTo(-16, -38); g.lineTo(-20, -52); g.lineTo(-7, -44); g.lineTo(0, -55);
+      g.lineTo(7, -44); g.lineTo(20, -52); g.lineTo(16, -38); g.closePath();
+      g.fillStyle = '#ffd740'; g.fill(); strokeInk(g, 3.5);
+    } else if (arm.crest === 'halo') {
+      g.beginPath(); g.ellipse(0, -48, 22, 6, 0, 0, Math.PI * 2);
+      g.strokeStyle = '#ff80ab'; g.lineWidth = 4; g.stroke();
+    } else {
+      g.beginPath(); g.moveTo(0, -36); g.lineTo(0, -49); strokeInk(g, 4, visorCol);
+      g.beginPath(); g.arc(0, -51, 5, 0, Math.PI * 2); g.fillStyle = '#ffd740'; g.fill(); strokeInk(g, 3);
+    }
+    if (kind === 'laser') {
+      rr(g, -34, -4, 12, 24, 5); g.fillStyle = '#ffd740'; g.fill(); strokeInk(g, 3.5);
+      rr(g, 22, -4, 12, 24, 5); g.fillStyle = '#ffd740'; g.fill(); strokeInk(g, 3.5);
+      rr(g, -23, -8, 46, 36, 12); g.fillStyle = bodyCol; g.fill(); strokeInk(g, 4);
+      rr(g, -13, 0, 26, 18, 6); g.fillStyle = '#0d1b3e'; g.fill();
+      g.beginPath(); g.arc(0, 9, 5, 0, Math.PI * 2); g.fillStyle = '#00e676'; g.fill();
+      rr(g, -26, -38, 52, 32, 13); g.fillStyle = arm.trim; g.fill(); strokeInk(g, 4);
+      rr(g, -19, -30, 38, 16, 7); g.fillStyle = '#09142e'; g.fill();
+      rr(g, -14, -26, 10, 8, 3); g.fillStyle = visorCol; g.fill();
+      rr(g, 4, -26, 10, 8, 3); g.fillStyle = visorCol; g.fill();
+    } else if (kind === 'drone') {
+      g.beginPath(); g.moveTo(-44, -6); g.lineTo(-18, -16); g.lineTo(-18, 10); g.closePath();
+      g.moveTo(44, -6); g.lineTo(18, -16); g.lineTo(18, 10); g.closePath();
+      g.fillStyle = arm.trim; g.fill(); strokeInk(g, 3.5);
+      g.beginPath(); g.arc(0, -8, 25, 0, Math.PI * 2); g.fillStyle = bodyCol; g.fill(); strokeInk(g, 4);
+      rr(g, -18, -20, 36, 16, 8); g.fillStyle = '#09142e'; g.fill();
+      g.beginPath(); g.arc(-7, -12, 4.5, 0, Math.PI * 2); g.arc(7, -12, 4.5, 0, Math.PI * 2);
+      g.fillStyle = visorCol; g.fill();
+      rr(g, -12, 15, 24, 10, 5); g.fillStyle = '#ffd740'; g.fill(); strokeInk(g, 3);
+    } else if (kind === 'tank') {
+      rr(g, -34, 12, 68, 18, 8); g.fillStyle = '#37474f'; g.fill(); strokeInk(g, 4);
+      rr(g, -28, -12, 56, 28, 10); g.fillStyle = bodyCol; g.fill(); strokeInk(g, 4);
+      g.beginPath(); g.arc(0, -14, 22, Math.PI, 0); g.closePath();
+      g.fillStyle = arm.trim; g.fill(); strokeInk(g, 4);
+      rr(g, -16, -28, 32, 13, 6); g.fillStyle = '#09142e'; g.fill();
+      rr(g, -11, -25, 22, 7, 3); g.fillStyle = visorCol; g.fill();
+    } else {
+      g.beginPath(); g.moveTo(0, -46); g.lineTo(14, -22); g.lineTo(-10, -22); g.closePath();
+      g.fillStyle = '#00e5ff'; g.fill(); strokeInk(g, 3.5);
+      rr(g, -28, -24, 56, 44, 18); g.fillStyle = bodyCol; g.fill(); strokeInk(g, 4);
+      rr(g, -20, -16, 40, 16, 8); g.fillStyle = '#09142e'; g.fill();
+      g.beginPath(); g.moveTo(-13, -10); g.lineTo(-4, -6); g.lineTo(-13, -4); g.closePath();
+      g.moveTo(13, -10); g.lineTo(4, -6); g.lineTo(13, -4); g.closePath();
+      g.fillStyle = visorCol; g.fill();
+      rr(g, -16, 5, 32, 9, 4); g.fillStyle = arm.trim; g.fill(); strokeInk(g, 2.5);
+    }
+    g.restore();
+  }
+
+  const BOT_KEYS = {
+    laser: { std: 'bot_laser_std', gold: 'bot_laser_gold', stealth: 'bot_laser_stealth', nova: 'bot_laser_nova' },
+    drone: { std: 'bot_drone_std', gold: 'bot_drone_gold', stealth: 'bot_drone_stealth', nova: 'bot_drone_nova' },
+    tank: { std: 'bot_tank_std', gold: 'bot_tank_gold', stealth: 'bot_tank_stealth', nova: 'bot_tank_nova' },
+    shark: { std: 'bot_shark_std', gold: 'bot_shark_gold', stealth: 'bot_shark_stealth', nova: 'bot_shark_nova' }
   };
-  const PRAISE = ['أحسنت!', 'رائع!', 'ممتاز!', 'برافو!'];
-  function speakHint(w, h) {
-    if (!h) return;
-    if (h.act === 'select') { const t = w.toys[h.toy]; if (t) voice.say('انقر على ال' + SF.NAMES[t.k][0]); }
-    else voice.say(SPEAK[h.act]);
-  }
-  function chip(id, n) { $(id).querySelector('b').textContent = String(n); }
-  function toTitle() {
-    world = null; voice.stop();
-    chip('titleStars', SF.totalStars(save) + '/' + SF.COUNT * 3);
-    setScreen('title');
-  }
-  function play() {
-    J.select();
-    // A child who has never shipped a box goes straight to the first level.
-    if (!SF.totalStars(save)) startLevel(0); else toMap();
+  function botSprite(kind, armorId) {
+    const m = BOT_KEYS[kind] || BOT_KEYS.laser;
+    return getSprite(m[armorId] || m.std, 112, 112, g => paintHeroBot(g, kind, armorId));
   }
 
-  /* ---------------------------------------------------------------- map */
-  const levelBtns = [], worldCards = [];
-  function keysHtml(act) {
-    return SF.ACTS[act].keys.map(k => '<span class="sg-key">' + k + '</span>').join('+');
-  }
-  function buildMap() {
-    const box = $('worlds');
-    SF.WORLDS.forEach((Wd, wi) => {
-      const row = document.createElement('div');
-      row.className = 'wrow'; row.style.top = (92 + wi * 124) + 'px';
-      const card = document.createElement('div');
-      card.className = 'wcard'; card.style.background = Wd.color;
-      card.innerHTML = '<b>' + Wd.name + '</b><span class="wkeys" dir="ltr">' + keysHtml(Wd.acts[0]) + '<i class="gap"></i>' + keysHtml(Wd.acts[1]) +
-        '</span><span class="wst"><svg aria-hidden="true"><use href="#i-star"/></svg><i>0</i></span>';
-      row.appendChild(card); worldCards.push(card);
-      for (let n = 0; n < SF.PER_WORLD; n++) {
-        const i = SF.levelOf(wi, n), L = SF.LEVELS[i], b = document.createElement('button');
-        b.type = 'button'; b.className = 'sf-btn lvl';
-        // Right to left like Arabic reading: a world's first level is next to its card.
-        b.style.left = (822 - n * 126) + 'px';
-        const t = L.teach[0], tag = t ? '<span class="tag">' + SF.ACTS[t].keys.join('+') + '</span>' : '';
-        const ico = L.time ? '<span class="ico"><svg aria-hidden="true"><use href="#i-clock"/></svg></span>' : L.gremlin ? '<span class="ico"><svg aria-hidden="true"><use href="#i-gremlin"/></svg></span>' : '';
-        b.innerHTML = tag + '<span class="num">' + (n + 1) + '</span><span class="st">' + '<svg><use href="#i-star"/></svg>'.repeat(3) + '</span>' + ico +
-          '<span class="lock"><svg aria-hidden="true"><use href="#i-lock"/></svg></span>';
-        on(b, () => pickLevel(i, b));
-        row.appendChild(b); levelBtns.push(b);
+  function virusSprite() {
+    return getSprite('hazard_virus', 104, 104, g => {
+      g.save(); g.translate(52, 52);
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2;
+        g.beginPath(); g.moveTo(Math.cos(a - 0.2) * 24, Math.sin(a - 0.2) * 24);
+        g.lineTo(Math.cos(a) * 42, Math.sin(a) * 42);
+        g.lineTo(Math.cos(a + 0.2) * 24, Math.sin(a + 0.2) * 24); g.closePath();
+        g.fillStyle = '#ffeb3b'; g.fill(); strokeInk(g, 3.5);
       }
-      box.appendChild(row);
+      g.beginPath(); g.arc(0, 0, 27, 0, Math.PI * 2); g.fillStyle = '#ff1744'; g.fill(); strokeInk(g, 4.5);
+      rr(g, -18, -12, 36, 18, 7); g.fillStyle = '#1a0510'; g.fill();
+      g.strokeStyle = '#ffeb3b'; g.lineWidth = 3.5; g.beginPath();
+      g.moveTo(-12, -8); g.lineTo(-4, 0); g.moveTo(-4, -8); g.lineTo(-12, 0);
+      g.moveTo(4, -8); g.lineTo(12, 0); g.moveTo(12, -8); g.lineTo(4, 0); g.stroke();
+      g.restore();
     });
-  }
-  function refreshMap() {
-    const next = SF.nextLevel(save);
-    levelBtns.forEach((b, i) => {
-      const open = SF.isOpen(save, i), st = save.stars[i];
-      b.classList.toggle('locked', !open);
-      b.classList.toggle('next', open && i === next);
-      b.querySelectorAll('.st svg').forEach((s, k) => s.classList.toggle('on', k < st));
-      b.setAttribute('aria-label', 'المرحلة ' + SF.LEVELS[i].id + (open ? '، ' + st + ' من 3 نجوم' : ' (مقفلة)'));
-    });
-    worldCards.forEach((c, wi) => {
-      c.querySelector('.wst i').textContent = SF.worldStars(save, wi) + '/' + SF.PER_WORLD * 3;
-      c.classList.toggle('locked', !SF.isOpen(save, SF.levelOf(wi, 0)));
-    });
-    chip('mapCoins', save.coins);
-    chip('mapStars', SF.totalStars(save) + '/' + SF.COUNT * 3);
-  }
-  function toMap() { world = null; voice.stop(); refreshMap(); setScreen('map'); J.whoosh(0.4); }
-  function wiggle(el) { el.classList.remove('wiggle'); void el.offsetWidth; el.classList.add('wiggle'); setTimeout(() => el.classList.remove('wiggle'), 500); }
-  function pickLevel(i, el) {
-    if (!SF.isOpen(save, i)) { J.error(); wiggle(el); return; }
-    J.select(); startLevel(i);
   }
 
-  /* --------------------------------------------------------------- shop */
-  const tiles = [];
+  function saboteurSprite() {
+    return getSprite('hazard_saboteur', 110, 100, g => {
+      g.save(); g.translate(55, 50);
+      g.beginPath(); g.moveTo(-22, -16); g.lineTo(-34, -38); g.lineTo(-10, -24); g.closePath();
+      g.moveTo(22, -16); g.lineTo(34, -38); g.lineTo(10, -24); g.closePath();
+      g.fillStyle = '#ff1744'; g.fill(); strokeInk(g, 3.5);
+      rr(g, -30, -24, 60, 46, 18); g.fillStyle = '#7c4dff'; g.fill(); strokeInk(g, 4);
+      g.beginPath(); g.arc(0, -4, 14, 0, Math.PI * 2); g.fillStyle = '#ffffff'; g.fill(); strokeInk(g, 3.5);
+      g.beginPath(); g.arc(2, -4, 6, 0, Math.PI * 2); g.fillStyle = '#ff1744'; g.fill();
+      g.beginPath(); g.moveTo(-14, 14); g.quadraticCurveTo(0, 22, 14, 14); strokeInk(g, 3.5);
+      g.restore();
+    });
+  }
+
+  const POD_KEYS = { laser: 'pod_laser', drone: 'pod_drone', tank: 'pod_tank', shark: 'pod_shark' };
+  function podSprite(kind) {
+    const col = (E.BOTS[kind] || E.BOTS.laser).color;
+    return getSprite(POD_KEYS[kind] || 'pod_laser', 260, 176, g => {
+      // Rocket nose cone & side fins
+      g.beginPath(); g.moveTo(96, 22); g.quadraticCurveTo(130, -2, 164, 22); g.closePath();
+      g.fillStyle = col; g.fill(); strokeInk(g, 4);
+      g.beginPath();
+      g.moveTo(28, 102); g.lineTo(4, 150); g.lineTo(48, 142); g.closePath();
+      g.moveTo(232, 102); g.lineTo(256, 150); g.lineTo(212, 142); g.closePath();
+      g.fillStyle = col; g.fill(); strokeInk(g, 4);
+      // Armored ship hull
+      rr(g, 22, 20, 216, 128, 28); g.fillStyle = '#122459'; g.fill(); strokeInk(g, 5);
+      rr(g, 32, 26, 196, 26, 12); g.fillStyle = col; g.fill(); strokeInk(g, 3);
+      // Glowing interior bay
+      rr(g, 34, 58, 192, 76, 18); g.fillStyle = '#07112b'; g.fill();
+      g.lineWidth = 2.5; g.strokeStyle = col; g.stroke();
+      rr(g, 64, 146, 40, 14, 5); g.fillStyle = '#546e7a'; g.fill(); strokeInk(g, 3);
+      rr(g, 156, 146, 40, 14, 5); g.fillStyle = '#546e7a'; g.fill(); strokeInk(g, 3);
+    });
+  }
+
+  function clonerSprite() {
+    return getSprite('machine_cloner', 196, 250, g => {
+      rr(g, 16, 196, 164, 40, 16); g.fillStyle = '#1e3575'; g.fill(); strokeInk(g, 5);
+      rr(g, 28, 38, 140, 164, 24); g.fillStyle = 'rgba(0, 229, 255, 0.16)'; g.fill();
+      g.lineWidth = 4.5; g.strokeStyle = '#00e5ff'; g.stroke();
+      g.strokeStyle = 'rgba(0, 229, 255, 0.25)'; g.lineWidth = 2;
+      for (let y = 64; y < 190; y += 26) { g.beginPath(); g.moveTo(36, y); g.lineTo(160, y); g.stroke(); }
+      rr(g, 16, 14, 164, 34, 14); g.fillStyle = '#1e3575'; g.fill(); strokeInk(g, 5);
+      rr(g, 44, 22, 108, 14, 7); g.fillStyle = '#00e5ff'; g.fill();
+    });
+  }
+
+  function turretSprite() {
+    return getSprite('machine_turret', 156, 180, g => {
+      rr(g, 14, 126, 114, 40, 14); g.fillStyle = '#263238'; g.fill(); strokeInk(g, 4.5);
+      rr(g, 74, 52, 68, 20, 8); g.fillStyle = '#ff1744'; g.fill(); strokeInk(g, 4);
+      rr(g, 74, 82, 68, 20, 8); g.fillStyle = '#ff1744'; g.fill(); strokeInk(g, 4);
+      g.beginPath(); g.arc(64, 82, 42, 0, Math.PI * 2); g.fillStyle = '#37474f'; g.fill(); strokeInk(g, 5);
+      g.beginPath(); g.arc(64, 82, 19, 0, Math.PI * 2); g.fillStyle = '#ffd740'; g.fill(); strokeInk(g, 3.5);
+    });
+  }
+
+  const BELT_KEYS = { cyan: 'belt_cyan', plasma: 'belt_plasma', solar: 'belt_solar', emerald: 'belt_emerald' };
+  function beltSprite(themeId) {
+    const th = getThemeObj(themeId);
+    return getSprite(BELT_KEYS[themeId] || 'belt_cyan', 830, 56, g => {
+      rr(g, 4, 6, 822, 44, 20); g.fillStyle = th.belt; g.fill(); strokeInk(g, 5);
+      g.beginPath(); g.moveTo(20, 12); g.lineTo(810, 12); g.strokeStyle = th.glow; g.lineWidth = 3; g.stroke();
+    });
+  }
+
+  /* ---- Screens, Map & Shop ---- */
+  const SCREENS = { title: 'scrTitle', map: 'scrMap', shop: 'scrShop', pause: 'scrPause', result: 'scrResult' };
+  function setScreen(next) {
+    screen = next;
+    for (const k in SCREENS) $(SCREENS[k]).hidden = k !== next;
+    $('hud').hidden = next !== 'play';
+    dirty = true;
+    if (next === 'play') { try { canvas.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }
+  }
+
+  const announce = msg => { $('live').textContent = msg; };
+
+  function updateHeaderChips() {
+    const starsStr = E.totalStars(save) + '/' + (E.COUNT * 3);
+    $('titleStars').querySelector('b').textContent = starsStr;
+    $('titleCoins').querySelector('b').textContent = String(save.coins);
+    $('mapCoins').querySelector('b').textContent = String(save.coins);
+    $('mapStars').querySelector('b').textContent = starsStr;
+    $('shopCoins').querySelector('b').textContent = String(save.coins);
+    $('rushBest').textContent = 'أفضل نقاط: ' + (save.bestScore[12] || 0);
+  }
+
+  function toTitle() { world = null; roundOpen = false; updateHeaderChips(); setScreen('title'); }
+
+  const mapCards = [];
+  function buildMap() {
+    const grid = $('tierGrid'); grid.innerHTML = '';
+    E.TIERS.forEach(tier => {
+      const row = document.createElement('div'); row.className = 'tier-row';
+      const badge = document.createElement('div'); badge.className = 'tier-badge';
+      badge.style.background = tier.color;
+      badge.innerHTML = '<b>' + tier.name + '</b><span>' + tier.badge + '</span>';
+      row.appendChild(badge);
+      tier.missions.forEach(mi => {
+        const m = E.MISSIONS[mi], card = document.createElement('button');
+        card.type = 'button'; card.className = 'sf-btn mcard';
+        const mainSc = E.SHORTCUTS[m.dock[0]];
+        card.innerHTML =
+          '<div class="mcard-top"><span class="mnum">' + (mi + 1) + '</span><span class="mtag">' + (mainSc ? mainSc.keys.join('+') : 'Ctrl+C') + '</span></div>' +
+          '<b class="mtitle">' + m.title + '</b><div class="mst">' + '<svg><use href="#i-star"/></svg>'.repeat(3) + '</div>';
+        bindClick(card, () => { J.select(); startMission(mi, { showDemo: true }); });
+        row.appendChild(card); mapCards[mi] = card;
+      });
+      grid.appendChild(row);
+    });
+  }
+
+  function openMap() {
+    world = null; roundOpen = false; updateHeaderChips();
+    for (let i = 0; i < E.COUNT; i++) {
+      const st = save.stars[i] || 0, card = mapCards[i];
+      if (!card) continue;
+      card.querySelectorAll('.mst svg').forEach((s, idx) => s.classList.toggle('on', idx < st));
+      card.setAttribute('aria-label', 'المهمة ' + (i + 1) + ': ' + E.MISSIONS[i].title + '، ' + st + ' نجوم');
+    }
+    setScreen('map');
+  }
+
+  const shopTiles = [];
   function buildShop() {
-    [['hat', SF.HATS, 'hats'], ['color', SF.COLORS, 'colors']].forEach(([type, list, box]) => {
+    [['theme', E.THEMES, 'shopThemes'], ['armor', E.ARMORS, 'shopArmors']].forEach(([cat, list, boxId]) => {
+      const box = $(boxId); box.innerHTML = '';
       list.forEach(item => {
-        const b = document.createElement('button');
-        b.type = 'button'; b.className = 'sf-btn tile';
-        b.innerHTML = '<canvas width="192" height="192"></canvas><b>' + item.name + '</b><span class="price"><i class="coin"></i><em></em></span>';
-        on(b, () => buy(type, item, b));
-        $(box).appendChild(b);
-        tiles.push({ b: b, type: type, item: item });
+        const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'sf-btn tile';
+        btn.innerHTML = '<canvas width="112" height="112"></canvas><b>' + item.name + '</b><span class="price"><i class="coin"></i><em></em></span>';
+        bindClick(btn, () => {
+          const res = E.buyItem(save, cat, item.id);
+          if (res === 'poor') { J.error(); btn.classList.remove('wiggle'); void btn.offsetWidth; btn.classList.add('wiggle'); return; }
+          persist(); if (res === 'bought') { J.coin(3); J.levelUp(); } else J.select();
+          refreshShop();
+        });
+        box.appendChild(btn); shopTiles.push({ btn, cat, item, drawn: false });
       });
     });
   }
-  function drawTile(t) {
-    const c = t.b.querySelector('canvas'), g = c.getContext('2d');
-    g.setTransform(2, 0, 0, 2, 0, 0); g.clearRect(0, 0, 96, 96);
-    if (t.type === 'hat') {
-      A.circle(g, 48, 62, 30); A.fill(g, '#ffd2a8'); A.ink(g, 4);
-      A.ell(g, 38, 60, 4, 5); A.fill(g, A.INK); A.ell(g, 58, 60, 4, 5); A.fill(g, A.INK);
-      g.beginPath(); g.moveTo(40, 74); g.quadraticCurveTo(48, 81, 56, 74); A.ink(g, 3);
-      g.save(); g.translate(48, 40); g.scale(0.72, 0.72); A.hat(g, t.item.id, 0, 0, 0, true); g.restore();
-    } else {
-      const T = A.theme(t.item.id);
-      A.rr(g, 6, 6, 84, 84, 18); g.save(); g.clip();
-      g.fillStyle = T.wall; g.fillRect(6, 6, 84, 50); g.fillStyle = T.wall2; g.fillRect(20, 6, 14, 50); g.fillRect(52, 6, 14, 50);
-      g.fillStyle = T.floor; g.fillRect(6, 56, 84, 34); g.fillStyle = T.desk; g.fillRect(6, 78, 84, 12);
-      g.restore(); A.rr(g, 6, 6, 84, 84, 18); A.ink(g, 4);
-      A.circle(g, 48, 58, 16); A.fill(g, T.suit); A.ink(g, 3.5);
-      A.rr(g, 10, 22, 76, 8, 4); A.fill(g, T.pipe); A.ink(g, 2.5);
-    }
-  }
+
   function refreshShop() {
-    tiles.forEach(t => {
-      const owned = (t.type === 'hat' ? save.hats : save.colors).indexOf(t.item.id) >= 0, wearing = save[t.type] === t.item.id;
-      t.b.classList.toggle('owned', owned);
-      t.b.classList.toggle('on', wearing);
-      t.b.classList.toggle('poor', !owned && save.coins < t.item.price);
-      t.b.querySelector('em').textContent = wearing ? '✓' : owned ? '✓' : String(t.item.price);
-      t.b.setAttribute('aria-label', t.item.name + (wearing ? ' (تلبسها)' : owned ? '' : '، السعر ' + t.item.price));
-      if (!t.drawn) { drawTile(t); t.drawn = true; }
+    updateHeaderChips();
+    shopTiles.forEach(t => {
+      const owned = (t.cat === 'armor' ? save.armors : save.themes).indexOf(t.item.id) >= 0;
+      const active = save[t.cat] === t.item.id;
+      t.btn.classList.toggle('owned', owned); t.btn.classList.toggle('on', active);
+      t.btn.classList.toggle('poor', !owned && save.coins < t.item.price);
+      t.btn.querySelector('em').textContent = active ? 'مُفعَّل ✓' : owned ? 'متاح ✓' : String(t.item.price);
+      if (!t.drawn) {
+        const g = t.btn.querySelector('canvas').getContext('2d');
+        g.clearRect(0, 0, 112, 112);
+        if (t.cat === 'armor') g.drawImage(botSprite('laser', t.item.id), 0, 0, 112, 112);
+        else {
+          rr(g, 10, 10, 92, 92, 20); g.fillStyle = t.item.bg2; g.fill(); strokeInk(g, 4, t.item.glow);
+          rr(g, 18, 52, 76, 22, 10); g.fillStyle = t.item.belt; g.fill(); strokeInk(g, 3, t.item.glow);
+          g.beginPath(); g.arc(56, 36, 12, 0, Math.PI * 2); g.fillStyle = t.item.accent; g.fill(); strokeInk(g, 3, '#ffffff');
+        }
+        t.drawn = true;
+      }
     });
-    chip('shopCoins', save.coins);
-    drawPreview();
-  }
-  function drawPreview() {
-    const c = $('preview'), g = c.getContext('2d'), T = A.theme(save.color), k = c.width / 300;
-    g.setTransform(k, 0, 0, k, 0, 0); g.clearRect(0, 0, 300, 400);
-    g.fillStyle = T.wall; g.fillRect(0, 0, 300, 400);
-    for (let x = -20; x < 300; x += 96) { g.fillStyle = T.wall2; g.fillRect(x, 0, 44, 400); }
-    g.fillStyle = T.floor; g.fillRect(0, 300, 300, 100);
-    A.worker(g, 140, 370, { hat: save.hat, theme: save.color, mood: 'happy', t: 0, still: true });
-  }
-  function openShop() { J.select(); refreshShop(); setScreen('shop'); }
-  function closeShop() { toTitle(); }
-  function buy(type, item, el) {
-    const r = SF.buy(save, type, item.id);
-    if (r === 'poor') { J.error(); wiggle(el); return; }
-    persist();
-    if (r === 'bought') { J.coin(3); J.levelUp(); const p = centerOf(el); if (p) burst(p.x, p.y, 30); }
-    else J.toggle(true);
-    A.reset();
-    refreshShop();
+    const c = $('preview'), g = c.getContext('2d'), th = getThemeObj(save.theme);
+    const grad = g.createLinearGradient(0, 0, 0, c.height);
+    grad.addColorStop(0, th.bg1); grad.addColorStop(1, th.bg2);
+    g.fillStyle = grad; g.fillRect(0, 0, c.width, c.height);
+    rr(g, 20, 290, 280, 38, 16); g.fillStyle = th.belt; g.fill(); strokeInk(g, 4, th.glow);
+    g.save(); g.translate(160, 210); g.scale(1.55, 1.55); g.drawImage(botSprite('laser', save.armor), -56, -56, 112, 112); g.restore();
+    drawTxt(g, getArmorObj(save.armor).name, 160, 62, 24, '#ffd740');
+    drawTxt(g, th.name, 160, 366, 22, th.glow);
   }
 
-  /* -------------------------------------------------------------- level */
-  function startLevel(i) {
-    li = i;
-    // Difficulty is read at every level start: the belts' speed, the clock, the gremlin.
-    tier = dda.tier;
-    world = SF.create(i, {
-      seed: (Math.random() * 2147483647) | 0, speed: Math.round(dda.value(10, 58)),
-      timeScale: dda.value(1.45, 0.85), parScale: dda.value(1.6, 1), gremlinEvery: dda.value(28, 12)
+  /* ---- Mission Lifecycle ---- */
+  function startMission(index, opts) {
+    opts = opts || {};
+    if (roundOpen && world) { Kit.stats.end('quit', world.score); roundOpen = false; }
+    currentLevel = index;
+    world = E.create(index, {
+      seed: ((Date.now() ^ (index * 7919)) & 0x7fffffff) || 101,
+      speedScale: dda.value(0.82, 1.25),
+      virusScale: dda.value(0.75, 1.25),
+      timeScale: dda.value(1.3, 0.9),
+      saboteurEvery: Math.round(dda.value(18, 10))
     });
-    const def = world.def;
-    // A new shortcut is shown once per visit, one at a time and just when it is needed: the
-    // first at the start, the next one when the coach first asks for it (Ctrl+V right after
-    // the first Ctrl+C, Ctrl+S when the day's sheet comes, Ctrl+Z when the gremlin strikes).
-    // Restart and Play again go straight to work.
-    lessons.length = 0;
-    if (!demoSeen[i]) def.teach.forEach(a => lessons.push(a));
-    demoSeen[i] = true;
-    demo = null;
-    if (lessons.length && lessons[0] !== 'save' && lessons[0] !== 'gremlin') openDemo(lessons[0]);
-    ending = 0; result = null; idle = 0; nudge = 0; hint = SF.hint(world); streak = 0; stampAnim = -1; sheetT = 0; typing = 0;
-    queue.length = 0; floats = []; flyers = []; poofs = []; toast = null; appear = {}; flash = {}; boxShake = {};
-    bump.copier = bump.bin = 0; mood.m = ''; mood.t = 0; hand.on = false;
+    demo = opts.showDemo && world.def.intro && world.def.intro.length ? { acts: world.def.intro.slice(), t: 0, dur: 1.15 } : null;
+    endingTimer = 0; resultData = null; idleTime = 0;
+    beams = []; flyers = []; floats = []; podShake = {}; dockPress = {};
+    clonerPulse = 0; turretPulse = 0; chronoWave = 0;
+    dockRects = computeDockRects(world);
     fx.clear(); Kit.keys.reset();
-    // Play stats: every working day (level) is a round.
-    Kit.stats.round('L' + (i + 1));
-    say('المرحلة ' + def.id);
-    setScreen('play');
-    J.whoosh(0.5);
-  }
-  function openDemo(act) {
-    lessons.splice(lessons.indexOf(act), 1);
-    // The calm first worlds give a demo twice the time, its keys pressed again and again.
-    demo = { acts: [act], t: 0, dur: world.def.calm ? 6 : 3 };
-    voice.say(SPEAK[act]);
-  }
-  function endDemo() { if (!demo) return; demo = null; idle = 0; J.tap(); }
-  function pause(own) {
-    if (screen !== 'play') return;
-    voice.stop();
-    setScreen('pause');
-    if (own) J.back();
-  }
-  function resume() {
-    if (screen !== 'pause') return;
-    J.select();
-    setScreen('play');
-    Kit.keys.reset();
-  }
-  function restart() { J.select(); startLevel(li); }
-  function quitToMap() { Kit.stats.end('quit'); J.back(); toMap(); }
 
-  /* ------------------------------------------------------------ result */
-  function finishLevel() {
-    const w = world;
-    ending = 0;
-    const res = SF.applyResult(save, w);
-    persist();
-    dda.result(SF.outcome(w));
-    const fail = w.phase !== 'done', Wd = SF.WORLDS[w.def.world];
-    Kit.stats.end(fail ? 'lose' : 'win', res.stars);
-    result = { res: res, fail: fail };
-    resultT = 0; resultLock = 0.6;
-    $('resTitle').textContent = fail ? 'انتهى الوقت!' : w.def.id + ' · ' + Wd.name;
-    // This day's stars pop in one by one; «رقم جديد!» when they beat the best.
-    $('resStars').querySelectorAll('svg').forEach(s => { s.classList.remove('on', 'pop'); });
+    const mid = world.id;
+    Kit.stats.round(mid);
+    roundOpen = true;
+    drainEvents(world);
+    announce('المهمة: ' + world.def.title);
+    setScreen('play');
+    J.select();
+  }
+
+  function closeDemo() { if (!demo) return; demo = null; idleTime = 0; dirty = true; J.tap(); }
+  function pauseGame(own) { if (screen !== 'play') return; setScreen('pause'); if (own) J.tap(); }
+  function resumeGame() { if (screen !== 'pause') return; J.select(); setScreen('play'); Kit.keys.reset(); }
+  function restartMission() { roundOpen = false; startMission(currentLevel, { showDemo: false }); }
+  function quitToMap() { if (roundOpen && world) { Kit.stats.end('quit', world.score); roundOpen = false; } J.tap(); openMap(); }
+
+  function finishMission() {
+    if (!world) return;
+    const w = world, res = E.applyResult(save, w);
+    persist(); dda.result(E.outcome(w));
+    if (roundOpen) { Kit.stats.end(res.win ? 'win' : 'lose', w.score); roundOpen = false; }
+    resultData = res; resultT = 0;
+    $('resTitle').textContent = res.win ? (w.def.endless ? 'انتهى التحدي اللانهائي!' : 'اكتملت المهمة بنجاح!') : 'انتهى الوقت! حاول مجدداً';
+    $('resStars').querySelectorAll('svg').forEach(s => s.classList.remove('on', 'pop'));
     $('resCoins').textContent = '+' + res.coins;
-    $('resBoxes').textContent = w.done + '/' + w.total;
-    $('resTime').textContent = fmt(w.t);
-    $('resBest').hidden = true; $('resNew').hidden = true;
-    // Enter: the next level; after the very last one, the map; after a day that ran out, again.
-    const go = fail ? 'again' : w.li + 1 < SF.COUNT ? 'next' : 'map';
-    result.go = go;
-    $('resNext').querySelector('use').setAttribute('href', '#i-' + go);
-    $('resNext').setAttribute('aria-label', { next: 'المرحلة التالية', again: 'العب مرة أخرى', map: 'المراحل' }[go]);
-    $('resEnterLabel').textContent = { next: 'التالي', again: 'مرة أخرى', map: 'المراحل' }[go];
-    $('resAgain').hidden = go === 'again';
-    $('resMap').hidden = go === 'map';
-    say(fail ? 'انتهى الوقت' : res.stars + ' نجوم');
+    $('resBoxes').textContent = String(w.launchedCount);
+    $('resScore').textContent = String(w.score);
+    $('resBest').hidden = !res.best;
+    const hasNext = res.win && !w.def.endless && w.index + 1 < E.COUNT;
+    resultData.nextAction = hasNext ? 'next' : res.win ? 'map' : 'again';
+    $('resNextText').textContent = hasNext ? 'المهمة التالية' : res.win ? 'قائمة المهمات' : 'أعد المحاولة';
+    $('resEnterLabel').textContent = $('resNextText').textContent;
     setScreen('result');
   }
-  function resultStep(dt) {
-    const r = result, before = resultT;
-    resultT += dt;
-    if (resultLock > 0) resultLock -= dt;
-    if (r.fail) return;
-    const at = t => before < t && resultT >= t;
-    for (let i = 0; i < r.res.stars; i++) {
-      if (at(0.3 + i * 0.38)) {
-        const s = $('resStars').children[i]; s.classList.add('on', 'pop'); J.star(i + 1);
-        burst(520 + i * 120, 200, 18);
-      }
+
+  /* ---- Events & SFX ---- */
+  function addFloat(x, y, txt, color, size) {
+    floats.push({ x, y, txt, color: color || '#ffffff', size: size || 30, t: 0 });
+    if (floats.length > 14) floats.shift();
+  }
+  function addBeam(x0, y0, x1, y1, color) { beams.push({ x0, y0, x1, y1, color: color || '#00e5ff', t: 0, dur: 0.28 }); }
+  function burstFx(x, y, count, cols) {
+    if (!reduced()) fx.burst(x, y, { count: count || 18, colors: cols || ['#00e5ff', '#ffd740', '#00e676', '#ffffff'], speed: 310, life: 0.7, size: 7, gravity: 340 });
+  }
+
+  const WARN_AR = {
+    select_first: 'حدد آلياً أولاً!', clip_empty: 'استنسخ آلياً بـ Ctrl+C أولاً!',
+    nothing_to_zap: 'لا يوجد فيروس على الخط!', nothing_undo: 'لا توجد خطوة للتراجع!',
+    nothing_redo: 'لا توجد خطوة للإعادة!', pod_full: 'السفن جاهزة للإقلاع!',
+    fill_ships_first: 'املأ السفن بالآليين أولاً!', no_bots: 'انتظر وصول الآليين!'
+  };
+
+  function drainEvents(w) {
+    for (let i = 0; i < w.events.length; i++) {
+      const ev = w.events[i];
+      if (ev.type === 'cue') Kit.track.cue();
+      else if (ev.type === 'select' || ev.type === 'focus_pod') J.tap();
+      else if (ev.type === 'selectAll') { Kit.track.hit(); J.select(); addFloat(590, 300, 'تحديد شامل! ⚡', '#ffd740', 34); }
+      else if (ev.type === 'copy') {
+        Kit.track.hit(); J.select(); clonerPulse = 1;
+        ev.ids.forEach(id => { const f = E.findItem(w, id); if (f) addBeam(f.x, f.y, E.CLONER.x, E.CLONER.y, '#00e5ff'); });
+        burstFx(E.CLONER.x, E.CLONER.y, 14, ['#00e5ff', '#ffffff']);
+        addFloat(E.CLONER.x - 20, E.CLONER.y - 95, 'تم الاستنساخ! ⚡', '#00e5ff', 28);
+      } else if (ev.type === 'cut') {
+        Kit.track.hit(); J.pop(0.6); clonerPulse = 1;
+        ev.items.forEach(it => { addBeam(it.x, it.y, E.CLONER.x, E.CLONER.y, '#ffd740'); burstFx(it.x, it.y, 12, ['#ffd740', '#00e5ff']); });
+        addFloat(E.CLONER.x - 20, E.CLONER.y - 95, 'نقل نفاث! ✂️', '#ffd740', 28);
+      } else if (ev.type === 'paste') {
+        Kit.track.hit(); J.pop(0.85); clonerPulse = 1;
+        ev.items.forEach((it, idx) => {
+          flyers.push({ kind: it.kind, x0: E.CLONER.x, y0: E.CLONER.y, x1: it.x, y1: it.y, t: -idx * 0.05, dur: 0.24 });
+          addBeam(E.CLONER.x, E.CLONER.y, it.x, it.y, '#00e676');
+        });
+      } else if (ev.type === 'delete') {
+        if (ev.viruses > 0) Kit.track.hit();
+        J.impact(0.75); turretPulse = 1; if (!reduced()) shake.add(5);
+        ev.items.forEach(it => {
+          addBeam(E.TURRET.x + 36, E.TURRET.y - 10, it.x, it.y, '#ff1744');
+          burstFx(it.x, it.y, 24, ['#ff1744', '#ffd740', '#ff9100', '#ffffff']);
+        });
+        if (ev.viruses > 0) { J.coin(1); addFloat(ev.items[0].x, ev.items[0].y - 36, 'تدمير الفيروس! 💥', '#ffd740', 30); }
+      } else if (ev.type === 'undo' || ev.type === 'redo') {
+        Kit.track.hit(); chronoWave = 1;
+        if (ev.bonk) { J.impact(0.85); J.coin(2); if (!reduced()) shake.add(6); addFloat(640, 230, 'إرجاع الزمن وطرد المخرب! ⏪', '#00e676', 36); }
+        else { J.select(); addFloat(640, 260, ev.type === 'undo' ? 'إرجاع الزمن ⏪' : 'تقديم الزمن ⏩', '#00e5ff', 32); }
+      } else if (ev.type === 'pod_launch') {
+        J.coin(Math.min(4, ev.combo)); if (ev.combo >= 2) J.streak(Math.min(10, ev.combo));
+        const bx = w.boxes[ev.boxIndex];
+        if (bx) { burstFx(bx.x, bx.y + 50, 28); addFloat(bx.x, bx.y - 40, 'انطلاق السفينة! 🚀', '#00e676', 32); }
+      } else if (ev.type === 'mega_ready') { J.levelUp(); addFloat(640, 250, 'اضغط Ctrl + S للإقلاع الشامل! 🔥', '#ffd740', 36); }
+      else if (ev.type === 'mega_launch') { Kit.track.hit(); J.levelUp(); if (!reduced()) shake.add(8); addFloat(640, 240, 'إقلاع الأسطول الكبير! 🚀🔥', '#ffd740', 42); }
+      else if (ev.type === 'save_boost') { Kit.track.hit(); J.select(); addFloat(640, 280, 'شحنة طاقة إضافية! +20 ⚡', '#00e676', 30); }
+      else if (ev.type === 'saboteur_warn') addFloat(920, 120, 'تنبيه! روبوت مخرب يقترب!', '#ff4081', 28);
+      else if (ev.type === 'saboteur_strike') { J.error(); if (!reduced()) shake.add(5); addFloat(w.boxes[ev.boxIndex].x, 96, 'تخريب! اضغط Ctrl+Z فوراً!', '#ff4081', 30); }
+      else if (ev.type === 'mistake' || ev.type === 'virus_leak') {
+        Kit.track.miss(); J.error(); if (ev.boxIndex != null) podShake[ev.boxIndex] = 0.45;
+        const msg = ev.reason === 'virus_copy' || ev.reason === 'virus_cut' ? 'هذا فيروس! دمره بزر Delete!'
+          : ev.type === 'virus_leak' ? 'تسلل فيروس! استخدم Delete!' : 'اختر السفينة المطابقة للآلي!';
+        addFloat(590, 260, msg, '#ff4081', 30);
+      } else if (ev.type === 'warn') { J.tap(); if (WARN_AR[ev.reason]) addFloat(590, 280, WARN_AR[ev.reason], '#ffd740', 28); }
+      else if (ev.type === 'win') { J.levelUp(); endingTimer = 0.9; }
+      else if (ev.type === 'timeup') { J.error(); endingTimer = 0.9; }
     }
-    const t1 = 0.4 + r.res.stars * 0.38;
-    if (r.res.best && at(t1)) { $('resBest').hidden = false; J.chime(2); confetti(); }
-    if (r.res.unlocked >= 0 && at(t1 + 0.3)) { $('resNew').hidden = false; J.levelUp(); }
+    w.events.length = 0;
   }
-  function resultNext() {
-    if (!result) return;
-    J.select();
-    if (result.go === 'map') toMap(); else startLevel(result.go === 'next' ? li + 1 : li);
-  }
-  function resultAgain() { if (result) { J.select(); startLevel(li); } }
-  function fmt(s) { s = Math.max(0, Math.ceil(s)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
 
-  /* --------------------------------------------------------------- input */
-  function on(el, fn) {
-    el.addEventListener('click', e => { e.stopPropagation(); if (e.detail > 1) return; Kit.audio.unlock(); if (e.detail > 0) { el.blur(); focusGame(); } fn(e); });
+  function execAction(actionObj) {
+    if (!world || screen !== 'play' || endingTimer > 0) return;
+    if (document.activeElement !== canvas) { try { canvas.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }
+    idleTime = 0;
+    const t = actionObj.type || actionObj.t;
+    if (t && E.SHORTCUTS[t]) dockPress[t] = 0.22;
+    E.act(world, actionObj); drainEvents(world); dirty = true;
   }
-  on($('btnPlay'), play);
-  on($('btnLevels'), () => { J.select(); toMap(); });
-  on($('btnShop'), openShop);
-  on($('mapHome'), () => { J.back(); toTitle(); });
-  on($('shopBack'), () => { J.back(); closeShop(); });
-  on($('btnPause'), () => pause(true));
-  on($('btnResume'), resume);
-  on($('btnRestart'), restart);
-  on($('btnMenu'), quitToMap);
-  on($('resNext'), () => { if (resultLock <= 0) resultNext(); });
-  on($('resAgain'), () => { if (resultLock <= 0) resultAgain(); });
-  on($('resMap'), () => { if (resultLock <= 0) { J.back(); toMap(); } });
 
-  const CTRL = { KeyC: 'copy', KeyV: 'paste', KeyX: 'cut', KeyZ: 'undo', KeyY: 'redo', KeyA: 'all', KeyS: 'save' };
-  const ARROWS = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down' };
-  const typingIn = t => !!(t && (t.isContentEditable || (t.closest && t.closest('input, textarea, select'))));
-  function push(a) { if (queue.length < 30) queue.push(a); idle = 0; }
-  // Tab moves the factory's selection while a level is on; in the menus it moves focus.
+  /* ---- Input Wiring ---- */
+  function bindClick(el, fn) {
+    el.addEventListener('click', e => { e.stopPropagation(); Kit.audio.unlock(); el.blur(); fn(e); });
+  }
+  bindClick($('btnPlay'), () => startMission(0, { showDemo: true }));
+  bindClick($('btnLevels'), () => { J.select(); openMap(); });
+  bindClick($('btnRush'), () => startMission(12, { showDemo: false }));
+  bindClick($('btnShop'), () => { J.select(); refreshShop(); setScreen('shop'); });
+  bindClick($('mapHome'), () => { J.tap(); toTitle(); });
+  bindClick($('mapRush'), () => startMission(12, { showDemo: false }));
+  bindClick($('shopBack'), () => { J.tap(); toTitle(); });
+  bindClick($('btnPause'), () => pauseGame(true));
+  bindClick($('btnResume'), resumeGame);
+  bindClick($('btnRestart'), restartMission);
+  bindClick($('btnMenu'), quitToMap);
+  bindClick($('resNext'), () => {
+    if (!resultData) return;
+    if (resultData.nextAction === 'next') startMission(currentLevel + 1, { showDemo: true });
+    else if (resultData.nextAction === 'again') startMission(currentLevel, { showDemo: false });
+    else openMap();
+  });
+  bindClick($('resAgain'), () => startMission(currentLevel, { showDemo: false }));
+  bindClick($('resMap'), openMap);
+
+  const CTRL_MAP = { KeyC: 'copy', KeyV: 'paste', KeyX: 'cut', KeyZ: 'undo', KeyY: 'redo', KeyA: 'selectAll', KeyS: 'saveShip' };
   Kit.keys.captureTab(() => screen === 'play');
+
   window.addEventListener('keydown', e => {
-    held[e.code] = true;
-    if (e.isComposing || typingIn(e.target)) return;
+    held[e.code] = true; dirty = true;
+    if (e.isComposing) return;
     if ((e.ctrlKey || e.metaKey) && !e.altKey) {
-      const act = CTRL[e.code];
-      if (!act) return;
-      // The page must not select its text, save itself or paste: the factory does it.
+      const mapped = CTRL_MAP[e.code];
+      if (!mapped) return;
       e.preventDefault();
-      if (screen === 'play' && !e.repeat) push({ t: e.code === 'KeyZ' && e.shiftKey ? 'redo' : act });
+      if (screen === 'play' && !e.repeat) {
+        if (demo) closeDemo();
+        execAction({ type: e.code === 'KeyZ' && e.shiftKey ? 'redo' : mapped });
+      }
       return;
     }
     if (screen !== 'play' || !Kit.isGameKeyEvent(e)) return;
     const c = e.code;
-    if (c === 'Delete' || c === 'Backspace') { e.preventDefault(); if (!e.repeat) push({ t: 'del' }); }
-    else if (c === 'Enter' || c === 'NumpadEnter') { e.preventDefault(); if (!e.repeat) push({ t: 'enter' }); }
-    else if (c === 'Tab') { e.preventDefault(); if (!e.repeat) push({ t: 'tab' }); }
-    else if (ARROWS[c]) { e.preventDefault(); push({ t: 'move', dir: ARROWS[c], add: e.shiftKey }); }
-    else if (c === 'Space' && demo) push({ t: 'enter' });
+    if (demo && (c === 'Enter' || c === 'NumpadEnter' || c === 'Space')) { e.preventDefault(); closeDemo(); return; }
+    if (c === 'Delete' || c === 'Backspace') { e.preventDefault(); if (!e.repeat) execAction({ type: 'delete' }); }
+    else if (c === 'Tab' || c === 'Space') { e.preventDefault(); if (!e.repeat) execAction({ type: 'select', dir: e.shiftKey ? -1 : 1 }); }
+    else if (c === 'ArrowLeft') { e.preventDefault(); execAction({ type: 'select', dir: 1, add: e.shiftKey }); }
+    else if (c === 'ArrowRight') { e.preventDefault(); execAction({ type: 'select', dir: -1, add: e.shiftKey }); }
+    else if ((c === 'Enter' || c === 'NumpadEnter') && world && world.megaReady) { e.preventDefault(); execAction({ type: 'saveShip' }); }
   });
-  window.addEventListener('keyup', e => { held[e.code] = false; });
+  window.addEventListener('keyup', e => { held[e.code] = false; dirty = true; });
   window.addEventListener('blur', () => { for (const k in held) held[k] = false; });
+
   canvas.addEventListener('pointerdown', e => {
-    focusGame();
     if (e.button !== 0 || screen !== 'play') return;
+    Kit.audio.unlock();
+    try { canvas.focus({ preventScroll: true }); } catch (err) { /* ignore */ }
     const p = view.toLogical(e.clientX, e.clientY);
-    push({ t: 'click', x: p.x, y: p.y, add: e.shiftKey || e.ctrlKey || e.metaKey });
+    if (demo) { closeDemo(); return; }
+    if (world && world.megaReady && p.y >= 244 && p.y <= 300 && p.x >= 380 && p.x <= 860) { execAction({ type: 'saveShip' }); return; }
+    for (let i = 0; i < dockRects.length; i++) {
+      const r = dockRects[i];
+      if (p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h) { execAction({ type: r.id }); return; }
+    }
+    execAction({ type: 'click', x: p.x, y: p.y, add: e.shiftKey });
   });
-  function handleKeys() {
+
+  function pollMenuKeys() {
     const K = Kit.keys, go = K.anyPressed(['Enter', 'NumpadEnter', 'Space']);
-    if (screen === 'title') { if (go) play(); }
-    else if (screen === 'map') { if (go) { J.select(); startLevel(SF.nextLevel(save)); } else if (K.pressed('Escape')) { J.back(); toTitle(); } }
-    else if (screen === 'shop') { if (K.pressed('Escape')) { J.back(); closeShop(); } }
-    else if (screen === 'play') { if (K.anyPressed(['KeyP', 'Escape'])) pause(true); }
-    else if (screen === 'pause') { if (K.anyPressed(['KeyP', 'Escape', 'Enter', 'NumpadEnter', 'Space'])) resume(); else if (K.pressed('KeyR')) restart(); }
-    else if (screen === 'result' && resultLock <= 0) {
-      if (go) resultNext(); else if (K.pressed('KeyR')) resultAgain();
-      else if (K.pressed('Escape')) { J.back(); toMap(); }
+    if (screen === 'title') { if (go) startMission(0, { showDemo: true }); }
+    else if (screen === 'map' || screen === 'shop') { if (K.pressed('Escape')) { J.tap(); toTitle(); } }
+    else if (screen === 'play') { if (K.anyPressed(['KeyP', 'Escape'])) pauseGame(true); }
+    else if (screen === 'pause') {
+      if (K.anyPressed(['KeyP', 'Escape', 'Enter', 'NumpadEnter', 'Space'])) resumeGame();
+      else if (K.pressed('KeyR')) restartMission();
+    } else if (screen === 'result' && resultData) {
+      if (go) $('resNext').click(); else if (K.pressed('KeyR')) restartMission();
     }
   }
 
-  /* ------------------------------------------------------------- actions */
-  const KEYED = { copy: 1, paste: 1, cut: 1, del: 1, undo: 1, redo: 1, all: 1, save: 1, ship: 1, tab: 1 };
-  function onBadge(w, c, x, y) { return Math.hypot(x - (c.x + 108), y - (BOX.y + 10)) < 40; }
-  function doAct(a) {
-    const w = world;
-    if (w.phase !== 'play' && w.phase !== 'stamp') return;
-    if (a.t === 'click') {
-      // The day's sheet, a ready box's Enter button, then the toys and boxes.
-      if (w.phase === 'stamp') {
-        if (a.x > SHEET.x && a.x < SHEET.x + SHEET.w && a.y > SHEET.y && a.y < SHEET.y + SHEET.h) act({ t: 'save' }, true);
-        return;
-      }
-      const b = SF.boxes(w).find(c => SF.ready(w, c) && onBadge(w, c, a.x, a.y));
-      if (b) { act({ t: 'ship', con: b.i }, true); return; }
-      act({ t: 'click', x: a.x, y: a.y, add: a.add }, true);
-      return;
-    }
-    // The day's sheet is stamped with Ctrl+S, not Enter: show which keys.
-    if (a.t === 'enter' && w.phase === 'stamp') { J.error(); float(640, SHEET.y + 300, 'Ctrl + S', '#ffd23f', 44); idle = 9; return; }
-    act(a.t === 'enter' ? { t: 'ship' } : a, false);
-  }
-  function act(a, mouse) {
-    const r = SF.act(world, a);
-    if (KEYED[a.t] && !mouse) {
-      toast = { act: a.t, ok: r === 'ok' || r === 'early', t: 0 };
-      typing = 1;
-      if (r === 'ok' && a.t !== 'tab') {
-        streak = time - lastOk < 2.2 ? streak + 1 : 1;
-        lastOk = time;
-        if (streak >= 3) J.streak(Math.min(12, streak - 1));
-      }
-    }
-    handleEvents();
-  }
-
-  /* ------------------------------------------------------------ effects */
-  function float(x, y, text, color, size) {
-    floats.push({ x: x, y: y, text: text, color: color || '#ffffff', size: size || 34, t: 0 });
-    if (floats.length > 12) floats.shift();
-  }
-  function fly(t, x0, y0, x1, y1, dur, o) {
-    o = o || {};
-    flyers.push({ k: t.k, b: t.b, x0: x0, y0: y0, x1: x1, y1: y1, t: -(o.delay || 0), dur: dur, s0: o.s0 || 1, s1: o.s1 == null ? 0.6 : o.s1, spin: o.spin || 0, arc: o.arc == null ? 110 : o.arc, poof: !!o.poof });
-    if (flyers.length > 30) flyers.shift();
-  }
-  function poof(x, y, color) { poofs.push({ x: x, y: y, t: 0, color: color || '#ffffff' }); if (poofs.length > 16) poofs.shift(); }
-  function burst(x, y, n, colors) { fx.burst(x, y, { count: n, colors: colors || ['#ffd23f', '#ffffff', '#ff7eb6', '#4fd1ff'], speed: 320, life: 0.8, size: 8, gravity: 420 }); }
-  function confetti() { if (calm()) return; for (let i = 0; i < 5; i++) burst(160 + i * 240, 120, 22, ['#ff7eb6', '#ffd23f', '#4fd1ff', '#5be38f', '#ffffff']); }
-  function setMood(m, t) { mood.m = m; mood.t = t; }
-  function centerOf(el) {
-    const r = el.getBoundingClientRect();
-    return r.width ? view.toLogical(r.left + r.width / 2, r.top + r.height / 2) : null;
-  }
-  const NOTHING = { copy: 'اختر لعبة أولًا', cut: 'اختر لعبة أولًا', del: 'اختر لعبة أولًا', paste: 'انسخ لعبة أولًا', undo: 'لا شيء للتراجع', redo: 'لا شيء للإعادة', all: 'لا ألعاب هنا' };
-  function gremlinY(g) { return g.phase === 'mess' ? 300 : 262; }
-  function handleEvents() {
-    const w = world;
-    for (const e of w.ev) {
-      switch (e.t) {
-        case 'select': if (e.ids.length) J.tap(); break;
-        case 'copy':
-          J.select(); bump.copier = 1;
-          e.ids.forEach((id, i) => { const f = SF.find(w, id); if (f) { flash[id] = 0.5; fly(w.toys[id], f.x, f.y, COPIER.x, COPIER.y + 48, 0.38, { delay: i * 0.05, s1: 0.5 }); } });
-          float(COPIER.x, COPIER.y - 20, 'نُسخت!', '#ffffff', 30);
-          break;
-        case 'cut':
-          J.whoosh(0.6); bump.copier = 1;
-          e.toys.forEach((g, i) => { fly(g, g.x, g.y, COPIER.x, COPIER.y + 48, 0.4, { delay: i * 0.05, s1: 0.5, spin: 6 }); poof(g.x, g.y); });
-          float(COPIER.x, COPIER.y - 20, 'قُصّت!', '#ffffff', 30);
-          break;
-        case 'paste':
-          J.pop(0.45); bump.copier = 1;
-          e.ids.forEach((id, i) => {
-            const f = SF.find(w, id), d = 0.3 + i * 0.07;
-            if (!f) return;
-            appear[id] = -d;
-            fly(w.toys[id], COPIER.x, COPIER.y + 48, f.x, f.y, d, { s0: 0.5, s1: 1, arc: 140 });
-          });
-          break;
-        case 'del': {
-          J.whoosh(0.35); bump.bin = 1;
-          let broken = 0;
-          e.toys.forEach((g, i) => { if (g.b) broken++; fly(g, g.x, g.y, BIN.x, BIN.y + 30, 0.45, { delay: i * 0.05, s1: 0.3, spin: 9, arc: 160 }); });
-          if (broken) { J.coin(1); float(BIN.x + 20, BIN.y - 10, '♻ رائع!', '#5be38f', 30); }
-          break;
-        }
-        case 'undo': case 'redo':
-          J.toggle(e.t === 'redo');
-          e.ids.forEach(id => { const f = SF.find(w, id); if (f) { appear[id] = 0; poof(f.x, f.y, '#bfe9ff'); } });
-          if (e.bonk) {
-            J.impact(0.8); shake.add(6); setMood('happy', 1.4);
-            float(w.g.x, gremlinY(w.g) - 70, 'بونك!', '#ffd23f', 46);
-            burst(w.g.x, gremlinY(w.g), 24, ['#ffd23f', '#ffffff', '#c79bff']);
-          } else if (e.label === 'gremlin' && e.t === 'undo') { setMood('happy', 1); float(640, 300, 'أصلحتها!', '#5be38f', 40); }
-          break;
-        case 'all': J.chime(1); e.ids.forEach(id => { flash[id] = 0.5; }); break;
-        case 'ship': {
-          const c = w.cons[e.con];
-          Kit.track.hit();
-          J.coin(Math.min(5, e.combo)); J.whoosh(0.7); setMood('happy', 1.3);
-          voice.say(PRAISE[w.done % PRAISE.length]);
-          burst(c.x, BOX.y + 40, 26);
-          float(c.x, BOX.y - 10, '+2', '#ffd23f', 40);
-          if (e.combo > 1) { float(c.x, BOX.y + 40, 'كومبو ×' + e.combo, '#ff7eb6', 40); J.streak(Math.min(12, e.combo + 2)); }
-          break;
-        }
-        case 'wrong':
-          Kit.track.miss();
-          J.error(); boxShake[e.con] = 0.6; setMood('oops', 1.2);
-          float(w.cons[e.con].x, BOX.y + 20, e.empty ? 'الصندوق فارغ!' : 'ليس بعد!', '#ffffff', 34);
-          break;
-        case 'full': Kit.track.miss(); J.error(); if (e.con >= 0) float(w.cons[e.con].x, BOX.y + 20, 'ممتلئ!', '#ffffff', 34); break;
-        case 'nothing': if (NOTHING[e.a]) { J.error(); float(640, 300, NOTHING[e.a], '#ffffff', 34); } break;
-        case 'arrive': J.whoosh(0.25); Kit.track.cue(); break; // a box to handle: the next shortcut is a reaction time
-        case 'gremlin': J.hover(); float(1180, 200, '!', '#ff5d6c', 60); break;
-        case 'mess':
-          J.impact(0.45); shake.add(5); setMood('oops', 1.6);
-          poof(w.cons[e.con].x, BOX.y + 60, '#e2d4ff'); poof(w.cons[e.con].x - 60, BOX.y + 80, '#e2d4ff');
-          float(w.g.x, gremlinY(w.g) - 80, 'هههه!', '#c79bff', 40);
-          break;
-        case 'allShipped':
-          if (w.phase === 'stamp') { J.chime(2); sheetT = 0; }
-          else { J.levelUp(); confetti(); setMood('wow', 2); ending = 1.5; }
-          break;
-        case 'stamp':
-          J.impact(1); shake.add(10); stampAnim = 0; setMood('wow', 2);
-          burst(640, SHEET.y + 206, 40, ['#e2364f', '#ffd23f', '#ffffff']);
-          ending = 1.7;
-          break;
-        case 'saved': J.toggle(true); float(640, 300, 'تم الحفظ ✓', '#ffffff', 34); break;
-        case 'timeup': J.fail(); setMood('oops', 3); float(640, 260, 'انتهى الوقت!', '#ffffff', 56); ending = 1.6; break;
-      }
-    }
-    w.ev.length = 0;
-  }
-
-  /* ----------------------------------------------------------- the coach */
-  function keyCenter(code) { const r = A.keyRect(code, KB.x, KB.y, KB.u); return r ? { x: r.x + r.w / 2, y: r.y + r.h / 2 } : null; }
-  // The keys that glow on the keyboard: the demo's keys, or the next useful shortcut (always in
-  // the first worlds and for an easy PC, after a few idle seconds later on).
-  function glowCodes(w) {
-    if (demo) { const s = demoStep(); return SF.ACTS[s.act].codes; }
-    if (!hint) return [];
-    const show = w.def.world <= 1 || tier <= 2 || idle > 4 || w.phase === 'stamp' || hint.act === 'gremlin';
-    return show ? SF.ACTS[hint.act].codes : [];
-  }
-  function handTarget(w) {
-    if (!hint || demo || ending || idle < (w.def.calm ? 2.5 : 6)) return null;
-    const h = hint;
-    if (h.act === 'select') {
-      const f = SF.find(w, h.toy);
-      return f && (w.cons[f.con].type === 'box' || SF.visible(f.x)) ? { x: f.x, y: f.y - 4 } : null;
-    }
-    if (h.act === 'place') return { x: w.cons[h.con].x, y: BOX.y + 76 };
-    if (h.act === 'ship') return { x: w.cons[h.con].x + 108, y: BOX.y + 10 };
-    const codes = SF.ACTS[h.act].codes;
-    return codes.length ? keyCenter(codes[codes.length - 1]) : null;
-  }
-  function coachStep(dt) {
-    const target = handTarget(world);
-    if (!target) { hand.on = false; return; }
-    if (!hand.on) { hand.on = true; hand.t = 0; hand.x = target.x + 90; hand.y = target.y + 120; }
-    hand.t += dt;
-    const k = calm() ? 1 : Math.min(1, dt * 7);
-    hand.x += (target.x - hand.x) * k; hand.y += (target.y - hand.y) * k;
-  }
-
-  /* ----------------------------------------------------------------- loop */
-  function playStep(dt) {
-    const w = world;
-    const list = queue.splice(0, queue.length);
-    for (const a of list) {
-      if (demo) {
-        // A click or Enter only closes the demo; a shortcut closes it and works.
-        if (a.t === 'click' || a.t === 'enter') { if (demo.t > 0.3) endDemo(); continue; }
-        endDemo();
-      }
-      if (!ending) doAct(a);
-    }
-    if (demo) { demo.t += dt; if (demo.t >= demo.dur) endDemo(); return; }
-    if (ending > 0) {
-      hint = null; hand.on = false;
-      w.offset += w.speed * dt;
-      ending -= dt;
-      if (ending <= 0) finishLevel();
-      return;
-    }
-    SF.step(w, dt);
-    handleEvents();
-    idle += dt;
-    hint = SF.hint(w);
-    if (hint && lessons.indexOf(hint.act) >= 0) { openDemo(hint.act); hand.on = false; return; }
-    if (w.phase === 'stamp') sheetT += dt;
-    // After a quiet moment the voice says the next step, then again now and then.
-    if (idle < 1) nudge = 0;
-    else if (idle > (w.def.calm ? 4 : 8) + nudge) { speakHint(w, hint); nudge += 10; }
-    coachStep(dt);
-  }
-  function decay(dt) {
-    for (let i = floats.length - 1; i >= 0; i--) { const f = floats[i]; f.t += dt; f.y -= dt * 40; if (f.t > 1.3) floats.splice(i, 1); }
-    for (let i = flyers.length - 1; i >= 0; i--) { const f = flyers[i]; f.t += dt; if (f.t >= f.dur) { if (f.poof) poof(f.x1, f.y1); flyers.splice(i, 1); } }
-    for (let i = poofs.length - 1; i >= 0; i--) { poofs[i].t += dt; if (poofs[i].t > 0.45) poofs.splice(i, 1); }
-    for (const id in appear) { appear[id] += dt; if (appear[id] > 0.4) delete appear[id]; }
-    for (const id in flash) { flash[id] -= dt; if (flash[id] <= 0) delete flash[id]; }
-    for (const c in boxShake) { boxShake[c] -= dt; if (boxShake[c] <= 0) delete boxShake[c]; }
-    bump.copier = Math.max(0, bump.copier - dt * 4); bump.bin = Math.max(0, bump.bin - dt * 3);
-    if (mood.t > 0) { mood.t -= dt; if (mood.t <= 0) mood.m = ''; }
-    typing = Math.max(0, typing - dt * 3);
-    if (toast) { toast.t += dt; if (toast.t > 1.2) toast = null; }
-    if (stampAnim >= 0) stampAnim += dt;
-  }
+  /* ---- Loop & Rendering ---- */
   function update(dt) {
-    time += dt;
-    handleKeys();
-    if (screen === 'play' && world) playStep(dt);
-    else if (screen === 'result' && result) resultStep(dt);
-    if (screen !== 'pause') {
-      menuOff += dt * 60;
-      fx.update(dt); shake.update(dt); decay(dt);
-      if (fx.list.length > 300) fx.list.splice(0, fx.list.length - 300);
+    pollMenuKeys();
+    if (screen === 'pause') { Kit.keys.endFrame(); return; }
+    appTime += dt;
+    if (screen === 'play' && world) {
+      if (demo) { demo.t += dt; if (demo.t >= demo.dur) closeDemo(); }
+      else if (endingTimer > 0) { endingTimer -= dt; if (endingTimer <= 0) finishMission(); }
+      else { idleTime += dt; E.step(world, dt); drainEvents(world); }
+    } else if (screen === 'result' && resultData) {
+      const prev = resultT; resultT += dt;
+      for (let i = 0; i < resultData.stars; i++) {
+        const th = 0.22 + i * 0.28;
+        if (prev < th && resultT >= th) {
+          const starEl = $('resStars').children[i];
+          if (starEl) { starEl.classList.add('on', 'pop'); J.star(i + 1); }
+        }
+      }
     }
-    Kit.keys.endFrame();
+    for (let i = beams.length - 1; i >= 0; i--) { beams[i].t += dt; if (beams[i].t >= beams[i].dur) beams.splice(i, 1); }
+    for (let i = flyers.length - 1; i >= 0; i--) { flyers[i].t += dt; if (flyers[i].t >= flyers[i].dur) flyers.splice(i, 1); }
+    for (let i = floats.length - 1; i >= 0; i--) { floats[i].t += dt; floats[i].y -= dt * 36; if (floats[i].t >= 1.15) floats.splice(i, 1); }
+    for (const k in podShake) { podShake[k] -= dt; if (podShake[k] <= 0) delete podShake[k]; }
+    for (const k in dockPress) { dockPress[k] -= dt; if (dockPress[k] <= 0) delete dockPress[k]; }
+    clonerPulse = Math.max(0, clonerPulse - dt * 3);
+    turretPulse = Math.max(0, turretPulse - dt * 3.5);
+    chronoWave = Math.max(0, chronoWave - dt * 2.2);
+    fx.update(dt); shake.update(dt);
+    if (fx.list.length > 240) fx.list.splice(0, fx.list.length - 240);
+    dirty = true; Kit.keys.endFrame();
   }
 
-  /* --------------------------------------------------------------- render */
-  const layers = {};
-  // A picture that changes rarely (the HUD, the actions card): drawn only when its key changes.
-  function layer(name, w, h, key, draw) {
-    let L = layers[name];
-    if (!L) L = layers[name] = { c: document.createElement('canvas'), key: null };
-    const k = key + '@' + ps;
-    if (L.key !== k) {
-      L.key = k; L.c.width = Math.ceil(w * ps); L.c.height = Math.ceil(h * ps);
-      const g = L.c.getContext('2d');
-      g.setTransform(ps, 0, 0, ps, 0, 0);
-      draw(g);
-    }
-    return L.c;
+  function drawKeycap(ctx, cx, cy, label, w, h, active, glowCol) {
+    const dy = active ? 4 : 0;
+    rr(ctx, cx - w / 2, cy - h / 2 + 6, w, h, 12); ctx.fillStyle = INK; ctx.fill();
+    rr(ctx, cx - w / 2, cy - h / 2 + dy, w, h, 12);
+    ctx.fillStyle = active ? '#ffd740' : (glowCol || '#ffffff'); ctx.fill(); strokeInk(ctx, 3.5, INK);
+    drawTxt(ctx, label, cx, cy + dy + 1, Math.min(24, Math.round(h * 0.48)), INK, { stroke: false });
   }
-  function drawToy(ctx, w, id, x, y, still, bob) {
-    const t = w.toys[id];
-    if (!t) return;
-    let s = 1;
-    const ap = appear[id];
-    if (ap != null) { if (ap < 0) return; s = still ? 1 : back(Math.min(1, ap / 0.32)); }
-    const sel = w.sel.indexOf(id) >= 0;
-    let dy = bob || 0;
-    if (sel) {
-      const p = still ? 0.6 : (Math.sin(time * 7) + 1) / 2;
-      A.circle(ctx, x, y, 44 + p * 3); A.fill(ctx, A.alpha('#ffe14d', 0.5 + 0.2 * p)); A.ink(ctx, 4, '#ffb800');
-      dy -= still ? 4 : 4 + p * 4;
-    }
-    if (flash[id] > 0) { const k = 1 - flash[id] / 0.5; A.circle(ctx, x, y, 40 + k * 30); A.ink(ctx, 5, A.alpha('#ffffff', 1 - k)); }
-    A.toy(ctx, t.k, t.b, x, y + dy, s, still || sel ? 0 : Math.sin(time * 5 + id) * 0.04);
-    if (id === w.curToy && !sel) {
-      ctx.setLineDash([8, 7]); A.circle(ctx, x, y, 44); A.ink(ctx, 4, '#ffffff'); ctx.setLineDash([]);
-    }
+
+  function isKeyDown(k) {
+    if (k === 'Ctrl') return !!(held.ControlLeft || held.ControlRight || held.MetaLeft || held.MetaRight);
+    if (k === 'Delete') return !!(held.Delete || held.Backspace);
+    if (k === 'Space') return !!held.Space;
+    return !!held['Key' + k];
   }
-  function drawBox(ctx, w, c, still) {
-    let dx = 0, dy = 0, k = 0;
-    if (c.ship > 0) { const p = 1 - c.ship / 0.9, q = Math.max(0, (p - 0.4) / 0.6); k = Math.min(1, p / 0.35); dy = ease(q) * 300; }
-    if (c.arrive > 0) dy -= ease(c.arrive / 0.7) * 340;
-    if (boxShake[c.i] > 0 && !still) dx = Math.sin(boxShake[c.i] * 48) * 12 * boxShake[c.i];
-    const live = SF.live(c), place = live && c.i === w.place && w.phase === 'play', n = SF.need(w, c), ready = live && n.ok;
-    ctx.save(); ctx.translate(dx, dy);
-    A.boxBack(ctx, c.x, BOX.y, k, place ? (w.clip ? '#ffe14d' : '#ffffff') : null);
-    c.items.forEach((id, i) => { const p = SF.boxSpot(c, i); drawToy(ctx, w, id, p.x, p.y, still, 0); });
-    A.boxFront(ctx, c.x, BOX.y, k);
-    const have = {};
-    for (const kind in c.order) have[kind] = c.order[kind] - (n.missing[kind] || 0);
-    A.orderCard(ctx, c.x, BOX.y, c.order, have, ready ? 'ready' : boxShake[c.i] > 0 ? 'wrong' : '', c.oid);
-    if (place) {
-      ctx.setLineDash([16, 10]); ctx.lineDashOffset = still ? 0 : -time * 30;
-      A.rr(ctx, c.x - 148, BOX.y - 30, 296, 238, 26); A.ink(ctx, 5, w.clip ? '#ffb800' : '#ffffff');
-      ctx.setLineDash([]); ctx.lineDashOffset = 0;
-      if (w.clip && !ready) { A.rr(ctx, c.x - 136, BOX.y - 16, 104, 40, 20); A.fill(ctx, '#ffffff'); A.ink(ctx, 3); A.caps(ctx, c.x - 84, BOX.y + 3, ['Ctrl', 'V'], 26); }
-    }
-    if (ready) A.enterBadge(ctx, c.x + 108, BOX.y + 10, still ? 0 : (Math.sin(time * 7) + 1) / 2);
-    ctx.restore();
+
+  function computeDockRects(w) {
+    if (!w) return [];
+    const list = w.def.dock, n = list.length, cardW = n <= 3 ? 292 : 256, gap = 18;
+    const startX = (W - (n * cardW + (n - 1) * gap)) / 2, out = [];
+    for (let i = 0; i < n; i++) out.push({ id: list[i], x: startX + (n - 1 - i) * (cardW + gap), y: 580, w: cardW, h: 118 });
+    return out;
   }
-  function drawFlyers(ctx, still) {
-    for (const f of flyers) {
-      if (f.t < 0) continue;
-      const k = Math.min(1, f.t / f.dur), e = ease(k);
-      const x = f.x0 + (f.x1 - f.x0) * e, y = f.y0 + (f.y1 - f.y0) * e - Math.sin(k * Math.PI) * f.arc;
-      A.toy(ctx, f.k, f.b, x, y, f.s0 + (f.s1 - f.s0) * k, still ? 0 : f.spin * k);
-    }
-    for (const p of poofs) {
-      const k = p.t / 0.45;
-      ctx.globalAlpha = Math.max(0, 1 - k);
-      for (let i = 0; i < 5; i++) { const a = i / 5 * Math.PI * 2, d = still ? 26 : 14 + k * 38; A.circle(ctx, p.x + Math.cos(a) * d, p.y + Math.sin(a) * d * 0.7, 16 - k * 6); A.fill(ctx, p.color); }
-      ctx.globalAlpha = 1;
-    }
-  }
-  function drawHud(ctx, w) {
-    const def = w.def, Wd = SF.WORLDS[def.world], left = Math.ceil(w.left), coins = save.coins + w.done * 2 + w.bonus;
-    const c = layer('hud', W, 70, [w.li, w.done, w.total, coins, w.limit ? left : -1].join('|'), g => {
-      A.pill(g, 80, 6, 300, 54, Wd.color);
-      A.rr(g, 88, 12, 76, 42, 21); A.fill(g, '#ffffff'); A.ink(g, 3.5);
-      A.text(g, def.id, 126, 34, 26, A.INK);
-      A.text(g, Wd.name, 272, 34, 26, A.INK);
-      const n = w.total, x0 = 640 + (n - 1) * 21;
-      A.pill(g, 640 - n * 21 - 18, 8, n * 42 + 36, 50, 'rgba(255,255,255,0.92)');
-      // The first order on the right, like reading Arabic.
-      for (let i = 0; i < n; i++) A.boxIcon(g, x0 - i * 42, 35, 1.05, i < w.done);
-      if (w.limit) {
-        const red = left <= 20;
-        A.pill(g, 860, 8, 150, 50, red ? '#ff5d6c' : '#ffffff');
-        A.clock(g, 986, 33, 15, 1 - w.left / w.limit);
-        A.text(g, fmt(left), 918, 34, 28, red ? '#ffffff' : A.INK);
+
+  function drawDock(ctx, w, coach) {
+    dockRects = computeDockRects(w);
+    const still = reduced(), pulse = still ? 0.6 : (Math.sin(appTime * 6) + 1) * 0.5;
+    for (let i = 0; i < dockRects.length; i++) {
+      const r = dockRects[i], sc = E.SHORTCUTS[r.id];
+      const isCoach = coach && coach.act === r.id, pressed = dockPress[r.id] > 0, py = pressed ? 4 : 0;
+      rr(ctx, r.x, r.y + 6, r.w, r.h, 22); ctx.fillStyle = INK; ctx.fill();
+      rr(ctx, r.x, r.y + py, r.w, r.h, 22);
+      ctx.fillStyle = isCoach ? '#1b3882' : '#10204d'; ctx.fill();
+      strokeInk(ctx, isCoach ? 5 : 4, isCoach ? '#ffd740' : '#00e5ff');
+      if (isCoach && !still) {
+        ctx.save(); ctx.globalAlpha = 0.25 + pulse * 0.35;
+        rr(ctx, r.x - 4, r.y - 4 + py, r.w + 8, r.h + 8, 26); strokeInk(ctx, 4, '#ffd740'); ctx.restore();
       }
-      A.pill(g, 1046, 8, 150, 50, 'rgba(28,34,80,0.88)', '#ffffff');
-      A.coin(g, 1074, 33, 15);
-      A.text(g, String(coins), 1140, 34, 28, '#ffffff');
-    });
-    ctx.drawImage(c, 0, 0, W, 70);
+      const keys = sc.keys, cy = r.y + 42 + py;
+      if (keys.length === 1) {
+        drawKeycap(ctx, r.x + r.w / 2, cy, keys[0], keys[0].length > 3 ? 116 : 88, 46, pressed || isKeyDown(keys[0]), isCoach ? '#fff59d' : '#ffffff');
+      } else {
+        const cx = r.x + r.w / 2;
+        drawKeycap(ctx, cx - 50, cy, keys[0], 82, 46, pressed || isKeyDown(keys[0]), isCoach ? '#fff59d' : '#e0f7fa');
+        drawTxt(ctx, '+', cx + 4, cy, 28, '#00e5ff');
+        drawKeycap(ctx, cx + 52, cy, keys[1], 56, 46, pressed || isKeyDown(keys[1]), isCoach ? '#fff59d' : '#ffffff');
+      }
+      drawTxt(ctx, sc.badge, r.x + r.w / 2, r.y + 94 + py, 23, isCoach ? '#ffd740' : '#ffffff');
+    }
   }
-  function drawActions(ctx, w) {
-    const list = SF.CARD.filter(a => w.def.tools[a]);
-    const hl = demo ? demoStep().act : hint ? ({ gremlin: 'undo', place: 'select' }[hint.act] || hint.act) : '';
-    const c = layer('acts', 368, 200, list.join() + '|' + hl, g => {
-      A.rr(g, 4, 4, 360, 192, 24); A.fill(g, 'rgba(255,255,255,0.96)'); A.ink(g, 4);
-      const cols = list.length > 6 ? 2 : 1, rows = Math.ceil(list.length / cols), rh = Math.min(cols === 2 ? 30 : 34, 178 / rows);
-      const y0 = 100 - rows * rh / 2, cw = 348 / cols, fs = cols === 2 ? 18 : 22, kh = cols === 2 ? 24 : 30;
-      list.forEach((a, i) => {
-        const col = Math.floor(i / rows), row = i % rows, cx = 358 - (col + 0.5) * cw, cy = y0 + rh * (row + 0.5);
-        if (a === hl) { A.rr(g, cx - cw / 2 + 2, cy - rh / 2 + 1, cw - 4, rh - 2, 12); A.fill(g, '#ffe14d'); }
-        A.text(g, SF.ACTS[a].short || SF.ACTS[a].name, cx + cw / 2 - 10, cy + 1, fs, A.INK, { align: 'right' });
-        const kw = A.capsW(g, SF.ACTS[a].keys, kh);
-        A.caps(g, cx - cw / 2 + 10 + kw / 2, cy, SF.ACTS[a].keys, kh);
-      });
-    });
-    ctx.drawImage(c, 902, 512, 368, 200);
+
+  function drawFactoryBg(ctx, th, withDock) {
+    const grad = ctx.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0, th.bg1); grad.addColorStop(0.68, th.bg2); grad.addColorStop(1, '#070d24');
+    ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = 'rgba(0, 229, 255, 0.08)'; ctx.lineWidth = 2;
+    for (let x = 80; x < W; x += 120) { ctx.beginPath(); ctx.moveTo(x, 66); ctx.lineTo(x, withDock ? 565 : H); ctx.stroke(); }
+    for (let y = 140; y < (withDock ? 565 : H); y += 110) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+    if (withDock) {
+      // Glowing energy conduits linking Holo-Cloner to Launch Bay
+      ctx.strokeStyle = 'rgba(0, 229, 255, 0.22)'; ctx.lineWidth = 6;
+      ctx.beginPath(); ctx.moveTo(1138, 265); ctx.lineTo(1138, 156); ctx.lineTo(280, 156); ctx.stroke();
+      ctx.fillStyle = 'rgba(7, 13, 36, 0.92)'; ctx.fillRect(0, 566, W, 154);
+      ctx.beginPath(); ctx.moveTo(0, 566); ctx.lineTo(W, 566);
+      ctx.strokeStyle = th.glow; ctx.lineWidth = 3.5; ctx.stroke();
+    }
   }
-  function drawDesk(ctx, w, still) {
-    A.worker(ctx, 110, 716, { hat: save.hat, theme: save.color, mood: mood.m, t: time, still: still, type: typing });
-    const pulse = still ? 1 : (Math.sin(time * 7) + 1) / 2;
-    A.keyboard(ctx, KB.x, KB.y, KB.u, { glow: glowCodes(w), down: demo ? demoHeld : (code => !!held[code]), pulse: pulse });
-    drawActions(ctx, w);
-  }
-  function drawSheet(ctx, w, still) {
-    const k = still ? 1 : Math.min(1, sheetT / 0.4), y = SHEET.y - (1 - back(k)) * 420;
-    ctx.fillStyle = 'rgba(28,34,80,' + (0.4 * k).toFixed(2) + ')'; ctx.fillRect(0, 64, W, 436);
-    A.rr(ctx, SHEET.x, y, SHEET.w, SHEET.h, 30); A.fill(ctx, '#fffdf4'); A.ink(ctx, 6);
-    A.rr(ctx, 590, y - 20, 100, 38, 12); A.fill(ctx, '#9aa3c7'); A.ink(ctx, 4);
-    A.text(ctx, 'عمل اليوم', 640, y + 52, 40, A.INK);
-    const n = w.total;
-    for (let i = 0; i < n; i++) A.boxIcon(ctx, 640 + (n - 1) * 23 - i * 46, y + 104, 1.2, true);
-    const cy = y + 216;
-    if (stampAnim < 0) {
-      ctx.setLineDash([12, 9]); A.circle(ctx, 640, cy, 86); A.ink(ctx, 5, '#e2364f'); ctx.setLineDash([]);
-      const p = still ? 1 : (Math.sin(time * 7) + 1) / 2;
-      A.caps(ctx, 640, cy - 14, ['Ctrl', 'S'], 48, p > 0.5 ? 'glow' : '');
-      A.text(ctx, 'اختم!', 640, cy + 44, 32, '#e2364f');
-      A.stamper(ctx, 790, y + 190 + (still ? 0 : Math.sin(time * 4) * 8), 1);
+
+  function drawPlayScene(ctx, w) {
+    const th = getThemeObj(save.theme), still = reduced(), coach = E.hint(w);
+    drawFactoryBg(ctx, th, true);
+
+    if (chronoWave > 0 && !still) {
+      ctx.save(); ctx.globalAlpha = chronoWave * 0.45;
+      ctx.beginPath(); ctx.arc(640, 360, (1 - chronoWave) * 580 + 40, 0, Math.PI * 2);
+      ctx.strokeStyle = '#00e5ff'; ctx.lineWidth = 10; ctx.stroke(); ctx.restore();
+    }
+
+    // 1. Drop-Ship Launch Pods
+    for (let i = 0; i < w.boxes.length; i++) {
+      const bx = w.boxes[i];
+      const dx = podShake[i] > 0 && !still ? Math.sin(podShake[i] * 45) * 9 : 0;
+      const dy = bx.launched && bx.launchT > 0 ? -Math.pow(1 - bx.launchT / 0.85, 2) * 280 : 0;
+      ctx.save(); ctx.translate(bx.x + dx, bx.y + dy);
+      if (w.activeBox === i && !bx.launched) { rr(ctx, -118, -74, 236, 158, 30); strokeInk(ctx, 4, '#ffd740'); }
+      ctx.drawImage(podSprite(bx.kind), -130, -88, 260, 176);
+      if (bx.launched) {
+        ctx.fillStyle = '#ff9100'; gFlame(ctx, -44, 72); gFlame(ctx, 44, 72);
+      }
+      const validCount = bx.items.filter(it => it.kind === bx.kind && !it.glitched && !it.virus).length;
+      drawTxt(ctx, (E.BOTS[bx.kind] || E.BOTS.laser).name + '  ' + validCount + '/' + bx.target, 0, -49, 19, '#ffffff');
+      ctx.restore();
+
+      // Empty docking slot rings inside bay
+      for (let s = 0; s < bx.target; s++) {
+        const sp = E.podSlot(bx, s, bx.target);
+        ctx.beginPath(); ctx.arc(sp.x + dx, sp.y + dy, 22, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(0, 229, 255, 0.25)'; ctx.lineWidth = 2.5; ctx.stroke();
+      }
+      for (let j = 0; j < bx.items.length; j++) {
+        const it = bx.items[j], px = it.x + dx, py = it.y + dy;
+        if (w.sel.indexOf(it.id) >= 0) {
+          ctx.beginPath(); ctx.arc(px, py, 32, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(255, 215, 64, 0.32)'; ctx.fill(); strokeInk(ctx, 3.5, '#ffd740');
+        }
+        ctx.drawImage(it.virus ? virusSprite() : botSprite(it.kind, save.armor), px - 34, py - 36, 68, 68);
+        if (it.glitched) drawTxt(ctx, '⚡ خلل!', px, py - 24, 17, '#ff1744');
+        else if (it.kind !== bx.kind) drawTxt(ctx, 'نقل Ctrl+X', px, py + 32, 15, '#ffd740');
+      }
+    }
+
+    if (w.megaReady) {
+      rr(ctx, 380, 246, 480, 50, 25); ctx.fillStyle = '#00e676'; ctx.fill(); strokeInk(ctx, 4.5, INK);
+      drawTxt(ctx, 'الأسطول جاهز! اضغط Ctrl + S للإقلاع الشامل 🔥', 620, 271, 22, INK, { stroke: false });
+    }
+
+    // 2. Conveyor Belts & Cyber-Bots
+    const bSpr = beltSprite(save.theme);
+    for (let bi = 0; bi < w.belts.length; bi++) {
+      const b = w.belts[bi];
+      ctx.drawImage(bSpr, 180, b.y + 10, 830, 56);
+      ctx.save(); rr(ctx, 196, b.y + 18, 798, 34, 14); ctx.clip();
+      const shift = still ? 0 : ((w.offset % 48) + 48) % 48;
+      ctx.fillStyle = 'rgba(0, 229, 255, 0.28)';
+      for (let x = 196 - shift; x < 1020; x += 48) {
+        ctx.beginPath(); ctx.moveTo(x + 18, b.y + 22); ctx.lineTo(x + 6, b.y + 35); ctx.lineTo(x + 18, b.y + 48);
+        ctx.lineTo(x + 28, b.y + 48); ctx.lineTo(x + 16, b.y + 35); ctx.lineTo(x + 28, b.y + 22); ctx.closePath(); ctx.fill();
+      }
+      ctx.restore();
+      rr(ctx, 976, b.y - 24, 34, 88, 12); ctx.fillStyle = '#1b3275'; ctx.fill(); strokeInk(ctx, 4, th.glow);
+      rr(ctx, 180, b.y - 24, 34, 88, 12); ctx.fillStyle = '#1b3275'; ctx.fill(); strokeInk(ctx, 4, '#ff4081');
+
+      for (let j = 0; j < b.items.length; j++) {
+        const it = b.items[j];
+        if (!E.isVisible(it.x)) continue;
+        const isSel = w.sel.indexOf(it.id) >= 0;
+        const isCoachBot = coach && coach.targetId === it.id && (w.def.tier === 0 || idleTime > 2.2);
+        const by = b.y - 18 + (still ? 0 : Math.sin(appTime * 5 + it.id) * 3);
+        if (isCoachBot && !isSel) {
+          ctx.save(); ctx.setLineDash([10, 7]); ctx.beginPath(); ctx.arc(it.x, by, 48, 0, Math.PI * 2);
+          strokeInk(ctx, 4, '#00e5ff'); ctx.restore();
+        }
+        if (isSel) {
+          ctx.beginPath(); ctx.arc(it.x, by, 48, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(255, 215, 64, 0.28)'; ctx.fill(); strokeInk(ctx, 4.5, '#ffd740');
+        }
+        ctx.drawImage(it.virus ? virusSprite() : botSprite(it.kind, save.armor), it.x - 50, by - 50, 100, 100);
+      }
+    }
+
+    // 3. Laser Blaster Turret & Holo-Cloner Chamber
+    ctx.save(); ctx.translate(E.TURRET.x, E.TURRET.y); ctx.scale(1 + turretPulse * 0.1, 1 + turretPulse * 0.1);
+    ctx.drawImage(turretSprite(), -78, -90, 156, 180);
+    drawTxt(ctx, 'مدفع الليزر', 0, 102, 20, '#ff4081'); ctx.restore();
+
+    ctx.save(); ctx.translate(E.CLONER.x, E.CLONER.y); ctx.scale(1 + clonerPulse * 0.08, 1 + clonerPulse * 0.08);
+    ctx.drawImage(clonerSprite(), -98, -125, 196, 250);
+    if (w.clip && w.clip.items.length) {
+      const hover = still ? 0 : Math.sin(appTime * 5) * 5;
+      ctx.drawImage(botSprite(w.clip.items[0].kind, save.armor), -44, -44 + hover, 88, 88);
+      if (w.clip.items.length > 1) drawTxt(ctx, '×' + w.clip.items.length, 38, -36, 24, '#ffd740');
+      drawTxt(ctx, w.clip.cut ? 'نقل جاهز!' : 'نسخة جاهزة!', 0, 134, 20, '#00e676');
     } else {
-      const s = still ? 1 : 1 + Math.max(0, 1 - stampAnim / 0.16) * 1.3;
-      A.stampMark(ctx, 640, cy, s, -0.18);
+      drawTxt(ctx, 'Ctrl + C', 0, 0, 22, 'rgba(0, 229, 255, 0.55)', { stroke: false });
+      drawTxt(ctx, 'غرفة الاستنساخ', 0, 134, 20, '#00e5ff');
     }
-  }
-  const TEACH = {
-    copy: 'اختر لعبة وانسخها', paste: 'ضع نسختها في الصندوق', place: 'انقر الصندوق لتلصق فيه', save: 'في آخر اليوم: احفظ واختم',
-    cut: 'خذ اللعبة من مكانها', tab: 'انتقل إلى اللعبة التالية', del: 'أرسل اللعبة المكسورة للتدوير', undo: 'ارجع خطوة إلى الوراء',
-    gremlin: 'بُرغي يخرّب الصناديق! تراجع عن خرابه', redo: 'أعد ما رجعت عنه', multi: 'اضغط Shift مع النقر', all: 'اختر كل الألعاب مرة واحدة', ship: 'أرسل الصندوق'
-  };
-  function demoStep() {
-    const d = demo, per = d.dur / d.acts.length, i = Math.min(d.acts.length - 1, Math.floor(d.t / per));
-    return { act: d.acts[i], lt: d.t - i * per, per: per };
-  }
-  // Which of the demo's keys are down now: Ctrl first, then the letter, then both let go.
-  // A long demo presses its keys again every 2.2 s.
-  function demoDown(j) { const s = demoStep(), cyc = s.per > 4 ? 2.2 : s.per, lt = s.lt % cyc; return lt > 0.35 + j * 0.45 && lt < cyc - 0.3; }
-  function demoHeld(code) { const codes = SF.ACTS[demoStep().act].codes, j = codes.indexOf(code); return j >= 0 && demoDown(j); }
-  function drawDemo(ctx, still) {
-    const s = demoStep(), act = SF.ACTS[s.act], Wd = SF.WORLDS[world.def.world];
-    ctx.fillStyle = 'rgba(28,34,80,0.55)'; ctx.fillRect(0, 0, W, 500);
-    const k = still ? 1 : back(Math.min(1, demo.t / 0.3));
-    ctx.save(); ctx.translate(640, 280); ctx.scale(k, k); ctx.translate(-640, -280);
-    A.rr(ctx, 320, 84, 640, 392, 40); A.fill(ctx, '#ffffff'); A.ink(ctx, 7);
-    A.rr(ctx, 320, 84, 640, 18, 9); A.fill(ctx, Wd.color);
-    A.rr(ctx, 846, 64, 132, 46, 23); A.fill(ctx, '#ff5d9e'); A.ink(ctx, 4); A.text(ctx, 'جديد!', 912, 88, 28, '#ffffff');
-    A.text(ctx, act.name, 640, 146, 54, A.INK);
-    A.text(ctx, TEACH[s.act], 640, 200, 26, '#4b5383');
-    // the keys, pressed down one after the other
-    const h = 96, keys = act.keys;
-    ctx.font = '700 ' + Math.round(h * 0.5) + 'px Fredoka';
-    const ws = keys.map(key => key === 'انقر' ? h : Math.max(h, ctx.measureText(key).width + h * 0.6)), plus = h * 0.55;
-    let x = 640 - (ws.reduce((a, b) => a + b, 0) + plus * (keys.length - 1)) / 2;
-    keys.forEach((key, j) => {
-      const d = demoDown(j);
-      if (key === 'انقر') A.mouse(ctx, x + ws[j] / 2, 296, 2.1, d);
-      else A.cap(ctx, x + ws[j] / 2, 296, key, h, d ? 'down' : '');
-      x += ws[j];
-      if (j < keys.length - 1) { A.text(ctx, '+', x + plus / 2, 296, 60, A.INK); x += plus; }
-    });
-    teachPic(ctx, s.act, s.lt, still);
-    A.rr(ctx, 400, 448, 480, 12, 6); A.fill(ctx, '#e3e6f3');
-    A.rr(ctx, 400, 448, Math.max(12, 480 * Math.min(1, demo.t / demo.dur)), 12, 6); A.fill(ctx, Wd.color);
     ctx.restore();
-  }
-  // A small picture of what the shortcut does, read right to left.
-  function teachPic(ctx, act, lt, still) {
-    const y = 396, on = lt > 0.9 || still, arrow = () => { A.poly(ctx, [600, y - 12, 600, y + 12, 576, y]); A.fill(ctx, '#9aa3c7'); A.rr(ctx, 598, y - 5, 86, 10, 5); A.fill(ctx, '#9aa3c7'); };
-    const ring = (x, yy) => { A.circle(ctx, x, yy, 34); A.fill(ctx, A.alpha('#ffe14d', 0.6)); A.ink(ctx, 3, '#ffb800'); };
-    if (act === 'copy') { ring(730, y); A.toy(ctx, 'duck', false, 730, y, 0.7); arrow(); if (on) { A.toy(ctx, 'duck', false, 540, y, 0.7); A.toy(ctx, 'duck', false, 480, y, 0.7); } }
-    else if (act === 'paste' || act === 'place') {
-      if (act === 'place') A.mouse(ctx, 740, y, 1, lt % 1 > 0.5);
-      else { A.boxIcon(ctx, 740, y, 1.6, false); A.text(ctx, '?', 740, y - 40, 30, A.INK); }
-      arrow(); A.boxIcon(ctx, 520, y + 8, 2.2, false); if (on) A.toy(ctx, 'duck', false, 520, y - 18, 0.62);
-    } else if (act === 'cut') { A.scissors(ctx, 790, y, 1.1); A.toy(ctx, 'car', false, 730, y, 0.7); arrow(); if (on) A.toy(ctx, 'car', false, 520, y - 6, 0.7); }
-    else if (act === 'del') { A.toy(ctx, 'duck', true, 730, y, 0.7); arrow(); A.recycle(ctx, 520, y, 26, '#3fc46f'); }
-    else if (act === 'undo' || act === 'redo') A.arrowUndo(ctx, 640, y + 8, 30, act === 'redo', act === 'redo' ? '#5be38f' : '#4fd1ff');
-    else if (act === 'gremlin') { ctx.save(); ctx.translate(730, y + 8); ctx.scale(0.62, 0.62); A.gremlin(ctx, 0, 0, { phase: 'mess', t: lt, still: still }); ctx.restore(); arrow(); A.arrowUndo(ctx, 520, y + 8, 26, false, '#4fd1ff'); }
-    else if (act === 'save') { if (on) A.stampMark(ctx, 640, y, 0.42, -0.18); else A.stamper(ctx, 640, y + 30, 1); }
-    else if (act === 'tab') {
-      const n = Math.floor(lt / 0.5) % 3;
-      ['duck', 'car', 'ball'].forEach((kind, i) => { if (i === n) ring(720 - i * 80, y); A.toy(ctx, kind, false, 720 - i * 80, y, 0.6); });
-      A.cap(ctx, 470, y, '←', 40); A.cap(ctx, 420, y, '→', 40);
-    } else if (act === 'multi' || act === 'all') {
-      ['car', 'ball', 'duck'].forEach((kind, i) => {
-        if (act === 'all' ? on : lt > 0.6 + i * 0.5) ring(720 - i * 80, y);
-        A.toy(ctx, kind, false, 720 - i * 80, y, 0.6);
-      });
-      if (act === 'multi') A.mouse(ctx, 480, y, 1, lt % 0.5 > 0.25);
-    } else if (act === 'ship') { A.boxIcon(ctx, 720, y, 2, true); arrow(); }
-  }
-  function drawFloats(ctx) {
-    for (const f of floats) {
-      ctx.globalAlpha = Math.max(0, 1 - Math.max(0, f.t - 0.8) / 0.5);
-      A.text(ctx, f.text, f.x, f.y, f.size, f.color, { stroke: Math.max(6, f.size * 0.2) });
+
+    if (w.saboteur.state !== 'away') {
+      const sx = w.saboteur.x, sy = w.saboteur.y + (still ? 0 : Math.sin(appTime * 7) * 6);
+      ctx.drawImage(saboteurSprite(), sx - 48, sy - 44, 96, 88);
+      drawTxt(ctx, w.saboteur.state === 'warn' ? 'مخرب قادم!' : 'اضغط Ctrl+Z!', sx, sy - 52, 20, '#ff4081');
     }
-    ctx.globalAlpha = 1;
-    if (toast) {
-      const a = SF.ACTS[toast.act];
-      ctx.globalAlpha = Math.max(0, Math.min(1, (1.2 - toast.t) / 0.3));
-      ctx.font = '700 22px Fredoka';
-      const nw = ctx.measureText(a.name).width, kw = A.capsW(ctx, a.keys, 34), tw = nw + kw + 34;
-      A.rr(ctx, 640 - tw / 2 - 14, 72, tw + 28, 50, 25); A.fill(ctx, toast.ok ? '#ffffff' : '#ffd9de'); A.ink(ctx, 4, toast.ok ? A.INK : '#e2364f');
-      A.caps(ctx, 640 - tw / 2 + kw / 2, 96, a.keys, 34);
-      A.text(ctx, a.name, 640 + tw / 2, 97, 26, A.INK, { align: 'right' });
-      ctx.globalAlpha = 1;
+
+    // 4. Beams & Flyers
+    for (let i = 0; i < beams.length; i++) {
+      const bm = beams[i];
+      ctx.save(); ctx.globalAlpha = 1 - bm.t / bm.dur; ctx.lineCap = 'round';
+      ctx.strokeStyle = bm.color; ctx.lineWidth = 10;
+      ctx.beginPath(); ctx.moveTo(bm.x0, bm.y0); ctx.lineTo(bm.x1, bm.y1); ctx.stroke();
+      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 4; ctx.stroke(); ctx.restore();
     }
-  }
-  function drawPlay(ctx, w) {
-    const still = calm(), theme = save.color, nb = w.def.belts.length;
-    A.back(ctx, theme, nb);
-    A.gears(ctx, theme, w.t, still || !w.speed);
-    for (const c of w.cons) {
-      if (c.type !== 'belt') continue;
-      A.belt(ctx, c.y, w.offset, theme, still);
-      c.items.forEach((id, s) => { if (id) drawToy(ctx, w, id, SF.beltX(w, s), c.y, still, 0); });
+    for (let i = 0; i < flyers.length; i++) {
+      const fl = flyers[i]; if (fl.t < 0) continue;
+      const k = Math.min(1, fl.t / fl.dur);
+      ctx.drawImage(botSprite(fl.kind, save.armor), fl.x0 + (fl.x1 - fl.x0) * k - 40, fl.y0 + (fl.y1 - fl.y0) * k - Math.sin(k * Math.PI) * 90 - 40, 80, 80);
     }
-    A.machines(ctx, theme, SF.BELT_Y[Math.max(0, nb - 1)], time, still);
-    A.bin(ctx, BIN.x, BIN.y, bump.bin, time, still);
-    A.copier(ctx, COPIER.x, COPIER.y, w.clip, bump.copier, time, still);
-    for (const c of w.cons) if (c.type === 'box' && !c.gone) drawBox(ctx, w, c, still);
-    const g = w.g;
-    if (g.phase !== 'away') A.gremlin(ctx, g.x, gremlinY(g), { phase: g.phase, t: time, still: still, look: -1 });
-    drawFlyers(ctx, still);
-    drawDesk(ctx, w, still);
-    drawHud(ctx, w);
-    if (w.phase === 'stamp' || stampAnim >= 0) drawSheet(ctx, w, still);
+
+    // 5. Top HUD & Bottom Keycap Dock
+    rr(ctx, 82, 10, 356, 48, 24); ctx.fillStyle = 'rgba(11, 19, 48, 0.9)'; ctx.fill(); strokeInk(ctx, 3.5, th.glow);
+    drawTxt(ctx, w.def.endless ? 'التحدي اللانهائي' : 'مهمة ' + (w.index + 1) + ' · ' + w.def.title, 260, 34, 21, '#ffffff');
+
+    rr(ctx, 452, 10, 340, 48, 24); ctx.fillStyle = 'rgba(11, 19, 48, 0.9)'; ctx.fill(); strokeInk(ctx, 3.5, '#00e676');
+    drawTxt(ctx, (w.def.endless ? 'السفن: ' + w.launchedCount : 'السفن: ' + w.launchedCount + '/' + w.totalPods) + '  |  النقاط: ' + w.score, 622, 34, 21, '#ffd740');
+
+    if (w.timeLimit > 0) {
+      const secs = Math.ceil(w.timeLeft), low = secs <= 15;
+      rr(ctx, 806, 10, 152, 48, 24); ctx.fillStyle = low ? '#b71c1c' : 'rgba(11, 19, 48, 0.9)'; ctx.fill();
+      strokeInk(ctx, 3.5, low ? '#ffd740' : '#00e5ff'); drawTxt(ctx, 'الوقت ' + secs, 882, 34, 22, '#ffffff');
+    }
+    rr(ctx, 972, 10, 196, 48, 24); ctx.fillStyle = 'rgba(11, 19, 48, 0.9)'; ctx.fill(); strokeInk(ctx, 3.5, '#ffd740');
+    drawTxt(ctx, 'العملات ' + save.coins, 1070, 34, 21, '#ffd740');
+
+    drawDock(ctx, w, coach);
     fx.draw(ctx);
-    drawFloats(ctx);
-    if (demo) drawDemo(ctx, still);
-    if (hand.on && !demo) {
-      const p = still ? 0 : Math.max(0, Math.sin(hand.t * 7));
-      A.hand(ctx, hand.x, hand.y, p);
+    for (let i = 0; i < floats.length; i++) {
+      const fl = floats[i];
+      ctx.save(); ctx.globalAlpha = Math.max(0, 1 - Math.max(0, fl.t - 0.65) / 0.5);
+      drawTxt(ctx, fl.txt, fl.x, fl.y, fl.size, fl.color); ctx.restore();
+    }
+
+    if (demo) {
+      ctx.fillStyle = 'rgba(6, 12, 32, 0.68)'; ctx.fillRect(0, 0, W, H);
+      rr(ctx, 350, 165, 580, 330, 32); ctx.fillStyle = '#13255c'; ctx.fill(); strokeInk(ctx, 6, '#00e5ff');
+      const sc = E.SHORTCUTS[demo.acts[0]] || E.SHORTCUTS.copy, keys = sc.keys;
+      drawTxt(ctx, 'قوة جديدة: ' + sc.name, 640, 224, 36, '#ffd740');
+      if (keys.length === 1) drawKeycap(ctx, 640, 322, keys[0], 150, 74, demo.t > 0.35, '#00e5ff');
+      else {
+        drawKeycap(ctx, 560, 322, keys[0], 130, 74, demo.t > 0.25, '#ffd740');
+        drawTxt(ctx, '+', 648, 322, 46, '#ffffff');
+        drawKeycap(ctx, 728, 322, keys[1], 96, 74, demo.t > 0.45, '#00e5ff');
+      }
+      drawTxt(ctx, 'اضغط Enter أو انقر للانطلاق!', 640, 434, 24, '#b0e5ff');
     }
   }
-  // The title and the menus: a parade of toys on a long belt, the worker waving, the gremlin.
-  const PARADE = ['duck', 'ball', 'car', 'robot', 'teddy', 'rocket', 'duck', 'car', 'teddy', 'ball'];
-  function drawMenu(ctx) {
-    const still = calm(), T = A.theme(save.color);
-    const bg = layer('menu', W, H, save.color, g => {
-      g.fillStyle = T.wall; g.fillRect(0, 0, W, H);
-      for (let x = -40; x < W; x += 96) { g.fillStyle = T.wall2; g.fillRect(x, 0, 44, H); }
-      A.rr(g, -10, 182, W + 20, 14, 7); A.fill(g, T.pipe); A.ink(g, 3.5);
-      g.fillStyle = T.floor; g.fillRect(0, 640, W, 80);
-      g.fillStyle = T.floor2; g.fillRect(0, 640, W, 6);
-      A.rr(g, -10, 654, W + 20, 30, 14); A.fill(g, '#3b4166'); A.ink(g, 4);
-    });
-    ctx.drawImage(bg, 0, 0, W, H);
-    A.gears(ctx, save.color, time, still);
-    if (screen !== 'title') { ctx.fillStyle = 'rgba(28,34,80,0.35)'; ctx.fillRect(0, 0, W, H); return; }
-    const off = still ? 0 : menuOff;
-    ctx.save(); A.rr(ctx, 0, 660, W, 18, 9); ctx.clip();
-    ctx.fillStyle = '#272c4a'; ctx.fillRect(0, 660, W, 18);
-    const st = 34, o = ((-off % st) + st) % st;
-    ctx.fillStyle = '#4b5383';
-    for (let x = -st + o; x < W + st; x += st) { A.poly(ctx, [x, 660, x + 12, 660, x + 4, 678, x - 8, 678]); ctx.fill(); }
-    ctx.restore();
-    PARADE.forEach((kind, i) => {
-      const x = 1400 - (((i * 140 + off) % 1400) + 1400) % 1400;
-      A.toy(ctx, kind, i === 6, x, 626, 0.95, still ? 0 : Math.sin(time * 5 + i) * 0.05);
-    });
-    A.worker(ctx, 170, 626, { hat: save.hat, theme: save.color, mood: 'happy', t: time, still: still });
-    if (!still) {
-      // «بُرغي» peeks in now and then (without a sound: the title stays quiet).
-      const k = (time % 11) / 11, gx = 1360 - Math.sin(Math.min(1, k * 2.2) * Math.PI) * 240;
-      if (k < 0.46) A.gremlin(ctx, gx, 130 + Math.sin(time * 3) * 10, { phase: 'come', t: time, still: false, look: -1 });
+
+  function gFlame(ctx, x, y) {
+    ctx.beginPath(); ctx.moveTo(x - 14, y); ctx.lineTo(x, y + 48); ctx.lineTo(x + 14, y); ctx.closePath(); ctx.fill();
+  }
+
+  function drawTitleBackdrop(ctx) {
+    const th = getThemeObj(save.theme), still = reduced();
+    drawFactoryBg(ctx, th, false);
+    if (screen !== 'title') { ctx.fillStyle = 'rgba(6, 12, 32, 0.52)'; ctx.fillRect(0, 0, W, H); return; }
+    ctx.drawImage(beltSprite(save.theme), 36, 616, 810, 56);
+    const shift = still ? 0 : appTime * 68;
+    for (let i = 0; i < 5; i++) {
+      const kind = E.BOT_KINDS[i % E.BOT_KINDS.length];
+      const x = 800 - (((i * 165 + shift) % 760) + 760) % 760;
+      ctx.drawImage(botSprite(kind, save.armor), x - 48, 544 + (still ? 0 : Math.sin(appTime * 5 + i) * 4), 96, 96);
     }
   }
+
   function render() {
     if (screen === 'pause' && !dirty) return;
     dirty = false;
     const ctx = view.ctx;
-    ctx.save();
-    ctx.translate(shake.x, shake.y);
-    if ((screen === 'play' || screen === 'pause' || screen === 'result') && world) drawPlay(ctx, world);
-    else drawMenu(ctx);
-    if (screen === 'result') fx.draw(ctx);
+    ctx.save(); ctx.translate(shake.x, shake.y);
+    if ((screen === 'play' || screen === 'pause' || screen === 'result') && world) drawPlayScene(ctx, world);
+    else drawTitleBackdrop(ctx);
     ctx.restore();
   }
 
-  canvas.addEventListener('contextrestored', () => { A.reset(); for (const k in layers) layers[k].key = null; tiles.forEach(t => { t.drawn = false; }); dirty = true; });
-  if (document.fonts && document.fonts.load) {
-    // Text drawn into cached pictures is drawn again once the font is there.
-    document.fonts.load('700 40px Fredoka', 'مصنع C').then(() => { A.reset(); for (const k in layers) layers[k].key = null; dirty = true; }, () => { /* fallback fonts */ });
+  /* ---- Scenario & Debug Hook ---- */
+  function toClientPoint(lx, ly) {
+    const r = canvas.getBoundingClientRect();
+    return { x: r.left + lx * view.scale, y: r.top + ly * view.scale };
   }
-
-  /* --------------------------------------------------- test and debug hook */
-  const page = (x, y) => { const r = canvas.getBoundingClientRect(); return { x: r.left + x * view.scale, y: r.top + y * view.scale }; };
   const round1 = v => Math.round(v * 10) / 10;
-  function toyState(w, id) { const t = w.toys[id], f = SF.find(w, id); return { id: id, k: t.k, b: t.b, x: round1(f.x), y: round1(f.y), visible: w.cons[f.con].type === 'box' || SF.visible(f.x) }; }
+
   window.__game = {
     get state() {
       const w = world;
       return {
-        screen: screen, paused: screen === 'pause', level: li, id: w ? w.def.id : '', phase: w ? w.phase : '', demo: !!demo, time: w ? Math.round(w.t * 1000) / 1000 : 0,
-        offset: w ? round1(w.offset) : 0, speed: w ? w.speed : 0, tier: tier,
-        sel: w ? w.sel.slice() : [], cur: w ? w.cur : -1, curToy: w ? w.curToy : 0, place: w ? w.place : -1,
-        clip: w && w.clip ? { cut: w.clip.cut, kinds: w.clip.items.map(t => (t.b ? '!' : '') + t.k) } : null,
-        undo: w ? w.undo.length : 0, redo: w ? w.redo.length : 0, done: w ? w.done : 0, total: w ? w.total : 0, mistakes: w ? w.mistakes : 0,
-        left: w ? round1(w.left) : 0, limit: w ? w.limit : 0,
-        belts: w ? w.cons.filter(c => c.type === 'belt').map(c => ({ i: c.i, items: c.items.filter(Boolean).map(id => toyState(w, id)) })) : [],
-        boxes: w ? w.cons.filter(c => c.type === 'box').map(c => ({ i: c.i, order: SF.orderText(c.order), items: c.items.map(id => toyState(w, id)), ready: SF.ready(w, c), ship: c.ship > 0, gone: c.gone })) : [],
-        gremlin: w ? w.g.phase : '', bonks: w ? w.bonks : 0, hint: hint ? hint.act : '', hand: hand.on, coins: save.coins, particles: fx.list.length, shake: shake.power,
-        result: result && screen === 'result' ? { stars: result.res.stars, fail: result.fail, best: result.res.best, coins: result.res.coins } : null,
-        focus: document.activeElement === canvas, scrollX: window.scrollX, scrollY: window.scrollY
+        screen, paused: screen === 'pause', level: currentLevel,
+        id: w ? w.id : '', phase: w ? w.phase : '', demo: !!demo,
+        time: w ? Math.round(w.time * 1000) / 1000 : 0,
+        timeLimit: w ? w.timeLimit : 0, timeLeft: w ? round1(w.timeLeft) : 0,
+        offset: w ? round1(w.offset) : 0, speed: w ? w.speed : 0,
+        tier: dda.tier, score: w ? w.score : 0,
+        sel: w ? w.sel.slice() : [],
+        clip: w && w.clip ? { cut: w.clip.cut, kinds: w.clip.items.map(i => i.kind) } : null,
+        undo: w ? w.undo.length : 0, redo: w ? w.redo.length : 0,
+        megaReady: !!(w && w.megaReady),
+        saboteur: w ? w.saboteur.state : '', bonks: w ? w.bonks : 0,
+        launchedCount: w ? w.launchedCount : 0, totalPods: w ? w.totalPods : 0,
+        particles: fx.list.length, shake: shake.power,
+        focus: document.activeElement === canvas,
+        scrollX: window.scrollX, scrollY: window.scrollY,
+        belts: w ? w.belts.map(b => ({
+          i: b.i,
+          items: b.items.map(it => ({
+            id: it.id, k: it.kind, kind: it.kind, b: !!it.virus, virus: !!it.virus,
+            x: round1(it.x), y: round1(b.y - 18), visible: E.isVisible(it.x)
+          }))
+        })) : [],
+        boxes: w ? w.boxes.map(bx => ({
+          i: bx.i, kind: bx.kind, target: bx.target,
+          items: bx.items.map(it => ({
+            id: it.id, k: it.kind, kind: it.kind, glitched: !!it.glitched, virus: !!it.virus,
+            x: round1(it.x), y: round1(it.y), visible: true
+          })),
+          ready: E.isPodReady(bx), launched: !!bx.launched
+        })) : [],
+        result: resultData && screen === 'result' ? { win: resultData.win, stars: resultData.stars, coins: resultData.coins, best: resultData.best } : null,
+        coins: save.coins
       };
     },
     get save() { return JSON.parse(JSON.stringify(save)); },
-    // The coach's next step ({ act, con, toy }), as the glowing keys and the hand show it.
-    get hint() { return hint ? Object.assign({}, hint) : null; },
-    // Where a logical point, a toy, a box or a box's Enter button is on the page, for tests
-    // that move the real mouse there.
-    point: page,
-    toyPoint: id => { const f = world && SF.find(world, id); return f ? page(f.x, f.y) : null; },
-    boxPoint: con => { const c = world && world.cons[con]; return c ? page(c.x + 30, BOX.y + 160) : null; },
-    shipPoint: con => { const c = world && world.cons[con]; return c ? page(c.x + 108, BOX.y + 10) : null; },
-    sheetPoint: () => page(640, SHEET.y + 216)
+    get hint() { return world ? E.hint(world) : null; },
+    point: toClientPoint,
+    toyPoint: id => {
+      if (!world) return null;
+      const f = E.findItem(world, id);
+      return f ? toClientPoint(f.x, f.where === 'belt' ? f.y - 18 : f.y) : null;
+    },
+    boxPoint: idx => (world && world.boxes[idx] ? toClientPoint(world.boxes[idx].x, world.boxes[idx].y) : null),
+    dockPoint: id => {
+      const rects = dockRects.length ? dockRects : computeDockRects(world);
+      const r = rects.find(d => d.id === id);
+      return r ? toClientPoint(r.x + r.w / 2, r.y + r.h / 2) : null;
+    }
   };
 
-  buildMap();
-  buildShop();
+  buildMap(); buildShop();
   Kit.muteButton();
-  Kit.lifecycle({ pause: () => pause(false), reset: () => { for (const k in held) held[k] = false; } });
+  Kit.lifecycle({ pause: () => pauseGame(false), reset: () => { for (const k in held) held[k] = false; } });
   toTitle();
   Kit.loop(update, render);
   Kit.ready();

@@ -1,64 +1,89 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
   <defs>
     <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#8ee0ff"/>
-      <stop offset="1" stop-color="#fff3b0"/>
+      <stop offset="0" stop-color="#38bdf8"/>
+      <stop offset="1" stop-color="#fef08a"/>
     </linearGradient>
-    <pattern id="grass" width="48" height="48" patternUnits="userSpaceOnUse">
-      <rect width="48" height="48" fill="#7dce6a"/>
-      <rect width="24" height="24" fill="#69c056"/>
-      <rect x="24" y="24" width="24" height="24" fill="#69c056"/>
+    <pattern id="tiles" width="56" height="56" patternUnits="userSpaceOnUse">
+      <rect width="56" height="56" fill="#fde68a"/>
+      <rect width="28" height="28" fill="#fcd34d"/>
+      <rect x="28" y="28" width="28" height="28" fill="#fcd34d"/>
     </pattern>
+    <radialGradient id="bal" cx="35%" cy="30%" r="65%">
+      <stop offset="0" stop-color="#e0f2fe"/>
+      <stop offset="0.35" stop-color="#22b8ff"/>
+      <stop offset="1" stop-color="#0284c7"/>
+    </radialGradient>
   </defs>
+
   <rect width="400" height="400" fill="url(#sky)"/>
-  <rect x="28" y="36" width="344" height="328" rx="28" fill="#2f6a32"/>
-  <rect x="40" y="48" width="320" height="304" rx="16" fill="url(#grass)"/>
-  <g>
-    <rect x="136" y="96" width="40" height="40" rx="10" fill="#7fbf78" stroke="#3e7a45" stroke-width="4"/>
-    <rect x="232" y="96" width="40" height="40" rx="10" fill="#7fbf78" stroke="#3e7a45" stroke-width="4"/>
-    <rect x="136" y="192" width="40" height="40" rx="10" fill="#7fbf78" stroke="#3e7a45" stroke-width="4"/>
-    <rect x="232" y="192" width="40" height="40" rx="10" fill="#7fbf78" stroke="#3e7a45" stroke-width="4"/>
-    <rect x="136" y="288" width="40" height="40" rx="10" fill="#7fbf78" stroke="#3e7a45" stroke-width="4"/>
+  <rect x="22" y="28" width="356" height="348" rx="30" fill="#693b14"/>
+  <rect x="22" y="22" width="356" height="346" rx="30" fill="#9a5b25" stroke="#0f2942" stroke-width="6"/>
+  <rect x="38" y="38" width="324" height="314" rx="18" fill="url(#tiles)" stroke="#0f2942" stroke-width="4"/>
+
+  <!-- Fortress Pillars & Warp Pipe -->
+  <g stroke="#0f2942" stroke-width="4">
+    <rect x="52" y="54" width="52" height="50" rx="12" fill="#fb7185"/>
+    <rect x="60" y="60" width="36" height="10" rx="5" fill="#ffe4e6" stroke="none"/>
+    <rect x="296" y="284" width="52" height="50" rx="12" fill="#fb7185"/>
+    <rect x="304" y="290" width="36" height="10" rx="5" fill="#ffe4e6" stroke="none"/>
+    <circle cx="78" cy="308" r="24" fill="#06b6d4"/>
+    <circle cx="78" cy="308" r="13" fill="#082f49"/>
   </g>
-  <g>
-    <rect x="88" y="148" width="40" height="36" rx="6" fill="#d3924a" stroke="#a86a2c" stroke-width="3"/>
-    <path d="M94 154 L122 178 M122 154 L94 178" stroke="#f3d7a1" stroke-width="3"/>
-    <rect x="280" y="244" width="40" height="36" rx="6" fill="#d3924a" stroke="#a86a2c" stroke-width="3"/>
-    <path d="M286 250 L314 274 M314 250 L286 274" stroke="#f3d7a1" stroke-width="3"/>
+
+  <!-- Loot Crate -->
+  <g transform="translate(292,58)">
+    <rect width="52" height="50" rx="10" fill="#d97706" stroke="#0f2942" stroke-width="4"/>
+    <path d="M10 10 L42 40 M42 10 L10 40" stroke="#fde68a" stroke-width="5" stroke-linecap="round"/>
   </g>
-  <g stroke="#e9fbff" stroke-width="16" stroke-linecap="round">
-    <path d="M200 120 V280"/>
-    <path d="M120 200 H280"/>
+
+  <!-- Pressurized Cross Water Splash -->
+  <g stroke-linecap="round">
+    <path d="M210 72 V328 M82 200 H338" stroke="#22b8ff" stroke-width="44"/>
+    <path d="M210 86 V314 M96 200 H324" stroke="#ffffff" stroke-width="18"/>
+    <circle cx="210" cy="200" r="32" fill="#ffffff"/>
   </g>
-  <g stroke="#3ec6ff" stroke-width="8" stroke-linecap="round">
-    <path d="M200 132 V268"/>
-    <path d="M132 200 H268"/>
+
+  <!-- Splash Droplets -->
+  <g fill="#e0f2fe" stroke="#0284c7" stroke-width="3">
+    <circle cx="152" cy="142" r="9"/>
+    <circle cx="272" cy="138" r="11"/>
+    <circle cx="268" cy="262" r="9"/>
+    <circle cx="156" cy="266" r="8"/>
   </g>
-  <circle cx="200" cy="200" r="16" fill="#e9fbff"/>
-  <g>
-    <ellipse cx="78" cy="292" rx="28" ry="10" fill="rgba(20,40,40,0.18)"/>
-    <circle cx="78" cy="250" r="32" fill="#3dce6e"/>
-    <ellipse cx="78" cy="258" rx="18" ry="14" fill="#d8ffb0"/>
-    <ellipse cx="66" cy="242" rx="9" ry="11" fill="#fff"/>
-    <ellipse cx="90" cy="242" rx="9" ry="11" fill="#fff"/>
-    <circle cx="68" cy="244" r="4" fill="#243044"/>
-    <circle cx="92" cy="244" r="4" fill="#243044"/>
-    <ellipse cx="46" cy="258" rx="10" ry="6" fill="#d8ffb0"/>
-    <ellipse cx="110" cy="258" rx="10" ry="6" fill="#d8ffb0"/>
+
+  <!-- Blasted Crab Rival Flying Sky-High -->
+  <g transform="translate(304,136) rotate(22)">
+    <circle cx="0" cy="0" r="32" fill="#ef4444" stroke="#0f2942" stroke-width="5"/>
+    <circle cx="-34" cy="-8" r="12" fill="#ef4444" stroke="#0f2942" stroke-width="4"/>
+    <circle cx="34" cy="-8" r="12" fill="#ef4444" stroke="#0f2942" stroke-width="4"/>
+    <ellipse cx="-11" cy="-4" rx="8" ry="10" fill="#fff" stroke="#0f2942" stroke-width="3"/>
+    <ellipse cx="11" cy="-4" rx="8" ry="10" fill="#fff" stroke="#0f2942" stroke-width="3"/>
+    <circle cx="-11" cy="-4" r="4" fill="#0f2942"/>
+    <circle cx="11" cy="-4" r="4" fill="#0f2942"/>
   </g>
-  <g>
-    <ellipse cx="322" cy="150" rx="28" ry="10" fill="rgba(20,40,40,0.18)"/>
-    <circle cx="322" cy="108" r="32" fill="#2c3148"/>
-    <ellipse cx="322" cy="116" rx="18" ry="16" fill="#fff7ea"/>
-    <ellipse cx="310" cy="100" rx="9" ry="11" fill="#fff"/>
-    <ellipse cx="334" cy="100" rx="9" ry="11" fill="#fff"/>
-    <circle cx="308" cy="102" r="4" fill="#243044"/>
-    <circle cx="332" cy="102" r="4" fill="#243044"/>
-    <path d="M322 128 L314 120 L330 120 Z" fill="#ffb703"/>
+
+  <!-- Water-Ninja Hero Commando -->
+  <g transform="translate(106,198)">
+    <ellipse cx="0" cy="46" rx="34" ry="10" fill="rgba(15,41,66,0.25)"/>
+    <circle cx="-16" cy="38" r="11" fill="#0f2942"/>
+    <circle cx="16" cy="38" r="11" fill="#0f2942"/>
+    <rect x="-38" y="-12" width="76" height="36" rx="14" fill="#22b8ff" stroke="#0f2942" stroke-width="4"/>
+    <circle cx="0" cy="4" r="36" fill="#1d8cf8" stroke="#0f2942" stroke-width="5"/>
+    <rect x="-26" y="-16" width="52" height="32" rx="14" fill="#d8f3ff" stroke="#0f2942" stroke-width="4"/>
+    <rect x="-34" y="-27" width="68" height="14" rx="7" fill="#ff3b5c" stroke="#0f2942" stroke-width="4"/>
+    <path d="M-34 -22 L-54 -32 L-48 -14 Z" fill="#ff3b5c" stroke="#0f2942" stroke-width="3"/>
+    <ellipse cx="-11" cy="0" rx="8" ry="10" fill="#fff" stroke="#0f2942" stroke-width="3"/>
+    <ellipse cx="11" cy="0" rx="8" ry="10" fill="#fff" stroke="#0f2942" stroke-width="3"/>
+    <circle cx="-8" cy="0" r="4.5" fill="#0f2942"/>
+    <circle cx="14" cy="0" r="4.5" fill="#0f2942"/>
   </g>
-  <g>
-    <ellipse cx="300" cy="300" rx="22" ry="8" fill="rgba(20,40,60,0.15)"/>
-    <circle cx="300" cy="274" r="22" fill="#3ec6ff" stroke="#fff" stroke-width="4"/>
-    <ellipse cx="292" cy="266" rx="6" ry="3" fill="#fff"/>
+
+  <!-- Giant Wobbly Water Balloon Foreground -->
+  <g transform="translate(216,294) rotate(-10)">
+    <ellipse cx="0" cy="44" rx="28" ry="8" fill="rgba(15,41,66,0.22)"/>
+    <path d="M-8 -44 L8 -44 L0 -32 Z" fill="#22b8ff" stroke="#0f2942" stroke-width="4"/>
+    <ellipse cx="0" cy="0" rx="36" ry="38" fill="url(#bal)" stroke="#0f2942" stroke-width="5"/>
+    <ellipse cx="-12" cy="-14" rx="11" ry="6" transform="rotate(-28 -12 -14)" fill="#ffffff" opacity="0.9"/>
   </g>
 </svg>

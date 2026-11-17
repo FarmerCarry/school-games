@@ -1,7 +1,8 @@
-// Magic Crayon (القلم السحري) in real Chromium: title & fresh-visit start, wordless coach,
-// real mouse drag drawing a bridge & completing Level 1, Space/#btnRoll launch,
-// keyboard Arrows+Shift drawing, Undo (#btnUndo/KeyZ/Right-click), Pause freeze & Restart,
-// slime pop retry, Shop + storage quota recovery via Kit.saveStatus, reduced motion, zero errors.
+// Magic Crayon: Turbo Stunt Rider (القلم السحري) in real Chromium:
+// Arabic title & difficulty tiers (سهل/متوسط/بطل), immediate 1-1 start & guide coach,
+// pre-launch & live mid-run crayon bridges, 3 magic inks (الجسر/التيربو/القفز),
+// all 15 open stunt stages + Free Stunt Sandbox, Undo/keyboard drawing, Pause freeze & Restart,
+// lava crash auto-reset, Stunt Garage + Kit.saveStatus quota retry, reduced motion & [1100,620] fit.
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import path from 'node:path';
@@ -22,19 +23,19 @@ after(async () => {
   await server?.close();
 });
 
-const SAVE = (open = 0, extra = {}) => ({
-  v: 1,
-  lv: Array.from({ length: 20 }, (_, i) => ({ s: i < open ? 2 : 0, ink: i < open ? 420 : 0, c: i < open ? 3 : 0 })),
+const SAVE = (starsCount = 0, extra = {}) => ({
+  v: 2,
+  tier: 'normal',
   coins: 0,
-  crayons: [1, 0, 0, 0, 0, 0],
-  skins: [1, 0, 0, 0, 0, 0],
-  crayon: 0,
-  skin: 0,
-  coach: true,
+  pod: 0,
+  trail: 0,
+  pods: [1, 0, 0, 0, 0],
+  trails: [1, 0, 0, 0],
+  lv: Array.from({ length: 15 }, (_, i) => ({ s: i < starsCount ? 2 : 0, ink: i < starsCount ? 400 : 0 })),
   ...extra
 });
 
-async function game(t, { save, dda = 0.3, reducedMotion = 'reduce', size = [1280, 720] } = {}) {
+async function game(t, { save, dda = 0.35, reducedMotion = 'reduce', size = [1280, 720] } = {}) {
   const ctx = await browser.newContext({ viewport: { width: size[0], height: size[1] }, reducedMotion });
   const errors = [], requests = [];
   ctx.on('page', page => {
@@ -115,24 +116,29 @@ async function dragStroke(page, pts) {
   await step(page);
 }
 
-async function openLevel(page, i) {
+async function openStage(page, idx) {
   await page.locator('#btnLevels').click();
   await step(page);
-  await page.locator('.lvl').nth(i).click();
+  await page.locator('.lvl').nth(idx).click();
   await step(page);
   const s = await state(page);
   assert.equal(s.screen, 'play');
-  assert.equal(s.level, i);
+  assert.equal(s.level, idx);
 }
 
-test('title waits; Play goes straight to Level 1 on fresh save; coach hand glides without drawing ink or moving Karroum', async t => {
+test('title shows Arabic stunt UI & difficulty tiers; #btnPlay opens 1-1 immediately with waiting pod & guide coach', async t => {
   const page = await game(t);
-  await step(page, 30);
+  await step(page, 20);
   assert.equal((await state(page)).screen, 'title');
-  assert.equal(await page.locator('#titleStars b').textContent(), '0/60');
-  for (const txt of ['ارسم جسرًا', 'اضغط انطلق', 'اجمع النجوم', 'الكأس الذهبية']) {
+  assert.equal(await page.locator('#titleStars b').textContent(), '0/45');
+
+  for (const txt of ['ارسم جسورًا', 'حطّم الصناديق', 'بوابة الفوز']) {
     assert.equal(await page.locator('.howto figcaption', { hasText: txt }).isVisible(), true, txt);
   }
+
+  // Switch difficulty tiers (سهل / بطل / متوسط) and verify Easy doubles ink budget.
+  await page.locator('#tierRow [data-tier="easy"]').click();
+  assert.equal((await state(page)).tier, 'easy');
 
   await page.locator('#btnPlay').click();
   await step(page);
@@ -142,51 +148,50 @@ test('title waits; Play goes straight to Level 1 on fresh save; coach hand glide
   assert.equal(s.rolling, false);
   assert.equal(s.strokes, 0);
   assert.equal(s.inkUsed, 0);
+  assert.ok(s.inkMax > 1200, 'easy tier grants generous double ink budget');
   const startBall = s.ball;
 
   await run(page, 60);
   s = await state(page);
-  assert.equal(s.coach, true, 'wordless coach hand shows how to draw across the gap');
-  assert.equal(s.inkUsed, 0, 'coach never consumes real ink');
-  assert.equal(s.rolling, false, 'Karroum stays waiting on start pedestal');
+  assert.equal(s.coach, true, 'guide coach glides across gap before first stroke');
+  assert.equal(s.inkUsed, 0, 'coach never consumes player ink');
+  assert.equal(s.rolling, false, 'stunt pod waits on start pad until Launch');
   assert.deepEqual(s.ball, startBall);
 });
 
-test('real mouse drag draws a crayon bridge, Space launches Karroum into Golden Star Cup with 3 stars, saves & advances', async t => {
+test('pre-launch mouse bridge on 1-1, Space launch, crate smash, 3 stars, win overlay & Enter advances to 1-2', async t => {
   const page = await game(t, { reducedMotion: 'no-preference' });
   await page.locator('#btnPlay').click();
   await step(page);
 
-  await dragStroke(page, [[368, 355], [570, 362], [772, 369]]);
+  await dragStroke(page, [[380, 344], [560, 350], [740, 356]]);
   let s = await state(page);
   assert.equal(s.strokes, 1);
-  assert.ok(s.inkUsed > 380 && s.inkUsed <= s.inkPar);
-  assert.equal(s.rolling, false, 'waits until Space or #btnRoll');
+  assert.ok(s.inkUsed > 300 && s.inkUsed <= s.inkPar);
+  assert.equal(s.rolling, false, 'waits until Space or #btnLaunch');
 
   await page.keyboard.press('Space');
   await step(page);
-  assert.equal((await state(page)).rolling, true, 'Space launches Karroum');
+  assert.equal((await state(page)).rolling, true, 'Space launches stunt pod');
 
-  await run(page, 360);
+  await run(page, 320);
   s = await state(page);
   assert.equal(s.done, true);
   assert.equal(s.starsGot, 3);
+  assert.equal(s.cratesLeft, 0, 'wooden crates smashed along goal runway');
   assert.deepEqual(await page.evaluate(() => mc.results), [1]);
 
   const saved = await stored(page);
   assert.equal(saved.lv[0].s, 3);
-  assert.equal(saved.coach, true);
-  assert.ok(saved.coins >= 9);
+  assert.ok(saved.coins >= 11);
 
-  await run(page, 120);
+  await run(page, 60);
   s = await state(page);
-  assert.equal(s.screen, 'result');
+  assert.equal(s.screen, 'win');
   assert.equal(s.stars, 3);
-  assert.equal(await page.locator('#scrResult').isVisible(), true);
-  await run(page, 90);
-  assert.equal(await page.locator('#resStars svg.on').count(), 3);
+  assert.equal(await page.locator('#scrWin').isVisible(), true);
+  assert.equal(await page.locator('#winStars svg.on').count(), 3);
 
-  // Enter advances to 1-2.
   await page.keyboard.press('Enter');
   await step(page);
   s = await state(page);
@@ -194,64 +199,138 @@ test('real mouse drag draws a crayon bridge, Space launches Karroum into Golden 
   assert.equal(s.id, '1-2');
 });
 
-test('Undo (#btnUndo, KeyZ, right-click), keyboard Arrows+Shift drawing, live mid-roll drawing, and KeyR ghost trace', async t => {
+test('3 magic crayons (1/2/3 & HUD), Undo/erase/keyboard drawing, live mid-run drawing & spring trampoline win', async t => {
   const page = await game(t);
   await page.locator('#btnPlay').click();
   await step(page);
 
-  await dragStroke(page, [[380, 360], [560, 360]]);
+  // Switch between the 3 magic crayons via HUD buttons and keys 1/2/3.
+  await page.locator('#ink1').click();
+  assert.equal((await state(page)).inkType, 1);
+  await page.keyboard.press('Digit3');
+  await step(page);
+  assert.equal((await state(page)).inkType, 2);
+  await page.keyboard.press('Digit1');
+  await step(page);
+  assert.equal((await state(page)).inkType, 0);
+
+  await dragStroke(page, [[390, 360], [560, 360]]);
   await dragStroke(page, [[420, 460], [600, 460]]);
   assert.equal((await state(page)).strokes, 2);
 
-  // Right-click on the first stroke erases it.
-  const p1 = await pagePoint(page, 470, 360);
+  // Right-click erases a stroke; #btnUndo removes the remaining stroke.
+  const p1 = await pagePoint(page, 475, 360);
   await page.mouse.click(p1.x, p1.y, { button: 'right' });
   await step(page);
   assert.equal((await state(page)).strokes, 1);
 
-  // #btnUndo removes the remaining stroke.
   await page.locator('#btnUndo').click();
   await step(page);
   assert.equal((await state(page)).strokes, 0);
   assert.equal((await state(page)).inkUsed, 0);
 
-  // Keyboard accessibility: Shift + ArrowRight draws a crayon line, KeyZ undoes it!
+  // Keyboard drawing: Shift + ArrowRight draws a stroke; KeyX undoes it; KeyZ + ArrowRight draws again.
   await page.keyboard.down('ShiftLeft');
   await page.keyboard.down('ArrowRight');
-  await step(page, 25);
+  await step(page, 24);
   await page.keyboard.up('ArrowRight');
   await page.keyboard.up('ShiftLeft');
   await step(page);
-  let s = await state(page);
-  assert.equal(s.strokes, 1, 'Shift + ArrowRight drew a crayon stroke');
-  assert.ok(s.inkUsed > 80);
+  assert.equal((await state(page)).strokes, 1);
 
-  // KeyR resets the level cleanly while keeping a helpful visual ghost trace!
+  await page.keyboard.press('KeyX');
+  await step(page);
+  assert.equal((await state(page)).strokes, 0);
+
+  await page.keyboard.down('KeyZ');
+  await page.keyboard.down('ArrowRight');
+  await step(page, 20);
+  await page.keyboard.up('ArrowRight');
+  await page.keyboard.up('KeyZ');
+  await step(page);
+  assert.equal((await state(page)).strokes, 1);
+
+  // KeyR resets stage cleanly while keeping a helpful ghost trace.
   await page.keyboard.press('KeyR');
   await step(page);
-  s = await state(page);
+  let s = await state(page);
   assert.equal(s.strokes, 0);
   assert.equal(s.inkUsed, 0);
   assert.equal(s.rolling, false);
   assert.equal(s.ghosts, 1);
 
-  // Live drawing AFTER clicking #btnRoll guides Karroum mid-roll!
-  await page.locator('#btnRoll').click();
-  await step(page, 10);
+  // LIVE mid-run drawing AFTER clicking #btnLaunch guides the moving stunt pod across 1-1!
+  await page.locator('#btnLaunch').click();
+  await step(page, 8);
   assert.equal((await state(page)).rolling, true);
-  await dragStroke(page, [[368, 355], [570, 362], [772, 369]]);
-  await run(page, 380);
+  await dragStroke(page, [[380, 344], [560, 350], [740, 356]]);
+  await run(page, 340);
   assert.equal((await state(page)).done, true);
+
+  // Spring Crayon (قلم القفز #ink2) launches pod sky-high to clear stage 1-3!
+  await run(page, 60);
+  await page.locator('#winMap').click();
+  await step(page);
+  await page.locator('.lvl').nth(2).click();
+  await step(page);
+  s = await state(page);
+  assert.equal(s.id, '1-3');
+  assert.equal(s.inkType, 2, 'stage 1-3 preselects spring crayon');
+  await dragStroke(page, [[415, 448], [560, 434]]);
+  await page.locator('#btnLaunch').click();
+  await run(page, 360);
+  assert.equal((await state(page)).done, true, 'spring crayon bounces pod to upper goal');
 });
 
-test('Pause (#btnPause, KeyP, Escape, blur) freezes physics completely; #btnResume & #btnRestart', async t => {
-  const page = await game(t, { save: SAVE(6) });
-  await openLevel(page, 5);
-  assert.equal((await state(page)).id, '2-1');
+test('all 15 stunt stages are open from fresh save; Free Stunt Sandbox has infinite ink & prop spawners', async t => {
+  const page = await game(t);
+  await page.locator('#btnLevels').click();
+  await step(page);
+  assert.equal(await page.locator('.lvl').count(), 15);
 
-  await dragStroke(page, [[250, 295], [535, 542]]);
-  await page.locator('#btnRoll').click();
-  await step(page, 20);
+  // Jump straight to final World 3 stage 3-5 with zero prior stars!
+  await page.locator('.lvl').nth(14).click();
+  await step(page);
+  let s = await state(page);
+  assert.equal(s.screen, 'play');
+  assert.equal(s.id, '3-5');
+  assert.equal(s.rolling, false);
+
+  // Switch to Free Stunt Sandbox via pause -> map -> sandbox button.
+  await page.locator('#btnPause').click();
+  await step(page);
+  await page.locator('#btnMap').click();
+  await step(page);
+  await page.locator('#mapSandbox').click();
+  await step(page);
+
+  s = await state(page);
+  assert.equal(s.screen, 'play');
+  assert.equal(s.sandbox, true);
+  assert.equal(s.id, 'sandbox');
+  assert.equal(await page.locator('#sbxBar').isVisible(), true);
+
+  const beforeCrates = s.cratesLeft;
+  await page.locator('#sbxBar [data-prop="wood"]').click();
+  await page.locator('#sbxBar [data-prop="tnt"]').click();
+  await step(page);
+  assert.equal((await state(page)).cratesLeft, beforeCrates + 2);
+
+  await dragStroke(page, [[320, 310], [640, 340], [920, 280]]);
+  assert.equal((await state(page)).strokes, 1);
+  await page.locator('#btnClearInk').click();
+  assert.equal((await state(page)).strokes, 0);
+  assert.equal((await state(page)).inkUsed, 0);
+});
+
+test('Pause (#btnPause, KeyP, Escape, blur) freezes simulation; #btnResume, #btnRestart & lava crash auto-reset', async t => {
+  const page = await game(t);
+  await openStage(page, 10);
+  assert.equal((await state(page)).id, '3-1');
+
+  await dragStroke(page, [[320, 340], [520, 360]]);
+  await page.locator('#btnLaunch').click();
+  await step(page, 16);
 
   const snap = () => page.evaluate(() => JSON.stringify([__game.state.time, __game.state.ball, __game.state.inkUsed, __game.state.strokes]));
 
@@ -265,10 +344,9 @@ test('Pause (#btnPause, KeyP, Escape, blur) freezes physics completely; #btnResu
     assert.equal((await state(page)).paused, true, how);
     const frozen = await snap();
 
-    // Mouse drags and frame ticks while paused do not advance simulation or draw ink.
-    await page.mouse.move(400, 400);
+    await page.mouse.move(420, 400);
     await page.mouse.down();
-    await page.mouse.move(750, 420);
+    await page.mouse.move(740, 420);
     await page.mouse.up();
     await run(page, 60);
     assert.equal(await snap(), frozen, how + ' freezes world completely');
@@ -281,55 +359,47 @@ test('Pause (#btnPause, KeyP, Escape, blur) freezes physics completely; #btnResu
     assert.notEqual(await snap(), frozen, 'simulation resumes cleanly');
   }
 
-  // #btnRestart from pause resets inkUsed === 0 && !rolling && strokes === 0.
+  // #btnRestart from pause resets rolling === false, inkUsed === 0, strokes === 0, ghosts === 0.
   await page.locator('#btnPause').click();
   await step(page);
   await page.locator('#btnRestart').click();
   await step(page);
-  const s = await state(page);
+  let s = await state(page);
   assert.equal(s.screen, 'play');
   assert.equal(s.inkUsed, 0);
   assert.equal(s.rolling, false);
   assert.equal(s.strokes, 0);
   assert.equal(s.ghosts, 0);
-});
 
-test('ticklish purple slime pops unbridged Karroum and auto-restarts ready to redraw', async t => {
-  const page = await game(t, { save: SAVE(12) });
-  await openLevel(page, 11);
-  assert.equal((await state(page)).id, '3-2');
-
-  await page.locator('#btnRoll').click();
-  await run(page, 160);
-  assert.equal((await state(page)).popped, true);
-
-  // After the short bubble-giggle beat, the level auto-restarts cleanly.
-  await run(page, 90);
-  const s = await state(page);
-  assert.equal(s.popped, false);
+  // Unbridged launch into volcano lava crashes pod and auto-resets it on start pad!
+  await page.locator('#btnLaunch').click();
+  await run(page, 140);
+  assert.equal((await state(page)).crashed, true);
+  await run(page, 65);
+  s = await state(page);
+  assert.equal(s.crashed, false);
   assert.equal(s.rolling, false);
-  assert.equal(s.strokes, 0);
 });
 
-test('Shop buys & equips crayons and skins; mute button & KeyM; full-disk QuotaExceededError warns & Retry saves', async t => {
-  const page = await game(t, { save: SAVE(1, { coins: 12 }) });
-  assert.equal(await page.locator('#titleStars b').textContent(), '2/60');
+test('Stunt Garage buys & equips pods/trails; mute & KeyM; QuotaExceededError warns & Retry saves', async t => {
+  const page = await game(t, { save: SAVE(1, { coins: 24 }) });
+  assert.equal(await page.locator('#titleStars b').textContent(), '2/45');
 
-  await page.locator('#btnShop').click();
+  await page.locator('#btnGarage').click();
   await step(page);
-  assert.equal((await state(page)).screen, 'shop');
+  assert.equal((await state(page)).screen, 'garage');
 
-  // Buy cyan crayon (price 4) and soccer skin (price 4).
-  await page.locator('#shelfColors .tile').nth(1).click();
+  // Buy Flame Pod (price 8) and Spark Trail (price 6).
+  await page.locator('#shelfPods .tile').nth(1).click();
   await step(page);
-  await page.locator('#shelfSkins .tile').nth(1).click();
+  await page.locator('#shelfTrails .tile').nth(1).click();
   await step(page);
-  let sv = await stored(page);
-  assert.equal(sv.crayon, 1);
-  assert.equal(sv.skin, 1);
-  assert.equal(sv.coins, 4);
-  assert.match(await page.locator('#shelfColors .tile').nth(1).getAttribute('class'), /wear/);
-  assert.match(await page.locator('#shelfSkins .tile').nth(1).getAttribute('class'), /wear/);
+  const sv = await stored(page);
+  assert.equal(sv.pod, 1);
+  assert.equal(sv.trail, 1);
+  assert.equal(sv.coins, 10);
+  assert.match(await page.locator('#shelfPods .tile').nth(1).getAttribute('class'), /wear/);
+  assert.match(await page.locator('#shelfTrails .tile').nth(1).getAttribute('class'), /wear/);
 
   await page.keyboard.press('Escape');
   await step(page);
@@ -344,31 +414,32 @@ test('Shop buys & equips crayons and skins; mute button & KeyM; full-disk QuotaE
   assert.equal(await page.evaluate(() => Kit.audio.muted), false);
   assert.equal((await state(page)).screen, 'title');
 
-  // Simulate full storage when completing 1-2; verify Kit.saveStatus banner & Retry recovery!
+  // Simulate full storage when winning 1-1; verify Kit.saveStatus banner & Retry recovery!
   await page.evaluate(() => { mc.failSave = true; });
-  await openLevel(page, 1);
-  await dragStroke(page, [[288, 236], [575, 378], [862, 497]]);
+  await page.locator('#btnPlay').click();
+  await step(page);
+  await dragStroke(page, [[380, 344], [560, 350], [740, 356]]);
   await page.keyboard.press('Space');
-  await run(page, 420);
+  await run(page, 340);
   assert.equal((await state(page)).done, true);
 
   const status = page.locator('.sg-save-status');
   assert.equal(await status.getAttribute('data-state'), 'failed');
-  assert.equal((await stored(page)).lv[1].s, 0, 'disk write failed');
-  assert.equal((await page.evaluate(() => __game.save)).lv[1].s, 3, 'in-memory save retained');
+  assert.equal((await stored(page)).lv[0].s, 2, 'disk write failed so previous 2-star save remained');
+  assert.equal((await page.evaluate(() => __game.save)).lv[0].s, 3, 'in-memory save retained 3 stars');
 
   await page.evaluate(() => { mc.failSave = false; });
   await status.locator('button').click();
   assert.equal(await status.getAttribute('data-state'), 'saved');
-  assert.equal((await stored(page)).lv[1].s, 3);
+  assert.equal((await stored(page)).lv[0].s, 3);
 });
 
-test('reduced motion suppresses trail, shake, and particles; smaller [1100, 620] portal frame fits cleanly', async t => {
+test('reduced motion suppresses trail, shake & particles; [1100, 620] portal viewport fits with zero HUD overlap', async t => {
   const page = await game(t, { reducedMotion: 'reduce', size: [1100, 620] });
   const canvasBox = await page.locator('#game').boundingBox();
   assert.ok(canvasBox.width <= 1100 && canvasBox.height <= 620);
 
-  for (const sel of ['#btnPlay', '#btnLevels', '#btnShop', '.howto .card >> nth=3']) {
+  for (const sel of ['#btnPlay', '#btnLevels', '#btnSandbox', '#btnGarage', '.howto .card >> nth=2']) {
     const b = await page.locator(sel).boundingBox();
     assert.ok(b.x >= canvasBox.x && b.x + b.width <= canvasBox.x + canvasBox.width && b.y + b.height <= canvasBox.y + canvasBox.height, sel);
   }
@@ -376,15 +447,15 @@ test('reduced motion suppresses trail, shake, and particles; smaller [1100, 620]
   await page.locator('#btnPlay').click();
   await step(page);
   const muteBox = await page.locator('.sg-mute').boundingBox();
-  const rollBox = await page.locator('#btnRoll').boundingBox();
-  assert.ok(rollBox.x + rollBox.width < muteBox.x, '#btnRoll does not overlap .sg-mute');
+  const launchBox = await page.locator('#btnLaunch').boundingBox();
+  assert.ok(launchBox.x + launchBox.width < muteBox.x, '#btnLaunch does not overlap .sg-mute');
 
-  await dragStroke(page, [[368, 355], [570, 362], [772, 369]]);
-  await page.locator('#btnRoll').click();
-  await run(page, 360);
+  await dragStroke(page, [[380, 344], [560, 350], [740, 356]]);
+  await page.locator('#btnLaunch').click();
+  await run(page, 340);
   const s = await state(page);
   assert.equal(s.done, true);
   assert.equal(s.trail, 0, 'no trail in reduced motion');
   assert.equal(s.shake, 0, 'no shake in reduced motion');
-  assert.equal(s.fx, 0, 'no confetti burst in reduced motion');
+  assert.equal(s.fx, 0, 'no particle burst in reduced motion');
 });

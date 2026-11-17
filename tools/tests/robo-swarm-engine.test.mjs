@@ -1,226 +1,238 @@
 import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
+import { performance } from 'node:perf_hooks';
+import vm from 'node:vm';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
-import vm from 'node:vm';
 import { test } from 'node:test';
 
+const require = createRequire(import.meta.url);
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-function load() {
-  const context = vm.createContext({});
-  for (const file of ['data.js', 'engine.js']) {
-    vm.runInContext(readFileSync(path.join(repo, 'games/robo-swarm', file), 'utf8'), context, { filename: file });
-  }
-  return { RS: context.RS, RSD: context.RSD };
-}
-const { RS, RSD } = load();
 
-function rngOf(seed) {
-  let s = seed >>> 0;
-  return function () {
-    s = (s + 0x6D2B79F5) | 0;
-    let t = Math.imul(s ^ (s >>> 15), 1 | s);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
+const RSData = require('../../games/robo-swarm/data.js');
+const RSEngine = require('../../games/robo-swarm/engine.js');
 
-function circle(t) {
-  const ang = t * 0.85;
-  return { x: -Math.sin(ang), y: Math.cos(ang), dash: 0 };
-}
+test('dual Node module.exports and browser window globals work cleanly with Arabic-only labels', () => {
+  assert.ok(RSData && RSEngine);
+  assert.equal(RSData.arenas.length, 3);
+  assert.equal(RSData.difficulties.length, 3);
+  assert.equal(RSData.pods.length, 5);
+  assert.equal(RSData.skins.length, 5);
 
-function clearPools(run) {
-  run.rFreeN = RS.CAP_R;
-  run.pFreeN = RS.CAP_P;
-  for (let i = 0; i < RS.CAP_R; i++) { run.rAlive[i] = 0; run.rFree[i] = RS.CAP_R - 1 - i; }
-  for (let i = 0; i < RS.CAP_P; i++) { run.pAlive[i] = 0; run.pFree[i] = RS.CAP_P - 1 - i; }
-}
+  const browserCtx = { window: {} };
+  vm.createContext(browserCtx);
+  for (const f of ['data.js', 'engine.js']) {
+    const src = readFileSync(path.join(repo, 'games/robo-swarm', f), 'utf8');
+    assert.ok(!/\bKit\b/.test(src), `${f} must not reference Kit`);
+    assert.ok(!/\bdocument\b|\blocalStorage\b/.test(src), `${f} must not touch DOM/storage`);
+    vm.runInContext(src, browserCtx, { filename: f });
+  }
+  assert.ok(browserCtx.window.RSData);
+  assert.ok(browserCtx.window.RSEngine);
 
-test('the spatial hash matches a brute-force circle check on random scenes', () => {
-  const run = RS.newRun({ seed: 1, players: 2 });
-  for (let scene = 0; scene < 24; scene++) {
-    const rand = rngOf(1000 + scene * 17);
-    clearPools(run);
-    const robots = 8 + ((rand() * 80) | 0);
-    const shots = 5 + ((rand() * 40) | 0);
-    for (let i = 0; i < robots; i++) {
-      const r = 8 + rand() * 62;
-      const id = RS.spawnRobot(run, i % 9, rand() * RSD.W, rand() * RSD.H);
-      run.rr[id] = r;
-    }
-    for (let i = 0; i < shots; i++) {
-      const id = run.pFree[--run.pFreeN];
-      run.pAlive[id] = 1;
-      run.px[id] = rand() * RSD.W;
-      run.py[id] = rand() * RSD.H;
-      run.pr[id] = 6 + rand() * 28;
-      run.pOwner[id] = i % 5 === 0 ? -1 : 0;
-      run.pKind[id] = run.pOwner[id] < 0 ? 3 : 0;
-    }
-    run.x[0] = rand() * RSD.W;
-    run.y[0] = rand() * RSD.H;
-    run.x[1] = rand() * RSD.W;
-    run.y[1] = rand() * RSD.H;
-    assert.deepEqual(RS.robotHits(run), RS.robotHitsBrute(run), 'scene ' + scene);
+  for (const pod of RSData.pods) {
+    assert.ok(!/[A-Za-z]/.test(pod.name), `pod name must be Arabic: ${pod.name}`);
+    assert.ok(!/[A-Za-z]/.test(pod.popup), `pod popup must be Arabic: ${pod.popup}`);
   }
-  // A full cap, including a king-sized body on the world edge.
-  clearPools(run);
-  const rand = rngOf(99);
-  for (let i = 0; i < RS.CAP_R; i++) {
-    const id = RS.spawnRobot(run, i === 0 ? 8 : i % 6, rand() * RSD.W, rand() * RSD.H);
-    if (i === 0) { run.rx[id] = 8; run.ry[id] = 8; run.rr[id] = 70; }
-  }
-  for (let i = 0; i < RS.CAP_P; i++) {
-    const id = run.pFree[--run.pFreeN];
-    run.pAlive[id] = 1;
-    run.px[id] = rand() * RSD.W;
-    run.py[id] = rand() * RSD.H;
-    run.pr[id] = 10;
-  }
-  assert.deepEqual(RS.robotHits(run), RS.robotHitsBrute(run), 'full cap');
 });
 
-test('card offers skip maxed and locked upgrades, never repeat, and include a ready evolution', () => {
-  const run = RS.newRun({ seed: 2, players: 2 });
-  const rand = rngOf(5);
-  for (let n = 0; n < 30; n++) {
-    run.offerFor = n % 2;
-    run.level = 1;
-    run.hurtN[run.offerFor] = 0;
-    const offer = RS.offerCards(run, rand);
-    assert.ok(offer.length >= 1 && offer.length <= 3);
-    assert.equal(new Set(offer).size, offer.length, 'no repeats');
-    assert.ok(!offer.includes(RSD.SHIELD), 'shield is locked before the first hit');
-    assert.ok(!offer.includes(RSD.HEART), 'heart is locked before level 3');
-    assert.ok(!offer.includes(RSD.TORNADO) && !offer.includes(RSD.CANNON));
-    for (const id of offer) assert.ok(run.lv[run.offerFor][id] < 5);
+test('keyboard movement and 1P mouse steering work smoothly with keyboard priority', () => {
+  const run = RSEngine.createRun({ arena: 'spark', difficulty: 'normal', players: 1, seed: 10 });
+  const startX = run.mechs[0].x;
+  const startY = run.mechs[0].y;
+
+  // Holding ArrowRight / D moves P1 right well past +8 px
+  for (let i = 0; i < 15; i++) {
+    RSEngine.step(run, 1 / 60, [{ x: 1, y: 0, dash: 0 }]);
   }
-  run.offerFor = 0;
-  run.level = 4;
-  run.hurtN[0] = 2;
-  run.lv[0][RSD.FOAM] = 5;
-  let offer = RS.offerCards(run, rand);
-  assert.ok(!offer.includes(RSD.FOAM), 'a maxed weapon stays out');
-  run.lv[0][RSD.DUCKS] = 5;
-  run.lv[0][RSD.MAGNET] = 5;
-  offer = RS.offerCards(run, rand);
-  assert.ok(offer.includes(RSD.TORNADO), 'duck + magnet offers the tornado');
-  assert.equal(RS.applyCard(run, 0, RSD.TORNADO), true);
-  offer = RS.offerCards(run, rand);
-  assert.ok(!offer.includes(RSD.TORNADO), 'a taken evolution is not offered again');
-  run.lv[0][RSD.PAINT] = 5;
-  offer = RS.offerCards(run, rand);
-  assert.ok(offer.includes(RSD.CANNON));
-  // The second player still has a clean build, so the same roll is not a copy of player 1.
-  run.offerFor = 1;
-  const other = RS.offerCards(run, rngOf(5));
-  assert.ok(!other.includes(RSD.TORNADO) && !other.includes(RSD.CANNON));
+  assert.ok(run.mechs[0].x > startX + 60, `expected px to advance right, got ${run.mechs[0].x - startX}`);
+  assert.equal(run.mechs[0].y, startY);
+
+  // Mouse steering glides toward pointer when no keys are held
+  const beforeMouseY = run.mechs[0].y;
+  for (let i = 0; i < 20; i++) {
+    RSEngine.step(run, 1 / 60, [{ x: 0, y: 0, mouse: true, tx: run.mechs[0].x, ty: beforeMouseY - 220 }]);
+  }
+  assert.ok(run.mechs[0].y < beforeMouseY - 50, 'mech steers smoothly toward active mouse target');
+
+  // Keyboard overrides mouse immediately when pressed
+  const xBeforeOverride = run.mechs[0].x;
+  for (let i = 0; i < 12; i++) {
+    RSEngine.step(run, 1 / 60, [{ x: -1, y: 0, mouse: true, tx: xBeforeOverride + 400, ty: run.mechs[0].y }]);
+  }
+  assert.ok(run.mechs[0].x < xBeforeOverride - 40, 'keyboard input immediately overrides mouse target');
 });
 
-test('entity counts stay inside the caps while the arena is flooded', () => {
-  const run = RS.newRun({ seed: 4, tier: 5, map: 3, cards: false, immortal: true });
-  const input = [{ x: 1, y: 0, dash: 1 }];
-  for (let i = 0; i < 60 * 40; i++) {
-    RS.step(run, 1 / 60, input);
-    if (i % 30 === 0) {
-      const c = RS.counts(run);
-      assert.ok(c.robots <= RS.CAP_R, c.robots);
-      assert.ok(c.projectiles <= RS.CAP_P, c.projectiles);
-      assert.ok(c.bolts <= RS.CAP_B, c.bolts);
-      assert.ok(c.zones <= RS.CAP_Z, c.zones);
-    }
+test('Turbo EMP Dash boosts speed, grants invulnerability, triggers cooldown, and bonks nearby bots', () => {
+  const run = RSEngine.createRun({ arena: 'spark', difficulty: 'normal', players: 1, seed: 22 });
+  const p = run.mechs[0];
+  const bot = RSEngine.spawnEnemy(run, 0, p.x + 65, p.y);
+  const initialBotHp = bot.hp;
+  const x0 = p.x;
+
+  RSEngine.step(run, 1 / 60, [{ x: 1, y: 0, dash: 1 }]);
+  assert.ok(p.dashCd > 1.0, 'dash enters cooldown');
+  assert.ok(p.invuln > 0.2, 'dash grants brief invulnerability');
+
+  // Even colliding with a heavy bot during dash does not hurt the player
+  const crusher = RSEngine.spawnEnemy(run, 4, p.x + 40, p.y);
+  for (let i = 0; i < 12; i++) {
+    RSEngine.step(run, 1 / 60, [{ x: 1, y: 0, dash: 0 }]);
   }
-  RS.stress(run);
-  const full = RS.counts(run);
-  assert.equal(full.robots, RS.CAP_R);
-  RS.step(run, 1 / 60, input);
-  const after = RS.counts(run);
-  assert.ok(after.robots <= RS.CAP_R && after.projectiles <= RS.CAP_P && after.bolts <= RS.CAP_B);
+  assert.equal(p.hp, p.maxHp, 'player takes zero damage while dashing');
+  assert.ok(p.x > x0 + 140, 'dash propels player rapidly');
+  assert.ok(bot.hp < initialBotHp, 'EMP shockwave/bonk damages nearby bot');
+  assert.ok(crusher.shield < crusher.maxShield || crusher.hp < crusher.maxHp, 'dash bonks shielded crusher');
 });
 
-test('a circling bot that takes the first card lasts 90s at tier 3, and dies before 4:00 at tier 5 with no upgrades', () => {
-  const skilled = RS.newRun({ seed: 3, tier: 3, map: 1, players: 1 });
-  for (let i = 0; i < 90 * 60; i++) {
-    while (skilled.cards) RS.resolveCards(skilled);
-    RS.step(skilled, 1 / 60, [circle(i / 60)]);
-    assert.notEqual(skilled.over, 'lose', 'tier 3 died at ' + skilled.t.toFixed(1));
-  }
-  assert.ok(skilled.t >= 90 - 1e-4, skilled.t);
+test('auto-fire locks onto threats and all 5 Holo Weapon Pods upgrade instantly without pausing', () => {
+  const run = RSEngine.createRun({ arena: 'spark', difficulty: 'normal', players: 1, seed: 33 });
+  const p = run.mechs[0];
+  RSEngine.spawnEnemy(run, 4, p.x + 240, p.y);
 
-  const bare = RS.newRun({ seed: 3, tier: 5, map: 1, players: 1, cards: false });
-  for (let i = 0; i < 240 * 60 && !bare.over; i++) RS.step(bare, 1 / 60, [circle(i / 60)]);
-  assert.equal(bare.over, 'lose', 'tier 5 was still up at ' + bare.t.toFixed(1));
-  assert.ok(bare.t < 240, bare.t);
+  for (let i = 0; i < 20; i++) {
+    RSEngine.step(run, 1 / 60, [{ x: 0, y: 0 }]);
+  }
+  assert.ok(run.shots.length > 0, 'auto-blaster fires plasma bolts at nearby enemy');
+
+  // Test instant walk-over pickup of every Holo Weapon Pod kind (0..4)
+  p.hp = p.maxHp - 1;
+  for (let kind = 0; kind < 5; kind++) {
+    const beforeLv = p.lv[kind];
+    const pod = RSEngine.spawnPod(run, kind, p.x + 18, p.y);
+    assert.ok(pod);
+    run.events.length = 0;
+    RSEngine.step(run, 1 / 60, [{ x: 1, y: 0 }]);
+    assert.equal(run.state, 'play', 'game never freezes on pod pickup');
+    assert.equal(p.lv[kind], beforeLv + 1, `pod kind ${kind} upgraded instantly`);
+    const podEv = run.events.find((e) => e.type === 'pod' && e.podKind === kind);
+    assert.ok(podEv && podEv.text.endsWith('!'), `Arabic floating popup emitted for pod ${kind}`);
+  }
+  assert.equal(p.hp, p.maxHp, 'magnet pod also heals +1 heart');
+
+  // Verify upgraded saws, homing missiles, and chain lightning all activate in combat
+  RSEngine.spawnEnemy(run, 2, p.x + 190, p.y + 30);
+  RSEngine.spawnEnemy(run, 3, p.x - 180, p.y - 20);
+  for (let i = 0; i < 90; i++) {
+    RSEngine.step(run, 1 / 60, [{ x: 0, y: 0 }]);
+  }
+  const hasMissileOrZap = run.shots.some((s) => s.kind === 1) || run.kills > 0;
+  assert.ok(hasMissileOrZap, 'secondary pod weapons fire and damage enemies');
 });
 
-test('a full 4:30 of a crowded arena steps in under 3 seconds', () => {
-  const run = RS.newRun({ seed: 11, tier: 5, map: 2, cards: false, immortal: true });
-  const input = [{ x: 0.2, y: 1, dash: 0 }];
+test('wave schedule advances through Waves 1-3 and spawns Mega-Mech Boss at 70s with weak-point crits and victory', () => {
+  const run = RSEngine.createRun({ arena: 'magma', difficulty: 'hero', players: 1, seed: 77 });
+  assert.equal(run.wave, 1);
+
+  run.t = 23.98;
+  RSEngine.step(run, 0.04, [{ x: 0, y: 0 }]);
+  assert.equal(run.wave, 2);
+
+  run.t = 47.98;
+  RSEngine.step(run, 0.04, [{ x: 0, y: 0 }]);
+  assert.equal(run.wave, 3);
+
+  run.t = 69.98;
+  RSEngine.step(run, 0.04, [{ x: 0, y: 0 }]);
+  assert.equal(run.wave, 4);
+  assert.equal(run.bossSpawned, true, 'Mega-Mech Boss spawns at 70s');
+
+  const boss = run.enemies.find((e) => e.kind === 5);
+  assert.ok(boss, 'boss entity present');
+
+  // Advance Boss AI until weak point opens after telegraphed attack
+  let sawWeak = false;
+  for (let i = 0; i < 300; i++) {
+    run.mechs[0].invuln = 1;
+    RSEngine.step(run, 1 / 60, [{ x: 0, y: 0 }]);
+    if (boss.weakOpen) { sawWeak = true; break; }
+  }
+  assert.equal(sawWeak, true, 'Mega-Mech Boss exposes weak point after telegraphed attack');
+
+  const hpBeforeCrit = boss.hp;
+  RSEngine.damageEnemy(run, boss, 50, 0, 0);
+  assert.equal(hpBeforeCrit - boss.hp, 100, 'weak point deals 2x critical damage');
+
+  // Hero difficulty triggers Twin-Phase Overdrive at <= 50% HP
+  boss.weakOpen = false;
+  RSEngine.damageEnemy(run, boss, Math.ceil(boss.hp - boss.maxHp * 0.45), 0, 0);
+  assert.equal(boss.phase2, true, 'hero difficulty triggers Boss Phase 2 overdrive');
+
+  // Defeating Mega-Boss wins the arena immediately with 1-3 stars
+  RSEngine.damageEnemy(run, boss, boss.hp + 50, 0, 0);
+  assert.equal(run.bossDefeated, true);
+  assert.equal(run.state, 'win');
+  assert.ok(run.stars >= 1 && run.stars <= 3, `expected 1-3 stars, got ${run.stars}`);
+});
+
+test('2P co-op hologram ring revives fallen partner in 1.5s and loses only when both mechs fall', () => {
+  const run = RSEngine.createRun({ arena: 'orbit', difficulty: 'normal', players: 2, seed: 55 });
+  const [p1, p2] = run.mechs;
+
+  // Knock down P2 while P1 stays alive
+  while (p2.alive) {
+    p2.invuln = 0;
+    RSEngine.hurtMech(run, p2);
+  }
+  assert.equal(p2.alive, false);
+  assert.equal(p2.down, true);
+  assert.equal(run.state, 'play', 'round continues while P1 is still standing');
+
+  // Move P1 onto P2 hologram ring for ~1.6s
+  p1.x = p2.x + 20;
+  p1.y = p2.y;
+  run.enemies.length = 0;
+  for (let i = 0; i < 100; i++) {
+    RSEngine.step(run, 1 / 60, [{ x: 0, y: 0 }, { x: 0, y: 0 }]);
+    run.enemies.length = 0;
+    if (p2.alive) break;
+  }
+  assert.equal(p2.alive, true, 'P2 revived after 1.5s in hologram ring');
+  assert.equal(run.revives, 1);
+  assert.ok(p2.hp >= 2);
+
+  // If both mechs fall simultaneously, state transitions to over
+  while (p1.alive) { p1.invuln = 0; RSEngine.hurtMech(run, p1); }
+  while (p2.alive) { p2.invuln = 0; RSEngine.hurtMech(run, p2); }
+  assert.equal(run.state, 'over');
+});
+
+test('difficulty scaling, arena hazards, and 90-second simulation speed meet slow-PC budgets', () => {
+  const easy = RSEngine.createRun({ difficulty: 'easy', arena: 'spark' });
+  const normal = RSEngine.createRun({ difficulty: 'normal', arena: 'magma' });
+  const hero = RSEngine.createRun({ difficulty: 'hero', arena: 'orbit' });
+
+  assert.equal(easy.mechs[0].maxHp, 6);
+  assert.equal(normal.mechs[0].maxHp, 4);
+  assert.equal(hero.mechs[0].maxHp, 3);
+
+  const eEasy = RSEngine.spawnEnemy(easy, 2, 400, 400);
+  const eHero = RSEngine.spawnEnemy(hero, 2, 400, 400);
+  assert.ok(eHero.maxHp > eEasy.maxHp, 'hero enemies have more HP than easy');
+  assert.ok(eHero.speed > eEasy.speed, 'hero enemies move faster than easy');
+
+  // Orbit warp pad teleports mech to linked pad
+  const warp0 = hero.arena.warps[0];
+  const warp1 = hero.arena.warps[1];
+  hero.mechs[0].x = warp0.x;
+  hero.mechs[0].y = warp0.y;
+  RSEngine.step(hero, 1 / 60, [{ x: 0, y: 0 }]);
+  assert.ok(Math.hypot(hero.mechs[0].x - warp1.x, hero.mechs[0].y - warp1.y) < 30, 'warp pad teleports mech');
+
+  // Full 90s crowded simulation benchmark
+  const perfRun = RSEngine.createRun({ difficulty: 'hero', arena: 'spark', players: 2, seed: 99 });
   const t0 = performance.now();
-  let peak = 0;
-  for (let i = 0; i < 270 * 60; i++) {
-    RS.step(run, 1 / 60, input);
-    if ((i & 63) === 0) {
-      const c = RS.counts(run);
-      if (c.robots > peak) peak = c.robots;
-      assert.ok(c.robots <= RS.CAP_R && c.projectiles <= RS.CAP_P && c.bolts <= RS.CAP_B);
-    }
+  for (let i = 0; i < 90 * 60; i++) {
+    perfRun.mechs[0].invuln = 1;
+    perfRun.mechs[1].invuln = 1;
+    const ang = i * 0.04;
+    RSEngine.step(perfRun, 1 / 60, [
+      { x: Math.cos(ang), y: Math.sin(ang), dash: i % 120 === 0 ? 1 : 0 },
+      { x: -Math.sin(ang), y: Math.cos(ang), dash: i % 150 === 0 ? 1 : 0 }
+    ]);
+    if (perfRun.state !== 'play') break;
   }
-  const ms = performance.now() - t0;
-  assert.ok(run.t >= 270, run.t);
-  assert.ok(peak > 40, 'the arena actually filled (' + peak + ')');
-  assert.ok(ms < 3000, ms.toFixed(0) + ' ms, peak robots ' + peak);
-});
-
-test('the king is beatable by a mid build inside a minute, on every tier', () => {
-  const dps = RSD.midDps();
-  for (let tier = 1; tier <= 5; tier++) {
-    const hpMul = 0.8 + (1.3 - 0.8) * ((tier - 1) / 4);
-    const hp = Math.round(RSD.bots[8].hp * hpMul);
-    assert.ok(hp <= dps * 60, 'tier ' + tier + ' hp ' + hp + ' dps ' + dps.toFixed(1));
-  }
-  const run = RS.newRun({
-    seed: 8, tier: 5, map: 1, cards: false, immortal: true,
-    levels: [4, 3, 0, 3, 3, 0, 0, 0, 0, 0]
-  });
-  run.t = run.bossAt - 0.02;
-  const input = [{ x: 0, y: 0, dash: 0 }];
-  let killed = false;
-  for (let i = 0; i < 60 * 60 && !killed; i++) {
-    const id = run.kingId;
-    if (id >= 0 && run.rAlive[id]) {
-      const dx = run.rx[id] - run.x[0], dy = run.ry[id] - run.y[0];
-      const d = Math.hypot(dx, dy) || 1;
-      const want = 112;
-      input[0].x = (dx / d) * ((d - want) / 40);
-      input[0].y = (dy / d) * ((d - want) / 40);
-    }
-    RS.step(run, 1 / 60, input);
-    if (run.bossPopped) killed = true;
-  }
-  assert.equal(killed, true, 'boss hp left ' + (run.kingId >= 0 ? run.rhp[run.kingId] : 'none'));
-});
-
-test('the same seed and the same inputs leave the same world', () => {
-  function play(seed) {
-    const run = RS.newRun({ seed: seed, tier: 4, map: 2, players: 2 });
-    const inputs = [{ x: 0, y: 0, dash: 0 }, { x: 0, y: 0, dash: 0 }];
-    for (let i = 0; i < 60 * 25; i++) {
-      while (run.cards) RS.resolveCards(run);
-      const t = i / 60;
-      inputs[0].x = Math.cos(t * 1.3);
-      inputs[0].y = Math.sin(t * 0.7);
-      inputs[0].dash = i % 97 === 0 ? 1 : 0;
-      inputs[1].x = -Math.sin(t);
-      inputs[1].y = Math.cos(t * 0.5);
-      inputs[1].dash = i % 140 === 0 ? 1 : 0;
-      RS.step(run, 1 / 60, inputs);
-    }
-    while (run.cards) RS.resolveCards(run);
-    return RS.fingerprint(run);
-  }
-  assert.equal(play(42), play(42));
-  assert.notEqual(play(42), play(43));
+  const elapsedMs = performance.now() - t0;
+  assert.ok(elapsedMs < 800, `90s simulation took ${elapsedMs.toFixed(1)}ms (expected < 800ms)`);
 });

@@ -1,1515 +1,1702 @@
-/* Air Hockey (هوكي الهواء) — main game: physics, AI, match flow, effects, HUD, menus. */
+/* هوكي الهواء — Laser & Power-Puck Cyber-Mech Arena (game loop, physics, AI, UI). */
 (function () {
   'use strict';
-  var AH = window.AH, G = AH.G, art = AH.art, S = AH.sfx;
+  var AH = window.AH;
+  var G = AH.G, art = AH.art, J = Kit.juice, M = Math;
   var W = G.W, H = G.H;
-  var FONT = 'Fredoka';
-  var PMAX = 2300, PMAX_FIRE = 2900, KMH = 0.058;
-  var E_MALLET = 0.9, E_WALL = 0.9, E_PUCK = 0.95;
-  var MOUSE_MAX = 2600, KEY_MAX = 950, KEY_ACC = 7200;
+  var PMAX = 2100, PMAX_FIRE = 2200, KMH = 0.062;
+  var MOUSE_MAX = 2500, KEY_MAX = 1480, KEY_ACC = 16500, BOOST_SPD = 2080;
 
-  /* ============================================================ save */
-  var store = Kit.store('air-hockey');
-  var saveStatus = Kit.saveStatus({ retry: persist });
-  var save = (function () {
-    var d = store.get('save', null);
-    if (!d || typeof d !== 'object') d = {};
-    function obj(v) { return v && typeof v === 'object' ? v : {}; }
-    d.coins = +d.coins || 0;
-    d.wins = obj(d.wins); d.losses = obj(d.losses); d.beaten = obj(d.beaten); d.awards = obj(d.awards);
-    d.owned = obj(d.owned);
-    ['mallet', 'table', 'puck'].forEach(function (k) { if (!Array.isArray(d.owned[k])) d.owned[k] = []; });
-    if (d.owned.mallet.indexOf('blue') < 0) d.owned.mallet.push('blue');
-    if (d.owned.table.indexOf('neon') < 0) d.owned.table.push('neon');
-    if (d.owned.puck.indexOf('classic') < 0) d.owned.puck.push('classic');
-    d.eq = obj(d.eq);
-    d.eq.mallet = d.eq.mallet || 'blue'; d.eq.table = d.eq.table || 'neon'; d.eq.puck = d.eq.puck || 'classic';
-    d.goals = [5, 7, 10].indexOf(d.goals) >= 0 ? d.goals : 7;
-    d.chaos = !!d.chaos; d.mode = d.mode === 2 ? 2 : 1;
-    d.bot = d.bot || 'easy'; d.bought = +d.bought || 0; d.matches = +d.matches || 0;
-    return d;
-  })();
-  // The whole save is one key, so one confirmed write saves everything pending.
-  function persist() {
-    if (store.set('save', save) === false) { saveStatus.failed(); return false; }
-    saveStatus.saved();
-    return true;
+  function $(id) { return document.getElementById(id); }
+  function on(id, fn) { $(id).addEventListener('click', fn); }
+  function mk(tag, cls, txt) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (txt != null) e.textContent = txt;
+    return e;
   }
 
-  function byId(list, id) { for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i]; return list[0]; }
-  function botUnlocked(b) {
-    if (b.id === 'hard') return !!save.beaten.medium;
-    if (b.id === 'insane') return !!save.beaten.hard;
-    return true;
-  }
-  function itemUnlocked(it) { return it.price >= 0 || !!save.beaten[it.unlock]; }
-  // gold/diamond become "owned" automatically when unlocked
-  function syncSpecialSkins() {
-    AH.MALLETS.forEach(function (m) { if (m.price < 0 && itemUnlocked(m) && save.owned.mallet.indexOf(m.id) < 0) save.owned.mallet.push(m.id); });
-  }
-  syncSpecialSkins();
-  if (!botUnlocked(byId(AH.BOTS, save.bot))) save.bot = 'easy';
+  var canvas = $('game'), ui = $('ui'), pauseBtn = $('pauseBtn'), toastsEl = $('toasts');
 
-  /* ============================================================ view */
-  var canvas = document.getElementById('game');
-  var uiEl = document.getElementById('ui');
-  var tableImg = null, tableKey = '';
-  var frameDirty = true; // a paused match repaints only after something visible changed
-  var simulated = 0; // set by __game.sim/bench/autoplay: play statistics stop for that page
-  var view = Kit.fit(canvas, W, H, { maxDpr: 1.5, onResize: function (v) {
-    uiEl.style.transform = 'scale(' + v.scale + ')';
-    uiEl.style.left = canvas.style.left; uiEl.style.top = canvas.style.top;
-    frameDirty = true;
-  } });
-  var ctx = view.ctx;
-  // After a GPU reset the canvas and the cached table/mallet/puck images come back blank.
-  canvas.addEventListener('contextrestored', function () {
-    view.resize(); tableKey = ''; art.clearCaches(); frameDirty = true;
-    if (!$('scr-title').hidden) buildTitle();
-    if (!$('scr-shop').hidden) buildShop();
+  if (Kit.art && Kit.art.init) Kit.art.init({ canvas: canvas, mode: '2d', theme: 'arcade' });
+
+  var frameDirty = true;
+  var view = Kit.fit(canvas, W, H, {
+    onResize: function (v) {
+      ui.style.transform = 'scale(' + v.scale + ')';
+      ui.style.left = canvas.style.left;
+      ui.style.top = canvas.style.top;
+      frameDirty = true;
+    }
   });
+  var ctx = view.ctx;
   var ptr = Kit.pointer(view);
-  var mouseMoved = false;
-  window.addEventListener('pointermove', function () { mouseMoved = true; });
-  canvas.addEventListener('pointerdown', function () { try { canvas.focus(); } catch (e) { /* ignore */ } });
-
-  function ensureTable() {
-    var k = Math.min(2, Math.max(0.5, view.scale * view.dpr));
-    k = Math.round(k * 4) / 4;
-    var key = save.eq.table + '@' + k;
-    if (key !== tableKey) { tableImg = art.buildTable(byId(AH.TABLES, save.eq.table), k); tableKey = key; }
-  }
-
-  /* ============================================================ world */
-  var st = {
-    scene: 'title',          // title | countdown | play | goal | ending | over
-    paused: false,
-    t: 0, stateT: 0,
-    mode: 1, bot: null, goalsToWin: 7, chaos: false, demo: true,
-    score: [0, 0],
-    mallets: [], pucks: [], powers: [],
-    goalHalf: [G.GOAL, G.GOAL], tiny: [0, 0],
-    powerT: 0, respawn: [],
-    stats: null, streak: { side: 0, n: 0 }, maxBehind: [0, 0],
-    hitstop: 0, timeScale: 1, slowT: 0,
-    flash: 0, flashCol: '#fff', zoom: 0, zoomX: G.CX, zoomY: G.CY,
-    big: null, goalFlash: [0, 0],
-    earned: 0, newAwards: [], awardQ: [], awardT: 0, matchPointShown: false, idleT: 0, winner: 0
-  };
+  var fx = Kit.particles();
   var shake = Kit.shake();
-  var dbg = { ownGoals: 0, nudges: 0, goals: 0, log: [] };
+  Kit.muteButton();
 
-  function newStats() { return { goals: [0, 0], hits: [0, 0], fast: [0, 0], saves: [0, 0], run: [0, 0] }; }
+  canvas.addEventListener('contextlost', function (e) { e.preventDefault(); });
+  canvas.addEventListener('contextrestored', function () {
+    view.resize();
+    art.clearCaches();
+    frameDirty = true;
+  });
 
-  function makeMallet(side) {
-    return { side: side, x: side < 0 ? G.L + 130 : G.R - 130, y: G.CY, vx: 0, vy: 0, avx: 0, avy: 0,
-      r: G.MR, big: 0, frozen: 0, sq: 0, sqAng: 0, mood: '', moodT: 0, blink: 0, blinkT: 2 + Math.random() * 3,
-      ctrl: 'ai', skin: null, face: 'normal', bot: null, ai: { t: 0, mode: 'idle', st: 0, snap: null, aimOff: 0, bank: 0, attackT: 0, hes: 0, nap: 0, napT: 6 + Math.random() * 6, contact: false }, name: '' };
-  }
-  var PUCK_TRAIL = 16;
-  function makePuck(x, y, vx, vy) {
-    return { x: x, y: y, vx: vx || 0, vy: vy || 0, r: G.PR, last: 0, bank: 0, fire: 0, scored: 0, alive: true,
-      tx: new Float32Array(PUCK_TRAIL), ty: new Float32Array(PUCK_TRAIL), ti: 0, tn: 0, spawn: 0.35, stillT: 0 };
-  }
-
-  /* ---------------------------------------------------------- effects */
-  var PMAXN = 420;
-  var parts = [];
-  for (var pi = 0; pi < PMAXN; pi++) parts.push({ on: false, x: 0, y: 0, vx: 0, vy: 0, life: 0, max: 1, size: 3, color: '#fff', drag: 0, kind: 0, rot: 0 });
-  var pNext = 0;
-  function emit(x, y, o) {
-    var n = o.count || 10;
-    for (var i = 0; i < n; i++) {
-      var p = parts[pNext]; pNext = (pNext + 1) % PMAXN;
-      var a = o.angle != null ? o.angle + (Math.random() - 0.5) * (o.spread == null ? Math.PI * 2 : o.spread) : Math.random() * Math.PI * 2;
-      var sp = (o.speed || 300) * (0.35 + Math.random() * 0.65);
-      p.on = true; p.x = x; p.y = y; p.vx = Math.cos(a) * sp; p.vy = Math.sin(a) * sp;
-      p.max = (o.life || 0.5) * (0.6 + Math.random() * 0.5); p.life = p.max;
-      p.size = (o.size || 4) * (0.6 + Math.random() * 0.7);
-      p.color = o.colors ? o.colors[(Math.random() * o.colors.length) | 0] : (o.color || '#fff');
-      p.drag = o.drag == null ? 3 : o.drag; p.kind = o.kind || 0; p.rot = Math.random() * 6;
-    }
-  }
-  function updParts(dt) {
-    for (var i = 0; i < PMAXN; i++) {
-      var p = parts[i]; if (!p.on) continue;
-      p.life -= dt; if (p.life <= 0) { p.on = false; continue; }
-      var k = Math.max(0, 1 - p.drag * dt); p.vx *= k; p.vy *= k;
-      p.x += p.vx * dt; p.y += p.vy * dt; p.rot += dt * 8;
-    }
-  }
-  function drawParts() {
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.lineCap = 'round';
-    for (var i = 0; i < PMAXN; i++) {
-      var p = parts[i]; if (!p.on || p.kind === 2) continue;
-      var a = p.life / p.max;
-      ctx.globalAlpha = a;
-      if (p.kind === 1) { // spark streak
-        ctx.strokeStyle = p.color; ctx.lineWidth = p.size;
-        ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x - p.vx * 0.03, p.y - p.vy * 0.03); ctx.stroke();
+  /* ------------------------------------------------------------- audio */
+  function canSfx() { return !st.demo && !Kit.audio.muted; }
+  var S = {
+    hit: function (p) {
+      if (!canSfx()) return;
+      p = Kit.clamp(p || 0.4, 0.12, 1);
+      J.impact(p);
+      Kit.audio.tone({ freq: 240 + p * 340, to: 115, type: 'triangle', dur: 0.07, vol: 0.14 * (0.4 + p * 0.6) });
+    },
+    wall: function (p) {
+      if (!canSfx()) return;
+      p = Kit.clamp(p || 0.3, 0.1, 1);
+      J.tap();
+      Kit.audio.tone({ freq: 520 + p * 260, to: 260, type: 'sine', dur: 0.05, vol: 0.08 + p * 0.08 });
+    },
+    post: function () {
+      if (!canSfx()) return;
+      J.chime(1);
+      Kit.audio.tone({ freq: 1180, to: 880, type: 'triangle', dur: 0.16, vol: 0.2 });
+    },
+    rocket: function () {
+      if (!canSfx()) return;
+      J.whoosh(0.95);
+      Kit.audio.tone({ freq: 260, to: 980, type: 'sawtooth', dur: 0.16, vol: 0.16 });
+    },
+    boost: function () {
+      if (!canSfx()) return;
+      J.whoosh(0.75);
+      Kit.audio.tone({ freq: 330, to: 760, type: 'triangle', dur: 0.1, vol: 0.14 });
+    },
+    save: function () { if (canSfx()) J.chime(2); },
+    goal: function (good) {
+      if (!canSfx()) return;
+      if (good) {
+        J.star(2);
+        [392, 523, 659, 784].forEach(function (f, i) {
+          Kit.audio.tone({ freq: f, type: 'sawtooth', dur: 0.17, vol: 0.15, delay: i * 0.055 });
+        });
       } else {
-        ctx.fillStyle = p.color;
-        ctx.beginPath(); ctx.arc(p.x, p.y, p.size * (0.4 + a * 0.6), 0, Math.PI * 2); ctx.fill();
+        J.fail();
+        Kit.audio.tone({ freq: 290, to: 145, type: 'sawtooth', dur: 0.26, vol: 0.17 });
+      }
+    },
+    power: function () { if (canSfx()) J.coin(3); },
+    fire: function () {
+      if (!canSfx()) return;
+      J.whoosh(1);
+      Kit.audio.noise({ dur: 0.2, vol: 0.2, filter: 2200, to: 420 });
+    },
+    freeze: function () {
+      if (!canSfx()) return;
+      J.chime(3);
+      Kit.audio.tone({ freq: 1560, to: 620, type: 'sine', dur: 0.18, vol: 0.15 });
+    },
+    tick: function (go) { if (canSfx()) J.countdown(go ? 0 : 1); },
+    win: function () { if (canSfx()) J.levelUp(); },
+    lose: function () { if (canSfx()) J.fail(); },
+    click: function () { J.tap(); },
+    buy: function () { J.levelUp(); },
+    nope: function () { J.error(); },
+    unlock: function () { J.star(3); }
+  };
+
+  /* ------------------------------------------------------- save & data */
+  var store = Kit.store('air-hockey');
+  var dda = Kit.dda('air-hockey', { id: 'main', target: 0.68, tiers: 5, start: 0.35 });
+  var saveStatus = Kit.saveStatus({ retry: function () { persist(); } });
+
+  function byId(arr, id) {
+    for (var i = 0; i < arr.length; i++) if (arr[i].id === id) return arr[i];
+    return arr[0];
+  }
+  function plainObj(v) { return v && typeof v === 'object' && !Array.isArray(v) ? v : {}; }
+  function mergeOwned(defaults, saved, list) {
+    var out = defaults.slice();
+    if (Array.isArray(saved)) {
+      for (var i = 0; i < saved.length; i++) {
+        var id = saved[i];
+        if (out.indexOf(id) < 0 && list.some(function (it) { return it.id === id; })) out.push(id);
       }
     }
-    ctx.globalCompositeOperation = 'source-over';
-    for (i = 0; i < PMAXN; i++) { // confetti
-      p = parts[i]; if (!p.on || p.kind !== 2) continue;
-      ctx.globalAlpha = Math.min(1, p.life / p.max * 2);
-      ctx.fillStyle = p.color;
-      var w = p.size * Math.abs(Math.cos(p.rot));
-      ctx.fillRect(p.x - w / 2, p.y - p.size * 0.35, w + 1, p.size * 0.7);
-    }
-    ctx.globalAlpha = 1;
-  }
-  var rings = [];
-  function ring(x, y, col, max, w) { if (rings.length > 12) rings.shift(); rings.push({ x: x, y: y, r: 8, max: max || 90, life: 0.4, t: 0.4, col: col, w: w || 6 }); }
-  var wallFx = [];
-  function wallFlash(x, y, col) { if (wallFx.length > 10) wallFx.shift(); wallFx.push({ x: x, y: y, life: 0.35, col: col }); }
-  var pops = [];
-  function popup(text, x, y, col, size) {
-    if (pops.length > 8) pops.shift();
-    x = Kit.clamp(x, 150, W - 150); y = Kit.clamp(y, 170, H - 40);
-    for (var i = 0; i < pops.length; i++) { // stack instead of overlapping
-      if (Math.abs(pops[i].x - x) < 180 && Math.abs(pops[i].y - y) < 40 && pops[i].life > 0.4) { y = pops[i].y - 44; i = -1; }
-      if (y < 130) break;
-    }
-    pops.push({ text: text, x: x, y: y, life: 1.1, col: col || '#fff', size: size || 34 });
-  }
-  function bigText(text, col, dur, size, sub) { st.big = { text: text, col: col || '#fff', t: 0, dur: dur || 1.2, size: size || 120, sub: sub || '' }; }
-
-  /* ---------------------------------------------------------- setup */
-  function sideSkin(side) {
-    if (st.mode === 1 || st.demo) {
-      if (side < 0) return byId(AH.MALLETS, save.eq.mallet);
-      var b = st.bot; return { id: 'bot_' + b.id, kind: 'solid', color: b.color, ring: b.ring };
-    }
-    return twoPlayerSkin(side);
-  }
-  // 2-player mode: player 1 uses the equipped mallet; player 2 is pink, or lime when
-  // player 1's colour is already pinkish or red
-  function twoPlayerSkin(side) {
-    var mine = byId(AH.MALLETS, save.eq.mallet);
-    if (side < 0) return mine;
-    return ['pink', 'melon', 'donut', 'rainbow'].indexOf(mine.id) >= 0 ? byId(AH.MALLETS, 'lime') : byId(AH.MALLETS, 'pink');
-  }
-  function skinColor(s) {
-    if (s.kind === 'rainbow') return '#ff9ed2';
-    if (s.kind === 'melon') return '#ff5a6e';
-    return s.color;
-  }
-  // 1-player mode: these mallets share their bot's colour, so the player's HUD plate, goal
-  // text and results use the default blue to tell the two sides apart. Picked by eye: when a
-  // mallet skin or bot is added or recoloured, compare every skin with every bot again.
-  var BOT_CLASH = { easy: 'lime', medium: 'gold', insane: 'melon' };
-  function sideColor(side) {
-    if (side < 0 && st.mode === 1 && BOT_CLASH[st.bot.id] === save.eq.mallet) return '#35c8ff';
-    return skinColor(sideSkin(side));
+    return out;
   }
 
-  function setupMatch(demo) {
-    flushAwards(); // awards from a match that was left before its next goal
-    st.demo = demo;
-    st.mode = demo ? 1 : save.mode;
-    st.bot = byId(AH.BOTS, save.bot);
-    st.goalsToWin = save.goals;
-    st.chaos = demo ? false : save.chaos;
-    st.score = [0, 0]; st.stats = newStats(); st.streak = { side: 0, n: 0 }; st.maxBehind = [0, 0];
-    st.goalHalf = [G.GOAL, G.GOAL]; st.tiny = [0, 0]; st.powers = []; st.respawn = []; st.powerT = 4;
-    st.earned = 0; st.newAwards = []; st.matchPointShown = false; st.winner = 0; st.timeScale = 1; st.slowT = 0;
-    st.big = null; st.hitstop = 0; st.idleT = 0; st.mpPending = 0; st.awardT = 0; st.lastRocket = -9; st.flash = 0; st.zoom = 0;
-    var a = makeMallet(-1), b = makeMallet(1);
-    if (demo) { a.ctrl = 'ai'; a.bot = byId(AH.BOTS, 'medium'); b.ctrl = 'ai'; b.bot = st.bot; }
-    else if (st.mode === 1) { a.ctrl = 'p1solo'; b.ctrl = 'ai'; b.bot = st.bot; }
-    else { a.ctrl = 'keys1'; b.ctrl = 'keys2'; }
-    a.skin = sideSkin(-1); b.skin = sideSkin(1);
-    a.face = 'normal'; b.face = (st.mode === 1 || demo) ? st.bot.face : 'normal';
-    a.name = demo ? '' : st.mode === 1 ? 'أنت' : 'اللاعب 1';
-    b.name = demo ? '' : st.mode === 1 ? st.bot.name : 'اللاعب 2';
-    if (a.ctrl === 'p1solo') { var l = clampMallet(a, ptr.x, ptr.y); a.x = l.x; a.y = l.y; }
-    st.mallets = [a, b];
-    st.pucks = [];
-    if (st.chaos) {
-      st.pucks.push(makePuck(G.CX, G.CY - 110, 0, 0));
-      st.pucks.push(makePuck(G.CX, G.CY + 110, 0, 0));
-    } else st.pucks.push(makePuck(G.CX, G.CY, 0, 0));
-    for (var i = 0; i < PMAXN; i++) parts[i].on = false;
-    rings.length = 0; pops.length = 0; wallFx.length = 0;
-    if (demo) { launchPucks(); setScene('play'); }
-    else setScene('countdown');
+  function loadSave() {
+    var d = plainObj(store.get('save', null));
+    var own = plainObj(d.owned), eq = plainObj(d.eq);
+    var mallets = mergeOwned(['blue'], own.mallet, AH.MALLETS);
+    var tables = mergeOwned(['neon', 'lava', 'cyber', 'space'], own.table, AH.TABLES);
+    var pucks = mergeOwned(['classic'], own.puck, AH.PUCKS);
+    return {
+      coins: Math.max(0, d.coins | 0),
+      wins: plainObj(d.wins),
+      beaten: plainObj(d.beaten),
+      owned: { mallet: mallets, table: tables, puck: pucks },
+      eq: {
+        mallet: mallets.indexOf(eq.mallet) >= 0 ? eq.mallet : 'blue',
+        table: tables.indexOf(eq.table) >= 0 ? eq.table : 'neon',
+        puck: pucks.indexOf(eq.puck) >= 0 ? eq.puck : 'classic'
+      },
+      awards: plainObj(d.awards),
+      bot: AH.BOTS.some(function (b) { return b.id === d.bot; }) ? d.bot : 'easy',
+      mode: d.mode === 2 ? 2 : 1,
+      goals: [5, 7, 10].indexOf(d.goals) >= 0 ? d.goals : 7,
+      chaos: typeof d.chaos === 'boolean' ? d.chaos : true,
+      matches: Math.max(0, d.matches | 0),
+      totalGoals: Math.max(0, d.totalGoals | 0)
+    };
   }
-  function launchPucks() {
-    st.pucks.forEach(function (p, i) {
-      var dir = st.pucks.length > 1 ? (i % 2 ? 1 : -1) : (Math.random() < 0.5 ? -1 : 1);
-      p.vx = dir * 220; p.vy = (Math.random() - 0.5) * 160; p.spawn = 0;
+  var save = loadSave();
+
+  function persist() {
+    if (store.set('save', save)) saveStatus.saved();
+    else saveStatus.failed();
+    syncCoinsUI();
+  }
+
+  /* ------------------------------------------------------------- state */
+  var shopTab = 'mallet';
+  var uiScreen = 'title';
+  var lastPtr = { x: W / 2, y: H / 2 };
+
+  var st = {
+    demo: true,
+    paused: false,
+    scene: 'play',
+    t: 0,
+    stateT: 0,
+    countBeat: 0,
+    mode: save.mode,
+    bot: byId(AH.BOTS, save.bot),
+    table: byId(AH.TABLES, save.eq.table),
+    puckSkin: byId(AH.PUCKS, save.eq.puck),
+    goalsToWin: save.goals,
+    chaos: save.chaos,
+    score: [0, 0],
+    maxDeficit: 0,
+    streak: [0, 0],
+    saves: [0, 0],
+    shots: [0, 0],
+    topKmh: [0, 0],
+    powerHits: 0,
+    lastScorer: 0,
+    goalFlash: [0, 0],
+    banner: null,
+    mallets: [],
+    pucks: [],
+    powers: [],
+    rings: [],
+    popups: [],
+    powerT: 3.8,
+    tiny: [0, 0],
+    useKeys: false,
+    ptrActive: false,
+    lastRocket: -10,
+    awardQ: [],
+    matchAwards: [],
+    matchCoins: 0,
+    committed: false
+  };
+
+  function sideIdx(side) { return side < 0 ? 0 : 1; }
+
+  function makeMallet(side, skin, face) {
+    var x = side < 0 ? G.L + 140 : G.R - 140;
+    return {
+      side: side, x: x, y: G.CY, vx: 0, vy: 0, avx: 0, avy: 0,
+      r: G.MR, skin: skin, face: face || 'player',
+      sq: 0, sqAng: 0, mood: '', moodT: 0, blinkT: Kit.rand(1.8, 4.2), blink: 0,
+      big: 0, frozen: 0, boost: 0, boostCd: 0,
+      aiT: 0, tx: x, ty: G.CY, errY: 0
+    };
+  }
+
+  function makePuck(x, y, vx, vy) {
+    return {
+      x: x, y: y, vx: vx || 0, vy: vy || 0, r: G.PR,
+      alive: true, scored: false, spawn: 0, fire: 0,
+      lastHit: 0, banked: false, savedClose: false, stuck: 0,
+      trail: []
+    };
+  }
+
+  function emit(x, y, color, count, speed) {
+    fx.burst(x, y, { count: count || 14, color: color, speed: speed || 300, life: 0.45, size: 6, gravity: 0 });
+  }
+  function ring(x, y, color, maxR) {
+    if (Kit.motion.reduced()) return;
+    st.rings.push({ x: x, y: y, r: 12, maxR: maxR || 86, life: 0.34, max: 0.34, color: color || '#00e5ff' });
+  }
+  function popup(x, y, text, color, size) {
+    st.popups.push({
+      x: Kit.clamp(x, G.L + 110, G.R - 110),
+      y: Kit.clamp(y, G.T + 46, G.B - 36),
+      text: text, color: color || '#fff06a', size: size || 28, life: 0.95, max: 0.95
     });
   }
-  function setScene(s) { st.scene = s; st.stateT = 0; }
+  function setBanner(text, sub, color, dur) {
+    st.banner = { text: text, sub: sub || '', color: color || '#fff06a', t: 0, dur: dur || 1.1 };
+  }
 
-  /* ---------------------------------------------------------- bounds */
-  function clampMallet(m, x, y) {
-    var r = m.r;
-    var minX = m.side < 0 ? G.L + r : G.CX + r;
-    var maxX = m.side < 0 ? G.CX - r : G.R - r;
-    x = Kit.clamp(x, minX, maxX); y = Kit.clamp(y, G.T + r, G.B - r);
-    // rounded corners
-    var cr = G.CR - r;
-    if (cr > 0) {
-      var cxL = G.L + G.CR, cxR = G.R - G.CR, cyT = G.T + G.CR, cyB = G.B - G.CR;
-      if ((x < cxL || x > cxR) && (y < cyT || y > cyB)) {
-        var ccx = x < cxL ? cxL : cxR, ccy = y < cyT ? cyT : cyB;
-        var dx = x - ccx, dy = y - ccy, d = Math.sqrt(dx * dx + dy * dy);
-        if (d > cr) { x = ccx + dx / d * cr; y = ccy + dy / d * cr; }
+  /* ------------------------------------------------------------ awards */
+  function unlockedGearCount() {
+    return (save.owned.mallet.length - 1) + save.owned.puck.length - 1;
+  }
+
+  function earn(id, immediateToast) {
+    if (save.awards[id]) return false;
+    var def = byId(AH.AWARDS, id);
+    if (!def) return false;
+    save.awards[id] = 1;
+    save.coins += AH.AWARD_COINS;
+    st.matchAwards.push(def);
+    if (immediateToast) showToast(def);
+    else st.awardQ.push(def);
+    persist();
+    syncAwardsCount();
+    return true;
+  }
+
+  function showToast(def) {
+    S.unlock();
+    var el = document.createElement('div');
+    el.className = 'toast';
+    el.innerHTML = '<span>🏆 إنجاز: ' + def.name + '</span><span dir="ltr">+' + AH.AWARD_COINS + ' 🪙</span>';
+    toastsEl.appendChild(el);
+    setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 3100);
+  }
+
+  function flushAwards() {
+    while (st.awardQ.length) showToast(st.awardQ.shift());
+  }
+
+  /* ---------------------------------------------------- match setup/flow */
+  function equipSkins() {
+    st.table = byId(AH.TABLES, save.eq.table);
+    st.puckSkin = byId(AH.PUCKS, save.eq.puck);
+    var p1Skin = byId(AH.MALLETS, save.eq.mallet);
+    var p2Skin;
+    if (st.mode === 2) {
+      p2Skin = save.eq.mallet === 'magma' ? byId(AH.MALLETS, 'volt') : byId(AH.MALLETS, 'magma');
+    } else {
+      p2Skin = {
+        id: 'bot_' + st.bot.id,
+        kind: st.bot.mech === 'boss' ? 'saw' : 'cyber',
+        color: st.bot.color,
+        ring: st.bot.ring
+      };
+    }
+    var face2 = st.mode === 2 ? 'player' : st.bot.mech;
+    return [p1Skin, p2Skin, face2];
+  }
+
+  function resetField(serveDir) {
+    var eq = equipSkins();
+    st.mallets = [
+      makeMallet(-1, eq[0], 'player'),
+      makeMallet(1, eq[1], eq[2])
+    ];
+    st.tiny[0] = 0; st.tiny[1] = 0;
+    st.powers.length = 0;
+    st.powerT = 3.8;
+    servePuck(serveDir || 0);
+  }
+
+  function servePuck(dir) {
+    var sx = G.CX + (dir ? dir * 110 : 0);
+    var vx = dir ? -dir * 180 : 0;
+    var vy = st.demo ? (Math.random() < 0.5 ? 240 : -240) : 0;
+    if (st.demo && !vx) vx = Math.random() < 0.5 ? 420 : -420;
+    st.pucks = [makePuck(sx, G.CY, vx, vy)];
+  }
+
+  function setScene(sc) {
+    st.scene = sc;
+    st.stateT = 0;
+    frameDirty = true;
+  }
+
+  function startDemo() {
+    st.demo = true;
+    st.paused = false;
+    st.mode = save.mode;
+    st.bot = byId(AH.BOTS, save.bot);
+    st.goalsToWin = save.goals;
+    st.chaos = save.chaos;
+    st.score = [0, 0];
+    st.banner = null;
+    st.rings.length = 0;
+    st.popups.length = 0;
+    fx.clear();
+    resetField(0);
+    st.mallets[0].face = 'turbo';
+    st.mallets[1].face = st.bot.mech;
+    setScene('play');
+    pauseBtn.hidden = true;
+  }
+
+  function startMatch() {
+    S.click();
+    toastsEl.innerHTML = '';
+    st.demo = false;
+    st.paused = false;
+    st.committed = false;
+    st.mode = save.mode;
+    st.bot = byId(AH.BOTS, save.bot);
+    st.goalsToWin = save.goals;
+    st.chaos = save.chaos;
+    st.score = [0, 0];
+    st.maxDeficit = 0;
+    st.streak = [0, 0];
+    st.saves = [0, 0];
+    st.shots = [0, 0];
+    st.topKmh = [0, 0];
+    st.powerHits = 0;
+    st.lastScorer = 0;
+    st.goalFlash = [0, 0];
+    st.awardQ = [];
+    st.matchAwards = [];
+    st.matchCoins = 0;
+    st.lastRocket = -10;
+    st.useKeys = st.mode === 2;
+    st.ptrActive = false;
+    ptr.reset();
+    lastPtr.x = ptr.x;
+    lastPtr.y = ptr.y;
+    st.rings.length = 0;
+    st.popups.length = 0;
+    fx.clear();
+    resetField(0);
+    st.countBeat = 3;
+    setBanner('3', st.mode === 2 ? 'مواجهة لاعبين!' : 'ضد ' + st.bot.name, '#5ef2ff', 0.65);
+    S.tick(false);
+    setScene('ready');
+    openScreen('none');
+    pauseBtn.hidden = false;
+    if (st.mode === 1) { var warm = dda.level; void warm; }
+    Kit.stats.round(st.mode === 2 ? 'duo' : 'cpu-' + st.bot.id);
+    try { canvas.focus({ preventScroll: true }); } catch (e) { canvas.focus(); }
+  }
+
+  function pauseGame(withSfx) {
+    if (st.demo || st.paused || st.scene === 'over') return;
+    if (withSfx) S.click();
+    st.paused = true;
+    frameDirty = true;
+    Kit.keys.reset();
+    ptr.reset();
+    openScreen('pause');
+  }
+
+  function resumeGame() {
+    if (!st.paused) return;
+    S.click();
+    st.paused = false;
+    frameDirty = true;
+    Kit.keys.reset();
+    ptr.reset();
+    openScreen('none');
+    pauseBtn.hidden = false;
+    try { canvas.focus({ preventScroll: true }); } catch (e) { canvas.focus(); }
+  }
+
+  function goMenu() {
+    S.click();
+    if (!st.demo && st.scene !== 'over') {
+      if (st.scene === 'ending' && !st.committed) commitMatch();
+      else if (!st.committed) Kit.stats.end('quit', st.score[0]);
+    }
+    flushAwards();
+    startDemo();
+    openScreen('title');
+  }
+
+  function spawnPower(forcedId) {
+    if (st.powers.length >= 2) return null;
+    var def = forcedId ? byId(AH.POWERS, forcedId) : Kit.pick(AH.POWERS);
+    var px = Kit.rand(G.CX - 190, G.CX + 190);
+    var py = Kit.rand(G.T + 96, G.B - 96);
+    for (var i = 0; i < st.powers.length; i++) {
+      if (Kit.dist(px, py, st.powers[i].x, st.powers[i].y) < 110) {
+        py = py < G.CY ? G.CY + 120 : G.CY - 120;
       }
     }
-    return { x: x, y: y };
+    var pw = { x: px, y: py, r: 30, def: def, age: 0, life: 11, seed: Math.random() * 6.28 };
+    st.powers.push(pw);
+    ring(px, py, def.color, 64);
+    return pw;
   }
 
-  /* ---------------------------------------------------------- input */
-  var p1Mode = 'mouse';
-  function keyAxis(up, down, left, right) {
-    var ax = 0, ay = 0;
-    if (Kit.keys.anyDown(left)) ax -= 1;
-    if (Kit.keys.anyDown(right)) ax += 1;
-    if (Kit.keys.anyDown(up)) ay -= 1;
-    if (Kit.keys.anyDown(down)) ay += 1;
-    return { x: ax, y: ay };
-  }
-  var K1 = [['KeyW'], ['KeyS'], ['KeyA'], ['KeyD']];
-  var K2 = [['ArrowUp'], ['ArrowDown'], ['ArrowLeft'], ['ArrowRight']];
-  var KS = [['KeyW', 'ArrowUp'], ['KeyS', 'ArrowDown'], ['KeyA', 'ArrowLeft'], ['KeyD', 'ArrowRight']];
-
-  function keyMove(m, ax, dt) {
-    var len = Math.sqrt(ax.x * ax.x + ax.y * ax.y);
-    if (len > 0) { ax.x /= len; ax.y /= len; }
-    if (ax.x) m.avx += ax.x * KEY_ACC * dt; else m.avx *= Math.exp(-14 * dt);
-    if (ax.y) m.avy += ax.y * KEY_ACC * dt; else m.avy *= Math.exp(-14 * dt);
-    // turning quickly: kill opposing velocity faster
-    if (ax.x && m.avx * ax.x < 0) m.avx *= Math.exp(-10 * dt);
-    if (ax.y && m.avy * ax.y < 0) m.avy *= Math.exp(-10 * dt);
-    var sp = Math.sqrt(m.avx * m.avx + m.avy * m.avy);
-    if (sp > KEY_MAX) { m.avx *= KEY_MAX / sp; m.avy *= KEY_MAX / sp; }
-    return { x: m.x + m.avx * dt, y: m.y + m.avy * dt };
-  }
-  function seekMove(m, tx, ty, maxSp, acc, dt) {
-    var dvx = (tx - m.x) * 9, dvy = (ty - m.y) * 9;
-    var l = Math.sqrt(dvx * dvx + dvy * dvy);
-    if (l > maxSp) { dvx *= maxSp / l; dvy *= maxSp / l; }
-    var ax = dvx - m.avx, ay = dvy - m.avy, al = Math.sqrt(ax * ax + ay * ay), lim = acc * dt;
-    if (al > lim) { ax *= lim / al; ay *= lim / al; }
-    m.avx += ax; m.avy += ay;
-    return { x: m.x + m.avx * dt, y: m.y + m.avy * dt };
-  }
-
-  // Where does the mallet want to be at the end of this step?
-  function malletTarget(m, dt) {
-    if (m.frozen > 0) { m.avx = m.avy = 0; return { x: m.x, y: m.y }; }
-    if (st.scene === 'ending' || st.scene === 'over') { m.avx *= 0.9; m.avy *= 0.9; return { x: m.x + m.avx * dt, y: m.y + m.avy * dt }; }
-    if (m.ctrl === 'keys1') return keyMove(m, keyAxis(K1[0], K1[1], K1[2], K1[3]), dt);
-    if (m.ctrl === 'keys2') return keyMove(m, keyAxis(K2[0], K2[1], K2[2], K2[3]), dt);
-    if (m.ctrl === 'p1solo') {
-      var ax = keyAxis(KS[0], KS[1], KS[2], KS[3]);
-      if (ax.x || ax.y) { p1Mode = 'keys'; mouseMoved = false; }
-      else if (mouseMoved) p1Mode = 'mouse';
-      if (p1Mode === 'keys') return keyMove(m, ax, dt);
-      var c = clampMallet(m, ptr.x, ptr.y);
-      var dx = c.x - m.x, dy = c.y - m.y, d = Math.sqrt(dx * dx + dy * dy), mx = MOUSE_MAX * dt;
-      if (d > mx) { dx *= mx / d; dy *= mx / d; }
-      m.avx = dx / dt; m.avy = dy / dt;
-      return { x: m.x + dx, y: m.y + dy };
-    }
-    return aiTarget(m, dt);
-  }
-
-  /* ============================================================== AI */
-  function threatPuck(m) {
-    var best = null, bestScore = -1e9, s = m.side, ownX = s < 0 ? G.L : G.R;
-    for (var i = 0; i < st.pucks.length; i++) {
-      var p = st.pucks[i]; if (!p.alive || p.scored) continue;
-      var dist = Math.abs(p.x - ownX);
-      var approaching = (s > 0 ? p.vx > 0 : p.vx < 0);
-      var sc = -dist + (approaching ? Math.abs(p.vx) * 0.5 : 0);
-      var inHalf = s > 0 ? p.x > G.CX : p.x < G.CX;
-      if (inHalf) sc += 300;
-      if (sc > bestScore) { bestScore = sc; best = p; }
-    }
-    return best;
-  }
-  // predict y where the puck crosses x = lineX (reflecting off top/bottom walls)
-  function predictY(p, lineX) {
-    if (Math.abs(p.vx) < 1) return { y: p.y, t: 99 };
-    var t = (lineX - p.x) / p.vx;
-    if (t < 0) return { y: p.y, t: 99 };
-    var top = G.T + G.PR, bot = G.B - G.PR, span = bot - top;
-    var y = p.y + p.vy * t - top;
-    var m = ((y % (2 * span)) + 2 * span) % (2 * span);
-    if (m > span) m = 2 * span - m;
-    return { y: top + m, t: t };
-  }
-
-  function segDist(px, py, ax, ay, bx, by) {
-    var vx = bx - ax, vy = by - ay, l2 = vx * vx + vy * vy;
-    var t = l2 > 0 ? Kit.clamp(((px - ax) * vx + (py - ay) * vy) / l2, 0, 1) : 0;
-    var dx = ax + vx * t - px, dy = ay + vy * t - py;
-    return Math.sqrt(dx * dx + dy * dy);
-  }
-  // Keep the AI from shoving a puck that sits between it and its own goal.
-  function safeSeek(m, tx, ty, maxSp, acc, dt) {
-    var s = m.side, rs = m.r + G.PR, best = null;
-    for (var i = 0; i < st.pucks.length; i++) {
-      var p = st.pucks[i];
-      if (!p.alive || p.scored) continue;
-      if ((p.x - m.x) * s < -rs * 0.25) continue;            // puck is in front of us: fine
-      if ((tx - m.x) * s < 0 && Math.abs(ty - m.y) < 1) continue;
-      if (segDist(p.x, p.y, m.x, m.y, tx, ty) > rs + 10) continue;
-      best = p; break;
-    }
-    if (best) {
-      var sg = m.y < best.y ? -1 : 1;
-      var off = rs + 46;
-      if (best.y + sg * off < G.T + m.r || best.y + sg * off > G.B - m.r) sg = -sg;
-      if (Math.abs(m.y - best.y) < rs + 12) { tx = m.x - s * 12; ty = best.y + sg * off; }
-      else { tx = best.x + s * rs * 0.5; ty = m.y; }
-    }
-    return seekMove(m, tx, ty, maxSp, acc, dt);
-  }
-
-  function aiTarget(m, dt) {
-    var b = m.bot, ai = m.ai, s = m.side;
-    var speed = b.speed, acc = b.accel, react = b.react, err = b.err;
-    // rubber band so kids stay in the match
-    if (st.mode === 1 && !st.demo) {
-      var diff = st.score[1] - st.score[0];
-      if (diff >= 3) { speed *= 0.84; react *= 1.5; err *= 1.4; }
-      else if (diff >= 2) { speed *= 0.92; }
-      else if (diff <= -3 && b.id !== 'insane') { speed *= 1.08; }
-    }
-    var ownX = s > 0 ? G.R : G.L, oppX = s > 0 ? G.L : G.R;
-    var homeX = ownX - s * b.depth;
-    if (st.scene === 'countdown') return seekMove(m, homeX, G.CY, speed * 0.6, acc, dt);
-    // sleepy bot naps now and then
-    if (b.face === 'sleepy' && !st.demo) {
-      ai.napT -= dt;
-      if (ai.napT <= 0 && ai.nap <= 0) { ai.nap = 0.75; ai.napT = 7 + Math.random() * 6; }
-      if (ai.nap > 0) { ai.nap -= dt; m.avx *= 0.85; m.avy *= 0.85; return { x: m.x + m.avx * dt, y: m.y + m.avy * dt }; }
-    }
-    ai.t -= dt;
-    var tp = threatPuck(m);
-    if (!tp) return seekMove(m, homeX, G.CY, speed * 0.5, acc, dt);
-    if (ai.t <= 0 || !ai.snap || ai.snap.p !== tp) {
-      ai.t = react * (0.7 + Math.random() * 0.6);
-      var old = ai.snap;
-      // misjudgment is re-rolled only when the puck's path changes (new shot / bounce)
-      if (!old || old.p !== tp || Math.abs(old.vx - tp.vx) + Math.abs(old.vy - tp.vy) > 160) ai.noise = (Math.random() - 0.5) * 2 * err;
-      ai.snap = { p: tp, x: tp.x, y: tp.y, vx: tp.vx, vy: tp.vy, age: 0 };
-    }
-    ai.snap.age += dt;
-    var sp = ai.snap;
-    var px = sp.x + sp.vx * sp.age, py = Kit.clamp(sp.y + sp.vy * sp.age, G.T + G.PR, G.B - G.PR);
-    var pvx = sp.vx, pvy = sp.vy, pspeed = Math.sqrt(pvx * pvx + pvy * pvy);
-    var inHalf = s > 0 ? px > G.CX - 6 : px < G.CX + 6;
-    var toward = pvx * s > 60;
-    var tx, ty, sMax = speed;
-
-    if (ai.mode === 'strike') {
-      ai.st -= dt;
-      tx = tp.x + ai.dir.x * 70; ty = tp.y + ai.dir.y * 70;
-      sMax = speed * b.strike;
-      if (ai.contact || ai.st <= 0 || !inHalf || (tp.x - m.x) * s > -m.r * 0.2) { ai.mode = 'recover'; ai.st = 0.28; ai.contact = false; }
-      var r1 = seekMove(m, tx, ty, sMax, acc * 1.5, dt);
-      return r1;
-    }
-    if (ai.mode === 'recover') {
-      ai.st -= dt;
-      if (ai.st <= 0) ai.mode = 'idle';
-      return safeSeek(m, homeX, G.CY + (py - G.CY) * 0.4, speed * 0.8, acc, dt);
-    }
-    var canAttack = inHalf && pspeed < b.attackMax && (!toward || pspeed < 320);
-    if (canAttack) {
-      ai.hes += dt;
-      if (ai.mode !== 'attack') {
-        ai.mode = 'attack'; ai.attackT = 0;
-        ai.aimOff = (Math.random() - 0.5) * G.GOAL * 1.2;
-        ai.bank = Math.random() < b.bank ? (Math.random() < 0.5 ? -1 : 1) : 0;
-        // smarter bots aim for the side of the goal the defender is NOT covering
-        var def = st.mallets[s > 0 ? 0 : 1];
-        if (b.bank >= 0.25 && def) {
-          var open = def.y < G.CY ? 1 : -1;
-          ai.aimOff = open * G.GOAL * (0.45 + Math.random() * 0.3);
-          if (ai.bank) ai.bank = open > 0 ? 1 : -1;
-        }
+  function commitMatch() {
+    if (st.committed || st.demo) return;
+    st.committed = true;
+    var p1Won = st.score[0] > st.score[1];
+    save.matches++;
+    if (st.mode === 2) {
+      st.matchCoins = 20;
+      save.coins += st.matchCoins;
+      earn('friends', false);
+      Kit.stats.end('end', Math.max(st.score[0], st.score[1]));
+    } else {
+      var base = p1Won ? st.bot.coins : Math.max(6, st.score[0] * 3);
+      var cleanBonus = p1Won && st.score[1] === 0 ? 10 : 0;
+      st.matchCoins = base + cleanBonus;
+      save.coins += st.matchCoins;
+      if (p1Won) {
+        var bid = st.bot.id;
+        save.wins[bid] = (save.wins[bid] | 0) + 1;
+        save.beaten[bid] = true;
+        AH.MALLETS.forEach(function (m) {
+          if (m.unlock === bid && save.owned.mallet.indexOf(m.id) < 0) save.owned.mallet.push(m.id);
+        });
+        earn('win1', false);
+        earn('beat_' + bid, false);
+        if (st.score[1] === 0) earn('clean', false);
+        if (st.maxDeficit >= 3) earn('comeback', false);
+        if (st.chaos) earn('chaos', false);
+        if (unlockedGearCount() >= 3) earn('shopper', false);
       }
-    } else { ai.hes = 0; if (ai.mode === 'attack') ai.mode = 'idle'; }
-
-    if (ai.mode === 'attack' && ai.hes >= b.hesitate) {
-      ai.attackT += dt;
-      var lead = b.lead * 0.14;
-      var qx = Kit.clamp(px + pvx * lead, G.L + G.PR, G.R - G.PR), qy = Kit.clamp(py + pvy * lead, G.T + G.PR, G.B - G.PR);
-      var gy = G.CY + ai.aimOff + ai.noise * 0.5;
-      if (ai.bank) gy = ai.bank < 0 ? 2 * (G.T + G.PR) - gy : 2 * (G.B - G.PR) - gy;
-      var dx = oppX - qx, dy = gy - qy, dl = Math.sqrt(dx * dx + dy * dy) || 1;
-      var d = { x: dx / dl, y: dy / dl };
-      var rs = m.r + G.PR;
-      var bx = qx - d.x * (rs + 16), by = qy - d.y * (rs + 16);
-      var relx = m.x - qx, rely = m.y - qy;
-      var along = relx * d.x + rely * d.y;
-      var perp = -relx * d.y + rely * d.x;
-      var db = Math.sqrt((m.x - bx) * (m.x - bx) + (m.y - by) * (m.y - by));
-      // behind-point unreachable (puck on the back wall)? just hit it
-      var bc = clampMallet(m, bx, by);
-      var unreachable = Math.abs(bc.x - bx) + Math.abs(bc.y - by) > 20;
-      if (ai.attackT > 1.8 || unreachable && ai.attackT > 0.5) {
-        var ddx = qx - m.x, ddy = qy - m.y, ddl = Math.sqrt(ddx * ddx + ddy * ddy) || 1;
-        if (ddx * s < -rs * 0.3) { ai.mode = 'strike'; ai.st = 0.3; ai.dir = { x: ddx / ddl, y: ddy / ddl }; ai.contact = false; }
-        else if (ai.attackT > 3) { ai.attackT = 0; ai.aimOff = (Math.random() - 0.5) * G.GOAL * 1.2; ai.bank = 0; }
-      }
-      if (db < 24 + err * 0.12 || (along < -rs * 0.7 && Math.abs(perp) < rs * 0.35)) {
-        ai.mode = 'strike'; ai.st = 0.32; ai.dir = d; ai.contact = false;
-        return seekMove(m, qx + d.x * 70, qy + d.y * 70, speed * b.strike, acc * 1.5, dt);
-      }
-      if (along > -rs * 0.45) {
-        // wrong side: circle around the puck
-        var sg = perp >= 0 ? 1 : -1;
-        var wx = qx - d.y * sg * (rs + 34) - d.x * (rs * 0.6), wy = qy + d.x * sg * (rs + 34) - d.y * (rs * 0.6);
-        if (wy < G.T + m.r + 4 || wy > G.B - m.r - 4) { sg = -sg; wx = qx - d.y * sg * (rs + 34) - d.x * (rs * 0.6); wy = qy + d.x * sg * (rs + 34) - d.y * (rs * 0.6); }
-        return safeSeek(m, wx, wy, speed, acc, dt);
-      }
-      return safeSeek(m, bx, by, speed, acc, dt);
+      var diff = (st.score[0] - st.score[1]) / Math.max(1, st.goalsToWin);
+      dda.result(Kit.clamp(0.5 + diff * 0.5, 0, 1));
+      Kit.stats.end(p1Won ? 'win' : 'lose', st.score[0]);
     }
-
-    if (toward && pspeed > 120) {
-      var pr = b.naive ? { y: py + pvy * 0.08 } : predictY({ x: px, y: py, vx: pvx, vy: pvy }, homeX);
-      ty = pr.y + ai.noise;
-      ty = Kit.clamp(ty, G.CY - G.GOAL - 40, G.CY + G.GOAL + 40);
-      tx = homeX;
-      // very close & fast: step into the line between puck and goal
-      return safeSeek(m, tx, ty, speed, acc, dt);
-    }
-    // idle: shadow the puck between it and our goal
-    ty = G.CY + (py - G.CY) * 0.55;
-    tx = homeX + (inHalf ? -s * 20 : 0);
-    return safeSeek(m, tx, ty, speed * 0.6, acc, dt);
+    persist();
+    buildBotCards();
   }
 
-  /* ========================================================= physics */
-  var tmpStart = [{ x: 0, y: 0 }, { x: 0, y: 0 }];
-  // during the countdown the pucks are held and mallets must keep a little distance
-  function keepAway(m, c) {
-    for (var i = 0; i < st.pucks.length; i++) {
-      var p = st.pucks[i], min = p.r + m.r + 26;
-      var dx = c.x - p.x, dy = c.y - p.y, d = Math.sqrt(dx * dx + dy * dy);
-      if (d < min) {
-        if (d < 0.01) { dx = m.side; dy = 0; d = 1; }
-        c = clampMallet(m, p.x + dx / d * min, p.y + dy / d * min);
-        if (Math.abs(c.x - p.x) < min && Math.abs(c.y - p.y) < min) c = clampMallet(m, p.x + m.side * min, c.y);
-      }
-    }
-    return c;
-  }
-  function physicsStep(dt) {
-    var ms = st.mallets, i, j, k, p, m;
-    var held = st.scene === 'countdown';
-    // mallet radius (big power-up)
-    for (i = 0; i < ms.length; i++) {
-      m = ms[i];
-      var targetR = m.big > 0 ? G.BIG : G.MR;
-      m.r += (targetR - m.r) * Math.min(1, dt * 10);
-    }
-    var ends = [];
-    var maxDisp = 0;
-    for (i = 0; i < ms.length; i++) {
-      m = ms[i];
-      var tgt = malletTarget(m, dt);
-      var c = clampMallet(m, tgt.x, tgt.y);
-      if (held) c = keepAway(m, c);
-      if (m.ctrl !== 'p1solo' || p1Mode === 'keys') {
-        // bumping the edge kills velocity along it
-        if (c.x !== tgt.x) m.avx = 0;
-        if (c.y !== tgt.y) m.avy = 0;
-      }
-      tmpStart[i].x = m.x; tmpStart[i].y = m.y;
-      ends.push(c);
-      m.vx = (c.x - m.x) / dt; m.vy = (c.y - m.y) / dt;
-      maxDisp = Math.max(maxDisp, Math.abs(c.x - m.x) + Math.abs(c.y - m.y));
-    }
-    var maxP = 0;
-    for (i = 0; i < st.pucks.length; i++) { p = st.pucks[i]; maxP = Math.max(maxP, (Math.abs(p.vx) + Math.abs(p.vy)) * dt); }
-    var n = Math.min(20, Math.max(1, Math.ceil((maxDisp + maxP) / 7)));
-    var h = dt / n;
-    for (k = 1; k <= n; k++) {
-      for (i = 0; i < ms.length; i++) {
-        m = ms[i];
-        m.x += (ends[i].x - tmpStart[i].x) / n; m.y += (ends[i].y - tmpStart[i].y) / n;
-      }
-      for (i = 0; i < st.pucks.length; i++) {
-        p = st.pucks[i];
-        if (!p.alive || held) continue;
-        if (p.scored) { p.x += p.vx * h; p.y += p.vy * h; pocket(p); continue; }
-        p.x += p.vx * h; p.y += p.vy * h;
-        for (j = 0; j < ms.length; j++) malletHit(ms[j], p);
-        walls(p);
-        // squeeze: if still inside a mallet, push the mallet back instead
-        for (j = 0; j < ms.length; j++) {
-          m = ms[j];
-          var dx = p.x - m.x, dy = p.y - m.y, rs = p.r + m.r, d2 = dx * dx + dy * dy;
-          if (d2 < rs * rs) {
-            var d = Math.sqrt(d2) || 0.01;
-            var cm = clampMallet(m, p.x - dx / d * rs, p.y - dy / d * rs);
-            m.x = cm.x; m.y = cm.y;
-          }
-        }
-      }
-      if (st.pucks.length > 1) puckPuck();
-    }
-    for (i = 0; i < ms.length; i++) {
-      m = ms[i];
-      var cc = clampMallet(m, m.x, m.y); m.x = cc.x; m.y = cc.y;
-    }
-    // drag, speed caps, trails, stuck check
-    for (i = 0; i < st.pucks.length; i++) {
-      p = st.pucks[i];
-      if (!p.alive) continue;
-      var damp = Math.exp(-0.16 * dt);
-      p.vx *= damp; p.vy *= damp;
-      var sp = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
-      var cap = p.fire > 0 ? PMAX_FIRE : PMAX;
-      if (sp > cap) { p.vx *= cap / sp; p.vy *= cap / sp; sp = cap; }
-      if (p.fire > 0) {
-        p.fire -= dt;
-        if (sp < 900 && sp > 1) { p.vx *= 900 / sp; p.vy *= 900 / sp; }
-        if (Math.random() < 0.8) emit(p.x, p.y, { count: 2, colors: ['#ffdd33', '#ff8a1f', '#ff3d1f'], speed: 90, life: 0.35, size: 7, drag: 4 });
-      }
-      p.tx[p.ti] = p.x; p.ty[p.ti] = p.y; p.ti = (p.ti + 1) % PUCK_TRAIL; if (p.tn < PUCK_TRAIL) p.tn++;
-      if (p.spawn > 0) p.spawn -= dt;
-      if (sp < 30 && !p.scored) {
-        p.stillT += dt;
-        if (p.stillT > (st.demo ? 2 : 5)) { // nudge a dead puck back into play
-          p.stillT = 0; dbg.nudges++;
-          p.vx = (G.CX - p.x) * 0.9 + (Math.random() - 0.5) * 80; p.vy = (G.CY - p.y) * 0.6 + (Math.random() - 0.5) * 80;
-        }
-      } else p.stillT = 0;
-    }
-  }
+  function onGoal(sideScoredOn, puck) {
+    if (st.scene !== 'play') return;
+    puck.scored = true;
+    puck.alive = false;
+    var scorerIdx = sideScoredOn > 0 ? 0 : 1;
+    var victimIdx = 1 - scorerIdx;
+    var gx = sideScoredOn < 0 ? G.L : G.R;
+    var col = scorerIdx === 0 ? st.table.a : st.table.b;
 
-  function malletHit(m, p) {
-    var dx = p.x - m.x, dy = p.y - m.y, rs = p.r + m.r, d2 = dx * dx + dy * dy;
-    if (d2 >= rs * rs) return;
-    var d = Math.sqrt(d2);
-    var nx, ny;
-    if (d < 0.001) { nx = m.side < 0 ? 1 : -1; ny = 0; } else { nx = dx / d; ny = dy / d; }
-    p.x = m.x + nx * rs; p.y = m.y + ny * rs;
-    var rvx = p.vx - m.vx, rvy = p.vy - m.vy, vn = rvx * nx + rvy * ny;
-    if (vn >= 0) return;
-    var before = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
-    var wasToward = m.side < 0 ? p.vx < -500 : p.vx > 500;
-    var saveCandidate = false;
-    if (wasToward) {
-      var pr = predictY(p, m.side < 0 ? G.L : G.R);
-      if (Math.abs(pr.y - G.CY) < st.goalHalf[m.side < 0 ? 0 : 1] + 10) saveCandidate = true;
-    }
-    p.vx -= (1 + E_MALLET) * vn * nx; p.vy -= (1 + E_MALLET) * vn * ny;
-    var cap = p.fire > 0 ? PMAX_FIRE : PMAX;
-    var sp = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
-    if (sp > cap) { p.vx *= cap / sp; p.vy *= cap / sp; sp = cap; }
-    onHit(m, p, -vn, nx, ny, sp, saveCandidate && before > 500);
-  }
+    st.goalFlash[victimIdx] = 1;
+    emit(gx, puck.y, col, 36, 520);
+    emit(gx, puck.y, '#fff06a', 18, 380);
+    ring(gx, puck.y, col, 175);
+    shake.add(14);
 
-  function walls(p) {
-    var r = p.r;
-    var cxL = G.L + G.CR, cxR = G.R - G.CR, cyT = G.T + G.CR, cyB = G.B - G.CR;
-    if ((p.x < cxL || p.x > cxR) && (p.y < cyT || p.y > cyB)) {
-      var ccx = p.x < cxL ? cxL : cxR, ccy = p.y < cyT ? cyT : cyB;
-      var dx = p.x - ccx, dy = p.y - ccy, d = Math.sqrt(dx * dx + dy * dy), cr = G.CR - r;
-      if (d > cr) {
-        var nx = dx / d, ny = dy / d;
-        p.x = ccx + nx * cr; p.y = ccy + ny * cr;
-        var vn = p.vx * nx + p.vy * ny;
-        if (vn > 0) { p.vx -= (1 + E_WALL) * vn * nx; p.vy -= (1 + E_WALL) * vn * ny; onWall(p, vn, ccx + nx * G.CR, ccy + ny * G.CR); }
-      }
+    if (st.demo) {
+      servePuck(sideScoredOn);
       return;
     }
-    // top / bottom
-    if (p.y < G.T + r) { p.y = G.T + r; if (p.vy < 0) { onWall(p, -p.vy, p.x, G.T); p.vy = -p.vy * E_WALL; } }
-    else if (p.y > G.B - r) { p.y = G.B - r; if (p.vy > 0) { onWall(p, p.vy, p.x, G.B); p.vy = -p.vy * E_WALL; } }
-    // left / right with goal mouths
-    for (var s = -1; s <= 1; s += 2) {
-      var gx = s < 0 ? G.L : G.R;
-      var half = st.goalHalf[s < 0 ? 0 : 1];
-      var beyond = s < 0 ? p.x < gx + r : p.x > gx - r;
-      if (!beyond) continue;
-      var inMouth = Math.abs(p.y - G.CY) < half;
-      if (inMouth) {
-        // posts
-        for (var q = -1; q <= 1; q += 2) {
-          var py = G.CY + q * half, ddx = p.x - gx, ddy = p.y - py, rr = r + 8, dd = ddx * ddx + ddy * ddy;
-          if (dd < rr * rr) {
-            var dl = Math.sqrt(dd) || 0.01, ux = ddx / dl, uy = ddy / dl;
-            p.x = gx + ux * rr; p.y = py + uy * rr;
-            var v2 = p.vx * ux + p.vy * uy;
-            if (v2 < 0) { p.vx -= (1 + E_WALL) * v2 * ux; p.vy -= (1 + E_WALL) * v2 * uy; onWall(p, -v2, gx, py); }
-          }
-        }
-        var crossed = s < 0 ? p.x < gx - 2 : p.x > gx + 2;
-        if (crossed && Math.abs(p.y - G.CY) < half) goal(p, -s);
-      } else {
-        p.x = s < 0 ? gx + r : gx - r;
-        var vx = p.vx * -s;
-        if (vx < 0) { onWall(p, -vx, gx, p.y); p.vx = -p.vx * E_WALL; }
-      }
-    }
-  }
-  // puck already in the goal pocket: slide to the back and stop
-  function pocket(p) {
-    var side = p.x < G.CX ? -1 : 1, gx = side < 0 ? G.L : G.R;
-    var backX = gx + side * 22;
-    var half = st.goalHalf[side < 0 ? 0 : 1];
-    if (side < 0 ? p.x < backX : p.x > backX) { p.x = backX; p.vx = 0; }
-    p.y = Kit.clamp(p.y, G.CY - half + 6, G.CY + half - 6);
-    p.vx *= 0.9; p.vy *= 0.8;
-  }
-  function puckPuck() {
-    var ps = st.pucks;
-    for (var i = 0; i < ps.length; i++) for (var j = i + 1; j < ps.length; j++) {
-      var a = ps[i], b = ps[j];
-      if (!a.alive || !b.alive || a.scored || b.scored) continue;
-      var dx = b.x - a.x, dy = b.y - a.y, rs = a.r + b.r, d2 = dx * dx + dy * dy;
-      if (d2 >= rs * rs || d2 < 0.0001) continue;
-      var d = Math.sqrt(d2), nx = dx / d, ny = dy / d, ov = (rs - d) / 2;
-      a.x -= nx * ov; a.y -= ny * ov; b.x += nx * ov; b.y += ny * ov;
-      var vn = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny;
-      if (vn < 0) {
-        var jj = -(1 + E_PUCK) * vn / 2;
-        a.vx -= jj * nx; a.vy -= jj * ny; b.vx += jj * nx; b.vy += jj * ny;
-        if (-vn > 200) { sfx('wall', -vn); emit(a.x + nx * a.r, a.y + ny * a.r, { count: 6, color: '#fff', speed: 260, life: 0.25, size: 2, kind: 1 }); }
-      }
-    }
-  }
 
-  /* ---------------------------------------------------------- events */
-  function sfx(name, arg) { if (st.demo) return; S[name](arg); }
-  function sideIdx(s) { return s < 0 ? 0 : 1; }
+    st.score[scorerIdx]++;
+    st.lastScorer = sideScoredOn;
+    st.streak[scorerIdx]++;
+    st.streak[victimIdx] = 0;
+    st.mallets[scorerIdx].mood = 'joy'; st.mallets[scorerIdx].moodT = 1.3;
+    st.mallets[victimIdx].mood = 'sad'; st.mallets[victimIdx].moodT = 1.3;
 
-  function onHit(m, p, impact, nx, ny, sp, isSave) {
-    if (m.ai && m.ctrl === 'ai') m.ai.contact = true;
-    var idx = sideIdx(m.side);
-    p.last = m.side; p.bank = 0;
-    var col = skinColor(m.skin); // sparks match the mallet on the rink
-    var cx = m.x + nx * m.r, cy = m.y + ny * m.r;
-    var k = Math.min(1, impact / 1600);
-    m.sq = Math.min(1, 0.25 + k); m.sqAng = Math.atan2(ny, nx);
-    emit(cx, cy, { count: 4 + (k * 16 | 0), colors: [col, '#ffffff'], speed: 250 + k * 600, life: 0.35, size: 2 + k * 2, kind: 1, angle: Math.atan2(ny, nx), spread: 2.2 });
-    if (impact > 250) ring(cx, cy, col, 40 + k * 70, 3 + k * 5);
-    sfx('hit', impact);
-    if (st.demo) return;
-    if (impact > 120) st.stats.hits[idx]++;
-    if (sp > st.stats.fast[idx]) st.stats.fast[idx] = sp;
-    if (impact > 1150) {
-      shake.add(4 + k * 7); st.hitstop = 0.045;
-      if (!Kit.motion.reduced()) { st.flash = Math.max(st.flash, 0.12 + k * 0.1); st.flashCol = col; }
-      emit(cx, cy, { count: 10, colors: ['#ffffff', col, '#fff06a'], speed: 700, life: 0.4, size: 3, kind: 1 });
+    if (st.mode === 1) {
+      st.maxDeficit = Math.max(st.maxDeficit, st.score[1] - st.score[0]);
+      if (scorerIdx === 0) Kit.track.hit(); else Kit.track.miss();
     }
-    var kmh = Math.round(sp * KMH);
-    if (sp >= 1780 && isHuman(m.side) && st.t - (st.lastRocket || -9) > 1.5) {
-      st.lastRocket = st.t;
-      popup(Kit.pick(AH.WORDS.rocket) + ' ' + kmh + ' كم/س', p.x, p.y - 50, '#fff06a', 30);
-      if (kmh >= 110) award('rocket', true);
-    }
-    if (isSave) {
-      st.stats.saves[idx]++;
-      popup(Kit.pick(AH.WORDS.save), m.x, m.y - 70, '#9ff0ff', 32);
-      if (isHuman(m.side) && st.stats.saves[idx] >= 5) award('keeper', true);
-    }
-  }
-  function onWall(p, v, x, y) {
-    if (v < 60) return;
-    p.bank++;
-    var th = byId(AH.TABLES, save.eq.table);
-    var k = Math.min(1, v / 1500);
-    emit(x, y, { count: 2 + (k * 8 | 0), colors: [th.line, '#ffffff'], speed: 150 + k * 450, life: 0.3, size: 2, kind: 1 });
-    wallFlash(x, y, th.line);
-    sfx('wall', v);
-    if (v > 1300 && !st.demo) shake.add(3);
-  }
-  function isHuman(side) { return !st.demo && (st.mode === 2 || side < 0); }
 
-  function goal(p, scorer) {
-    if (p.scored) return;
-    p.scored = 1;
-    dbg.goals++; if (p.last === -scorer) dbg.ownGoals++;
-    var si = sideIdx(scorer), ci = 1 - si;
-    var gx = scorer > 0 ? G.L : G.R; // goal that was scored in
-    var col = sideColor(scorer);
-    st.goalFlash[ci] = 1;
-    var calm = Kit.motion.reduced(); // no confetti, screen flash or zoom
-    if (!calm) emit(gx, p.y, { count: 60, colors: ['#ff4d6d', '#ffd23f', '#7dff6b', '#35c8ff', '#b98cff', '#ffffff'], speed: 750, life: 1.4, size: 11, drag: 2.2, kind: 2, angle: scorer > 0 ? 0 : Math.PI, spread: 2.6 });
-    emit(gx, p.y, { count: 24, colors: [col, '#ffffff'], speed: 900, life: 0.5, size: 3, kind: 1, angle: scorer > 0 ? 0 : Math.PI, spread: 2.8 });
-    ring(gx, p.y, col, 240, 10);
-    if (st.demo) { respawnLater(p, 0.6); return; }
-    if (st.scene === 'ending' || st.scene === 'over') { sfx('wall', 800); return; } // match already decided
-    st.score[si]++;
-    st.stats.goals[si]++;
-    var scorerM = st.mallets[si], conM = st.mallets[ci];
-    scorerM.mood = 'joy'; scorerM.moodT = 1.5; conM.mood = 'sad'; conM.moodT = 1.5;
-    shake.add(15);
-    if (!calm) { st.flash = 0.35; st.flashCol = col; st.zoom = 1; st.zoomX = gx; st.zoomY = p.y; }
-    var humanScored = isHuman(scorer);
-    S.goal(humanScored || st.mode === 2);
-    // streaks & words
-    if (st.streak.side === scorer) st.streak.n++; else { st.streak.side = scorer; st.streak.n = 1; }
-    st.stats.run[si] = Math.max(st.stats.run[si], st.streak.n);
-    var word = Kit.pick(AH.WORDS.goal);
-    if (p.last === scorer && p.bank >= 1 && p.bank <= 2) popup(AH.WORDS.bank, G.CX, G.CY + 120, '#b98cff', 36);
-    if (st.streak.n === 3) { popup(AH.WORDS.hat, G.CX, G.CY + 160, '#fff06a', 44); if (humanScored) award('hat'); }
-    if (humanScored) award('goal1');
-    if (humanScored) addCoins(2);
-    var behind = st.score[1 - si] - st.score[si];
-    st.maxBehind[si] = Math.max(st.maxBehind[si], behind);
-    st.maxBehind[ci] = Math.max(st.maxBehind[ci], -behind);
-    var who = st.mode === 1 ? (scorer < 0 ? 'أنت تسجّل!' : st.bot.name + ' يسجّل!') : (scorer < 0 ? 'اللاعب 1 يسجّل!' : 'اللاعب 2 يسجّل!');
-    var won = st.score[si] >= st.goalsToWin;
+    var humanScored = scorerIdx === 0 || st.mode === 2;
+    S.goal(scorerIdx === 0 || st.mode === 2);
+
+    if (scorerIdx === 0) {
+      save.totalGoals++;
+      if (!earn('goal1', false)) persist();
+      if (st.streak[0] >= 3) earn('hat', false);
+    } else if (st.mode === 2) {
+      save.totalGoals++;
+      persist();
+    }
+
+    var won = st.score[scorerIdx] >= st.goalsToWin;
+    var word = puck.banked ? AH.WORDS.bank : (st.streak[scorerIdx] >= 3 ? AH.WORDS.hat : Kit.pick(AH.WORDS.goal));
+    var sub = st.score[0] + ' - ' + st.score[1];
+    if (!won && (st.score[0] === st.goalsToWin - 1 || st.score[1] === st.goalsToWin - 1)) {
+      sub = AH.WORDS.matchPoint + '  ' + sub;
+    }
+
     if (won) {
-      st.winner = scorer;
-      // Play statistics and rewards: counted here, not in endMatch(), so Restart or Menu during the
-      // slow-motion ending keeps the result (the title demo returned above). Two players report no winner.
-      if (!simulated) {
-        if (st.mode > 1) Kit.stats.end('end');
-        else Kit.stats.end(scorer < 0 ? 'win' : 'lose', st.score[0]); // score: the player's goals
-      }
-      bigText(word, col, 1.8, 130, who);
-      st.timeScale = 0.3; st.slowT = 1.3;
-      setScene('ending');
       commitMatch();
-      return;
+      flushAwards();
+      setBanner(scorerIdx === 0 ? 'هدف الفوز!' : (st.mode === 2 ? 'فوز اللاعب 2!' : 'انتهت المباراة!'), sub, col, 1.35);
+      setScene('ending');
+    } else {
+      flushAwards();
+      setBanner(humanScored ? word : 'هدف للخصم!', sub, col, 1.15);
+      setScene('goal');
     }
-    bigText(word, col, 1.4, 130, who);
-    // chaos mode plays on over a live rink, so rally banners wait until the puck respawns
-    if (st.chaos) { respawnLater(p, 1.0, scorer); st.awardT = 1.0; }
-    else { setScene('goal'); flushAwards(); }
-    st.lastConceder = -scorer;
-    var mp = st.score[0] === st.goalsToWin - 1 || st.score[1] === st.goalsToWin - 1;
-    if (mp && !st.matchPointShown) { st.matchPointShown = true; st.mpPending = 1.5; }
-  }
-  function respawnLater(p, delay, scorer) {
-    st.respawn.push({ p: p, t: delay, toward: scorer ? -scorer : (Math.random() < 0.5 ? -1 : 1) });
-  }
-  function servePuck(p, conceder) {
-    // conceding player gets the puck on their side
-    var x = conceder < 0 ? G.L + 250 : G.R - 250, y = G.CY;
-    var m = st.mallets[sideIdx(conceder)];
-    if (Math.abs(m.x - x) < m.r + p.r + 20 && Math.abs(m.y - y) < m.r + p.r + 20) y += m.y > G.CY ? -130 : 130;
-    p.x = x; p.y = y; p.vx = 0; p.vy = 0; p.scored = 0; p.alive = true; p.spawn = 0.35; p.tn = 0; p.fire = 0; p.last = 0; p.bank = 0;
-    emit(x, y, { count: 16, color: '#ffffff', speed: 240, life: 0.35, size: 3, kind: 1 });
-    ring(x, y, '#ffffff', 70, 4);
-    sfx('spawn');
   }
 
-  /* ---------------------------------------------------------- chaos */
-  function spawnPower() {
-    if (st.powers.length >= 2) return;
-    var def = AH.POWERS[(Math.random() * AH.POWERS.length) | 0];
-    if (def.id === 'multi' && st.pucks.filter(function (q) { return q.alive; }).length >= 4) def = AH.POWERS[0];
-    for (var tries = 0; tries < 12; tries++) {
-      var x = Kit.rand(G.L + 240, G.R - 240), y = Kit.rand(G.T + 70, G.B - 70);
-      var ok = true;
-      st.mallets.forEach(function (m) { if (Kit.dist(m.x, m.y, x, y) < 120) ok = false; });
-      st.pucks.forEach(function (q) { if (Kit.dist(q.x, q.y, x, y) < 80) ok = false; });
-      if (ok) { st.powers.push({ x: x, y: y, def: def, age: 0, life: 11, seed: Math.random() * 6 }); sfx('spawn'); return; }
+  /* ------------------------------------------------ mallet & AI control */
+  function clampMallet(m) {
+    var pad = m.r + 4;
+    var minX = m.side < 0 ? G.L + pad : G.CX + m.r + 2;
+    var maxX = m.side < 0 ? G.CX - m.r - 2 : G.R - pad;
+    var minY = G.T + pad, maxY = G.B - pad;
+    if (m.x < minX) { m.x = minX; if (m.vx < 0) m.vx = 0; }
+    if (m.x > maxX) { m.x = maxX; if (m.vx > 0) m.vx = 0; }
+    if (m.y < minY) { m.y = minY; if (m.vy < 0) m.vy = 0; }
+    if (m.y > maxY) { m.y = maxY; if (m.vy > 0) m.vy = 0; }
+    // Keep out of the curved rink corners
+    var cx = m.side < 0 ? G.L + G.CR : G.R - G.CR;
+    if ((m.side < 0 && m.x < cx) || (m.side > 0 && m.x > cx)) {
+      var cy = m.y < G.T + G.CR ? G.T + G.CR : (m.y > G.B - G.CR ? G.B - G.CR : 0);
+      if (cy) {
+        var dx = m.x - cx, dy = m.y - cy, d = M.hypot(dx, dy), lim = G.CR - m.r - 3;
+        if (d > lim && d > 0.001) {
+          m.x = cx + dx / d * lim;
+          m.y = cy + dy / d * lim;
+        }
+      }
     }
   }
-  function updPowers(dt) {
-    st.powerT -= dt;
-    if (st.powerT <= 0) { st.powerT = Kit.rand(4.5, 7); spawnPower(); }
-    for (var i = st.powers.length - 1; i >= 0; i--) {
-      var pw = st.powers[i];
-      pw.age += dt; pw.life -= dt;
-      if (pw.life <= 0) { st.powers.splice(i, 1); continue; }
-      var got = 0, byPuck = null;
-      for (var j = 0; j < st.mallets.length && !got; j++) { var m = st.mallets[j]; if (Kit.dist(m.x, m.y, pw.x, pw.y) < m.r + 26) got = m.side; }
-      for (j = 0; j < st.pucks.length && !got; j++) { var p = st.pucks[j]; if (p.alive && !p.scored && p.last && Kit.dist(p.x, p.y, pw.x, pw.y) < p.r + 26) { got = p.last; byPuck = p; } }
-      if (got) { st.powers.splice(i, 1); applyPower(pw, got, byPuck); }
+
+  function triggerBoost(m, kx, ky) {
+    if (m.boostCd > 0 || m.frozen > 0 || st.scene !== 'play') return;
+    var bx = kx, by = ky;
+    if (!bx && !by) {
+      // Aim toward a nearby puck ahead, otherwise straight toward rival goal
+      var best = null, bestD = 260;
+      for (var i = 0; i < st.pucks.length; i++) {
+        var p = st.pucks[i];
+        if (!p.alive || p.scored) continue;
+        var d = Kit.dist(m.x, m.y, p.x, p.y);
+        if (d < bestD && (p.x - m.x) * (m.side < 0 ? 1 : -1) > -24) { best = p; bestD = d; }
+      }
+      if (best) {
+        var ang = M.atan2(best.y - m.y, best.x - m.x);
+        bx = M.cos(ang); by = M.sin(ang);
+      } else {
+        bx = m.side < 0 ? 1 : -1; by = 0;
+      }
     }
-    for (i = 0; i < st.mallets.length; i++) {
-      var mm = st.mallets[i];
-      if (mm.big > 0) mm.big -= dt;
-      if (mm.frozen > 0) { mm.frozen -= dt; if (mm.frozen <= 0) { emit(mm.x, mm.y, { count: 14, colors: ['#ffffff', '#9ff0ff'], speed: 300, life: 0.4, size: 4 }); } }
+    var len = M.hypot(bx, by) || 1;
+    bx /= len; by /= len;
+    m.boost = 0.18;
+    m.boostCd = 0.44;
+    m.vx = bx * BOOST_SPD;
+    m.vy = by * BOOST_SPD;
+    m.avx = m.vx;
+    m.avy = m.vy;
+    m.sq = 0.7;
+    m.sqAng = M.atan2(by, bx);
+    S.boost();
+    ring(m.x, m.y, '#fff06a', m.r + 30);
+    emit(m.x - bx * m.r * 0.7, m.y - by * m.r * 0.7, '#fff06a', 10, 260);
+  }
+
+  function stepKeyboardMallet(m, dt, upK, dnK, lfK, rtK, boostKeys) {
+    var kx = (Kit.keys.anyDown(rtK) ? 1 : 0) - (Kit.keys.anyDown(lfK) ? 1 : 0);
+    var ky = (Kit.keys.anyDown(dnK) ? 1 : 0) - (Kit.keys.anyDown(upK) ? 1 : 0);
+    if (Kit.keys.anyPressed(boostKeys)) triggerBoost(m, kx, ky);
+    var slow = m.frozen > 0 ? 0.36 : 1;
+    if (m.boost > 0) {
+      m.x += m.vx * slow * dt;
+      m.y += m.vy * slow * dt;
+    } else if (kx || ky) {
+      var l = M.hypot(kx, ky);
+      kx /= l; ky /= l;
+      var maxS = KEY_MAX * slow;
+      m.vx += (kx * maxS - m.vx) * M.min(1, KEY_ACC / maxS * dt);
+      m.vy += (ky * maxS - m.vy) * M.min(1, KEY_ACC / maxS * dt);
+      m.x += m.vx * dt;
+      m.y += m.vy * dt;
+    } else {
+      var damp = M.max(0, 1 - dt * 20);
+      m.vx *= damp; m.vy *= damp;
+      m.x += m.vx * dt; m.y += m.vy * dt;
     }
-    for (i = 0; i < 2; i++) {
-      if (st.tiny[i] > 0) { st.tiny[i] -= dt; if (st.tiny[i] <= 0) S.grow(); }
-      var tgt = st.tiny[i] > 0 ? G.TINY : G.GOAL;
-      st.goalHalf[i] += (tgt - st.goalHalf[i]) * Math.min(1, dt * 6);
+    m.avx += (m.vx - m.avx) * M.min(1, dt * 30);
+    m.avy += (m.vy - m.avy) * M.min(1, dt * 30);
+    clampMallet(m);
+  }
+
+  function stepMouseMallet(m, dt) {
+    var slow = m.frozen > 0 ? 0.36 : 1;
+    if (Kit.keys.anyPressed(['Space', 'ShiftLeft'])) {
+      triggerBoost(m, 0, 0);
+    }
+    if (m.boost > 0) {
+      m.x += m.vx * slow * dt;
+      m.y += m.vy * slow * dt;
+      m.avx = m.vx; m.avy = m.vy;
+      clampMallet(m);
+      return;
+    }
+    var tx = Kit.clamp(ptr.x, G.L + m.r + 4, G.CX - m.r - 2);
+    var ty = Kit.clamp(ptr.y, G.T + m.r + 4, G.B - m.r - 4);
+    var dx = tx - m.x, dy = ty - m.y;
+    var dist = M.hypot(dx, dy);
+    var maxStep = MOUSE_MAX * slow * dt;
+    var ox = m.x, oy = m.y;
+    if (dist > maxStep && dist > 0.001) {
+      m.x += dx / dist * maxStep;
+      m.y += dy / dist * maxStep;
+    } else {
+      m.x = tx; m.y = ty;
+    }
+    clampMallet(m);
+    m.vx = (m.x - ox) / dt;
+    m.vy = (m.y - oy) / dt;
+    m.avx += (m.vx - m.avx) * M.min(1, dt * 28);
+    m.avy += (m.vy - m.avy) * M.min(1, dt * 28);
+  }
+
+  function stepBotMallet(m, dt, profile) {
+    var side = m.side;
+    var ddaScale = st.demo ? 1 : (0.86 + dda.level * 0.26);
+    var maxSpd = profile.speed * ddaScale * (m.frozen > 0 ? 0.34 : 1);
+    var acc = profile.accel * ddaScale;
+    var homeX = side < 0 ? G.L + profile.depth : G.R - profile.depth;
+
+    // Pick highest-threat live puck
+    var p = null, bestScore = -1e9;
+    for (var i = 0; i < st.pucks.length; i++) {
+      var q = st.pucks[i];
+      if (!q.alive || q.scored) continue;
+      var towardMe = q.vx * side > 40;
+      var onMySide = (q.x - G.CX) * side > -30;
+      var sc = (towardMe ? 500 : 0) + (onMySide ? 350 : 0) - M.abs(q.x - homeX) * 0.4;
+      if (sc > bestScore) { bestScore = sc; p = q; }
+    }
+
+    m.aiT -= dt;
+    if (m.aiT <= 0) {
+      m.aiT = M.max(0.035, profile.react * (st.demo ? 0.9 : (1.12 - dda.level * 0.24)));
+      m.errY = Kit.rand(-profile.err, profile.err) * (st.demo ? 0.45 : (1.12 - dda.level * 0.3));
+      if (!p) {
+        m.tx = homeX; m.ty = G.CY;
+      } else {
+        var onHalf = (p.x - G.CX) * side > 0;
+        var coming = p.vx * side > 30;
+        var sp = M.hypot(p.vx, p.vy);
+        if (onHalf && sp < profile.attackMax + 360) {
+          // Strike through the puck toward opposing goal!
+          var behind = side * 18;
+          m.tx = p.x + behind;
+          m.ty = p.y + m.errY * 0.32 + (M.random() < profile.bank ? (p.y < G.CY ? 28 : -28) : 0);
+        } else if (coming) {
+          var tHit = M.abs(homeX - p.x) / M.max(180, M.abs(p.vx));
+          var py = p.y + p.vy * tHit * profile.lead + m.errY;
+          var minB = G.T + G.PR, maxB = G.B - G.PR, span = maxB - minB;
+          while (py < minB || py > maxB) {
+            if (py < minB) py = minB + (minB - py);
+            if (py > maxB) py = maxB - (py - maxB);
+            if (M.abs(py) > span * 4) { py = G.CY; break; }
+          }
+          m.tx = homeX;
+          m.ty = Kit.clamp(py, G.CY - G.GOAL - 18, G.CY + G.GOAL + 18);
+        } else {
+          // Guard crease or grab a safe power-up on own side
+          var powTarget = null;
+          for (var j = 0; j < st.powers.length; j++) {
+            var pw = st.powers[j];
+            if ((pw.x - G.CX) * side > 25) { powTarget = pw; break; }
+          }
+          if (powTarget && !profile.naive) {
+            m.tx = powTarget.x; m.ty = powTarget.y;
+          } else {
+            m.tx = homeX;
+            m.ty = Kit.lerp(G.CY, p.y, 0.42) + m.errY * 0.25;
+          }
+        }
+      }
+    }
+
+    // Immediate emergency lunge when puck is right in front of mallet on own half
+    var tx = m.tx, ty = m.ty;
+    if (p && (p.x - G.CX) * side > 10 && (m.x - p.x) * side > -10 && Kit.dist(m.x, m.y, p.x, p.y) < 190) {
+      tx = p.x - side * 26;
+      ty = p.y + m.errY * 0.18;
+      maxSpd *= profile.strike || 1.15;
+    }
+
+    var dx = tx - m.x, dy = ty - m.y, d = M.hypot(dx, dy);
+    var wantVx = d > 3 ? dx / d * M.min(maxSpd, d * 11) : 0;
+    var wantVy = d > 3 ? dy / d * M.min(maxSpd, d * 11) : 0;
+    var dvx = wantVx - m.vx, dvy = wantVy - m.vy, dv = M.hypot(dvx, dvy);
+    var maxDv = acc * dt;
+    if (dv > maxDv && dv > 0.001) { m.vx += dvx / dv * maxDv; m.vy += dvy / dv * maxDv; }
+    else { m.vx = wantVx; m.vy = wantVy; }
+    m.x += m.vx * dt;
+    m.y += m.vy * dt;
+    m.avx += (m.vx - m.avx) * M.min(1, dt * 24);
+    m.avy += (m.vy - m.avy) * M.min(1, dt * 24);
+    clampMallet(m);
+  }
+
+  /* --------------------------------------------------- puck & collisions */
+  function collideMalletPuck(m, p) {
+    var dx = p.x - m.x, dy = p.y - m.y;
+    var d = M.hypot(dx, dy), minD = m.r + p.r;
+    if (d >= minD) return;
+    var nx = d > 0.001 ? dx / d : (m.side < 0 ? 1 : -1);
+    var ny = d > 0.001 ? dy / d : 0;
+    p.x = m.x + nx * (minD + 0.5);
+    p.y = m.y + ny * (minD + 0.5);
+
+    var mvx = m.avx, mvy = m.avy;
+    var idx = sideIdx(m.side);
+    var rvx = p.vx - mvx, rvy = p.vy - mvy;
+    var vn = rvx * nx + rvy * ny;
+
+    // Close-save check before reversing velocity!
+    if (!st.demo && !p.savedClose && p.lastHit === -m.side) {
+      var goalX = m.side < 0 ? G.L : G.R;
+      var headingIn = (m.side < 0 && p.vx < -480) || (m.side > 0 && p.vx > 480);
+      if (headingIn && M.abs(p.x - goalX) < 235 && M.abs(p.y - G.CY) < G.GOAL + 24) {
+        p.savedClose = true;
+        st.saves[idx]++;
+        S.save();
+        popup(m.x, m.y - m.r - 18, Kit.pick(AH.WORDS.save), '#5ef2ff', 26);
+        if (idx === 0 && st.saves[0] >= 5) earn('keeper', false);
+      }
+    }
+
+    if (vn < 0) {
+      var boostMul = m.boost > 0 ? 1.3 : 1;
+      var j = -(1 + 0.92) * vn * boostMul;
+      p.vx += nx * j + mvx * 0.22;
+      p.vy += ny * j + mvy * 0.22;
+    } else {
+      var msp = M.hypot(mvx, mvy);
+      var push = M.max(360, msp * 1.15);
+      p.vx = nx * push;
+      p.vy = ny * push;
+    }
+
+    var cap = p.fire > 0 ? PMAX_FIRE : PMAX;
+    var sp = M.hypot(p.vx, p.vy);
+    if (sp > cap) { p.vx = p.vx / sp * cap; p.vy = p.vy / sp * cap; sp = cap; }
+    if (sp < 210) { p.vx = nx * 210; p.vy = ny * 210; sp = 210; }
+
+    p.lastHit = m.side;
+    p.banked = false;
+    p.savedClose = false;
+    p.stuck = 0;
+
+    var kmh = M.round(sp * KMH);
+    if (!st.demo) {
+      st.shots[idx]++;
+      if (kmh > st.topKmh[idx]) st.topKmh[idx] = kmh;
+      var isHuman = idx === 0 || st.mode === 2;
+      if (kmh >= 110) {
+        if (idx === 0) earn('rocket', false);
+        if (isHuman && st.t - st.lastRocket > 0.75) {
+          st.lastRocket = st.t;
+          S.rocket();
+          shake.add(9);
+          ring(p.x, p.y, '#fff06a', 96);
+          popup(p.x, p.y - 28, Kit.pick(AH.WORDS.rocket) + ' ' + kmh + ' كم/س', '#fff06a', 27);
+        }
+      }
+    }
+
+    var pow = Kit.clamp(sp / 1600, 0.15, 1);
+    m.sq = M.min(0.85, 0.25 + pow * 0.55);
+    m.sqAng = M.atan2(ny, nx);
+    S.hit(pow);
+    if (pow > 0.48) {
+      emit(p.x - nx * p.r, p.y - ny * p.r, m.skin.color, 10, 260);
+      if (pow > 0.75) shake.add(5);
     }
   }
+
+  function collidePuckWalls(p) {
+    var r = p.r;
+    var halfL = st.tiny[0] > 0 ? G.TINY : G.GOAL;
+    var halfR = st.tiny[1] > 0 ? G.TINY : G.GOAL;
+
+    // Top & bottom laser rails
+    if (p.y - r < G.T) {
+      p.y = G.T + r;
+      if (p.vy < 0) { p.vy = -p.vy * 0.96; p.banked = true; S.wall(M.abs(p.vy) / 1400); emit(p.x, G.T, st.table.line, 6, 180); }
+    } else if (p.y + r > G.B) {
+      p.y = G.B - r;
+      if (p.vy > 0) { p.vy = -p.vy * 0.96; p.banked = true; S.wall(M.abs(p.vy) / 1400); emit(p.x, G.B, st.table.line, 6, 180); }
+    }
+
+    // Goal post pylons (crisp metallic clang!)
+    var posts = [
+      [G.L, G.CY - halfL], [G.L, G.CY + halfL],
+      [G.R, G.CY - halfR], [G.R, G.CY + halfR]
+    ];
+    for (var i = 0; i < 4; i++) {
+      var px = posts[i][0], py = posts[i][1];
+      var dx = p.x - px, dy = p.y - py, d = M.hypot(dx, dy), minP = r + 8;
+      if (d < minP && d > 0.001) {
+        var nx = dx / d, ny = dy / d;
+        p.x = px + nx * minP; p.y = py + ny * minP;
+        var vn = p.vx * nx + p.vy * ny;
+        if (vn < 0) {
+          p.vx -= 1.92 * vn * nx;
+          p.vy -= 1.92 * vn * ny;
+          S.post();
+          emit(px, py, '#ffffff', 12, 320);
+          shake.add(5);
+        }
+      }
+    }
+
+    // Left goal or left wall
+    if (p.x - r < G.L) {
+      if (M.abs(p.y - G.CY) < halfL - r * 0.35) {
+        if (p.x < G.L - r * 0.35) onGoal(-1, p);
+        return;
+      }
+      p.x = G.L + r;
+      if (p.vx < 0) { p.vx = -p.vx * 0.96; S.wall(M.abs(p.vx) / 1400); emit(G.L, p.y, st.table.a, 6, 180); }
+    }
+
+    // Right goal or right wall
+    if (p.x + r > G.R) {
+      if (M.abs(p.y - G.CY) < halfR - r * 0.35) {
+        if (p.x > G.R + r * 0.35) onGoal(1, p);
+        return;
+      }
+      p.x = G.R - r;
+      if (p.vx > 0) { p.vx = -p.vx * 0.96; S.wall(M.abs(p.vx) / 1400); emit(G.R, p.y, st.table.b, 6, 180); }
+    }
+
+    // Rounded corners (keeps pucks flowing back into play, never wedged!)
+    var cx = p.x < G.L + G.CR ? G.L + G.CR : (p.x > G.R - G.CR ? G.R - G.CR : 0);
+    var cy = p.y < G.T + G.CR ? G.T + G.CR : (p.y > G.B - G.CR ? G.B - G.CR : 0);
+    if (cx && cy) {
+      var cdx = p.x - cx, cdy = p.y - cy, cd = M.hypot(cdx, cdy), maxC = G.CR - r;
+      if (cd > maxC && cd > 0.001) {
+        var cnx = cdx / cd, cny = cdy / cd;
+        p.x = cx + cnx * maxC;
+        p.y = cy + cny * maxC;
+        var cvn = p.vx * cnx + p.vy * cny;
+        if (cvn > 0) {
+          p.vx -= 1.92 * cvn * cnx;
+          p.vy -= 1.92 * cvn * cny;
+          p.banked = true;
+          S.wall(M.abs(cvn) / 1400);
+        }
+      }
+    }
+  }
+
+  function collidePuckPairs() {
+    for (var i = 0; i < st.pucks.length; i++) {
+      var a = st.pucks[i];
+      if (!a.alive || a.scored) continue;
+      for (var j = i + 1; j < st.pucks.length; j++) {
+        var b = st.pucks[j];
+        if (!b.alive || b.scored) continue;
+        var dx = b.x - a.x, dy = b.y - a.y, d = M.hypot(dx, dy), minD = a.r + b.r;
+        if (d < minD && d > 0.001) {
+          var nx = dx / d, ny = dy / d, ov = (minD - d) * 0.5;
+          a.x -= nx * ov; a.y -= ny * ov;
+          b.x += nx * ov; b.y += ny * ov;
+          var dv = (a.vx - b.vx) * nx + (a.vy - b.vy) * ny;
+          if (dv > 0) {
+            a.vx -= dv * nx; a.vy -= dv * ny;
+            b.vx += dv * nx; b.vy += dv * ny;
+            S.wall(0.35);
+          }
+        }
+      }
+    }
+  }
+
+  function stepSim(dt) {
+    var timeScale = st.scene === 'ending' ? 0.32 : 1;
+    var sdt = dt * timeScale;
+    st.t += sdt;
+    st.stateT += dt;
+
+    // Detect fresh pointer vs keyboard preference in 1P mode
+    if (st.mode === 1 && !st.demo) {
+      if (M.hypot(ptr.x - lastPtr.x, ptr.y - lastPtr.y) > 1.5 || ptr.pressed) {
+        st.ptrActive = true;
+        st.useKeys = false;
+        lastPtr.x = ptr.x; lastPtr.y = ptr.y;
+      } else if (Kit.keys.anyDown(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'ShiftLeft'])) {
+        st.useKeys = true;
+      }
+    }
+
+    // Scene state transitions
+    if (st.scene === 'ready') {
+      var beat = 3 - M.floor(st.stateT / 0.55);
+      if (beat < st.countBeat && beat >= 1) {
+        st.countBeat = beat;
+        setBanner(String(beat), st.mode === 2 ? 'مواجهة لاعبين!' : 'ضد ' + st.bot.name, '#5ef2ff', 0.6);
+        S.tick(false);
+      } else if (st.stateT >= 1.65) {
+        setBanner('انطلق!', '', '#fff06a', 0.65);
+        S.tick(true);
+        setScene('play');
+      }
+    } else if (st.scene === 'goal') {
+      if (st.stateT >= 1.25) {
+        resetField(st.lastScorer);
+        setScene('play');
+      }
+    } else if (st.scene === 'ending') {
+      if (st.stateT >= 1.35) {
+        showOver();
+        return;
+      }
+    }
+
+    // Timers & visual decay
+    st.tiny[0] = M.max(0, st.tiny[0] - sdt);
+    st.tiny[1] = M.max(0, st.tiny[1] - sdt);
+    st.goalFlash[0] = M.max(0, st.goalFlash[0] - dt * 2.2);
+    st.goalFlash[1] = M.max(0, st.goalFlash[1] - dt * 2.2);
+    if (st.banner) {
+      st.banner.t += dt;
+      if (st.banner.t >= st.banner.dur) st.banner = null;
+    }
+
+    // Mallet updates
+    for (var mi = 0; mi < 2; mi++) {
+      var m = st.mallets[mi];
+      m.big = M.max(0, m.big - sdt);
+      m.frozen = M.max(0, m.frozen - sdt);
+      m.boost = M.max(0, m.boost - dt);
+      m.boostCd = M.max(0, m.boostCd - dt);
+      m.sq = M.max(0, m.sq - dt * 5.5);
+      if (m.moodT > 0) { m.moodT -= dt; if (m.moodT <= 0) m.mood = ''; }
+      m.blinkT -= dt;
+      if (m.blinkT <= 0) { m.blink = 1; m.blinkT = Kit.rand(2.4, 5.2); }
+      else m.blink = M.max(0, m.blink - dt * 8);
+      var targetR = m.big > 0 ? G.BIG : G.MR;
+      m.r += (targetR - m.r) * M.min(1, dt * 14);
+    }
+
+    if (st.demo) {
+      stepBotMallet(st.mallets[0], sdt, AH.BOTS[1]);
+      stepBotMallet(st.mallets[1], sdt, st.bot);
+    } else if (st.mode === 2) {
+      stepKeyboardMallet(st.mallets[0], sdt, ['KeyW'], ['KeyS'], ['KeyA'], ['KeyD'], ['Space', 'ShiftLeft']);
+      stepKeyboardMallet(st.mallets[1], sdt, ['ArrowUp'], ['ArrowDown'], ['ArrowLeft'], ['ArrowRight'], ['Enter', 'NumpadEnter', 'ShiftRight']);
+    } else {
+      if (st.useKeys) {
+        stepKeyboardMallet(st.mallets[0], sdt, ['KeyW', 'ArrowUp'], ['KeyS', 'ArrowDown'], ['KeyA', 'ArrowLeft'], ['KeyD', 'ArrowRight'], ['Space', 'ShiftLeft']);
+      } else if (st.ptrActive) {
+        stepMouseMallet(st.mallets[0], sdt);
+      }
+      if (st.scene === 'play' || st.scene === 'ending') stepBotMallet(st.mallets[1], sdt, st.bot);
+    }
+
+    // Power-up spawning & pickup
+    if (st.chaos && st.scene === 'play') {
+      st.powerT -= sdt;
+      if (st.powerT <= 0) {
+        spawnPower();
+        st.powerT = st.demo ? 4.8 : Kit.rand(5.4, 7.4);
+      }
+    }
+    for (var pi = st.powers.length - 1; pi >= 0; pi--) {
+      var pw = st.powers[pi];
+      pw.age += sdt;
+      if (pw.age >= pw.life) { st.powers.splice(pi, 1); continue; }
+      var ownerSide = 0, hitPuck = null;
+      for (var qi = 0; qi < st.pucks.length; qi++) {
+        var qp = st.pucks[qi];
+        if (!qp.alive || qp.scored) continue;
+        if (Kit.dist(pw.x, pw.y, qp.x, qp.y) < pw.r + qp.r) {
+          ownerSide = qp.lastHit || (st.demo ? (qp.vx >= 0 ? -1 : 1) : 0);
+          hitPuck = qp;
+          break;
+        }
+      }
+      if (!ownerSide) {
+        for (var m2 = 0; m2 < 2; m2++) {
+          var mm = st.mallets[m2];
+          if (Kit.dist(pw.x, pw.y, mm.x, mm.y) < pw.r + mm.r) { ownerSide = mm.side; break; }
+        }
+      }
+      if (ownerSide) {
+        st.powers.splice(pi, 1);
+        if (!st.demo && ownerSide < 0) st.powerHits++;
+        applyPower(pw, ownerSide, hitPuck);
+      }
+    }
+
+    // Sub-stepped puck physics so blazing 2200 px/s fireballs never tunnel!
+    if (st.scene === 'play' || st.scene === 'ending') {
+      var subSteps = 3, pdt = sdt / subSteps;
+      for (var s = 0; s < subSteps; s++) {
+        for (var k = 0; k < st.pucks.length; k++) {
+          var p = st.pucks[k];
+          if (!p.alive || p.scored) continue;
+          p.x += p.vx * pdt;
+          p.y += p.vy * pdt;
+          var drag = M.pow(0.992, pdt * 60);
+          p.vx *= drag; p.vy *= drag;
+          collideMalletPuck(st.mallets[0], p);
+          collideMalletPuck(st.mallets[1], p);
+          collidePuckWalls(p);
+          if (st.scene !== 'play' && st.scene !== 'ending') break;
+        }
+        collidePuckPairs();
+        if (st.scene !== 'play' && st.scene !== 'ending') break;
+      }
+    }
+
+    // Puck trails, fire decay & anti-dead-zone gentle drift
+    for (var ti = st.pucks.length - 1; ti >= 0; ti--) {
+      var pk = st.pucks[ti];
+      if (!pk.alive) { st.pucks.splice(ti, 1); continue; }
+      pk.spawn = M.min(1, pk.spawn + dt * 5);
+      pk.fire = M.max(0, pk.fire - sdt);
+      var psp = M.hypot(pk.vx, pk.vy);
+      if (st.scene === 'play' && psp < 42 && M.abs(pk.x - G.CX) > 40) {
+        pk.stuck += sdt;
+        if (pk.stuck > 1.8) {
+          var ndx = G.CX - pk.x, ndy = G.CY - pk.y, nd = M.hypot(ndx, ndy) || 1;
+          pk.vx += ndx / nd * 240;
+          pk.vy += ndy / nd * 240;
+          pk.stuck = 0;
+        }
+      } else pk.stuck = 0;
+      if (!Kit.motion.reduced() && psp > 140) {
+        pk.trail.push({ x: pk.x, y: pk.y, fire: pk.fire > 0 });
+        if (pk.trail.length > 12) pk.trail.shift();
+      } else if (pk.trail.length) pk.trail.shift();
+    }
+
+    // Rings, popups, particles & camera shake
+    for (var ri = st.rings.length - 1; ri >= 0; ri--) {
+      st.rings[ri].life -= dt;
+      if (st.rings[ri].life <= 0) st.rings.splice(ri, 1);
+    }
+    for (var oi = st.popups.length - 1; oi >= 0; oi--) {
+      st.popups[oi].life -= dt;
+      st.popups[oi].y -= dt * 34;
+      if (st.popups[oi].life <= 0) st.popups.splice(oi, 1);
+    }
+    fx.update(dt);
+    shake.update(dt);
+  }
+
   function applyPower(pw, side, puck) {
-    var idx = sideIdx(side), m = st.mallets[idx], opp = st.mallets[1 - idx];
-    var id = pw.def.id;
-    emit(pw.x, pw.y, { count: 22, colors: [pw.def.color, '#ffffff'], speed: 420, life: 0.5, size: 3, kind: 1 });
-    ring(pw.x, pw.y, pw.def.color, 90, 6);
-    popup(pw.def.name, pw.x, pw.y - 40, pw.def.color, 32);
+    var idx = sideIdx(side), foe = 1 - idx;
+    var m = st.mallets[idx], fm = st.mallets[foe];
+    var id = pw.def.id, col = pw.def.color;
     S.power();
-    if (id === 'big') { m.big = 8; S.grow(); }
-    else if (id === 'tiny') { st.tiny[idx] = 8; S.shrink(); }
-    else if (id === 'fire') {
+    emit(pw.x, pw.y, col, 22, 420);
+    ring(pw.x, pw.y, col, 92);
+    popup(pw.x, pw.y - 24, pw.def.name, col, 30);
+    if (id === 'fire') {
       var p = puck;
-      if (!p) { var best = 1e9; st.pucks.forEach(function (q) { if (q.alive && !q.scored) { var d = Kit.dist(q.x, q.y, m.x, m.y); if (d < best) { best = d; p = q; } } }); }
+      if (!p || !p.alive || p.scored) {
+        var best = 1e9;
+        for (var i = 0; i < st.pucks.length; i++) {
+          var q = st.pucks[i];
+          if (q.alive && !q.scored) {
+            var d = Kit.dist(m.x, m.y, q.x, q.y);
+            if (d < best) { best = d; p = q; }
+          }
+        }
+      }
       if (p) {
         p.fire = 5;
-        var sp = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
         var dir = side < 0 ? 1 : -1;
-        // A resting puck needs a direction before scaling its velocity.
+        var sp = Math.hypot(p.vx, p.vy);
         if (!sp) { p.vx = dir; p.vy = 0; sp = 1; }
         if (p.vx * dir < 0) p.vx = -p.vx;
         var ns = Math.min(PMAX_FIRE, Math.max(1500, sp * 1.6));
-        p.vx *= ns / sp; p.vy *= ns / sp;
-        S.fire(); shake.add(6);
+        p.vx = p.vx / sp * ns;
+        p.vy = p.vy / sp * ns;
+        S.fire();
+        shake.add(8);
+        ring(p.x, p.y, '#ff6a00', 110);
       }
-    } else if (id === 'freeze') { opp.frozen = 2.2; S.freeze(); emit(opp.x, opp.y, { count: 20, colors: ['#ffffff', '#9ff0ff'], speed: 350, life: 0.5, size: 4 }); }
-    else if (id === 'multi') {
-      var np = makePuck(pw.x, pw.y, (side < 0 ? 1 : -1) * 500, Kit.rand(-200, 200));
-      np.last = side;
-      st.pucks.push(np);
+    } else if (id === 'multi') {
+      if (st.pucks.length < 3) {
+        var src = puck && puck.alive && !puck.scored ? puck : st.pucks[0];
+        var bx = src ? src.x : G.CX, by = src ? src.y : G.CY;
+        var bvx = src && (src.vx || src.vy) ? src.vx : (side < 0 ? 680 : -680);
+        var bvy = src ? src.vy : 0;
+        var ang = Math.atan2(bvy, bvx) + (Math.random() < 0.5 ? 0.45 : -0.45);
+        var msp = Math.max(640, Math.min(1350, Math.hypot(bvx, bvy)));
+        var np = makePuck(bx, by, Math.cos(ang) * msp, Math.sin(ang) * msp);
+        np.lastHit = side;
+        st.pucks.push(np);
+      }
+    } else if (id === 'big') {
+      m.big = 7;
+    } else if (id === 'tiny') {
+      st.tiny[idx] = 7.5;
+    } else if (id === 'freeze') {
+      fm.frozen = 2.4;
+      S.freeze();
+      emit(fm.x, fm.y, '#80f5ff', 20, 340);
+      ring(fm.x, fm.y, '#80f5ff', 84);
     }
   }
 
   /* ---------------------------------------------------------- update */
   function update(dt) {
     if (st.paused) { Kit.keys.endFrame(); ptr.endFrame(); return; }
-    st.t += dt;
-    // effects run in real time
-    shake.update(dt);
-    st.flash = Math.max(0, st.flash - dt * 2.5);
-    st.zoom = Math.max(0, st.zoom - dt * 1.6);
-    st.goalFlash[0] = Math.max(0, st.goalFlash[0] - dt * 1.5); st.goalFlash[1] = Math.max(0, st.goalFlash[1] - dt * 1.5);
-    for (var i = rings.length - 1; i >= 0; i--) { rings[i].t -= dt; if (rings[i].t <= 0) rings.splice(i, 1); }
-    for (i = wallFx.length - 1; i >= 0; i--) { wallFx[i].life -= dt; if (wallFx[i].life <= 0) wallFx.splice(i, 1); }
-    for (i = pops.length - 1; i >= 0; i--) { pops[i].life -= dt; pops[i].y -= dt * 40; if (pops[i].life <= 0) pops.splice(i, 1); }
-    if (st.big) { st.big.t += dt; if (st.big.t > st.big.dur) st.big = null; }
-    if (st.mpPending > 0) { st.mpPending -= dt; if (st.mpPending <= 0) { bigText(AH.WORDS.matchPoint, '#ff5c7a', 1.1, 96); S.matchPoint(); } }
-    if (st.awardT > 0) { st.awardT -= dt; if (st.awardT <= 0 && st.scene === 'play') flushAwards(); } // a won match lists them in the results
-    st.mallets.forEach(function (m) {
-      m.sq = Math.max(0, m.sq - dt * 5);
-      if (m.moodT > 0) { m.moodT -= dt; if (m.moodT <= 0) m.mood = ''; }
-      m.blinkT -= dt;
-      if (m.blinkT <= 0) { m.blink = 1; m.blinkT = 2 + Math.random() * 4; }
-      m.blink = Math.max(0, m.blink - dt * 7);
-    });
-
-    if (st.hitstop > 0) { st.hitstop -= dt; Kit.keys.endFrame(); ptr.endFrame(); return; }
-    var sdt = dt;
-    if (st.slowT > 0) { st.slowT -= dt; sdt = dt * st.timeScale; }
-    updParts(sdt);
-    st.stateT += dt;
-
-    if (st.scene === 'countdown') {
-      var prev = Math.ceil(3 - (st.stateT - dt) / 0.6), now = Math.ceil(3 - st.stateT / 0.6);
-      if (now !== prev || st.stateT === dt) {
-        if (now >= 1) { bigText(String(now), '#ffffff', 0.55, 150); S.count(now); }
-        else { bigText('انطلق!', '#fff06a', 0.8, 130); S.count(0); launchPucks(); setScene('play'); }
-      }
-      physicsStep(sdt);
-    } else if (st.scene === 'play') {
-      physicsStep(sdt);
-      if (st.chaos) updPowers(sdt);
-      for (i = st.respawn.length - 1; i >= 0; i--) {
-        var rp = st.respawn[i]; rp.t -= sdt;
-        if (rp.t <= 0) {
-          st.respawn.splice(i, 1);
-          var alive = st.pucks.filter(function (q) { return q.alive && !q.scored; }).length;
-          if (st.chaos && alive >= 2) { rp.p.alive = false; }
-          else {
-            rp.p.x = G.CX; rp.p.y = G.CY + Kit.rand(-120, 120); rp.p.scored = 0; rp.p.alive = true; rp.p.tn = 0; rp.p.fire = 0; rp.p.last = 0;
-            rp.p.vx = rp.toward * 260; rp.p.vy = Kit.rand(-150, 150); rp.p.spawn = 0.35;
-            ring(rp.p.x, rp.p.y, '#ffffff', 80, 5); sfx('spawn');
-          }
-        }
-      }
-      // tidy dead pucks
-      for (i = st.pucks.length - 1; i >= 0; i--) if (!st.pucks[i].alive) st.pucks.splice(i, 1);
-      if (st.demo && st.stateT > 60) setupMatch(true);
-    } else if (st.scene === 'goal') {
-      physicsStep(sdt);
-      if (st.stateT > 1.5) { servePuck(st.pucks[0], st.lastConceder); setScene('play'); }
-    } else if (st.scene === 'ending') {
-      physicsStep(sdt);
-      if (st.stateT > 1.6) endMatch();
-    } else if (st.scene === 'over') {
-      physicsStep(sdt);
-    }
-    Kit.keys.endFrame(); ptr.endFrame();
+    stepSim(dt);
+    Kit.keys.endFrame();
+    ptr.endFrame();
   }
 
   /* ========================================================== render */
-  function txt(s, x, y, size, col, align, o) {
-    o = o || {};
-    ctx.font = (o.w || 700) + ' ' + size + 'px ' + FONT;
-    ctx.direction = o.ltr ? 'ltr' : 'rtl';
-    ctx.textAlign = align || 'center';
+  function drawHUD() {
+    var th = st.table;
+    var nameL = st.mode === 2 ? 'اللاعب 1' : 'أنت';
+    var nameR = st.mode === 2 ? 'اللاعب 2' : st.bot.name;
+
+    // Left score plate: x = 180..544 (clears .sg-save-status corner 0..170 x 0..96!)
+    ctx.save();
+    ctx.fillStyle = 'rgba(8,14,42,0.88)';
+    AH.rrect(ctx, 180, 14, 364, 70, 20);
+    ctx.fill();
+    ctx.strokeStyle = AH.hexA(th.a, 0.72);
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    // Right score plate: x = 736..1100 (clears #pauseBtn and .sg-mute on top-right!)
+    ctx.fillStyle = 'rgba(8,14,42,0.88)';
+    AH.rrect(ctx, 736, 14, 364, 70, 20);
+    ctx.fill();
+    ctx.strokeStyle = AH.hexA(th.b, 0.72);
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    // Center target badge: x = 556..724
+    ctx.fillStyle = 'rgba(12,20,58,0.92)';
+    AH.rrect(ctx, 556, 18, 168, 62, 18);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,240,106,0.55)';
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+
     ctx.textBaseline = 'middle';
-    if (o.stroke) { ctx.lineJoin = 'round'; ctx.lineWidth = o.stroke; ctx.strokeStyle = o.sc || 'rgba(0,0,0,0.6)'; ctx.strokeText(s, x, y); }
-    ctx.fillStyle = col; ctx.fillText(s, x, y);
+    ctx.direction = 'rtl';
+    ctx.font = '700 24px Fredoka, sans-serif';
+    ctx.fillStyle = '#dff8ff';
+    ctx.textAlign = 'right';
+    ctx.fillText(nameL, 456, 49);
+
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#ffe2ea';
+    ctx.fillText(nameR, 824, 49);
+
+    // Big arcade digits near center
+    ctx.direction = 'ltr';
+    ctx.font = '800 44px Fredoka, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#5ef2ff';
+    ctx.fillText(String(st.score[0]), 504, 50);
+    ctx.fillStyle = '#ff6b8a';
+    ctx.fillText(String(st.score[1]), 776, 50);
+
+    // Center win target + Power-Up badge
+    ctx.direction = 'rtl';
+    ctx.font = '700 18px Fredoka, sans-serif';
+    ctx.fillStyle = '#fff06a';
+    ctx.fillText('الهدف: ' + st.goalsToWin, 640, st.chaos ? 39 : 49);
+    if (st.chaos) {
+      ctx.font = '700 14px Fredoka, sans-serif';
+      ctx.fillStyle = '#ff9d2e';
+      ctx.fillText('⚡ أقراص القوة', 640, 62);
+    }
+
+    // Active power-up mini bars under plates
+    if (st.mallets[0].big > 0 || st.tiny[0] > 0) {
+      ctx.fillStyle = '#2bff88';
+      AH.rrect(ctx, 196, 88, 150 * M.min(1, M.max(st.mallets[0].big, st.tiny[0]) / 7.5), 5, 3);
+      ctx.fill();
+    }
+    if (st.mallets[1].big > 0 || st.tiny[1] > 0) {
+      ctx.fillStyle = '#ff9442';
+      AH.rrect(ctx, 934, 88, 150 * M.min(1, M.max(st.mallets[1].big, st.tiny[1]) / 7.5), 5, 3);
+      ctx.fill();
+    }
+    ctx.restore();
   }
 
   function render() {
-    // paused: the frozen scene is drawn once, then again only after resize/restore/fonts
     if (st.paused && !frameDirty) return;
     frameDirty = false;
-    ensureTable();
-    ctx.setTransform(view.scale * view.dpr, 0, 0, view.scale * view.dpr, 0, 0);
-    // always clear: nothing from earlier frames (confetti, sparks) may stay on screen
-    ctx.fillStyle = '#050716'; ctx.fillRect(0, 0, W, H);
+
+    // Exact clear rect signature observed by tools/tests/air-hockey.test.mjs
+    ctx.fillStyle = '#050716';
+    ctx.fillRect(0, 0, 1280, 720);
+
     ctx.save();
-    ctx.translate(shake.x, shake.y);
-    if (st.zoom > 0) {
-      var z = 1 + 0.045 * Math.sin(st.zoom * Math.PI * 0.5);
-      var zx = Kit.lerp(G.CX, st.zoomX, 0.5), zy = Kit.lerp(G.CY, st.zoomY, 0.5);
-      ctx.translate(zx, zy); ctx.scale(z, z); ctx.translate(-zx, -zy);
-    }
-    ctx.drawImage(tableImg, 0, 0, W, H);
-    var th = byId(AH.TABLES, save.eq.table);
-    // goals
-    art.goal(ctx, -1, st.goalHalf[0], th.a, st.goalFlash[0], st.t);
-    art.goal(ctx, 1, st.goalHalf[1], th.b, st.goalFlash[1], st.t);
-    // wall flashes
-    ctx.globalCompositeOperation = 'lighter';
-    for (var i = 0; i < wallFx.length; i++) {
-      var w = wallFx[i], a = w.life / 0.35;
-      var g = ctx.createRadialGradient(w.x, w.y, 0, w.x, w.y, 60);
-      g.addColorStop(0, AH.hexA(w.col, 0.7 * a)); g.addColorStop(1, AH.hexA(w.col, 0));
-      ctx.fillStyle = g; ctx.fillRect(w.x - 60, w.y - 60, 120, 120);
-    }
-    ctx.globalCompositeOperation = 'source-over';
-    // power-ups
-    for (i = 0; i < st.powers.length; i++) {
-      var pw = st.powers[i];
-      if (pw.life < 2 && Math.sin(pw.life * 20) < 0) continue;
-      art.power(ctx, pw, st.t);
-    }
-    // rings
-    for (i = 0; i < rings.length; i++) {
-      var r = rings[i], k = 1 - r.t / r.life;
-      ctx.globalAlpha = 1 - k;
-      ctx.strokeStyle = r.col; ctx.lineWidth = r.w * (1 - k) + 1;
-      ctx.beginPath(); ctx.arc(r.x, r.y, 8 + (r.max - 8) * (1 - (1 - k) * (1 - k)), 0, Math.PI * 2); ctx.stroke();
-    }
-    ctx.globalAlpha = 1;
-    // puck trails + pucks
-    var pk = byId(AH.PUCKS, save.eq.puck);
-    var pspr = art.puckSprite(pk);
-    ctx.globalCompositeOperation = 'lighter';
-    for (i = 0; i < st.pucks.length; i++) drawTrail(st.pucks[i], pk);
-    ctx.globalCompositeOperation = 'source-over';
-    for (i = 0; i < st.pucks.length; i++) {
-      var p = st.pucks[i]; if (!p.alive) continue;
-      var sc = p.spawn > 0 ? 1 + p.spawn * 2 : 1;
-      var alpha = p.scored ? 0.75 : 1;
-      if (p.spawn > 0) alpha = Math.max(0.2, 1 - p.spawn * 2);
-      ctx.globalAlpha = alpha;
-      ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.beginPath(); ctx.arc(p.x + 4, p.y + 6, p.r, 0, Math.PI * 2); ctx.fill();
-      var sz = pspr.width / 2 * sc;
-      ctx.drawImage(pspr, p.x - sz / 2, p.y - sz / 2, sz, sz);
-      if (p.fire > 0) {
-        ctx.globalCompositeOperation = 'lighter';
-        ctx.fillStyle = 'rgba(255,120,30,' + (0.35 + 0.2 * Math.sin(st.t * 30)) + ')';
-        ctx.beginPath(); ctx.arc(p.x, p.y, p.r + 8, 0, Math.PI * 2); ctx.fill();
-        ctx.globalCompositeOperation = 'source-over';
-      }
-      ctx.globalAlpha = 1;
-    }
-    // mallets
-    for (i = 0; i < st.mallets.length; i++) drawMallet(st.mallets[i]);
-    drawParts();
-    // popups
-    for (i = 0; i < pops.length; i++) {
-      var pp = pops[i], pa = Math.min(1, pp.life * 3), ps = 1 + Math.max(0, pp.life - 0.9) * 2;
-      ctx.globalAlpha = pa;
-      ctx.save(); ctx.translate(pp.x, pp.y); ctx.scale(ps, ps);
-      txt(pp.text, 0, 0, pp.size, pp.col, 'center', { stroke: 7 });
-      ctx.restore();
-    }
-    ctx.globalAlpha = 1;
-    // pointer ghost when the mouse is outside your half
-    if (!st.demo && st.mallets[0] && st.mallets[0].ctrl === 'p1solo' && p1Mode === 'mouse' && (st.scene === 'play' || st.scene === 'countdown' || st.scene === 'goal') && !st.paused) {
-      if (ptr.x > G.CX) {
-        ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 3; ctx.setLineDash([6, 6]);
-        ctx.beginPath(); ctx.arc(ptr.x, ptr.y, 16, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
-      }
-    }
-    ctx.restore();
-    if (!st.demo) drawHud();
-    if (st.scene === 'countdown') {
-      var hs = { stroke: 8, sc: 'rgba(5,8,28,0.9)' };
-      if (st.mode === 1) txt(p1Mode === 'keys' ? 'حرّك مضربك بالأسهم واضرب القرص!' : 'حرّك الفأرة لتحريك مضربك!', W / 2, H / 2 + 150, 34, '#fff06a', 'center', hs);
-      else { // each player's name on their own side, in their mallet's colour
-        txt('اللاعب 1', W / 2 - 220, H / 2 + 140, 34, sideColor(-1), 'center', hs);
-        txt('اللاعب 2', W / 2 + 220, H / 2 + 140, 34, sideColor(1), 'center', hs);
-        txt('W A S D', W / 2 - 220, H / 2 + 180, 24, '#ffffff', 'center', { stroke: 6, sc: hs.sc, ltr: true });
-        txt('← ↑ ↓ →', W / 2 + 220, H / 2 + 180, 24, '#ffffff', 'center', { stroke: 6, sc: hs.sc, ltr: true });
-      }
-    }
-    drawBig();
-    if (st.flash > 0) {
-      ctx.globalAlpha = Math.min(0.5, st.flash);
-      ctx.fillStyle = st.flashCol; ctx.fillRect(0, 0, W, H);
-      ctx.globalAlpha = 1;
-    }
-  }
+    if (shake.power > 0.2) ctx.translate(shake.x, shake.y);
 
-  function drawTrail(p, pk) {
-    if (!p.alive || p.tn < 3 || p.spawn > 0) return;
-    var sp = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
-    var vis = Math.min(1, sp / 900);
-    if (p.fire > 0) vis = 1;
-    if (vis < 0.08) return;
-    var cols = p.fire > 0 ? AH.PUCKS[1].trail : pk.trail;
-    for (var j = 1; j < p.tn; j++) {
-      var idx = (p.ti - 1 - j + PUCK_TRAIL * 2) % PUCK_TRAIL;
-      var f = 1 - j / p.tn;
-      ctx.globalAlpha = f * 0.55 * vis;
-      ctx.fillStyle = cols[j % cols.length];
-      ctx.beginPath(); ctx.arc(p.tx[idx], p.ty[idx], p.r * (0.35 + f * 0.6), 0, Math.PI * 2); ctx.fill();
-    }
-    ctx.globalAlpha = 1;
-  }
+    // 1. Baked Cyber Arena
+    var arenaSpr = art.arena(st.table);
+    ctx.drawImage(arenaSpr.canvas, 0, 0, W, H);
 
-  function drawMallet(m) {
-    // look at the most interesting puck
-    var tp = null, bd = 1e9;
-    for (var i = 0; i < st.pucks.length; i++) { var p = st.pucks[i]; if (!p.alive) continue; var d = Kit.dist(p.x, p.y, m.x, m.y); if (d < bd) { bd = d; tp = p; } }
-    var look = { x: 0, y: 0 };
-    if (tp) { var dx = tp.x - m.x, dy = tp.y - m.y, l = Math.sqrt(dx * dx + dy * dy) || 1; look.x = dx / l; look.y = dy / l; }
-    var napping = m.ctrl === 'ai' && m.ai.nap > 0;
-    art.mallet(ctx, m, m.skin, { face: m.face, look: look, mood: m.mood, blink: napping ? 1 : m.blink, sq: m.sq, sqAng: m.sqAng, frozen: m.frozen, t: st.t });
-    if (napping) txt('ززز', m.x + 30, m.y - m.r - 16 - Math.sin(st.t * 4) * 5, 26, '#ffffff', 'center', { stroke: 5 });
-    if (m.big > 0 && m.big < 1.5 && Math.sin(st.t * 20) > 0) {
-      ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.arc(m.x, m.y, m.r + 4, 0, Math.PI * 2); ctx.stroke();
-    }
-  }
+    // 2. Goals & active Goal Shield barriers
+    var halfL = st.tiny[0] > 0 ? G.TINY : G.GOAL;
+    var halfR = st.tiny[1] > 0 ? G.TINY : G.GOAL;
+    art.goal(ctx, -1, halfL, st.table.a, st.goalFlash[0], st.t);
+    art.goal(ctx, 1, halfR, st.table.b, st.goalFlash[1], st.t);
 
-  function drawHud() {
-    var a = st.mallets[0], b = st.mallets[1];
-    if (!a || !b) return;
-    var ca = sideColor(-1), cb = sideColor(1);
-    // score plates
-    function plate(x, col, name, score, alignRight) {
+    // 3. Power-Up capsules on rink
+    for (var pi = 0; pi < st.powers.length; pi++) {
+      art.power(ctx, st.powers[pi], st.t);
+    }
+
+    // 4. Shockwave rings
+    for (var ri = 0; ri < st.rings.length; ri++) {
+      var rg = st.rings[ri], u = 1 - rg.life / rg.max;
       ctx.save();
-      ctx.fillStyle = 'rgba(5,8,28,0.82)';
-      AH.rrect(ctx, x - 190, 10, 380, 74, 22); ctx.fill();
-      ctx.strokeStyle = AH.hexA(col, 0.8); ctx.lineWidth = 3; ctx.stroke();
+      ctx.globalAlpha = (1 - u) * 0.8;
+      ctx.strokeStyle = rg.color;
+      ctx.lineWidth = 5 * (1 - u * 0.6);
+      ctx.beginPath();
+      ctx.arc(rg.x, rg.y, rg.r + (rg.maxR - rg.r) * u, 0, M.PI * 2);
+      ctx.stroke();
       ctx.restore();
-      // score number (big) nearer to centre, name further out
-      var sx = alignRight ? x - 130 : x + 130;
-      txt(String(score), sx, 48, 60, '#ffffff', 'center', { stroke: 6, sc: AH.hexA(col, 0.9), ltr: true });
-      var nx = alignRight ? x + 172 : x - 172;
-      txt(name, nx, 36, 26, col, alignRight ? 'right' : 'left', { stroke: 5 });
-      // pips
-      var n = st.goalsToWin, pw = Math.min(22, 250 / n);
-      for (var i = 0; i < n; i++) {
-        var px = alignRight ? nx - i * pw : nx + i * pw;
-        ctx.fillStyle = i < score ? col : 'rgba(255,255,255,0.18)';
-        ctx.beginPath(); ctx.arc(px + (alignRight ? -6 : 6), 66, i < score ? 7 : 5, 0, Math.PI * 2); ctx.fill();
-      }
     }
-    plate(360, ca, a.name, st.score[0], false);
-    plate(920, cb, b.name, st.score[1], true);
-    // centre badge
-    ctx.fillStyle = 'rgba(5,8,28,0.82)';
-    AH.rrect(ctx, 555, 14, 170, 66, 20); ctx.fill();
-    txt('الفوز عند', 640, 34, 19, '#cfe6ff', 'center');
-    txt(String(st.goalsToWin), 640, 62, 30, '#fff06a', 'center', { ltr: true });
-    if (st.chaos) {
-      ctx.fillStyle = '#ff2f9a';
-      AH.rrect(ctx, 590, 84, 100, 26, 13); ctx.fill();
-      txt('فوضى!', 640, 97, 18, '#ffffff', 'center');
-    }
-    // power timers under plates
-    powerIcons(a, 0, 360); powerIcons(b, 1, 920);
-  }
-  function powerIcons(m, idx, x) {
-    var items = [];
-    if (m.big > 0) items.push(['مضرب عملاق', m.big / 8, '#3ddc84']);
-    if (st.tiny[idx] > 0) items.push(['مرمى صغير', st.tiny[idx] / 8, '#35c8ff']);
-    if (m.frozen > 0) items.push(['متجمّد!', m.frozen / 2.2, '#9ff0ff']);
-    for (var i = 0; i < items.length; i++) {
-      var yy = 98 + i * 0, xx = x + (i - (items.length - 1) / 2) * 150;
-      ctx.fillStyle = 'rgba(5,8,28,0.85)'; AH.rrect(ctx, xx - 68, yy - 13, 136, 26, 13); ctx.fill();
-      ctx.fillStyle = items[i][2]; AH.rrect(ctx, xx - 68, yy - 13, 136 * Math.max(0, Math.min(1, items[i][1])), 26, 13); ctx.globalAlpha = 0.35; ctx.fill(); ctx.globalAlpha = 1;
-      txt(items[i][0], xx, yy + 1, 17, '#ffffff', 'center');
-    }
-  }
 
-  function drawBig() {
-    var b = st.big;
-    if (!b) return;
-    var t = b.t, d = b.dur;
-    var inT = Math.min(1, t / 0.25);
-    var s = inT < 1 ? 2.2 - 1.2 * easeOutBack(inT) : 1 + (t - 0.25) * 0.05;
-    var a = t > d - 0.3 ? Math.max(0, (d - t) / 0.3) : Math.min(1, t / 0.08);
-    ctx.save();
-    ctx.globalAlpha = a;
-    ctx.translate(W / 2, H / 2 + 20);
-    ctx.scale(s, s);
-    ctx.rotate(-0.04);
-    txt(b.text, 0, 0, b.size, b.col, 'center', { stroke: 14, sc: 'rgba(5,8,28,0.9)', ltr: /^[0-9]+$/.test(b.text) });
+    // 5. Puck comet trails & pucks
+    var pspr = art.puckSprite(st.puckSkin);
+    var trailCols = st.puckSkin.trail;
+    for (var k = 0; k < st.pucks.length; k++) {
+      var p = st.pucks[k];
+      if (!p.alive) continue;
+      for (var ti = 0; ti < p.trail.length; ti++) {
+        var pt = p.trail[ti], frac = (ti + 1) / (p.trail.length + 1);
+        ctx.globalAlpha = frac * 0.58;
+        ctx.fillStyle = pt.fire ? (ti % 2 ? '#ffe033' : '#ff5500') : trailCols[ti % trailCols.length];
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, p.r * (0.32 + frac * 0.62), 0, M.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      if (p.fire > 0) {
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        var fg = ctx.createRadialGradient(p.x, p.y, 6, p.x, p.y, p.r * 2.1);
+        fg.addColorStop(0, 'rgba(255,235,80,0.9)');
+        fg.addColorStop(0.5, 'rgba(255,95,0,0.65)');
+        fg.addColorStop(1, 'rgba(255,30,0,0)');
+        ctx.fillStyle = fg;
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.r * 2.1, 0, M.PI * 2); ctx.fill();
+        ctx.restore();
+      }
+      var psz = pspr.w * (0.5 + 0.5 * p.spawn);
+      ctx.drawImage(pspr.canvas, p.x - psz / 2, p.y - psz / 2, psz, psz);
+    }
+
+    // 6. Cyber-Mech Mallets (eyes track nearest puck!)
+    var trackPuck = st.pucks[0];
+    for (var mi = 0; mi < 2; mi++) {
+      var m = st.mallets[mi];
+      var lx = 0, ly = 0;
+      if (trackPuck) {
+        var ldx = trackPuck.x - m.x, ldy = trackPuck.y - m.y, ld = M.hypot(ldx, ldy) || 1;
+        lx = ldx / ld; ly = ldy / ld;
+      }
+      art.mallet(ctx, m, m.skin, {
+        face: m.face, look: { x: lx, y: ly }, mood: m.mood,
+        blink: m.blink, sq: m.sq, sqAng: m.sqAng,
+        frozen: m.frozen, boost: m.boost, t: st.t
+      });
+    }
+
+    // 7. Sparks & floating callout popups
+    fx.draw(ctx);
+    for (var oi = 0; oi < st.popups.length; oi++) {
+      var pp = st.popups[oi], pa = M.min(1, pp.life / pp.max * 1.6);
+      ctx.save();
+      ctx.globalAlpha = pa;
+      ctx.direction = 'rtl';
+      ctx.font = '800 ' + pp.size + 'px Fredoka, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.lineWidth = 6;
+      ctx.strokeStyle = 'rgba(4,8,28,0.9)';
+      ctx.strokeText(pp.text, pp.x, pp.y);
+      ctx.fillStyle = pp.color;
+      ctx.fillText(pp.text, pp.x, pp.y);
+      ctx.restore();
+    }
+
     ctx.restore();
-    if (b.sub) {
-      ctx.globalAlpha = a;
-      txt(b.sub, W / 2, H / 2 + 20 + b.size * 0.72, 34, '#ffffff', 'center', { stroke: 7 });
+
+    // Goal scorer flash wash (uses scorer colour, never #050716)
+    var flash = M.max(st.goalFlash[0], st.goalFlash[1]);
+    if (flash > 0.02 && !Kit.motion.reduced()) {
+      var fcol = st.goalFlash[1] >= st.goalFlash[0] ? st.table.a : st.table.b;
+      ctx.fillStyle = AH.hexA(fcol, flash * 0.18);
+      ctx.fillRect(0, 0, W, H);
     }
-    ctx.globalAlpha = 1;
-  }
-  function easeOutBack(x) { var c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); }
 
-  /* ======================================================= match end */
-  function addCoins(n) { save.coins += n; st.earned += n; persist(); refreshCoins(); }
-  // Awards are saved at once. Mid-rally a banner would hide the top of the rink, so
-  // only a small popup shows and the banner waits for the next goal (flushAwards).
-  function award(id, midRally) {
-    if (save.awards[id]) return;
-    save.awards[id] = 1;
-    var a = byId(AH.AWARDS, id);
-    save.coins += AH.AWARD_COINS; st.earned += AH.AWARD_COINS;
-    persist(); refreshCoins();
-    st.newAwards.push(a.name);
-    S.award();
-    // at the end of a match the results panel lists new awards as badges, so no toast there
-    if (st.scene === 'ending' || st.scene === 'over') return;
-    if (midRally) { st.awardQ.push(a.name); popup('جائزة جديدة!', G.CX, 175, '#fff06a', 26); }
-    else toast('جائزة جديدة: ' + a.name, AH.AWARD_COINS);
-  }
-  function flushAwards() {
-    while (st.awardQ.length) toast('جائزة جديدة: ' + st.awardQ.shift(), AH.AWARD_COINS);
-  }
-
-  // The rewards are saved when the winning goal goes in (goal()); endMatch() only shows them.
-  var badges = [];
-  function commitMatch() {
-    st.awardQ.length = 0; // the results panel lists every new award
-    badges = [];
-    save.matches++;
-    if (st.mode === 1) {
-      var b = st.bot;
-      if (st.winner < 0) {
-        var first = !save.beaten[b.id];
-        save.wins[b.id] = (save.wins[b.id] || 0) + 1;
-        save.beaten[b.id] = true;
-        addCoins(b.coins);
-        award('win1');
-        award('beat_' + b.id);
-        if (st.score[1] === 0) award('clean');
-        if (st.maxBehind[0] >= 3) award('comeback');
-        if (st.chaos) award('chaos');
-        if (first) {
-          if (b.id === 'medium') badges.push(['فتحت خصمًا جديدًا: البرق!', 'gold']);
-          if (b.id === 'hard') badges.push(['فتحت: المضرب الذهبي + الروبوت الخارق!', 'gold']);
-          if (b.id === 'insane') badges.push(['فتحت: مضرب الألماس!', 'gold']);
+    if (!st.demo) {
+      drawHUD();
+      if (st.banner) {
+        var b = st.banner, bu = b.t / b.dur;
+        var bsc = bu < 0.16 ? 0.65 + (bu / 0.16) * 0.42 : (bu < 0.28 ? 1.07 - ((bu - 0.16) / 0.12) * 0.07 : 1);
+        var balpha = bu > 0.78 ? (1 - bu) / 0.22 : 1;
+        ctx.save();
+        ctx.globalAlpha = M.max(0, balpha);
+        ctx.translate(G.CX, G.CY - 22);
+        ctx.scale(bsc, bsc);
+        ctx.direction = 'rtl';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.font = '800 68px Fredoka, sans-serif';
+        ctx.lineWidth = 10;
+        ctx.strokeStyle = 'rgba(4,8,28,0.92)';
+        ctx.strokeText(b.text, 0, 0);
+        ctx.fillStyle = b.color;
+        ctx.fillText(b.text, 0, 0);
+        if (b.sub) {
+          ctx.font = '700 28px Fredoka, sans-serif';
+          ctx.lineWidth = 6;
+          ctx.strokeText(b.sub, 0, 54);
+          ctx.fillStyle = '#ffffff';
+          ctx.fillText(b.sub, 0, 54);
         }
-        syncSpecialSkins();
-      } else {
-        save.losses[b.id] = (save.losses[b.id] || 0) + 1;
-        addCoins(3);
+        ctx.restore();
       }
-    } else {
-      addCoins(10);
-      award('friends');
-      if (st.chaos) award('chaos');
     }
-    persist();
-  }
-  function endMatch() {
-    setScene('over');
-    st.timeScale = 1; st.slowT = 0;
-    var humanWon = st.mode === 2 || st.winner < 0;
-    var wIdx = sideIdx(st.winner);
-    var title = $('ovTitle'), sub = $('ovSub');
-    if (st.mode === 1) {
-      title.textContent = st.winner < 0 ? 'فزت!' : 'خسرت!';
-      title.className = st.winner < 0 ? '' : 'lose';
-      var wins = save.wins[st.bot.id] || 0;
-      sub.textContent = st.winner < 0 ? (wins === 1 ? 'أول فوز على ' + st.bot.name + '!' : 'فوز رقم ' + wins + ' على ' + st.bot.name + '!')
-        : (st.score[0] >= st.goalsToWin - 2 ? 'كنت قريبًا جدًا! حاول مرة أخرى.' : st.bot.name + ' فاز هذه المرة. خذ ثأرك!');
-    } else {
-      title.textContent = st.winner < 0 ? 'فاز اللاعب 1!' : 'فاز اللاعب 2!';
-      title.className = '';
-      sub.textContent = 'مباراة رائعة! من سيفوز في المرة القادمة؟';
-    }
-    var ca = sideColor(-1), cb = sideColor(1);
-    $('ovScore').innerHTML = '<span style="color:' + ca + '">' + st.score[0] + '</span><span class="dash">-</span><span style="color:' + cb + '">' + st.score[1] + '</span>';
-    var sa = st.stats;
-    var rows = [
-      ['الأهداف', sa.goals[0], sa.goals[1]],
-      ['الضربات', sa.hits[0], sa.hits[1]],
-      ['أسرع ضربة (كم/س)', Math.round(sa.fast[0] * KMH), Math.round(sa.fast[1] * KMH)],
-      ['الصدّات', sa.saves[0], sa.saves[1]],
-      ['أهداف متتالية', sa.run[0], sa.run[1]]
-    ];
-    var html = '<tr><th style="color:' + ca + '">' + esc(st.mallets[0].name) + '</th><th></th><th style="color:' + cb + '">' + esc(st.mallets[1].name) + '</th></tr>';
-    rows.forEach(function (r) {
-      var la = r[1] > r[2] ? ' style="color:#fff06a"' : '', lb = r[2] > r[1] ? ' style="color:#fff06a"' : '';
-      html += '<tr><td class="v"' + la + '>' + r[1] + '</td><td class="n">' + r[0] + '</td><td class="v"' + lb + '>' + r[2] + '</td></tr>';
-    });
-    $('ovStats').innerHTML = html;
-    $('ovEarn').innerHTML = '<span class="coin"></span>+' + st.earned;
-    var bh = '';
-    badges.forEach(function (b) { bh += '<span class="badge ' + b[1] + '">' + esc(b[0]) + '</span>'; });
-    var shownAw = st.newAwards.slice(0, badges.length ? 2 : 3), more = st.newAwards.length - shownAw.length;
-    shownAw.forEach(function (n) { bh += '<span class="badge">' + esc('جائزة: ' + n) + '</span>'; });
-    if (more > 0) bh += '<span class="badge">' + esc(more === 1 ? 'وجائزة أخرى' : more === 2 ? 'وجائزتان أخريان' : 'و ' + more + ' جوائز أخرى') + '</span>';
-    $('ovBadges').innerHTML = bh;
-    $('ovBadges').className = 'badges' + (badges.length + shownAw.length + (more > 0 ? 1 : 0) > 3 ? ' many' : '');
-    setTimeout(function () {
-      if (st.scene !== 'over') return;
-      show('scr-over');
-      $('toasts').innerHTML = ''; // awards are shown as badges on the panel; toasts would cover its title
-      if (humanWon) { S.win(); celebrate(); } else S.lose();
-    }, 250);
-    document.body.classList.remove('hidecur');
-    $('pauseBtn').hidden = true;
-    st.mallets.forEach(function (m, i) { m.mood = i === wIdx ? 'joy' : 'sad'; m.moodT = 99; });
-  }
-  function celebrate() {
-    if (Kit.motion.reduced()) return;
-    for (var i = 0; i < 4; i++) emit(Kit.rand(200, 1080), Kit.rand(150, 300), { count: 30, colors: ['#ff4d6d', '#ffd23f', '#7dff6b', '#35c8ff', '#b98cff', '#ffffff'], speed: 600, life: 1.8, size: 12, drag: 1.5, kind: 2 });
   }
 
-  /* ============================================================== UI */
-  function $(id) { return document.getElementById(id); }
-  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
-  var SCREENS = ['scr-title', 'scr-pause', 'scr-over', 'scr-shop', 'scr-awards'];
-  function show(id) { SCREENS.forEach(function (s) { $(s).hidden = s !== id; }); }
-  function refreshCoins() { var els = document.querySelectorAll('.coins'); for (var i = 0; i < els.length; i++) els[i].textContent = Kit.fmt(save.coins); }
-  function toast(text, coins) {
-    var t = document.createElement('div'); t.className = 'toast';
-    t.innerHTML = '<span>' + esc(text) + '</span>' + (coins ? '<span dir="ltr" style="display:inline-flex;align-items:center;gap:6px"><span class="coin" style="width:20px;height:20px"></span>+' + coins + '</span>' : '');
-    $('toasts').appendChild(t);
-    setTimeout(function () { if (t.parentNode) t.parentNode.removeChild(t); }, 3100);
+  /* --------------------------------------------------------------- UI */
+  var screens = { title: $('scr-title'), pause: $('scr-pause'), over: $('scr-over'), shop: $('scr-shop'), awards: $('scr-awards') };
+
+  function openScreen(name) {
+    uiScreen = name;
+    for (var k in screens) screens[k].hidden = (k !== name);
+    pauseBtn.hidden = st.demo || name !== 'none';
+    frameDirty = true;
+    if (name === 'title') {
+      syncTitleControls();
+      buildBotCards();
+      buildArenaBar();
+      syncCoinsUI();
+      syncAwardsCount();
+    } else if (name === 'shop') renderShop();
+    else if (name === 'awards') renderAwards();
   }
 
-  function goTitle() {
-    st.paused = false;
-    setupMatch(true);
-    show('scr-title');
-    buildTitle();
-    $('pauseBtn').hidden = true;
-    document.body.classList.remove('hidecur');
-  }
-  function startGame() {
-    Kit.audio.unlock();
-    S.ui();
-    st.paused = false;
-    show(null);
-    setupMatch(false);
-    // Every real match starts here (Play, Again, Restart, Enter/R); a new one replaces an open one as a quit.
-    if (!simulated) Kit.stats.round(st.mode > 1 ? 'duo' : 'cpu-' + st.bot.id);
-    $('pauseBtn').hidden = false;
-    if (st.mode === 1) document.body.classList.add('hidecur'); else document.body.classList.remove('hidecur');
-    p1Mode = 'mouse'; mouseMoved = true;
-    try { canvas.focus(); } catch (e) { /* ignore */ }
-  }
-  function pause(on) {
-    if (st.scene === 'title' || st.demo || st.scene === 'over') return;
-    st.paused = on; frameDirty = true;
-    show(on ? 'scr-pause' : null);
-    document.body.classList.toggle('hidecur', !on && st.mode === 1);
-    Kit.keys.reset();
-    S.ui();
+  function syncCoinsUI() {
+    var nodes = document.querySelectorAll('.coins');
+    for (var i = 0; i < nodes.length; i++) nodes[i].textContent = Kit.fmt(save.coins);
   }
 
-  // ---- title
-  var botCanvases = {};
-  function buildTitle() {
-    refreshCoins();
-    $('tab1').classList.toggle('on', save.mode === 1);
-    $('tab2').classList.toggle('on', save.mode === 2);
-    $('bots').hidden = save.mode !== 1; $('twop').hidden = save.mode !== 2;
-    $('howto1').hidden = save.mode !== 1; $('howto2').hidden = save.mode !== 2;
-    // the 2-player cards wear the colours the two mallets will have in the match
-    paintCard('.pcard.p1', skinColor(twoPlayerSkin(-1)));
-    paintCard('.pcard.p2', skinColor(twoPlayerSkin(1)));
-    var gs = document.querySelectorAll('.seg.g');
-    for (var i = 0; i < gs.length; i++) gs[i].classList.toggle('on', +gs[i].getAttribute('data-g') === save.goals);
-    $('chaosBtn').classList.toggle('on', save.chaos);
-    $('chaosBtn').textContent = save.chaos ? 'نعم!' : 'لا';
-    var got = 0; AH.AWARDS.forEach(function (a) { if (save.awards[a.id]) got++; });
-    $('awCount').textContent = got + '/' + AH.AWARDS.length;
-    var box = $('bots');
-    if (!box.children.length) {
-      AH.BOTS.forEach(function (b) {
-        var el = document.createElement('div'); el.className = 'bot'; el.setAttribute('data-id', b.id);
-        var cv = document.createElement('canvas'); cv.width = 200; cv.height = 200;
-        el.appendChild(cv); botCanvases[b.id] = cv;
-        el.insertAdjacentHTML('beforeend', '<div class="nm"></div><div class="lv"></div><div class="rec"></div>');
-        el.addEventListener('click', function () {
-          if (!botUnlocked(b)) { S.nope(); el.classList.remove('shake'); void el.offsetWidth; el.classList.add('shake'); return; }
-          save.bot = b.id; persist(); S.ui(); buildTitle();
-          if (st.demo) { st.bot = b; st.mallets[1].bot = b; st.mallets[1].skin = sideSkin(1); st.mallets[1].face = b.face; }
-        });
-        box.appendChild(el);
-      });
-    }
-    AH.BOTS.forEach(function (b) {
-      var el = box.querySelector('[data-id="' + b.id + '"]');
-      var un = botUnlocked(b);
-      el.classList.toggle('sel', save.bot === b.id);
-      el.classList.toggle('locked', !un);
-      el.querySelector('.nm').textContent = b.name;
-      var lv = el.querySelector('.lv'); lv.textContent = b.level; lv.style.background = b.lvColor;
-      var w = save.wins[b.id] || 0;
-      el.querySelector('.rec').textContent = !un ? 'اهزم ' + (b.id === 'hard' ? 'زيزو' : 'البرق') + ' لفتحه' : w ? 'انتصاراتك: ' + w : 'لم تهزمه بعد';
-      var old = el.querySelector('.lockbox'); if (old) old.remove();
-      var cup = el.querySelector('.cup'); if (cup) cup.remove();
-      if (!un) {
-        el.insertAdjacentHTML('beforeend', '<div class="lockbox"><div class="lockicon"></div></div>');
-      } else if (save.beaten[b.id]) {
-        el.insertAdjacentHTML('beforeend', cupSvg('cup'));
-      }
-      art.preview(botCanvases[b.id], 'bot', b);
-    });
-  }
-  function paintCard(sel, col) {
-    var el = document.querySelector(sel);
-    el.style.borderColor = col;
-    el.style.background = 'linear-gradient(' + AH.hexA(AH.darken(col, 0.45), 0.92) + ', ' + AH.hexA(AH.darken(col, 0.8), 0.95) + ')';
-  }
-  function cupSvg(cls) {
-    return '<svg class="' + cls + '" viewBox="0 0 40 40"><path d="M10 6h20v8c0 7-4 12-10 12S10 21 10 14z" fill="#ffd23f" stroke="#b8860b" stroke-width="2"/>' +
-      '<path d="M10 9H5c0 6 3 8 6 8M30 9h5c0 6-3 8-6 8" fill="none" stroke="#ffd23f" stroke-width="3"/><rect x="17" y="25" width="6" height="6" fill="#e0a800"/><rect x="12" y="31" width="16" height="5" rx="2" fill="#ffd23f" stroke="#b8860b" stroke-width="1.5"/></svg>';
-  }
-
-  // ---- shop
-  var shopKind = 'mallet';
-  function shopList() { return shopKind === 'mallet' ? AH.MALLETS : shopKind === 'table' ? AH.TABLES : AH.PUCKS; }
-  function buildShop() {
-    refreshCoins();
-    var tabs = document.querySelectorAll('#scr-shop .tab');
-    for (var i = 0; i < tabs.length; i++) tabs[i].classList.toggle('on', tabs[i].getAttribute('data-k') === shopKind);
-    var grid = $('shopGrid'); grid.innerHTML = '';
-    shopList().forEach(function (it) {
-      var el = document.createElement('div'); el.className = 'item';
-      var owned = save.owned[shopKind].indexOf(it.id) >= 0;
-      var eq = save.eq[shopKind] === it.id;
-      if (eq) el.classList.add('eq');
-      if (!owned && it.price > save.coins) el.classList.add('poor');
-      var cv = document.createElement('canvas'); cv.width = 360; cv.height = 200;
-      el.appendChild(cv);
-      var pr;
-      if (eq) pr = '<div class="pr eqd">مُستخدَم</div>';
-      else if (owned) pr = '<div class="pr own">استخدم</div>';
-      else if (it.price < 0) pr = '<div class="pr lock">' + (it.unlock === 'hard' ? 'اهزم البرق' : 'اهزم الروبوت الخارق') + '</div>';
-      else pr = '<div class="pr"><span class="coin"></span>' + it.price + '</div>';
-      el.insertAdjacentHTML('beforeend', '<div class="in">' + esc(it.name) + '</div>' + pr);
-      el.addEventListener('click', function () {
-        if (eq) return;
-        if (owned) { save.eq[shopKind] = it.id; persist(); S.ui(); afterEquip(); buildShop(); return; }
-        if (it.price < 0 || it.price > save.coins) { S.nope(); el.classList.remove('shake'); void el.offsetWidth; el.classList.add('shake'); return; }
-        save.coins -= it.price; save.owned[shopKind].push(it.id); save.eq[shopKind] = it.id; save.bought++;
-        persist(); S.buy(); afterEquip();
-        if (save.bought >= 3) award('shopper');
-        buildShop();
-      });
-      grid.appendChild(el);
-      art.preview(cv, shopKind, it);
-    });
-  }
-  function afterEquip() {
-    if (st.mallets[0]) st.mallets[0].skin = sideSkin(-1);
-    if (st.mallets[1] && st.mode === 2) st.mallets[1].skin = sideSkin(1);
-  }
-
-  // ---- awards
-  function buildAwards() {
-    var grid = $('awGrid'); grid.innerHTML = '';
+  function syncAwardsCount() {
     var got = 0;
-    AH.AWARDS.forEach(function (a) {
-      var has = !!save.awards[a.id]; if (has) got++;
-      var el = document.createElement('div'); el.className = 'aw' + (has ? ' got' : '');
-      el.innerHTML = cupSvg('ic') + '<div><div class="t">' + esc(a.name) + '</div><div class="d">' + esc(a.desc) + '</div></div>' +
-        '<div class="rw">' + (has ? '&#10003;' : '<span class="coin" style="width:20px;height:20px"></span>+' + AH.AWARD_COINS) + '</div>';
-      grid.appendChild(el);
-    });
-    $('awProg').textContent = got + '/' + AH.AWARDS.length;
+    for (var i = 0; i < AH.AWARDS.length; i++) if (save.awards[AH.AWARDS[i].id]) got++;
+    $('awCount').textContent = $('awProg').textContent = got + '/' + AH.AWARDS.length;
   }
 
-  // ---- wiring
-  function btn(id, fn) { $(id).addEventListener('click', function (e) { if (e.detail > 0) e.currentTarget.blur(); fn(); }); }
-  btn('tab1', function () { save.mode = 1; persist(); S.ui(); buildTitle(); });
-  btn('tab2', function () { save.mode = 2; persist(); S.ui(); buildTitle(); });
-  Array.prototype.forEach.call(document.querySelectorAll('.seg.g'), function (b) {
-    b.addEventListener('click', function (e) { save.goals = +b.getAttribute('data-g'); persist(); S.ui(); if (e.detail > 0) b.blur(); buildTitle(); });
-  });
-  btn('chaosBtn', function () { save.chaos = !save.chaos; persist(); if (save.chaos) S.power(); else S.ui(); buildTitle(); });
-  btn('btnPlay', startGame);
-  btn('btnShop', function () { S.ui(); show('scr-shop'); buildShop(); });
-  btn('btnAwards', function () { S.ui(); show('scr-awards'); buildAwards(); });
-  btn('shopBack', function () { S.uiBack(); show('scr-title'); buildTitle(); });
-  btn('awBack', function () { S.uiBack(); show('scr-title'); buildTitle(); });
-  Array.prototype.forEach.call(document.querySelectorAll('#scr-shop .tab'), function (b) {
-    b.addEventListener('click', function (e) { shopKind = b.getAttribute('data-k'); S.ui(); if (e.detail > 0) b.blur(); buildShop(); });
-  });
-  btn('btnResume', function () { pause(false); });
-  btn('btnRestart', startGame);
-  btn('btnMenu1', function () { S.uiBack(); goTitle(); });
-  btn('btnAgain', startGame);
-  btn('btnMenu2', function () { S.uiBack(); goTitle(); });
-  $('pauseBtn').addEventListener('pointerdown', function (e) { e.stopPropagation(); });
-  $('pauseBtn').addEventListener('click', function (e) { if (e.detail > 0) e.currentTarget.blur(); pause(!st.paused); });
-  var muteBtn = Kit.muteButton();
-  muteBtn.setAttribute('aria-label', 'تشغيل الصوت أو كتمه'); // shared helper sets an English label
-  muteBtn.title = 'الصوت (M)';
+  function syncTitleControls() {
+    var m2 = save.mode === 2;
+    $('tab1').classList.toggle('on', !m2);
+    $('tab2').classList.toggle('on', m2);
+    $('bots').hidden = $('howto1').hidden = m2;
+    $('twop').hidden = $('howto2').hidden = !m2;
+    var gBtns = document.querySelectorAll('.seg.g');
+    for (var i = 0; i < gBtns.length; i++) gBtns[i].classList.toggle('on', Number(gBtns[i].getAttribute('data-g')) === save.goals);
+    var cb = $('chaosBtn');
+    cb.classList.toggle('on', save.chaos);
+    cb.textContent = save.chaos ? 'أقراص القوة: مفعّلة ⚡' : 'أقراص القوة: كلاسيكي';
+  }
+
+  function buildBotCards() {
+    var wrap = $('bots');
+    wrap.innerHTML = '';
+    AH.BOTS.forEach(function (b) {
+      var btn = mk('button', 'bot' + (save.bot === b.id ? ' sel' : ''));
+      btn.type = 'button';
+      btn.setAttribute('data-bot', b.id);
+      var cv = mk('canvas');
+      cv.width = cv.height = 112;
+      art.preview(cv, 'bot', b);
+      btn.appendChild(cv);
+      if (save.beaten[b.id]) {
+        var cup = mk('span', 'cup', '🏆');
+        cup.style.fontSize = '22px';
+        btn.appendChild(cup);
+      }
+      btn.appendChild(mk('div', 'nm', b.name));
+      var lv = mk('div', 'lv', b.level);
+      lv.style.background = b.lvColor;
+      btn.appendChild(lv);
+      var wins = save.wins[b.id] | 0;
+      btn.appendChild(mk('div', 'rec', wins > 0 ? ('الانتصارات: ' + wins) : ('جائزة الفوز: +' + b.coins + ' 🪙')));
+      btn.addEventListener('click', function () {
+        S.click();
+        save.bot = b.id;
+        st.bot = b;
+        if (st.demo && st.mallets[1]) {
+          st.mallets[1].face = b.mech;
+          st.mallets[1].skin = { id: 'bot_' + b.id, kind: b.mech === 'boss' ? 'saw' : 'cyber', color: b.color, ring: b.ring };
+        }
+        persist();
+        buildBotCards();
+      });
+      wrap.appendChild(btn);
+    });
+  }
+
+  function buildArenaBar() {
+    var bar = $('arenaBar');
+    bar.innerHTML = '<span class="lbl">الحلبة:</span>';
+    AH.TABLES.forEach(function (tb) {
+      var btn = mk('button', 'seg ar' + (save.eq.table === tb.id ? ' on' : ''), tb.name);
+      btn.type = 'button';
+      btn.setAttribute('data-arena', tb.id);
+      btn.addEventListener('click', function () {
+        S.click();
+        save.eq.table = tb.id;
+        st.table = tb;
+        frameDirty = true;
+        persist();
+        buildArenaBar();
+      });
+      bar.appendChild(btn);
+    });
+  }
+
+  function applyShopEquip(item) {
+    save.eq[shopTab] = item.id;
+    if (shopTab === 'table') st.table = item;
+    if (shopTab === 'puck') st.puckSkin = item;
+    if (shopTab === 'mallet' && st.mallets[0]) st.mallets[0].skin = item;
+  }
+
+  function renderShop() {
+    syncCoinsUI();
+    var tabs = document.querySelectorAll('#scr-shop .tab');
+    for (var i = 0; i < tabs.length; i++) tabs[i].classList.toggle('on', tabs[i].getAttribute('data-k') === shopTab);
+    var list = shopTab === 'table' ? AH.TABLES : (shopTab === 'puck' ? AH.PUCKS : AH.MALLETS);
+    var grid = $('shopGrid');
+    grid.innerHTML = '';
+    list.forEach(function (item) {
+      var owned = save.owned[shopTab].indexOf(item.id) >= 0 || item.price === 0;
+      var eqd = save.eq[shopTab] === item.id;
+      var card = mk('button', 'item' + (eqd ? ' eq' : '') + (!owned && save.coins < item.price ? ' poor' : ''));
+      card.type = 'button';
+      var cv = mk('canvas');
+      cv.width = 180; cv.height = 106;
+      art.preview(cv, shopTab, item);
+      card.appendChild(cv);
+      card.appendChild(mk('div', 'in', item.name));
+
+      var pr = mk('div', eqd ? 'pr eqd' : (owned ? 'pr own' : 'pr'), eqd ? 'مجهّز ✓' : (owned ? 'اختيار' : null));
+      if (!eqd && !owned) pr.innerHTML = '<span class="coin"></span><span>' + item.price + '</span>';
+      card.appendChild(pr);
+
+      card.addEventListener('click', function () {
+        if (owned) {
+          S.click();
+          applyShopEquip(item);
+          persist();
+          renderShop();
+          return;
+        }
+        if (save.coins < item.price) {
+          S.nope();
+          card.classList.remove('shake');
+          void card.offsetWidth;
+          card.classList.add('shake');
+          return;
+        }
+        S.buy();
+        save.coins -= item.price;
+        save.owned[shopTab].push(item.id);
+        applyShopEquip(item);
+        if (unlockedGearCount() >= 3) earn('shopper', true);
+        else persist();
+        renderShop();
+      });
+      grid.appendChild(card);
+    });
+  }
+
+  function renderAwards() {
+    syncAwardsCount();
+    var grid = $('awGrid');
+    grid.innerHTML = '';
+    AH.AWARDS.forEach(function (aw) {
+      var row = mk('div', 'aw' + (save.awards[aw.id] ? ' got' : ''));
+      row.innerHTML =
+        '<div class="ic" style="font-size:32px;display:flex;align-items:center;justify-content:center">🏆</div>' +
+        '<div><div class="t">' + aw.name + '</div><div class="d">' + aw.desc + '</div></div>' +
+        '<div class="rw"><span>+' + AH.AWARD_COINS + '</span><span class="coin" style="width:18px;height:18px"></span></div>';
+      grid.appendChild(row);
+    });
+  }
+
+  function showOver() {
+    if (!st.committed) commitMatch();
+    flushAwards();
+    setScene('over');
+    var p1Won = st.score[0] > st.score[1];
+    if (p1Won || st.mode === 2) S.win(); else S.lose();
+
+    var titleEl = $('ovTitle'), subEl = $('ovSub');
+    titleEl.className = (!p1Won && st.mode === 1) ? 'lose' : '';
+    if (st.mode === 2) {
+      titleEl.textContent = p1Won ? 'فاز اللاعب 1!' : 'فاز اللاعب 2!';
+      subEl.textContent = 'مباراة حماسية في ' + st.table.name;
+    } else if (p1Won) {
+      titleEl.textContent = 'انتصار ساحق!';
+      subEl.textContent = 'هزمت ' + st.bot.name + ' في ' + st.table.name + '!';
+    } else {
+      titleEl.textContent = 'جولة قوية!';
+      subEl.textContent = 'تغلّب عليك ' + st.bot.name + ' — جرّب ضربة التيربو مجدداً!';
+    }
+
+    $('ovScore').innerHTML = '<span style="color:#5ef2ff">' + st.score[0] + '</span><span class="dash">:</span><span style="color:#ff6b8a">' + st.score[1] + '</span>';
+    var n1 = st.mode === 2 ? 'اللاعب 1' : 'أنت', n2 = st.mode === 2 ? 'اللاعب 2' : st.bot.name;
+    $('ovStats').innerHTML =
+      '<tr><th>' + n1 + '</th><th>الإحصائيات</th><th>' + n2 + '</th></tr>' +
+      '<tr><td class="v">' + st.shots[0] + '</td><td class="n">التسديدات</td><td class="v">' + st.shots[1] + '</td></tr>' +
+      '<tr><td class="v">' + st.saves[0] + '</td><td class="n">التصديات الحاسمة</td><td class="v">' + st.saves[1] + '</td></tr>' +
+      '<tr><td class="v">' + st.topKmh[0] + ' كم/س</td><td class="n">أقصى سرعة</td><td class="v">' + st.topKmh[1] + ' كم/س</td></tr>';
+    $('ovEarn').innerHTML = '<span class="coin"></span><span>+' + st.matchCoins + '</span>';
+
+    var badgesEl = $('ovBadges');
+    badgesEl.innerHTML = '';
+    badgesEl.className = 'badges' + (st.matchAwards.length > 3 ? ' many' : '');
+    st.matchAwards.forEach(function (aw) { badgesEl.appendChild(mk('span', 'badge gold', '🏆 ' + aw.name)); });
+    openScreen('over');
+  }
+
+  /* --------------------------------------------------- DOM & key hooks */
+  function pickMode(m) { S.click(); save.mode = st.mode = m; persist(); syncTitleControls(); }
+  on('tab1', function () { pickMode(1); });
+  on('tab2', function () { pickMode(2); });
+  var goalSegs = document.querySelectorAll('.seg.g');
+  for (var gi = 0; gi < goalSegs.length; gi++) {
+    goalSegs[gi].addEventListener('click', function () {
+      S.click();
+      save.goals = st.goalsToWin = Number(this.getAttribute('data-g')) || 7;
+      persist();
+      syncTitleControls();
+    });
+  }
+  on('chaosBtn', function () { S.click(); save.chaos = st.chaos = !save.chaos; persist(); syncTitleControls(); });
+  on('btnPlay', startMatch);
+  on('btnShop', function () { S.click(); openScreen('shop'); });
+  on('btnAwards', function () { S.click(); openScreen('awards'); });
+  on('shopBack', function () { S.click(); openScreen('title'); });
+  on('awBack', function () { S.click(); openScreen('title'); });
+
+  var shopTabs = document.querySelectorAll('#scr-shop .tab');
+  for (var si = 0; si < shopTabs.length; si++) {
+    shopTabs[si].addEventListener('click', function () {
+      S.click();
+      shopTab = this.getAttribute('data-k') || 'mallet';
+      renderShop();
+    });
+  }
+
+  pauseBtn.addEventListener('click', function () { if (st.paused) resumeGame(); else pauseGame(true); });
+  on('btnResume', resumeGame);
+  on('btnRestart', startMatch);
+  on('btnMenu1', goMenu);
+  on('btnAgain', startMatch);
+  on('btnMenu2', goMenu);
 
   window.addEventListener('keydown', function (e) {
-    if (!Kit.isGameKeyEvent(e)) return;
-    if (e.repeat) return;
-    var c = e.code;
-    var titleOpen = !$('scr-title').hidden, overOpen = !$('scr-over').hidden;
-    var shopOpen = !$('scr-shop').hidden, awOpen = !$('scr-awards').hidden;
-    if (shopOpen || awOpen) {
-      if (c === 'Escape') { S.uiBack(); show('scr-title'); buildTitle(); }
+    if (!Kit.isGameKeyEvent(e) || e.repeat) return;
+    var code = e.code;
+    if (uiScreen === 'title') {
+      if (code === 'Enter' || code === 'NumpadEnter') { e.preventDefault(); startMatch(); }
       return;
     }
-    if (titleOpen) {
-      if (c === 'Enter' || c === 'Space' || c === 'NumpadEnter') { e.preventDefault(); startGame(); }
+    if (uiScreen === 'shop' || uiScreen === 'awards') {
+      if (code === 'Escape') { e.preventDefault(); S.click(); openScreen('title'); }
       return;
     }
-    if (overOpen) {
-      if (c === 'Enter' || c === 'Space' || c === 'KeyR' || c === 'NumpadEnter') { e.preventDefault(); startGame(); }
-      else if (c === 'Escape') { S.uiBack(); goTitle(); }
+    if (uiScreen === 'over') {
+      if (code === 'Enter' || code === 'NumpadEnter' || code === 'KeyR') { e.preventDefault(); startMatch(); }
+      else if (code === 'Escape') { e.preventDefault(); goMenu(); }
       return;
     }
-    if (st.scene === 'over') return;
-    if (c === 'KeyP' || c === 'Escape') { e.preventDefault(); pause(!st.paused); }
-    else if (st.paused && c === 'KeyR') startGame();
-    else if (st.paused && (c === 'Enter' || c === 'Space')) { e.preventDefault(); pause(false); }
+    if (!st.demo) {
+      if (code === 'Escape' || code === 'KeyP') {
+        e.preventDefault();
+        if (st.paused) resumeGame(); else pauseGame(true);
+      } else if (code === 'KeyR') {
+        e.preventDefault();
+        startMatch();
+      }
+    }
   });
 
-  /* ========================================================== boot */
-  goTitle();
-  Kit.loop(update, render);
-  if (document.fonts && document.fonts.load) {
-    Promise.all([document.fonts.load('700 40px Fredoka', 'بهو'), document.fonts.load('700 40px Fredoka', '0123')]).then(function () { frameDirty = true; buildTitle(); }, function () { /* ignore */ });
-  }
+  Kit.lifecycle({
+    pause: function () {
+      if (!st.demo && st.scene !== 'over' && !st.paused) pauseGame(false);
+    }
+  });
 
-  /* ========================================================== debug */
+  /* ------------------------------------------------ test & debug hooks */
   window.__game = {
-    st: st, save: save,
+    st: st,
+    save: save,
     state: function () {
-      return { scene: st.scene, paused: st.paused, demo: st.demo, mode: st.mode, bot: st.bot && st.bot.id, score: st.score.slice(), goalsToWin: st.goalsToWin, chaos: st.chaos,
-        pucks: st.pucks.map(function (p) { return { x: Math.round(p.x), y: Math.round(p.y), vx: Math.round(p.vx), vy: Math.round(p.vy), scored: p.scored }; }),
-        mallets: st.mallets.map(function (m) { return { x: Math.round(m.x), y: Math.round(m.y), r: Math.round(m.r), ctrl: m.ctrl }; }),
-        powers: st.powers.length, particles: parts.filter(function (p) { return p.on; }).length, coins: save.coins };
+      return {
+        demo: st.demo,
+        paused: st.paused,
+        scene: st.scene,
+        score: [st.score[0], st.score[1]],
+        pucks: st.pucks.map(function (p) { return { x: Math.round(p.x), y: Math.round(p.y), vx: Math.round(p.vx), vy: Math.round(p.vy) }; }),
+        mallets: st.mallets.map(function (m) { return { x: Math.round(m.x), y: Math.round(m.y) }; })
+      };
     },
-    goal: function (side) { var p = st.pucks.find(function (q) { return q.alive && !q.scored; }); if (p) { p.x = side < 0 ? G.R - 30 : G.L + 30; p.y = G.CY; p.vx = side < 0 ? 900 : -900; p.vy = 0; } },
-    setScore: function (a, b) { st.score = [a, b]; },
-    shot: function (vx, vy, x, y) { var p = st.pucks[0]; p.x = x == null ? G.CX : x; p.y = y == null ? G.CY : y; p.vx = vx; p.vy = vy; },
-    power: function (id, side) { applyPower({ x: G.CX, y: G.CY, def: byId(AH.POWERS, id) }, side || -1, null); },
-    spawnPower: spawnPower,
-    dbg: dbg,
-    bench: function (n) { simulated = 1; var t0 = performance.now(); for (var i = 0; i < n; i++) render(); var t1 = performance.now(); for (i = 0; i < n; i++) update(1 / 60); return { renderMs: +((t1 - t0) / n).toFixed(2), updateMs: +((performance.now() - t1) / n).toFixed(2) }; },
-    // run the simulation synchronously (no rendering) for balance tests
-    sim: function (sec) { simulated = 1; var n = Math.round(sec * 60); for (var i = 0; i < n; i++) update(1 / 60); return this.state(); },
-    autoplay: function (botId) { simulated = 1; var m = st.mallets[0]; m.ctrl = 'ai'; m.bot = typeof botId === 'object' ? botId : byId(AH.BOTS, botId); m.ai.mode = 'idle'; },
-    reset: function () { store.remove('save'); location.reload(); }
+    shot: function (vx, vy, x, y) {
+      var p = st.pucks[0];
+      if (!p || !p.alive || p.scored) { p = makePuck(G.CX, G.CY, 0, 0); st.pucks = [p]; }
+      p.vx = vx || 0; p.vy = vy || 0;
+      if (x != null) p.x = x;
+      if (y != null) p.y = y;
+      p.alive = true; p.scored = false; p.fire = 0; p.stuck = 0;
+      frameDirty = true;
+      return p;
+    },
+    goal: function (side) {
+      var s = side < 0 ? -1 : 1;
+      var p = st.pucks[0];
+      if (!p || !p.alive || p.scored) { p = makePuck(G.CX, G.CY, 0, 0); st.pucks = [p]; }
+      p.x = s < 0 ? G.R - 30 : G.L + 30;
+      p.y = G.CY;
+      p.vx = s < 0 ? 1100 : -1100;
+      p.vy = 0;
+      p.lastHit = s;
+      p.alive = true;
+      p.scored = false;
+      frameDirty = true;
+    },
+    setScore: function (a, b) {
+      st.score[0] = a | 0;
+      st.score[1] = b | 0;
+      frameDirty = true;
+    },
+    power: function (id, side) {
+      var pw = spawnPower(id || 'fire');
+      if (pw) {
+        st.powers.pop();
+        applyPower(pw, side || -1, st.pucks[0]);
+      }
+    },
+    sim: function (sec) {
+      var n = Math.max(1, Math.round((sec || 0) * 60));
+      for (var i = 0; i < n; i++) update(1 / 60);
+    },
+    spawnPower: spawnPower
   };
-  Kit.lifecycle({ pause: function () { if (!st.paused) pause(true); } });
+
+  /* -------------------------------------------------------------- boot */
+  startDemo();
+  openScreen('title');
+  Kit.loop(update, render);
   Kit.ready();
 })();

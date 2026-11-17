@@ -405,3 +405,29 @@ test('Golf: a save from the first version keeps its coins, refunds its upgrades 
   assert.equal(await page.locator('#world-label').textContent(), 'قمم الثلج');
   assert.equal(await page.evaluate(() => golfState.skin), 'gold');
 });
+
+test('Golf: all five worlds are playable immediately and difficulty tiers tune gauge and rewards', async t => {
+  const page = await game(t, { play: false });
+  await page.locator('#open-worlds').click();
+  const enabled = await page.locator('#worlds-content button').evaluateAll(list => list.map(b => !b.disabled));
+  assert.deepEqual(enabled, [true, true, true, true, true], 'all five worlds are open on shared school PCs');
+  await page.locator('#worlds-content button').nth(4).click();
+  assert.equal(await page.evaluate(() => golfState.world), 4, 'can jump straight to galaxy orbit');
+
+  await page.locator('[data-difficulty="easy"]').click();
+  assert.equal(await page.locator('[data-difficulty="easy"]').getAttribute('aria-pressed'), 'true');
+  await page.locator('#play').click();
+  assert(await page.evaluate(() => golfState.gauge.perfect < 0.85), 'easy mode widens the golden zone');
+  await page.locator('#pause').click();
+  await page.locator('#menu').click();
+
+  await page.locator('[data-difficulty="hero"]').click();
+  await page.locator('#play').click();
+  await swing(page, 28);
+  await page.evaluate(() => advanceGolfFrames(15));
+  await page.keyboard.press('ArrowDown');
+  assert.equal(await page.evaluate(() => golfState.ball.rocketsLeft), 1, 'ArrowDown in mid-air saves rockets for ground slams');
+  await land(page);
+  assert(await page.evaluate(() => GolfPhysics.reward(golfState.ball).hero > 0), 'hero tier awards bonus coins');
+});
+

@@ -1,1289 +1,1204 @@
-/* Recess Kitchen (مطبخ الفسحة) pure simulation engine:
- * 12 handcrafted levels across 4 worlds (Sunny Canteen, Smoothie & Toast Bar,
- * Conveyor Kitchen, Ice Festival), 1P & 2P cooperative chefs, auto-chopping,
- * forgiving fryer/grill/blender cooking, plate assembly, conveyor belts,
- * slippery ice physics, VIP star orders, A* / BFS point-and-walk pathfinding,
- * stars, shop, and save validation.
- * Pure UMD: no DOM, no Kit, no timers, no Math.random. */
-(function (root, factory) {
-  'use strict';
-  var RK = factory();
-  if (typeof window !== 'undefined') window.RK = RK;
-  if (typeof module === 'object' && module.exports) module.exports = RK;
-})(typeof globalThis !== 'undefined' ? globalThis : this, function () {
+/*
+ * مطبخ الفسحة (Recess Kitchen: Turbo Robo-Chef & Burger Cannon) — Pure Simulation Engine
+ * Dual CommonJS (Node tests) + Browser global (window.RKEngine / window.RK).
+ * Deterministic: zero DOM, zero browser storage, zero timers, zero Math.random.
+ */
+(function () {
   'use strict';
 
-  var RK = {};
-  var W = 1280, H = 720;
-  var COLS = 14, ROWS = 7, TILE = 76, X0 = 108, Y0 = 164;
-  RK.W = W; RK.H = H;
-  RK.COLS = COLS; RK.ROWS = ROWS; RK.TILE = TILE; RK.X0 = X0; RK.Y0 = Y0;
+  var W = 1280, H = 720, COLS = 13, ROWS = 6, TILE = 84, GX = 94, GY = 196;
+  var CHEF_R = 26, BASE_SPEED = 295, DASH_SPEED = 640, DASH_DUR = 0.19, DASH_CD = 0.55;
 
-  RK.CR = 22;           // chef collision radius (leaves generous room in 76px corridors)
-  RK.SPEED = 250;       // normal walking speed (px/s)
-  RK.DASH_SPEED = 560;  // dash burst speed (px/s)
-  RK.DASH_DUR = 0.16;   // dash duration (s)
-  RK.DASH_CD = 0.62;    // dash cooldown (s)
-  RK.REACH = 88;        // interaction reach from chef center to station center (px)
-  RK.CHOP_DIST = 96;    // distance within which standing beside a cutting board auto-chops
+  var WORLDS = [
+    { id: 'canteen', name: 'مقصف المدرسة', color: '#ff8c2b', floorA: '#fff8ec', floorB: '#ffe7be', trim: '#c2410c' },
+    { id: 'truck', name: 'شاحنة التيربو', color: '#00b4d8', floorA: '#eefbff', floorB: '#cdeffd', trim: '#0369a1' },
+    { id: 'space', name: 'مطبخ الفضاء', color: '#8b5cf6', floorA: '#f4efff', floorB: '#ded1ff', trim: '#5b21b6' },
+    { id: 'festival', name: 'مهرجان الأبطال', color: '#ef476f', floorA: '#fff0f4', floorB: '#ffd2e1', trim: '#be123c' }
+  ];
 
-  // DDA endpoints: 0 = extra gentle for a 6-year-old, 1 = brisk rush for an 11-year-old.
-  RK.EASY = { patienceScale: 1.35, cookSpeed: 1.25, burnDelay: 14.0, goalScale: 0.8 };
-  RK.HARD = { patienceScale: 0.82, cookSpeed: 0.90, burnDelay: 6.5, goalScale: 1.15 };
+  var CUSTOMERS = [
+    { id: 'striker', name: 'بطل الكرة', color: '#38bdf8' },
+    { id: 'robo', name: 'الآلي الجائع', color: '#a855f7' },
+    { id: 'dino', name: 'الديناصور الصغير', color: '#22c55e' },
+    { id: 'ninja', name: 'نينجا الفسحة', color: '#f43f5e' }
+  ];
 
-  function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
-  RK.clamp = clamp;
-
-  RK.params = function (k) {
-    k = clamp(+k || 0, 0, 1);
-    var out = {};
-    for (var key in RK.EASY) out[key] = RK.EASY[key] + (RK.HARD[key] - RK.EASY[key]) * k;
-    return out;
+  var DIFFICULTIES = {
+    easy: { id: 'easy', name: 'سهل', sub: 'بلا احتراق', canBurn: false, patienceMul: 1.4, goalMul: 0.8, reachBonus: 18, orderGap: 6.2, vipChance: 0.12 },
+    normal: { id: 'normal', name: 'متوسط', sub: 'متوازن وممتع', canBurn: true, patienceMul: 1.0, goalMul: 1.0, reachBonus: 0, orderGap: 5.0, vipChance: 0.2 },
+    hero: { id: 'hero', name: 'بطل', sub: 'سرعة وطلبات ذهبية', canBurn: true, patienceMul: 0.82, goalMul: 1.15, reachBonus: 0, orderGap: 3.8, vipChance: 0.42 }
   };
 
-  // Seeded PRNG (mulberry32) for deterministic order queues and tests.
-  RK.rng = function (seed) {
-    var a = (seed >>> 0) || 1;
+  var ITEMS = {
+    bun: { id: 'bun', name: 'خبز' },
+    meatRaw: { id: 'meatRaw', name: 'لحم طازج' },
+    meatCooked: { id: 'meatCooked', name: 'برجر مشوي' },
+    cheese: { id: 'cheese', name: 'جبن' },
+    bunCheese: { id: 'bunCheese', name: 'خبز بالجبن' },
+    meatCheese: { id: 'meatCheese', name: 'برجر بالجبن' },
+    potatoRaw: { id: 'potatoRaw', name: 'بطاطس' },
+    fries: { id: 'fries', name: 'بطاطس مقرمشة' },
+    fruitRaw: { id: 'fruitRaw', name: 'فواكه' },
+    juice: { id: 'juice', name: 'عصير الصاروخ' },
+    dough: { id: 'dough', name: 'عجينة' },
+    pizzaRaw: { id: 'pizzaRaw', name: 'عجينة بالجبن' },
+    burger: { id: 'burger', name: 'برجر عملاق' },
+    cheeseburger: { id: 'cheeseburger', name: 'برجر بالجبن' },
+    pizza: { id: 'pizza', name: 'بيتزا النجوم' }
+  };
+
+  var DISHES = {
+    burger: { id: 'burger', name: 'برجر عملاق', coins: 26, steps: ['bun', 'meatCooked'] },
+    cheeseburger: { id: 'cheeseburger', name: 'برجر بالجبن', coins: 34, steps: ['bun', 'meatCooked', 'cheese'] },
+    juice: { id: 'juice', name: 'عصير الصاروخ', coins: 20, steps: ['fruitRaw', 'blender'] },
+    fries: { id: 'fries', name: 'بطاطس مقرمشة', coins: 22, steps: ['potatoRaw', 'fryer'] },
+    pizza: { id: 'pizza', name: 'بيتزا النجوم', coins: 36, steps: ['dough', 'cheese', 'oven'] }
+  };
+
+  var APRONS = [
+    { id: 'school', name: 'طاهي المدرسة', color: '#ff8c2b', cost: 0 },
+    { id: 'neon', name: 'طاهي النيون', color: '#00f5d4', cost: 60 },
+    { id: 'turbo', name: 'درع التيربو', color: '#ef476f', cost: 90 },
+    { id: 'galaxy', name: 'بدلة المجرة', color: '#8b5cf6', cost: 120 }
+  ];
+
+  var HATS = [
+    { id: 'toque', name: 'قبعة الشيف', color: '#ffffff', cost: 0 },
+    { id: 'pirate', name: 'قبعة القرصان', color: '#2b2d42', cost: 50 },
+    { id: 'space', name: 'خوذة الفضاء', color: '#38bdf8', cost: 80 },
+    { id: 'crown', name: 'التاج الذهبي', color: '#ffd166', cost: 120 }
+  ];
+
+  var LEVELS = [
+    { id: '1-1', world: 0, name: 'برجر الجرس الأول', duration: 70, goals: [45, 90, 140], dishes: ['burger', 'juice'], map: [
+      '#BM##SSS##FT#',
+      '#...........#',
+      'G..1........J',
+      'G..2..##....J',
+      '#.........A.#',
+      '#############'
+    ] },
+    { id: '1-2', world: 0, name: 'شطيرة الجبن الذهبي', duration: 75, goals: [55, 105, 160], dishes: ['burger', 'cheeseburger', 'juice'], map: [
+      '#BMC#SSS##FT#',
+      '#...........#',
+      'G..1........J',
+      'G..2.###....J',
+      '#.........A.#',
+      '#############'
+    ] },
+    { id: '1-3', world: 0, name: 'زحمة الفسحة الأولى', duration: 75, goals: [60, 115, 175], dishes: ['burger', 'cheeseburger', 'juice'], map: [
+      '#BMC#SSS#CFT#',
+      '#...........#',
+      'G..1........J',
+      'G..2.###....J',
+      '#.........A.#',
+      '#############'
+    ] },
+    { id: '2-1', world: 1, name: 'انطلاق الشاحنة', duration: 75, goals: [60, 115, 175], dishes: ['burger', 'fries', 'juice'], map: [
+      '#BMP#SSS#PFT#',
+      '#.>>>>.<<<<.#',
+      'G..1........Y',
+      'G..2..##....J',
+      '#.........A.#',
+      '#############'
+    ] },
+    { id: '2-2', world: 1, name: 'حزام البطاطس السريع', duration: 75, goals: [65, 125, 190], dishes: ['cheeseburger', 'fries', 'burger'], map: [
+      '#BMC#SSS#CPT#',
+      '#.>>>>.<<<<.#',
+      'G..1........Y',
+      'G..2.RR#....Y',
+      '#.........A.#',
+      '#############'
+    ] },
+    { id: '2-3', world: 1, name: 'سباق الوجبات السريعة', duration: 80, goals: [75, 140, 210], dishes: ['cheeseburger', 'fries', 'juice', 'burger'], map: [
+      '#BMC#SSS#PFT#',
+      '#.>>>>>>>>>.#',
+      'G..1........Y',
+      'G..2.RR#....J',
+      '#...<<<<<.A.#',
+      '######Y######'
+    ] },
+    { id: '3-1', world: 2, name: 'فرن بيتزا النجوم', duration: 75, goals: [65, 125, 190], dishes: ['pizza', 'juice', 'fries'], map: [
+      '#DCF#SSS#PFT#',
+      '#...........#',
+      'O..1........Y',
+      'O..2..##....J',
+      '#.........A.#',
+      '#############'
+    ] },
+    { id: '3-2', world: 2, name: 'بوابة الفضاء العجيبة', duration: 80, goals: [75, 140, 210], dishes: ['pizza', 'burger', 'juice'], map: [
+      '#DCB#SSS#MFT#',
+      '#...........#',
+      'O..1........G',
+      'O..2..##....J',
+      '#.........A.#',
+      '##W#######W##'
+    ] },
+    { id: '3-3', world: 2, name: 'حفل المجرة', duration: 80, goals: [80, 155, 230], dishes: ['pizza', 'cheeseburger', 'fries', 'juice'], map: [
+      '#DCB#SSS#MPT#',
+      '#.>>>>.<<<<.#',
+      'O..1........G',
+      'O..2..##....Y',
+      '#.........A.J',
+      '##W###F###W##'
+    ] },
+    { id: '4-1', world: 3, name: 'مدرج الأبطال', duration: 80, goals: [85, 160, 240], dishes: ['cheeseburger', 'burger', 'fries', 'juice'], map: [
+      '#BMC#SSS#PFT#',
+      '#.>>>>>>>>>.#',
+      'G..1........Y',
+      'G..2.RR#....J',
+      '#...<<<<<.A.#',
+      '####G###Y####'
+    ] },
+    { id: '4-2', world: 3, name: 'مهرجان البيتزا والبرجر', duration: 80, goals: [90, 170, 255], dishes: ['pizza', 'cheeseburger', 'fries', 'juice'], map: [
+      '#DCB#SSS#MPT#',
+      '#.>>>>.<<<<.#',
+      'O..1........G',
+      'G..2..##....Y',
+      '#.........A.J',
+      '##W###F###W##'
+    ] },
+    { id: '4-3', world: 3, name: 'تحدي الشيف الأسطوري', duration: 85, goals: [95, 185, 275], dishes: ['pizza', 'cheeseburger', 'burger', 'fries', 'juice'], map: [
+      '#DCB#SSS#MPT#',
+      '#.>>>>.<<<<.#',
+      'O..1........G',
+      'G..2.RR#....Y',
+      '#...<<<<<.A.J',
+      '##W#O###F#W##'
+    ] }
+  ];
+
+  function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+
+  function makeRng(seed) {
+    var s = (seed | 0) || 1234567;
     return function () {
-      a = (a + 0x6D2B79F5) | 0;
-      var t = Math.imul(a ^ (a >>> 15), 1 | a);
+      s = (s + 0x6d2b79f5) | 0;
+      var t = Math.imul(s ^ (s >>> 15), 1 | s);
       t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
       return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
-  };
-
-  /* ------------------------------------------------- worlds, dishes, shop */
-  RK.WORLDS = [
-    { id: 'canteen', name: 'نافذة الفلافل', color: '#ff9f1c', bg0: '#331d0c', bg1: '#522e14', floor0: '#fff8e7', floor1: '#ffe8b8', trim: '#e07a00' },
-    { id: 'juice', name: 'ركن العصير والتوست', color: '#ff5d9e', bg0: '#2d1233', bg1: '#491a52', floor0: '#fff2f8', floor1: '#ffd9ec', trim: '#d62872' },
-    { id: 'belt', name: 'حزام التوصيل', color: '#2ec4b6', bg0: '#0f2b2e', bg1: '#18454a', floor0: '#ebfcf9', floor1: '#cbf3ec', trim: '#0d9488' },
-    { id: 'ice', name: 'مهرجان الجليد', color: '#5ce1e6', bg0: '#102042', bg1: '#1d3768', floor0: '#f0f8ff', floor1: '#dceeff', trim: '#4f46e5' }
-  ];
-
-  RK.ANIMALS = ['cat', 'bunny', 'bear', 'penguin', 'dino'];
-
-  RK.DISHES = {
-    wrap: { id: 'wrap', name: 'شطيرة فلافل', coins: 24, patience: 48, plate: true, recipe: ['bread', 'falafel'] },
-    wrapTomato: { id: 'wrapTomato', name: 'فلافل بالطماطم', coins: 32, patience: 54, plate: true, recipe: ['bread', 'falafel', 'tomato'] },
-    toastie: { id: 'toastie', name: 'توست الجبن', coins: 26, patience: 46, plate: false, recipe: ['bread', 'cheese'] },
-    smoothieStrawberry: { id: 'smoothieStrawberry', name: 'عصير الفراولة', coins: 18, patience: 40, plate: false, recipe: ['strawberry'] },
-    smoothieMango: { id: 'smoothieMango', name: 'عصير المانجو', coins: 18, patience: 40, plate: false, recipe: ['mango'] }
-  };
-
-  RK.APRONS = [
-    { name: 'سماوي', body: '#38b6ff', trim: '#0284c7', price: 0 },
-    { name: 'توتي', body: '#ff5d9e', trim: '#be185d', price: 50 },
-    { name: 'شمسي', body: '#ffb703', trim: '#d97706', price: 80 },
-    { name: 'نعناعي', body: '#2ec4b6', trim: '#0f766e', price: 110 },
-    { name: 'بنفسجي', body: '#9b5de5', trim: '#6d28d9', price: 150 },
-    { name: 'برتقالي', body: '#ff6b35', trim: '#c2410c', price: 190 }
-  ];
-
-  RK.HATS = [
-    { id: 'toque', name: 'قبعة الطاهي', price: 0 },
-    { id: 'crown', name: 'تاج ذهبي', price: 70 },
-    { id: 'strawberry', name: 'قبعة الفراولة', price: 100 },
-    { id: 'catears', name: 'أذنا قطة', price: 130 },
-    { id: 'viking', name: 'خوذة الفايكنغ', price: 170 },
-    { id: 'halo', name: 'هالة النجوم', price: 220 }
-  ];
-
-  /* --------------------------------------------------- 12 handcrafted maps */
-  // Legend (14 cols x 7 rows):
-  // # wall, C counter, . floor, I ice floor, = 1P walkable bridge (counter in 2P)
-  // > < ^ v conveyor belt, S serving window, P plate rack, T confetti recycle bin
-  // Crates: B bread, F falafelRaw, M tomatoRaw, H cheese, R strawberry, G mango
-  // Appliances: K cutting board (chop), Y fryer, L panini grill, D blender
-  // Spawns: 1 Chef 1 (always has walkable floor to its right!), 2 Chef 2
-  RK.LEVELS = [
-    // World 1: نافذة الفلافل (Sunny Canteen)
-    {
-      id: '1-1', world: 0, name: 'صباح الفلافل', duration: 70,
-      dishes: ['wrap'], goals: [40, 75, 110], vip: false,
-      map: [
-        '#CPCSSSSCCCP##',
-        'C............C',
-        'B..1......2..Y',
-        'B............Y',
-        'C............C',
-        'F............T',
-        '#CCCCFFCCCCCC#'
-      ]
-    },
-    {
-      id: '1-2', world: 0, name: 'فلافل وعصير', duration: 70,
-      dishes: ['wrap', 'smoothieStrawberry'], goals: [45, 85, 125], vip: false,
-      map: [
-        '#CPCSSSSCCCP##',
-        'C............C',
-        'B..1......2..Y',
-        'F............Y',
-        'C............D',
-        'R............D',
-        '#CCCRCCCCCTCC#'
-      ]
-    },
-    {
-      id: '1-3', world: 0, name: 'طماطم طازجة', duration: 75,
-      dishes: ['wrap', 'wrapTomato', 'smoothieStrawberry'], goals: [55, 100, 145], vip: false,
-      map: [
-        '#CPCSSSSCCCP##',
-        'C............C',
-        'B..1......2..Y',
-        'F............Y',
-        'M............D',
-        'R............T',
-        '#CCKKCCCCKKCC#'
-      ]
-    },
-
-    // World 2: ركن العصير والتوست (Smoothie & Toast Bar)
-    {
-      id: '2-1', world: 1, name: 'توست الجبن', duration: 70,
-      dishes: ['toastie', 'smoothieMango'], goals: [50, 90, 130], vip: false,
-      map: [
-        '#CPCSSSSCCCP##',
-        'B............L',
-        'H..1......2..L',
-        'C....CCCC....D',
-        'G............D',
-        'C............T',
-        '#CCBHCCCCGGCC#'
-      ]
-    },
-    {
-      id: '2-2', world: 1, name: 'جزيرة الوسط', duration: 75,
-      dishes: ['toastie', 'wrap', 'smoothieStrawberry', 'smoothieMango'], goals: [55, 100, 145], vip: false,
-      map: [
-        '#CPCSSSSCCCP##',
-        'B..1......2..Y',
-        'F............L',
-        'H..CCCCCCCC..D',
-        'R............D',
-        'G............T',
-        '#CCBCCFCCLCCC#'
-      ]
-    },
-    {
-      id: '2-3', world: 1, name: 'فسحة مزدحمة', duration: 80,
-      dishes: ['wrapTomato', 'toastie', 'smoothieMango', 'smoothieStrawberry'], goals: [65, 115, 165], vip: false,
-      map: [
-        '#CPCSSSSCCCP##',
-        'B..1......2..Y',
-        'F............L',
-        'M..CCK..KCC..D',
-        'H............D',
-        'R............T',
-        '#CCGCCMCCYLCC#'
-      ]
-    },
-
-    // World 3: حزام التوصيل (Conveyor Kitchen — walkable bridge in 1P, awesome pass-play in 2P!)
-    {
-      id: '3-1', world: 2, name: 'الحزام السريع', duration: 75,
-      dishes: ['wrap', 'toastie', 'smoothieStrawberry'], goals: [45, 85, 125], vip: false,
-      map: [
-        '#CPSSS##SSSPC#',
-        'B.1...##..2..Y',
-        'F.....>>C....L',
-        'H.....==.....D',
-        'R....C<<.....D',
-        'C.....##.....T',
-        '#CTBCC##CCYLC#'
-      ]
-    },
-    {
-      id: '3-2', world: 2, name: 'خط الشطائر', duration: 80,
-      dishes: ['wrapTomato', 'toastie', 'smoothieMango'], goals: [50, 90, 130], vip: false,
-      map: [
-        '#CPSSS##SSSPC#',
-        'B.1...##..2..Y',
-        'F.....>>C....L',
-        'M.....==.....D',
-        'G....C<<.....K',
-        'H.....##.....T',
-        '#CTKCC##CCYLD#'
-      ]
-    },
-    {
-      id: '3-3', world: 2, name: 'مصنع الفسحة', duration: 85,
-      dishes: ['wrap', 'wrapTomato', 'toastie', 'smoothieStrawberry', 'smoothieMango'], goals: [55, 95, 140], vip: false,
-      map: [
-        '#CPSSS##SSSPC#',
-        'B.1...>>C.2..Y',
-        'F.....==.....L',
-        'M....C<<.....D',
-        'R.....>>C....K',
-        'G.....##.....T',
-        '#CTHKC##CCYLD#'
-      ]
-    },
-
-    // World 4: مهرجان الجليد (Ice Festival — cheerful slippery ice & golden VIP star orders!)
-    {
-      id: '4-1', world: 3, name: 'أرضية الجليد', duration: 75,
-      dishes: ['toastie', 'wrap', 'smoothieMango'], goals: [55, 100, 145], vip: true,
-      map: [
-        '#CPCSSSSCCCP##',
-        'B.1IIIIIIII2.Y',
-        'F.IIIIIIIIII.L',
-        'H.IIIIIIIIII.D',
-        'G.IIIIIIIIII.D',
-        'C.IIIIIIIIII.T',
-        '#CCBCCFCCYLCC#'
-      ]
-    },
-    {
-      id: '4-2', world: 3, name: 'تزلج وتوصيل', duration: 80,
-      dishes: ['wrapTomato', 'toastie', 'smoothieStrawberry', 'smoothieMango'], goals: [60, 110, 155], vip: true,
-      map: [
-        '#CPCSSSSCCCP##',
-        'B.1IIIIIIII2.Y',
-        'F.IIIIIIIIII.L',
-        'M..CCKIIKCC..D',
-        'H.IIIIIIIIII.D',
-        'R.IIIIIIIIII.T',
-        '#CCGCCMCCYLCC#'
-      ]
-    },
-    {
-      id: '4-3', world: 3, name: 'حفلة النجوم', duration: 85,
-      dishes: ['wrap', 'wrapTomato', 'toastie', 'smoothieStrawberry', 'smoothieMango'], goals: [65, 115, 165], vip: true,
-      map: [
-        '#CPCSSSSCCCP##',
-        'B.1IIIIIIII2.Y',
-        'F.IIIIIIIIII.L',
-        'M..>>>>C..K..D',
-        'H.IIIIIIIIII.D',
-        'R.IIIIIIIIII.T',
-        '#CCGCCKCCYLCC#'
-      ]
-    }
-  ];
-
-  /* --------------------------------------------------------- grid helpers */
-  RK.cellCenter = function (c, r) {
-    return { x: X0 + (c + 0.5) * TILE, y: Y0 + (r + 0.5) * TILE };
-  };
-  RK.cellAt = function (x, y) {
-    return { c: Math.floor((x - X0) / TILE), r: Math.floor((y - Y0) / TILE) };
-  };
-
-  var CRATE_MAP = { B: 'bread', F: 'falafelRaw', M: 'tomatoRaw', H: 'cheese', R: 'strawberry', G: 'mango' };
-  var BELT_DIRS = { '>': [1, 0], '<': [-1, 0], '^': [0, -1], 'v': [0, 1] };
-
-  RK.walkable = function (w, c, r) {
-    if (c < 0 || c >= COLS || r < 0 || r >= ROWS) return false;
-    var t = w.grid[r][c];
-    return t === '.' || t === 'I' || t === '=';
-  };
-
-  RK.stationAt = function (w, c, r) {
-    if (c < 0 || c >= COLS || r < 0 || r >= ROWS) return null;
-    return w.stationGrid[r][c];
-  };
-
-  /* --------------------------------------------------- dish & plate logic */
-  var PLATE_ORDER = { bread: 1, falafel: 2, tomato: 3, cheese: 4, toastie: 5 };
-  function sortPlate(items) {
-    items.sort(function (a, b) { return (PLATE_ORDER[a] || 9) - (PLATE_ORDER[b] || 9); });
-    return items;
   }
 
-  // Can ingredient kind `ing` be placed onto a plate currently holding `items`?
-  function canAddToPlate(items, ing) {
-    if (items.indexOf(ing) >= 0) return false;
-    if (ing === 'toastie') return items.length === 0;
-    if (items.indexOf('toastie') >= 0) return false;
-    if (ing === 'cheese') {
-      return items.length === 0 || (items.length === 1 && items[0] === 'bread');
-    }
-    if (items.indexOf('cheese') >= 0) {
-      return ing === 'bread' && items.length === 1;
-    }
-    return ing === 'bread' || ing === 'falafel' || ing === 'tomato';
+  function cellCenter(c, r) {
+    return { x: GX + c * TILE + TILE / 2, y: GY + r * TILE + TILE / 2 };
   }
-  RK.canAddToPlate = canAddToPlate;
 
-  // Returns the servable dish ID of a held item, or null if incomplete/raw.
-  RK.dishOf = function (item) {
-    if (!item) return null;
-    if (item.kind === 'toastie') return 'toastie';
-    if (item.kind === 'smoothieStrawberry') return 'smoothieStrawberry';
-    if (item.kind === 'smoothieMango') return 'smoothieMango';
-    if (item.kind === 'plate') {
-      var it = item.items;
-      if (it.length === 1 && it[0] === 'toastie') return 'toastie';
-      if (it.indexOf('bread') >= 0 && it.indexOf('falafel') >= 0) {
-        if (it.length === 2) return 'wrap';
-        if (it.length === 3 && it.indexOf('tomato') >= 0) return 'wrapTomato';
-      }
-    }
-    return null;
+  function posToCell(x, y) {
+    return {
+      c: clamp(Math.floor((x - GX) / TILE), 0, COLS - 1),
+      r: clamp(Math.floor((y - GY) / TILE), 0, ROWS - 1)
+    };
+  }
+
+  var COMBOS = {
+    'bun+meatCooked': 'burger',
+    'bun+cheese': 'bunCheese',
+    'cheese+meatCooked': 'meatCheese',
+    'burger+cheese': 'cheeseburger',
+    'bunCheese+meatCooked': 'cheeseburger',
+    'bun+meatCheese': 'cheeseburger',
+    'cheese+dough': 'pizzaRaw'
   };
 
-  // Attempts to combine item `a` (on counter) and `b` (in chef's hand).
-  // Returns { onCounter, inHand, ok: true } if combined, else null.
-  function tryCombine(a, b) {
-    if (!a || !b) return null;
-    // Plate on counter + compatible ingredient in hand
-    if (a.kind === 'plate' && canAddToPlate(a.items, b.kind)) {
-      var nextA = sortPlate(a.items.concat([b.kind]));
-      return { onCounter: { kind: 'plate', items: nextA }, inHand: null, ok: true };
-    }
-    // Compatible ingredient on counter + plate in hand -> scoop onto plate in hand!
-    if (b.kind === 'plate' && canAddToPlate(b.items, a.kind)) {
-      var nextB = sortPlate(b.items.concat([a.kind]));
-      return { onCounter: null, inHand: { kind: 'plate', items: nextB }, ok: true };
-    }
-    // Two partial plates whose ingredients are all mutually compatible -> merge onto counter plate, keep clean plate in hand
-    if (a.kind === 'plate' && b.kind === 'plate' && a.items.length > 0 && b.items.length > 0) {
-      var merged = a.items.slice();
-      for (var i = 0; i < b.items.length; i++) {
-        if (!canAddToPlate(merged, b.items[i])) return null;
-        merged.push(b.items[i]);
-      }
-      return { onCounter: { kind: 'plate', items: sortPlate(merged) }, inHand: { kind: 'plate', items: [] }, ok: true };
-    }
-    // Bread + Cheese directly on a counter -> rawToastie ready for grill
-    if ((a.kind === 'bread' && b.kind === 'cheese') || (a.kind === 'cheese' && b.kind === 'bread')) {
-      return { onCounter: { kind: 'rawToastie' }, inHand: null, ok: true };
-    }
-    return null;
+  function combineItems(a, b) {
+    if (!a || !b || a === b) return null;
+    var k1 = a < b ? a + '+' + b : b + '+' + a;
+    return COMBOS[k1] || null;
   }
-  RK.tryCombine = tryCombine;
 
-  /* ----------------------------------------------------------- build/init */
-  RK.create = function (levelIdx, opts) {
-    levelIdx = clamp(levelIdx | 0, 0, RK.LEVELS.length - 1);
+  function isDish(kind) {
+    return !!DISHES[kind];
+  }
+
+  function dishOf(item) {
+    return item && DISHES[item.kind] ? item.kind : null;
+  }
+
+  var APPLIANCES = {
+    grill: { inKind: 'meatRaw', outKind: 'meatCooked', time: 2.0, canBurn: true, actionLbl: 'اشوِ اللحم!' },
+    fryer: { inKind: 'potatoRaw', outKind: 'fries', time: 1.9, canBurn: true, actionLbl: 'اقلِ البطاطس!' },
+    blender: { inKind: 'fruitRaw', outKind: 'juice', time: 1.6, canBurn: false, actionLbl: 'اخلط العصير!' },
+    oven: { inKind: 'pizzaRaw', outKind: 'pizza', time: 2.2, canBurn: true, actionLbl: 'اخبز البيتزا!' }
+  };
+
+  var CRATE_CHARS = { B: 'bun', M: 'meatRaw', C: 'cheese', P: 'potatoRaw', F: 'fruitRaw', D: 'dough' };
+  var APP_CHARS = { G: 'grill', Y: 'fryer', J: 'blender', O: 'oven' };
+
+  function create(levelIndex, opts) {
     opts = opts || {};
-    var R = RK.LEVELS[levelIdx];
+    var idx = clamp(levelIndex | 0, 0, LEVELS.length - 1);
+    var R = LEVELS[idx];
+    var diffKey = DIFFICULTIES[opts.difficulty] ? opts.difficulty : 'normal';
+    var diff = DIFFICULTIES[diffKey];
     var players = opts.players === 2 ? 2 : 1;
-    var pScale = clamp(+opts.patienceScale || 1, 0.4, 2.5);
-    var cSpeed = clamp(+opts.cookSpeed || 1, 0.4, 2.5);
-    var bDelay = clamp(+opts.burnDelay || 10, 3, 30);
-    var gScale = clamp(+opts.goalScale || 1, 0.5, 2.0);
-    var rand = RK.rng(opts.seed || ((levelIdx + 1) * 7919 + players * 31));
+    var dda = typeof opts.dda === 'number' ? clamp(opts.dda, 0, 1) : 0.35;
+    var rng = makeRng(opts.seed || ((idx + 1) * 9173 + players * 313));
 
-    var grid = [], stationGrid = [], stations = [], spawns = [null, null], racks = [], belts = [];
+    var grid = [], stations = [], floorPads = [], warps = [];
+    var p1 = cellCenter(3, 2), p2 = cellCenter(3, 3), sousHome = cellCenter(10, 4);
+
     for (var r = 0; r < ROWS; r++) {
-      var row = [], srow = [];
-      var line = R.map[r];
+      var row = [];
       for (var c = 0; c < COLS; c++) {
-        var ch = line.charAt(c);
-        var center = RK.cellCenter(c, r);
+        var ch = R.map[r].charAt(c);
+        var pt = cellCenter(c, r);
         var st = null;
-        if (ch === '1' || ch === '2') {
-          var idx = ch === '1' ? 0 : 1;
-          // Inherit ice if surrounded by ice on row
-          var neighborIce = line.charAt(Math.max(0, c - 1)) === 'I' || line.charAt(Math.min(COLS - 1, c + 1)) === 'I';
-          var floorCh = neighborIce && R.world === 3 ? 'I' : '.';
-          // Keep Chef 1's spawn tile itself crisp or ice — on World 4 row 1, '.' at c=1 and 'I' at c=3, let's check:
-          // Actually '.' on spawn tile or 'I' both move immediately on ArrowRight! Using '.' on spawn gives clean footing at t=0.
-          floorCh = '.';
-          spawns[idx] = { x: center.x, y: center.y, c: c, r: r };
-          row.push(floorCh);
-          srow.push(null);
-          continue;
-        }
-        if (ch === '.' || ch === 'I') {
-          row.push(ch); srow.push(null); continue;
-        }
-        if (ch === '=') {
-          if (players === 1) {
-            row.push('='); srow.push(null); continue;
+        if (ch === '1') { p1 = pt; }
+        else if (ch === '2') { p2 = pt; }
+        else if (ch === '>' || ch === '<') {
+          floorPads.push({ c: c, r: r, x: pt.x, y: pt.y, type: 'boost', dir: ch === '>' ? 1 : -1 });
+        } else if (ch === 'A') {
+          sousHome = pt;
+          floorPads.push({ c: c, r: r, x: pt.x, y: pt.y, type: 'sousPad', dir: 0 });
+        } else if (ch !== '.') {
+          var type = 'counter', kind = null, dir = 0;
+          if (CRATE_CHARS[ch]) { type = 'crate'; kind = CRATE_CHARS[ch]; }
+          else if (APP_CHARS[ch]) { type = APP_CHARS[ch]; }
+          else if (ch === 'S') type = 'cannon';
+          else if (ch === 'T') type = 'trash';
+          else if (ch === 'R' || ch === 'L') { type = 'belt'; dir = ch === 'R' ? 1 : -1; }
+          else if (ch === 'W') type = 'warp';
+          else if (ch === '#' && (r === 0 || r === ROWS - 1 || c === 0 || c === COLS - 1)) {
+            type = (r === 0 && c > 0 && c < COLS - 1) ? 'counter' : 'wall';
+            if (r === ROWS - 1 || c === 0 || c === COLS - 1) type = 'wall';
           }
-          // In 2P mode, '=' becomes a solid pass-through counter!
-          ch = 'C';
+          st = {
+            id: stations.length, c: c, r: r, x: pt.x, y: pt.y,
+            type: type, kind: kind, dir: dir,
+            item: null, prep: null, beltT: 0, warpCd: 0, snapLock: 0, wobble: 0,
+            cook: APPLIANCES[type] ? { state: 'idle', t: 0, dur: APPLIANCES[type].time, prog: 0 } : null
+          };
+          stations.push(st);
+          if (type === 'warp') warps.push(st);
         }
-        row.push('#');
-        if (ch === '#') { srow.push(null); continue; }
-        st = { c: c, r: r, x: center.x, y: center.y, type: 'counter', item: null };
-        if (CRATE_MAP[ch]) {
-          st.type = 'crate'; st.kind = CRATE_MAP[ch];
-        } else if (BELT_DIRS[ch]) {
-          st.type = 'belt'; st.dir = BELT_DIRS[ch]; st.beltT = 0; belts.push(st);
-        } else if (ch === 'S') {
-          st.type = 'serve';
-        } else if (ch === 'P') {
-          st.type = 'plates'; st.plates = 4; racks.push(st);
-        } else if (ch === 'T') {
-          st.type = 'trash';
-        } else if (ch === 'K') {
-          st.type = 'chop'; st.chopMilestone = 0;
-        } else if (ch === 'Y') {
-          st.type = 'fryer'; st.cook = { state: 'idle', prog: 0, over: 0 };
-        } else if (ch === 'L') {
-          st.type = 'grill'; st.parts = []; st.cook = { state: 'idle', prog: 0, over: 0 };
-        } else if (ch === 'D') {
-          st.type = 'blender'; st.fruit = null; st.cook = { state: 'idle', prog: 0, over: 0 };
-        }
-        stations.push(st);
-        srow.push(st);
+        row.push(st);
       }
       grid.push(row);
-      stationGrid.push(srow);
     }
 
-    var chefs = [];
-    for (var p = 0; p < players; p++) {
-      var sp = spawns[p] || RK.cellCenter(3 + p * 6, 2);
-      chefs.push({
-        id: p, x: sp.x, y: sp.y, sx: sp.x, sy: sp.y,
-        vx: 0, vy: 0, dirX: p === 0 ? 1 : -1, dirY: 0,
-        held: null, dashT: 0, dashCd: 0, moved: false, walk: 0,
-        onIce: false, focus: null, nav: null
-      });
+    for (var wi = 0; wi + 1 < warps.length; wi += 2) {
+      warps[wi].partner = warps[wi + 1];
+      warps[wi + 1].partner = warps[wi];
+      warps[wi].pairId = (wi / 2) | 0;
+      warps[wi + 1].pairId = (wi / 2) | 0;
     }
 
-    var goals = R.goals.map(function (g) { return Math.max(20, Math.round(g * gScale / 5) * 5); });
+    var goals = R.goals.map(function (g) { return Math.max(20, Math.round(g * diff.goalMul)); });
+    var burnHold = typeof opts.burnDelay === 'number' ? opts.burnDelay : (diffKey === 'hero' ? 3.5 : (6.4 - dda * 1.8));
+    var warnHold = typeof opts.burnDelay === 'number' ? opts.burnDelay * 0.6 : (diffKey === 'hero' ? 2.8 : 4.2);
+
+    var chefs = [makeChef(0, p1.x, p1.y)];
+    if (players === 2) chefs.push(makeChef(1, p2.x, p2.y));
 
     var w = {
-      level: levelIdx, R: R, world: R.world, players: players,
-      opts: { patienceScale: pScale, cookSpeed: cSpeed, burnDelay: bDelay, goalScale: gScale },
-      rand: rand, grid: grid, stationGrid: stationGrid, stations: stations, racks: racks, belts: belts,
-      chefs: chefs, orders: [], nextOrderId: 1, orderCount: 0, spawnTimer: 3.5,
-      plateReturns: [], t: 0, timeLeft: R.duration, done: false,
-      coins: 0, served: 0, expired: 0, burnt: 0, streak: 0, goals: goals, ev: []
+      id: R.id, levelIndex: idx, R: R, world: R.world, players: players,
+      difficulty: diffKey, diff: diff, dda: dda, rng: rng,
+      burnHold: burnHold, warnHold: warnHold,
+      grid: grid, stations: stations, floorPads: floorPads,
+      chefs: chefs,
+      sousBot: players === 1 ? { x: sousHome.x, y: sousHome.y, homeX: sousHome.x, homeY: sousHome.y, state: 'ready', cd: 0, t: 0, tx: sousHome.x, ty: sousHome.y, targetSt: null } : null,
+      orders: [], nextOrderId: 1, orderTimer: 2.2,
+      shots: [], hints: [], ev: [],
+      time: 0, timeLeft: R.duration, duration: R.duration,
+      goals: goals, coins: 0, score: 0, served: 0, expired: 0, burnt: 0,
+      streak: 0, bestStreak: 0, mult: 1, fever: false,
+      atStart: true, done: false, stars: 0
     };
 
-    // Spawn 2 initial customers immediately so players have clear goals on frame 1!
-    spawnOrder(w, R.dishes[0], false);
-    spawnOrder(w, R.dishes[1 % R.dishes.length], R.vip);
-    updateFocus(w);
+    spawnOrder(w, false);
+    spawnOrder(w, idx >= 9 && diffKey !== 'easy');
     return w;
-  };
+  }
 
-  function spawnOrder(w, forcedDish, forceVip) {
-    var used = {};
-    for (var i = 0; i < w.orders.length; i++) used[w.orders[i].slot] = true;
-    var maxSlots = 4, slot = -1;
-    for (var s = 0; s < maxSlots; s++) { if (!used[s]) { slot = s; break; } }
+  function makeChef(index, x, y) {
+    return {
+      index: index, x: x, y: y, vx: 0, vy: 0, faceX: 1, faceY: 0,
+      held: null, moved: false, dashT: 0, dashCd: 0, boostT: 0, nav: null
+    };
+  }
+
+  function spawnOrder(w, forceVip) {
+    if (w.orders.length >= 3) return false;
+    var usedSlots = [false, false, false];
+    for (var i = 0; i < w.orders.length; i++) usedSlots[w.orders[i].slot] = true;
+    var slot = usedSlots.indexOf(false);
     if (slot < 0) return false;
+
     var dishes = w.R.dishes;
-    var dish = forcedDish || dishes[Math.floor(w.rand() * dishes.length)];
-    var spec = RK.DISHES[dish];
-    var animal = RK.ANIMALS[(w.orderCount + Math.floor(w.rand() * 2)) % RK.ANIMALS.length];
-    var vip = forceVip != null ? !!forceVip : (w.R.vip && (w.orderCount % 3 === 1));
-    var maxT = Math.round(spec.patience * w.opts.patienceScale * (vip ? 0.92 : 1));
-    w.orderCount++;
-    var ord = { id: w.nextOrderId++, slot: slot, dish: dish, animal: animal, vip: vip, left: maxT, max: maxT };
+    var dish = dishes[Math.floor(w.rng() * dishes.length)];
+    // Ensure early variety on first two orders
+    if (w.orders.length === 1 && dishes.length > 1 && w.orders[0].dish === dish) {
+      dish = dishes[(dishes.indexOf(dish) + 1) % dishes.length];
+    }
+    var cust = CUSTOMERS[(w.nextOrderId + Math.floor(w.rng() * CUSTOMERS.length)) % CUSTOMERS.length];
+    var vipChance = w.diff.vipChance + (w.world === 3 ? 0.18 : 0);
+    var vip = forceVip || (w.nextOrderId > 1 && w.rng() < vipChance);
+    var basePat = (46 - w.dda * 6) * w.diff.patienceMul * (vip ? 0.92 : 1);
+    var ord = {
+      id: w.nextOrderId++,
+      slot: slot,
+      dish: dish,
+      steps: DISHES[dish].steps,
+      customer: cust.id,
+      customerName: cust.name,
+      vip: !!vip,
+      patience: basePat,
+      maxPatience: basePat
+    };
     w.orders.push(ord);
-    w.ev.push({ t: 'order', id: ord.id, slot: slot, dish: dish, animal: animal, vip: vip });
+    w.ev.push({ t: 'orderIn', slot: slot, dish: dish, vip: ord.vip });
     return true;
   }
 
-  /* --------------------------------------------------- BFS pathfinding */
-  RK.findPath = function (w, startC, startR, goalC, goalR) {
-    if (!RK.walkable(w, goalC, goalR)) return null;
-    if (startC === goalC && startR === goalR) {
-      var pt = RK.cellCenter(goalC, goalR);
-      return [{ c: goalC, r: goalR, x: pt.x, y: pt.y }];
-    }
-    var seen = {}, prev = {}, q = [[startC, startR]];
-    seen[startR * COLS + startC] = true;
-    var dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-    var found = false;
-    while (q.length) {
-      var cur = q.shift(), cc = cur[0], cr = cur[1];
-      if (cc === goalC && cr === goalR) { found = true; break; }
-      for (var d = 0; d < 4; d++) {
-        var nc = cc + dirs[d][0], nr = cr + dirs[d][1], key = nr * COLS + nc;
-        if (!seen[key] && RK.walkable(w, nc, nr)) {
-          seen[key] = true;
-          prev[key] = [cc, cr];
-          q.push([nc, nr]);
-        }
-      }
-    }
-    if (!found) return null;
-    var out = [], kc = goalC, kr = goalR;
-    while (!(kc === startC && kr === startR)) {
-      var p = RK.cellCenter(kc, kr);
-      out.unshift({ c: kc, r: kr, x: p.x, y: p.y });
-      var pr = prev[kr * COLS + kc];
-      kc = pr[0]; kr = pr[1];
-    }
-    return out;
-  };
+  function findStation(w, pred) {
+    for (var i = 0; i < w.stations.length; i++) if (pred(w.stations[i])) return w.stations[i];
+    return null;
+  }
 
-  // Click-to-walk-and-interact for 1P mouse/touch play!
-  RK.clickAt = function (w, chefIdx, lx, ly) {
-    var chef = w.chefs[chefIdx || 0];
-    if (!chef || w.done) return false;
-    var cell = RK.cellAt(lx, ly);
-    var tc = clamp(cell.c, 0, COLS - 1), tr = clamp(cell.r, 0, ROWS - 1);
-    var curCell = RK.cellAt(chef.x, chef.y);
-    var sc = clamp(curCell.c, 0, COLS - 1), sr = clamp(curCell.r, 0, ROWS - 1);
-    var st = RK.stationAt(w, tc, tr);
-
-    if (st) {
-      // Already orthogonally right next to this station? Face it and interact right now!
-      if (Math.hypot(st.x - chef.x, st.y - chef.y) <= TILE + 8) {
-        var dx = st.x - chef.x, dy = st.y - chef.y, dl = Math.hypot(dx, dy) || 1;
-        chef.dirX = dx / dl; chef.dirY = dy / dl;
-        chef.moved = true;
-        chef.nav = null;
-        updateChefFocus(w, chef);
-        return interactWith(w, chef, st);
-      }
-      // Find shortest path to any walkable neighbor of `st`
-      var neighbors = [[0, 1], [0, -1], [1, 0], [-1, 0]];
-      var bestPath = null, bestDist = Infinity;
-      for (var i = 0; i < 4; i++) {
-        var nc = tc + neighbors[i][0], nr = tr + neighbors[i][1];
-        if (!RK.walkable(w, nc, nr)) continue;
-        var path = RK.findPath(w, sc, sr, nc, nr);
-        if (path) {
-          var d = path.length * TILE + Math.hypot(RK.cellCenter(nc, nr).x - chef.x, RK.cellCenter(nc, nr).y - chef.y) * 0.1;
-          if (d < bestDist) { bestDist = d; bestPath = path; }
-        }
-      }
-      if (bestPath) {
-        chef.nav = { path: bestPath, station: st, act: true };
-        chef.moved = true;
-        return true;
-      }
-      return false;
+  function addHint(w, st, x, y, text, pred) {
+    var target = pred ? findStation(w, pred) : null;
+    if (st) st.wobble = 0.45;
+    var h = {
+      text: text, x: x, y: y,
+      targetX: target ? target.x : null,
+      targetY: target ? target.y : null,
+      targetId: target ? target.id : -1,
+      life: 2.3, max: 2.3
+    };
+    // Replace existing hint at nearby spot so bubbles stay tidy
+    for (var i = w.hints.length - 1; i >= 0; i--) {
+      if (Math.hypot(w.hints[i].x - x, w.hints[i].y - y) < 90) w.hints.splice(i, 1);
     }
-
-    if (RK.walkable(w, tc, tr)) {
-      var floorPath = RK.findPath(w, sc, sr, tc, tr);
-      if (floorPath && floorPath.length) {
-        chef.nav = { path: floorPath, station: null, act: false };
-        chef.moved = true;
-        return true;
-      }
-      // Same cell: walk directly to exact point
-      chef.nav = { path: [{ c: tc, r: tr, x: clamp(lx, X0 + RK.CR + 2, X0 + COLS * TILE - RK.CR - 2), y: clamp(ly, Y0 + RK.CR + 2, Y0 + ROWS * TILE - RK.CR - 2) }], station: null, act: false };
-      chef.moved = true;
-      return true;
-    }
+    w.hints.push(h);
+    w.ev.push({ t: 'hint', text: text, x: x, y: y, targetX: h.targetX, targetY: h.targetY });
     return false;
-  };
+  }
 
-  /* -------------------------------------------- focus & station targeting */
-  function updateChefFocus(w, chef) {
-    var best = null, bestScore = -Infinity;
-    var probeX = chef.x + chef.dirX * 44, probeY = chef.y + chef.dirY * 44;
-    var cc = RK.cellAt(chef.x, chef.y);
-    for (var r = Math.max(0, cc.r - 1); r <= Math.min(ROWS - 1, cc.r + 1); r++) {
-      for (var c = Math.max(0, cc.c - 1); c <= Math.min(COLS - 1, cc.c + 1); c++) {
-        var st = w.stationGrid[r][c];
-        if (!st) continue;
-        var dx = st.x - chef.x, dy = st.y - chef.y, dist = Math.hypot(dx, dy);
-        if (dist > RK.REACH) continue;
-        var dot = (dx * chef.dirX + dy * chef.dirY) / (dist || 1);
-        if (dot < -0.25) continue;
-        var pd = Math.hypot(st.x - probeX, st.y - probeY);
-        var score = dot * 40 - pd - dist * 0.3;
-        if (score > bestScore) { bestScore = score; best = st; }
-      }
+  function nearestStation(w, chef) {
+    var reach = 88 + w.diff.reachBonus;
+    var best = null, bestScore = 1e9;
+    for (var i = 0; i < w.stations.length; i++) {
+      var st = w.stations[i];
+      if (st.type === 'wall') continue;
+      var dx = st.x - chef.x, dy = st.y - chef.y;
+      var d = Math.hypot(dx, dy);
+      if (d > reach) continue;
+      var dot = d > 1 ? (dx / d) * chef.faceX + (dy / d) * chef.faceY : 1;
+      var score = d - dot * 18;
+      if (score < bestScore) { bestScore = score; best = st; }
     }
-    chef.focus = best ? { c: best.c, r: best.r, type: best.type } : null;
     return best;
   }
 
-  function updateFocus(w) {
-    for (var i = 0; i < w.chefs.length; i++) updateChefFocus(w, w.chefs[i]);
+  function promptFor(w, ci) {
+    var chef = w.chefs[ci];
+    if (!chef) return null;
+    var st = nearestStation(w, chef);
+    if (!st) return null;
+    var held = chef.held ? chef.held.kind : null;
+
+    if (st.type === 'crate') {
+      if (!held) return { station: st, label: 'التقط ' + ITEMS[st.kind].name };
+      if (combineItems(held, st.kind)) return { station: st, label: 'ادمج ✨' };
+      if (held === st.kind) return { station: st, label: 'أعد للصندوق' };
+      return { station: st, label: 'يداك مشغولتان' };
+    }
+    if (st.type === 'counter' || st.type === 'belt' || st.type === 'warp') {
+      var label = st.type === 'warp' ? 'بوابة الفضاء ✨' : 'طاولة';
+      if (!held && st.item) return { station: st, label: 'التقط ' + ITEMS[st.item.kind].name };
+      if (held && !st.item) return { station: st, label: st.type === 'warp' ? 'انقل بالبوابة ✨' : 'ضع هنا' };
+      if (held && st.item && combineItems(held, st.item.kind)) return { station: st, label: 'ادمج فوراً! ✨' };
+      return { station: st, label: label };
+    }
+    if (APPLIANCES[st.type]) {
+      var ap = APPLIANCES[st.type];
+      if (st.cook.state === 'burnt') return { station: st, label: 'نظّف الدخان! ✨' };
+      if (st.cook.state === 'done' || st.cook.state === 'warning') {
+        if (!held || combineItems(held, ap.outKind)) return { station: st, label: 'جاهز! التقط 🔥' };
+      }
+      if (st.cook.state === 'cooking') return { station: st, label: 'جاري التحضير...' };
+      if (st.type === 'oven' && (held === 'dough' || held === 'cheese') && !st.prep) return { station: st, label: 'جهّز البيتزا 🍕' };
+      if (st.type === 'oven' && st.prep && combineItems(st.prep, held) === 'pizzaRaw') return { station: st, label: ap.actionLbl };
+      if (held === ap.inKind) return { station: st, label: ap.actionLbl };
+      return { station: st, label: ap.actionLbl };
+    }
+    if (st.type === 'cannon') {
+      if (held && isDish(held)) return { station: st, label: 'أطلق الطلب! 🚀' };
+      return { station: st, label: 'مدفع التقديم 🚀' };
+    }
+    if (st.type === 'trash') {
+      return { station: st, label: held ? 'أفرغ اليد ♻️' : 'تدوير ♻️' };
+    }
+    return null;
   }
 
-  /* --------------------------------------------------------- interactions */
-  RK.interact = function (w, chefIdx) {
-    var chef = w.chefs[chefIdx || 0];
-    if (!chef || w.done) return false;
-    chef.moved = true;
-    var st = updateChefFocus(w, chef);
-    return interactWith(w, chef, st);
-  };
+  function applyWarpIfPossible(w, st) {
+    if (st.type !== 'warp' || !st.item || !st.partner || st.warpCd > 0) return;
+    var dst = st.partner;
+    if (!dst.item) {
+      dst.item = st.item;
+      st.item = null;
+      dst.warpCd = 0.7;
+      st.warpCd = 0.4;
+      w.ev.push({ t: 'warp', fromX: st.x, fromY: st.y, x: dst.x, y: dst.y, kind: dst.item.kind });
+    } else {
+      var merged = combineItems(st.item.kind, dst.item.kind);
+      if (merged) {
+        st.item = null;
+        dst.item = { kind: merged };
+        dst.warpCd = 0.7;
+        w.ev.push({ t: 'warp', fromX: st.x, fromY: st.y, x: dst.x, y: dst.y, kind: merged });
+        w.ev.push({ t: 'combine', kind: merged, x: dst.x, y: dst.y });
+      }
+    }
+  }
 
-  function interactWith(w, chef, st) {
-    if (!chef || !st || w.done) return false;
-    chef.moved = true;
-    var held = chef.held;
+  function wrongApplianceHint(w, st, held) {
+    if (held === 'meatRaw') return addHint(w, st, st.x, st.y - 44, 'اشوِ اللحم على الشواية! 🔥', function (s) { return s.type === 'grill'; });
+    if (held === 'potatoRaw') return addHint(w, st, st.x, st.y - 44, 'البطاطس تذهب للمقلاة! 🍟', function (s) { return s.type === 'fryer'; });
+    if (held === 'fruitRaw') return addHint(w, st, st.x, st.y - 44, 'الفاكهة تذهب للخلاط! 🚀', function (s) { return s.type === 'blender'; });
+    if (held === 'dough' || held === 'pizzaRaw') return addHint(w, st, st.x, st.y - 44, 'البيتزا تذهب للفرن! 🍕', function (s) { return s.type === 'oven'; });
+    return null;
+  }
 
-    // 1. Ingredient Crates
+  function interact(w, ci, explicitSt) {
+    if (w.done) return false;
+    var chef = w.chefs[ci | 0];
+    if (!chef) return false;
+    w.atStart = false;
+    chef.moved = true;
+
+    // Check if standing on sousPad in 1P with empty hands and no station targeted
+    var st = explicitSt || nearestStation(w, chef);
+    if (!st) {
+      if (w.sousBot && Math.hypot(chef.x - w.sousBot.homeX, chef.y - w.sousBot.homeY) < 68) {
+        return triggerSousBot(w);
+      }
+      return addHint(w, null, chef.x, chef.y - 48, 'اقترب من الطاولة أولاً! 👟', function (s) { return s.type === 'crate'; });
+    }
+
+    var held = chef.held ? chef.held.kind : null;
+
     if (st.type === 'crate') {
       if (!held) {
         chef.held = { kind: st.kind };
-        w.ev.push({ t: 'pickup', kind: st.kind, chef: chef.id, x: st.x, y: st.y });
+        st.wobble = 0.25;
+        w.ev.push({ t: 'pickup', kind: st.kind, x: st.x, y: st.y, chef: ci });
         return true;
       }
-      // Put back untouched same raw item
-      if (held.kind === st.kind && !held.prog) {
+      if (held === st.kind) {
         chef.held = null;
-        w.ev.push({ t: 'place', kind: st.kind, chef: chef.id, x: st.x, y: st.y });
+        w.ev.push({ t: 'putback', kind: st.kind, x: st.x, y: st.y, chef: ci });
         return true;
       }
-      // Handy shortcut: holding a plate at Bread or Cheese crate adds directly onto plate!
-      if (held.kind === 'plate' && (st.kind === 'bread' || st.kind === 'cheese') && canAddToPlate(held.items, st.kind)) {
-        held.items = sortPlate(held.items.concat([st.kind]));
-        w.ev.push({ t: 'assemble', chef: chef.id, x: st.x, y: st.y });
+      var crateCombo = combineItems(held, st.kind);
+      if (crateCombo) {
+        chef.held = { kind: crateCombo };
+        st.wobble = 0.35;
+        w.ev.push({ t: 'combine', kind: crateCombo, x: st.x, y: st.y, chef: ci });
         return true;
       }
-      // Kid-friendly shortcut: holding bread at Cheese crate (or cheese at Bread crate) stacks rawToastie in hand!
-      if ((held.kind === 'bread' && st.kind === 'cheese') || (held.kind === 'cheese' && st.kind === 'bread')) {
-        chef.held = { kind: 'rawToastie' };
-        w.ev.push({ t: 'assemble', chef: chef.id, x: st.x, y: st.y });
-        return true;
+      if (held === 'meatRaw' && st.kind === 'bun') {
+        return addHint(w, st, st.x, st.y - 44, 'اشوِ اللحم أولاً! 🔥', function (s) { return s.type === 'grill'; });
       }
-      return false;
+      return addHint(w, st, st.x, st.y - 44, 'ضع ما بيدك على طاولة فارغة! ✨', function (s) { return s.type === 'counter' && !s.item; });
     }
 
-    // 2. Plate Rack
-    if (st.type === 'plates') {
-      if (!held && st.plates > 0) {
-        st.plates--;
-        chef.held = { kind: 'plate', items: [] };
-        w.ev.push({ t: 'pickup', kind: 'plate', chef: chef.id, x: st.x, y: st.y });
-        return true;
-      }
-      if (held && held.kind === 'plate' && held.items.length === 0) {
-        st.plates++;
-        chef.held = null;
-        w.ev.push({ t: 'place', kind: 'plate', chef: chef.id, x: st.x, y: st.y });
-        return true;
-      }
-      // Holding a plateable food at the plate rack slips a clean plate right underneath it!
-      if (held && st.plates > 0 && canAddToPlate([], held.kind)) {
-        st.plates--;
-        chef.held = { kind: 'plate', items: [held.kind] };
-        w.ev.push({ t: 'assemble', chef: chef.id, x: st.x, y: st.y });
-        return true;
-      }
-      return false;
-    }
-
-    // 3. Cutting Board
-    if (st.type === 'chop') {
-      if (!st.item) {
-        if (held && held.kind === 'tomatoRaw') {
-          st.item = { kind: 'tomatoRaw', prog: held.prog || 0 };
-          st.chopMilestone = Math.floor((st.item.prog || 0) * 4);
-          chef.held = null;
-          w.ev.push({ t: 'place', kind: 'tomatoRaw', chef: chef.id, x: st.x, y: st.y });
-          return true;
-        }
-        return false;
-      }
-      if (st.item.kind === 'tomatoRaw') {
-        st.item.prog = Math.min(1, (st.item.prog || 0) + 0.28);
-        w.ev.push({ t: 'chop', chef: chef.id, x: st.x, y: st.y });
-        if (st.item.prog >= 1) {
-          st.item = { kind: 'tomato' };
-          w.ev.push({ t: 'chopped', chef: chef.id, x: st.x, y: st.y });
-        }
-        return true;
-      }
-      if (st.item.kind === 'tomato') {
-        if (!held) {
-          chef.held = { kind: 'tomato' };
-          st.item = null;
-          w.ev.push({ t: 'pickup', kind: 'tomato', chef: chef.id, x: st.x, y: st.y });
-          return true;
-        }
-        if (held.kind === 'plate' && canAddToPlate(held.items, 'tomato')) {
-          held.items = sortPlate(held.items.concat(['tomato']));
-          st.item = null;
-          w.ev.push({ t: 'assemble', chef: chef.id, x: st.x, y: st.y });
-          return true;
-        }
-      }
-      return false;
-    }
-
-    // 4. Fryer (falafelRaw -> falafel)
-    if (st.type === 'fryer') {
-      if (st.cook.state === 'burnt') {
-        st.cook = { state: 'idle', prog: 0, over: 0 };
-        st.item = null;
-        w.ev.push({ t: 'toss', station: 'fryer', chef: chef.id, x: st.x, y: st.y });
-        if (held && held.kind === 'falafelRaw') {
-          chef.held = null;
-          st.item = { kind: 'falafelRaw' };
-          st.cook = { state: 'cooking', prog: 0, over: 0 };
-          w.ev.push({ t: 'cookStart', station: 'fryer', chef: chef.id, x: st.x, y: st.y });
-        }
-        return true;
-      }
-      if (st.cook.state === 'idle') {
-        if (held && held.kind === 'falafelRaw') {
-          chef.held = null;
-          st.item = { kind: 'falafelRaw' };
-          st.cook = { state: 'cooking', prog: 0, over: 0 };
-          w.ev.push({ t: 'cookStart', station: 'fryer', chef: chef.id, x: st.x, y: st.y });
-          return true;
-        }
-        return false;
-      }
-      if (st.cook.state === 'done' || st.cook.state === 'warning') {
-        if (!held) {
-          chef.held = { kind: 'falafel' };
-          st.item = null; st.cook = { state: 'idle', prog: 0, over: 0 };
-          w.ev.push({ t: 'pickup', kind: 'falafel', chef: chef.id, x: st.x, y: st.y });
-          return true;
-        }
-        if (held.kind === 'plate' && canAddToPlate(held.items, 'falafel')) {
-          held.items = sortPlate(held.items.concat(['falafel']));
-          st.item = null; st.cook = { state: 'idle', prog: 0, over: 0 };
-          w.ev.push({ t: 'assemble', chef: chef.id, x: st.x, y: st.y });
-          return true;
-        }
-      }
-      return false;
-    }
-
-    // 5. Panini Grill (bread + cheese -> toastie)
-    if (st.type === 'grill') {
-      if (st.cook.state === 'burnt') {
-        st.cook = { state: 'idle', prog: 0, over: 0 };
-        st.parts = [];
-        w.ev.push({ t: 'toss', station: 'grill', chef: chef.id, x: st.x, y: st.y });
-        if (held && held.kind === 'rawToastie') {
-          chef.held = null; st.parts = ['bread', 'cheese'];
-          st.cook = { state: 'cooking', prog: 0, over: 0 };
-          w.ev.push({ t: 'cookStart', station: 'grill', chef: chef.id, x: st.x, y: st.y });
-        }
-        return true;
-      }
-      if (st.cook.state === 'idle') {
-        if (held) {
-          if (held.kind === 'rawToastie' && st.parts.length === 0) {
-            chef.held = null;
-            st.parts = ['bread', 'cheese'];
-            st.cook = { state: 'cooking', prog: 0, over: 0 };
-            w.ev.push({ t: 'cookStart', station: 'grill', chef: chef.id, x: st.x, y: st.y });
-            return true;
-          }
-          if (held.kind === 'plate' && held.items.length === 2 && held.items.indexOf('bread') >= 0 && held.items.indexOf('cheese') >= 0 && st.parts.length === 0) {
-            held.items = [];
-            st.parts = ['bread', 'cheese'];
-            st.cook = { state: 'cooking', prog: 0, over: 0 };
-            w.ev.push({ t: 'cookStart', station: 'grill', chef: chef.id, x: st.x, y: st.y });
-            return true;
-          }
-          if ((held.kind === 'bread' || held.kind === 'cheese') && st.parts.indexOf(held.kind) < 0) {
-            st.parts.push(held.kind);
-            chef.held = null;
-            if (st.parts.length === 2) {
-              st.cook = { state: 'cooking', prog: 0, over: 0 };
-              w.ev.push({ t: 'cookStart', station: 'grill', chef: chef.id, x: st.x, y: st.y });
-            } else {
-              w.ev.push({ t: 'place', kind: st.parts[0], chef: chef.id, x: st.x, y: st.y });
-            }
-            return true;
-          }
-          return false;
-        }
-        if (!held && st.parts.length === 1) {
-          var part = st.parts.pop();
-          chef.held = { kind: part };
-          w.ev.push({ t: 'pickup', kind: part, chef: chef.id, x: st.x, y: st.y });
-          return true;
-        }
-        return false;
-      }
-      if (st.cook.state === 'done' || st.cook.state === 'warning') {
-        if (!held) {
-          chef.held = { kind: 'toastie' };
-          st.parts = []; st.cook = { state: 'idle', prog: 0, over: 0 };
-          w.ev.push({ t: 'pickup', kind: 'toastie', chef: chef.id, x: st.x, y: st.y });
-          return true;
-        }
-        if (held.kind === 'plate' && canAddToPlate(held.items, 'toastie')) {
-          held.items = ['toastie'];
-          st.parts = []; st.cook = { state: 'idle', prog: 0, over: 0 };
-          w.ev.push({ t: 'assemble', chef: chef.id, x: st.x, y: st.y });
-          return true;
-        }
-      }
-      return false;
-    }
-
-    // 6. Swirling Blender (strawberry / mango -> smoothie, never burns!)
-    if (st.type === 'blender') {
-      if (st.cook.state === 'idle') {
-        if (held && (held.kind === 'strawberry' || held.kind === 'mango')) {
-          st.fruit = held.kind;
-          chef.held = null;
-          st.cook = { state: 'cooking', prog: 0, over: 0 };
-          w.ev.push({ t: 'cookStart', station: 'blender', chef: chef.id, x: st.x, y: st.y });
-          return true;
-        }
-        return false;
-      }
-      if (st.cook.state === 'done') {
-        if (!held) {
-          var smKind = st.fruit === 'mango' ? 'smoothieMango' : 'smoothieStrawberry';
-          chef.held = { kind: smKind };
-          st.fruit = null; st.cook = { state: 'idle', prog: 0, over: 0 };
-          w.ev.push({ t: 'pickup', kind: smKind, chef: chef.id, x: st.x, y: st.y });
-          return true;
-        }
-      }
-      return false;
-    }
-
-    // 7. Counters & Conveyor Belts
-    if (st.type === 'counter' || st.type === 'belt') {
-      if (!st.item && held) {
-        st.item = held;
-        if (st.type === 'belt') st.beltT = 0;
-        chef.held = null;
-        w.ev.push({ t: 'place', kind: st.item.kind, chef: chef.id, x: st.x, y: st.y });
-        return true;
-      }
-      if (st.item && !held) {
+    if (st.type === 'counter' || st.type === 'belt' || st.type === 'warp') {
+      if (st.snapLock > 0 && !st.item && held) return true;
+      if (!held && st.item) {
         chef.held = st.item;
         st.item = null;
-        if (st.type === 'belt') st.beltT = 0;
-        w.ev.push({ t: 'pickup', kind: chef.held.kind, chef: chef.id, x: st.x, y: st.y });
+        st.beltT = 0;
+        w.ev.push({ t: 'pickup', kind: chef.held.kind, x: st.x, y: st.y, chef: ci });
         return true;
       }
-      if (st.item && held) {
-        var comb = tryCombine(st.item, held);
-        if (comb) {
-          st.item = comb.onCounter;
-          if (st.type === 'belt') st.beltT = 0;
-          chef.held = comb.inHand;
-          w.ev.push({ t: 'assemble', chef: chef.id, x: st.x, y: st.y });
+      if (held && !st.item) {
+        st.item = chef.held;
+        chef.held = null;
+        st.beltT = 0;
+        w.ev.push({ t: 'place', kind: st.item.kind, x: st.x, y: st.y, chef: ci });
+        applyWarpIfPossible(w, st);
+        return true;
+      }
+      if (held && st.item) {
+        var combo = combineItems(held, st.item.kind);
+        if (combo) {
+          chef.held = { kind: combo };
+          st.item = null;
+          st.snapLock = 0.25;
+          st.wobble = 0.35;
+          w.ev.push({ t: 'combine', kind: combo, x: st.x, y: st.y, chef: ci });
+          return true;
+        }
+        if ((held === 'meatRaw' && (st.item.kind === 'bun' || st.item.kind === 'bunCheese')) ||
+            (st.item.kind === 'meatRaw' && (held === 'bun' || held === 'bunCheese'))) {
+          return addHint(w, st, st.x, st.y - 44, 'اشوِ اللحم أولاً! 🔥', function (s) { return s.type === 'grill'; });
+        }
+        return addHint(w, st, st.x, st.y - 44, 'لا يندمجان! استخدم طاولة فارغة ✨', function (s) { return s.type === 'counter' && !s.item; });
+      }
+      return addHint(w, st, st.x, st.y - 44, 'خذ مكوناً من الصندوق! 📦', function (s) { return s.type === 'crate'; });
+    }
+
+    if (APPLIANCES[st.type]) {
+      var ap = APPLIANCES[st.type];
+      var ck = st.cook;
+
+      if (ck.state === 'burnt') {
+        ck.state = 'idle'; ck.t = 0; ck.prog = 0; st.prep = null;
+        w.ev.push({ t: 'toss', station: st.type, x: st.x, y: st.y, chef: ci });
+        if (held === ap.inKind) {
+          chef.held = null;
+          ck.state = 'cooking'; ck.t = 0; ck.prog = 0;
+          w.ev.push({ t: 'cookStart', station: st.type, x: st.x, y: st.y, chef: ci });
+        }
+        return true;
+      }
+
+      if (ck.state === 'done' || ck.state === 'warning') {
+        if (!held) {
+          chef.held = { kind: ap.outKind };
+          ck.state = 'idle'; ck.t = 0; ck.prog = 0; st.prep = null;
+          w.ev.push({ t: 'pickup', kind: ap.outKind, x: st.x, y: st.y, chef: ci });
+          return true;
+        }
+        var outCombo = combineItems(held, ap.outKind);
+        if (outCombo) {
+          chef.held = { kind: outCombo };
+          ck.state = 'idle'; ck.t = 0; ck.prog = 0; st.prep = null;
+          st.wobble = 0.35;
+          w.ev.push({ t: 'combine', kind: outCombo, x: st.x, y: st.y, chef: ci });
+          return true;
+        }
+        return addHint(w, st, st.x, st.y - 44, 'يداك مشغولتان! ضع ما معك أولاً ✨', function (s) { return s.type === 'counter' && !s.item; });
+      }
+
+      if (ck.state === 'cooking') {
+        return addHint(w, st, st.x, st.y - 44, 'انتظر لحظة.. ينضج الآن! 🔥', null);
+      }
+
+      // Idle appliance
+      if (st.type === 'oven') {
+        if (held === 'pizzaRaw') {
+          chef.held = null; st.prep = null;
+          ck.state = 'cooking'; ck.t = 0; ck.prog = 0;
+          w.ev.push({ t: 'cookStart', station: 'oven', x: st.x, y: st.y, chef: ci });
+          return true;
+        }
+        if (!st.prep && (held === 'dough' || held === 'cheese')) {
+          st.prep = held;
+          chef.held = null;
+          var needKind = held === 'dough' ? 'cheese' : 'dough';
+          var needMsg = held === 'dough' ? 'رائع! أضف الجبن ليبدأ الخبز 🧀' : 'رائع! أضف العجينة ليبدأ الخبز 🫓';
+          addHint(w, st, st.x, st.y - 44, needMsg, function (s) { return s.type === 'crate' && s.kind === needKind; });
+          w.ev.push({ t: 'place', kind: st.prep, x: st.x, y: st.y, chef: ci });
+          return true;
+        }
+        if (st.prep && combineItems(st.prep, held) === 'pizzaRaw') {
+          chef.held = null; st.prep = null;
+          ck.state = 'cooking'; ck.t = 0; ck.prog = 0;
+          w.ev.push({ t: 'combine', kind: 'pizzaRaw', x: st.x, y: st.y, chef: ci });
+          w.ev.push({ t: 'cookStart', station: 'oven', x: st.x, y: st.y, chef: ci });
+          return true;
+        }
+        if (st.prep && !held) {
+          chef.held = { kind: st.prep };
+          st.prep = null;
+          w.ev.push({ t: 'pickup', kind: chef.held.kind, x: st.x, y: st.y, chef: ci });
           return true;
         }
       }
-      return false;
-    }
 
-    // 8. Confetti Recycle Bin
-    if (st.type === 'trash') {
-      if (!held) return false;
-      if (held.kind === 'plate') {
-        if (!held.items.length) return false;
-        held.items = [];
-      } else {
+      if (held === ap.inKind) {
         chef.held = null;
+        ck.state = 'cooking'; ck.t = 0; ck.prog = 0;
+        w.ev.push({ t: 'cookStart', station: st.type, x: st.x, y: st.y, chef: ci });
+        return true;
       }
-      w.ev.push({ t: 'toss', station: 'trash', chef: chef.id, x: st.x, y: st.y });
-      return true;
+
+      if (held && wrongApplianceHint(w, st, held) === false) return false;
+      var wantCrate = st.type === 'oven' ? 'dough' : ap.inKind;
+      var msgMap = {
+        grill: 'أحضر اللحم الطازج للشواية! 🥩',
+        fryer: 'أحضر البطاطس للمقلاة! 🥔',
+        blender: 'أحضر الفواكه للخلاط! 🍓',
+        oven: 'أحضر العجينة والجبن للفرن! 🍕'
+      };
+      return addHint(w, st, st.x, st.y - 44, msgMap[st.type], function (s) { return s.type === 'crate' && s.kind === wantCrate; });
     }
 
-    // 9. Serving Window
-    if (st.type === 'serve') {
-      var dish = RK.dishOf(held);
-      if (!dish) {
-        if (held) w.ev.push({ t: 'wrongOrder', chef: chef.id, x: st.x, y: st.y });
-        return false;
+    if (st.type === 'cannon') {
+      if (!held) {
+        return addHint(w, st, st.x, st.y + 38, 'احمل وجبة جاهزة لإطلاقها! 🚀', function (s) { return s.type === 'crate'; });
       }
-      // Match most urgent matching order (VIP tie-breaker)
-      var matchIdx = -1, bestUrgency = Infinity;
-      for (var i = 0; i < w.orders.length; i++) {
-        var o = w.orders[i];
-        if (o.dish !== dish) continue;
-        var u = (o.left / o.max) - (o.vip ? 0.25 : 0);
-        if (u < bestUrgency) { bestUrgency = u; matchIdx = i; }
+      if (!isDish(held)) {
+        if (held === 'meatRaw') return addHint(w, st, st.x, st.y + 38, 'اشوِ اللحم أولاً! 🔥', function (s) { return s.type === 'grill'; });
+        if (held === 'potatoRaw') return addHint(w, st, st.x, st.y + 38, 'اقلِ البطاطس أولاً! 🍟', function (s) { return s.type === 'fryer'; });
+        if (held === 'fruitRaw') return addHint(w, st, st.x, st.y + 38, 'اخلط الفاكهة أولاً! 🚀', function (s) { return s.type === 'blender'; });
+        if (held === 'dough') return addHint(w, st, st.x, st.y + 38, 'أضف الجبن ثم اخبزها! 🧀', function (s) { return s.type === 'crate' && s.kind === 'cheese'; });
+        if (held === 'pizzaRaw') return addHint(w, st, st.x, st.y + 38, 'اخبز البيتزا في الفرن! 🍕', function (s) { return s.type === 'oven'; });
+        if (held === 'meatCooked' || held === 'meatCheese') return addHint(w, st, st.x, st.y + 38, 'أضف الخبز لإكمال البرجر! 🍞', function (s) { return s.type === 'crate' && s.kind === 'bun'; });
+        return addHint(w, st, st.x, st.y + 38, 'أضف البرجر المشوي للخبز! 🥩', function (s) { return s.type === 'grill' || (s.type === 'crate' && s.kind === 'meatRaw'); });
+      }
+
+      // Find best matching customer order (lowest remaining patience first)
+      var matchIdx = -1, lowestPat = 1e9;
+      for (var oi = 0; oi < w.orders.length; oi++) {
+        if (w.orders[oi].dish === held && w.orders[oi].patience < lowestPat) {
+          lowestPat = w.orders[oi].patience;
+          matchIdx = oi;
+        }
       }
       if (matchIdx < 0) {
-        w.ev.push({ t: 'wrongOrder', dish: dish, chef: chef.id, x: st.x, y: st.y });
-        return false;
+        return addHint(w, st, st.x, st.y + 38, 'لا أحد طلب هذا الآن! شاهد الزبائن 👀', function (s) { return s.type === 'counter' && !s.item; });
       }
-      var servedOrd = w.orders.splice(matchIdx, 1)[0];
-      var base = RK.DISHES[dish].coins;
-      var tip = Math.round(6 * clamp(servedOrd.left / servedOrd.max, 0, 1));
-      var bonus = Math.min(6, w.streak * 2);
-      var earned = Math.round((base + tip) * (servedOrd.vip ? 1.5 : 1)) + bonus;
-      w.coins += earned;
+
+      var ord = w.orders.splice(matchIdx, 1)[0];
+      chef.held = null;
       w.served++;
       w.streak++;
-      if (held.kind === 'plate') w.plateReturns.push(2.2);
-      chef.held = null;
-      w.ev.push({
-        t: 'serve', dish: dish, coins: earned, vip: servedOrd.vip,
-        slot: servedOrd.slot, animal: servedOrd.animal, chef: chef.id, x: st.x, y: st.y
-      });
-      if (w.orders.length < 2) w.spawnTimer = Math.min(w.spawnTimer, 1.1);
+      if (w.streak > w.bestStreak) w.bestStreak = w.streak;
+      w.mult = w.streak >= 4 ? 3 : w.streak >= 2 ? 2 : 1;
+      w.fever = w.streak >= 4;
+
+      var dishDef = DISHES[held];
+      var tip = Math.round(6 * clamp(ord.patience / ord.maxPatience, 0, 1));
+      var streakBonus = w.mult === 3 ? 12 : w.mult === 2 ? 5 : 0;
+      var earned = (dishDef.coins + tip + streakBonus) * (ord.vip ? 2 : 1);
+      w.coins += earned;
+      w.score = w.coins;
+      updateStars(w);
+
+      var slotX = 330 + ord.slot * 310;
+      w.shots.push({ dish: held, x0: st.x, y0: st.y - 16, x1: slotX, y1: 102, t: 0, dur: 0.28, vip: ord.vip });
+      st.wobble = 0.4;
+      w.ev.push({ t: 'serve', dish: held, coins: earned, streak: w.streak, mult: w.mult, vip: ord.vip, slot: ord.slot, x: st.x, y: st.y });
+
+      if (w.orders.length === 0) spawnOrder(w, false);
+      w.orderTimer = Math.min(w.orderTimer, 1.4);
       return true;
+    }
+
+    if (st.type === 'trash') {
+      if (held) {
+        chef.held = null;
+        st.wobble = 0.3;
+        w.ev.push({ t: 'toss', station: 'trash', x: st.x, y: st.y, chef: ci });
+        return true;
+      }
+      return addHint(w, st, st.x, st.y - 44, 'الحاوية لتفريغ اليد عند الحاجة! ♻️', null);
     }
 
     return false;
-  };
+  }
 
-  /* --------------------------------------------------- physics & movement */
-  function collideGrid(w, chef) {
-    var cr = RK.CR;
-    // Clamp inside kitchen outer boundaries
-    chef.x = clamp(chef.x, X0 + cr, X0 + COLS * TILE - cr);
-    chef.y = clamp(chef.y, Y0 + cr, Y0 + ROWS * TILE - cr);
+  function dash(w, ci) {
+    var chef = w.chefs[ci | 0];
+    if (!chef || w.done || chef.dashCd > 0) return false;
+    w.atStart = false;
+    chef.moved = true;
+    chef.dashT = DASH_DUR;
+    chef.dashCd = DASH_CD;
+    w.ev.push({ t: 'dash', chef: chef.index, x: chef.x, y: chef.y });
+    return true;
+  }
 
-    var cell = RK.cellAt(chef.x, chef.y);
-    for (var r = Math.max(0, cell.r - 1); r <= Math.min(ROWS - 1, cell.r + 1); r++) {
-      for (var c = Math.max(0, cell.c - 1); c <= Math.min(COLS - 1, cell.c + 1); c++) {
-        if (RK.walkable(w, c, r)) continue;
-        var x0 = X0 + c * TILE, y0 = Y0 + r * TILE, x1 = x0 + TILE, y1 = y0 + TILE;
-        var nx = clamp(chef.x, x0, x1), ny = clamp(chef.y, y0, y1);
+  function triggerSousBot(w) {
+    if (!w.sousBot || w.done) return false;
+    var bot = w.sousBot;
+    if (bot.state !== 'ready' || bot.cd > 0) {
+      return addHint(w, null, bot.x, bot.y - 42, 'المساعد يشحن طاقته! ⚡', null);
+    }
+    w.atStart = false;
+
+    // 1. Rescue any warning/burnt appliance immediately
+    for (var i = 0; i < w.stations.length; i++) {
+      var s = w.stations[i];
+      if (s.cook && (s.cook.state === 'warning' || s.cook.state === 'burnt')) {
+        s.cook.state = 'done';
+        s.cook.t = 0;
+        w.ev.push({ t: 'botRescue', x: s.x, y: s.y });
+      } else if (s.cook && s.cook.state === 'cooking') {
+        s.cook.t = s.cook.dur;
+      }
+    }
+
+    // 2. Pick a helpful item for the first active order and deliver it to a free counter!
+    var wantDish = w.orders.length ? w.orders[0].dish : w.R.dishes[0];
+    var giftKind = wantDish === 'pizza' ? 'pizzaRaw' : wantDish === 'fries' ? 'fries' : wantDish === 'juice' ? 'juice' : 'meatCooked';
+    var freeCounter = findStation(w, function (st) { return st.type === 'counter' && !st.item; });
+
+    bot.state = 'go';
+    bot.t = 0;
+    bot.gift = giftKind;
+    bot.targetSt = freeCounter;
+    bot.tx = freeCounter ? freeCounter.x : W / 2;
+    bot.ty = freeCounter ? freeCounter.y + 42 : H / 2;
+    w.ev.push({ t: 'botGo', x: bot.x, y: bot.y, gift: giftKind });
+    return true;
+  }
+
+  function isWalkable(w, c, r) {
+    if (c < 0 || c >= COLS || r < 0 || r >= ROWS) return false;
+    return !w.grid[r][c];
+  }
+
+  function clickAt(w, ci, lx, ly) {
+    if (w.done) return false;
+    var chef = w.chefs[ci | 0];
+    if (!chef) return false;
+    var tc = posToCell(lx, ly);
+
+    // Check if clicked Mini Sous-Bot pad directly in 1P
+    if (w.sousBot && Math.hypot(lx - w.sousBot.x, ly - w.sousBot.y) < 46 && w.sousBot.state === 'ready') {
+      return triggerSousBot(w);
+    }
+
+    var targetSt = w.grid[tc.r][tc.c];
+    if (targetSt && targetSt.type === 'wall') targetSt = null;
+
+    var start = posToCell(chef.x, chef.y);
+    if (!isWalkable(w, start.c, start.r)) {
+      // Nudge to nearest walkable cell
+      var dirs0 = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+      for (var d0 = 0; d0 < 4; d0++) {
+        if (isWalkable(w, start.c + dirs0[d0][0], start.r + dirs0[d0][1])) {
+          start = { c: start.c + dirs0[d0][0], r: start.r + dirs0[d0][1] };
+          break;
+        }
+      }
+    }
+
+    var goals = [];
+    if (targetSt) {
+      var adj = [[0, 1], [0, -1], [1, 0], [-1, 0]];
+      for (var a = 0; a < 4; a++) {
+        var nc = targetSt.c + adj[a][0], nr = targetSt.r + adj[a][1];
+        if (isWalkable(w, nc, nr)) goals.push({ c: nc, r: nr });
+      }
+    } else if (isWalkable(w, tc.c, tc.r)) {
+      goals.push(tc);
+    }
+    if (!goals.length) return false;
+
+    w.atStart = false;
+    chef.moved = true;
+
+    // If already adjacent to targetSt, interact immediately!
+    if (targetSt && Math.hypot(chef.x - targetSt.x, chef.y - targetSt.y) <= 88 + w.diff.reachBonus) {
+      var dx0 = targetSt.x - chef.x, dy0 = targetSt.y - chef.y, l0 = Math.hypot(dx0, dy0) || 1;
+      chef.faceX = dx0 / l0; chef.faceY = dy0 / l0;
+      chef.nav = null;
+      interact(w, ci, targetSt);
+      return true;
+    }
+
+    // BFS shortest path on 13x6 grid
+    var seen = {}, queue = [{ c: start.c, r: start.r, path: [] }], found = null;
+    seen[start.c + ',' + start.r] = true;
+    var dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    while (queue.length) {
+      var cur = queue.shift();
+      for (var gi = 0; gi < goals.length; gi++) {
+        if (cur.c === goals[gi].c && cur.r === goals[gi].r) { found = cur.path; break; }
+      }
+      if (found) break;
+      for (var di = 0; di < 4; di++) {
+        var xc = cur.c + dirs[di][0], xr = cur.r + dirs[di][1], key = xc + ',' + xr;
+        if (!seen[key] && isWalkable(w, xc, xr)) {
+          seen[key] = true;
+          queue.push({ c: xc, r: xr, path: cur.path.concat([cellCenter(xc, xr)]) });
+        }
+      }
+    }
+    if (!found) return false;
+    if (!found.length) found.push(cellCenter(goals[0].c, goals[0].r));
+
+    chef.nav = { pts: found, target: targetSt };
+    if (chef.dashCd <= 0 && found.length >= 2) {
+      chef.dashT = DASH_DUR;
+      chef.dashCd = DASH_CD;
+      w.ev.push({ t: 'dash', chef: chef.index, x: chef.x, y: chef.y });
+    }
+    return true;
+  }
+
+  function resolveCollisions(w, chef) {
+    var minX = GX + CHEF_R, maxX = GX + COLS * TILE - CHEF_R;
+    var minY = GY + CHEF_R, maxY = GY + ROWS * TILE - CHEF_R;
+    chef.x = clamp(chef.x, minX, maxX);
+    chef.y = clamp(chef.y, minY, maxY);
+
+    var cc = posToCell(chef.x, chef.y);
+    var half = TILE / 2 - 2;
+    for (var r = Math.max(0, cc.r - 1); r <= Math.min(ROWS - 1, cc.r + 1); r++) {
+      for (var c = Math.max(0, cc.c - 1); c <= Math.min(COLS - 1, cc.c + 1); c++) {
+        var st = w.grid[r][c];
+        if (!st) continue;
+        var nx = clamp(chef.x, st.x - half, st.x + half);
+        var ny = clamp(chef.y, st.y - half, st.y + half);
         var dx = chef.x - nx, dy = chef.y - ny;
         var d2 = dx * dx + dy * dy;
-        if (d2 < cr * cr) {
+        if (d2 < CHEF_R * CHEF_R) {
           var d = Math.sqrt(d2);
-          if (d > 1e-4) {
-            var push = cr - d;
+          if (d > 0.001) {
+            var push = CHEF_R - d;
             chef.x += (dx / d) * push;
             chef.y += (dy / d) * push;
           } else {
-            // Exact center overlap fallback
-            var cx = x0 + TILE * 0.5, cy = y0 + TILE * 0.5;
-            if (Math.abs(chef.x - cx) > Math.abs(chef.y - cy)) {
-              chef.x = chef.x < cx ? x0 - cr : x1 + cr;
+            chef.y += CHEF_R;
+          }
+        }
+      }
+    }
+  }
+
+  function checkProximityAutoSnap(w, chef) {
+    if (!chef.held) return;
+    for (var i = 0; i < w.stations.length; i++) {
+      var st = w.stations[i];
+      if ((st.type === 'counter' || st.type === 'belt' || st.type === 'warp') && st.item) {
+        if (Math.hypot(chef.x - st.x, chef.y - st.y) <= 66) {
+          var merged = combineItems(chef.held.kind, st.item.kind);
+          if (merged) {
+            chef.held = { kind: merged };
+            st.item = null;
+            st.snapLock = 0.28;
+            st.wobble = 0.35;
+            if (chef.nav && chef.nav.target === st) chef.nav = null;
+            w.ev.push({ t: 'combine', kind: merged, x: st.x, y: st.y, chef: chef.index });
+            return;
+          }
+        }
+      }
+    }
+  }
+
+  function updateStars(w) {
+    var s = 0;
+    for (var i = 0; i < 3; i++) if (w.coins >= w.goals[i]) s = i + 1;
+    w.stars = s;
+  }
+
+  function normalizeInputs(inputs, nChefs) {
+    if (!inputs) return [{}, {}];
+    if (Array.isArray(inputs)) return [inputs[0] || {}, inputs[1] || {}];
+    if (typeof inputs.mx === 'number' || typeof inputs.my === 'number' || inputs.act || inputs.dash) {
+      return [inputs, {}];
+    }
+    return [inputs.p1 || {}, nChefs > 1 ? (inputs.p2 || {}) : {}];
+  }
+
+  function stepChef(w, chef, inp, dt) {
+    if (chef.dashT > 0) chef.dashT = Math.max(0, chef.dashT - dt);
+    if (chef.dashCd > 0) chef.dashCd = Math.max(0, chef.dashCd - dt);
+    if (chef.boostT > 0) chef.boostT = Math.max(0, chef.boostT - dt);
+
+    var mx = inp.mx || 0, my = inp.my || 0;
+    if (mx !== 0 || my !== 0) {
+      w.atStart = false;
+      chef.moved = true;
+      chef.nav = null;
+    }
+
+    if (inp.dash) dash(w, chef.index);
+
+    // Check floor boost pad under chef
+    for (var fi = 0; fi < w.floorPads.length; fi++) {
+      var fp = w.floorPads[fi];
+      if (fp.type === 'boost' && Math.abs(chef.x - fp.x) < TILE * 0.5 && Math.abs(chef.y - fp.y) < TILE * 0.5) {
+        chef.boostT = 0.22;
+      }
+    }
+
+    var spMul = (chef.boostT > 0 ? 1.42 : 1) * (w.fever ? 1.12 : 1);
+    var sp = (chef.dashT > 0 ? DASH_SPEED : BASE_SPEED) * spMul;
+
+    if (chef.nav) {
+      var wp = chef.nav.pts[0];
+      if (wp) {
+        var dx = wp.x - chef.x, dy = wp.y - chef.y, dist = Math.hypot(dx, dy);
+        if (dist <= Math.max(10, sp * dt * 1.1)) {
+          chef.x = wp.x; chef.y = wp.y;
+          chef.nav.pts.shift();
+        } else {
+          mx = dx / dist; my = dy / dist;
+        }
+      }
+      if (!chef.nav.pts.length) {
+        var tgt = chef.nav.target;
+        chef.nav = null;
+        chef.vx = 0; chef.vy = 0;
+        if (tgt) {
+          var tdx = tgt.x - chef.x, tdy = tgt.y - chef.y, tl = Math.hypot(tdx, tdy) || 1;
+          chef.faceX = tdx / tl; chef.faceY = tdy / tl;
+          interact(w, chef.index, tgt);
+        }
+        checkProximityAutoSnap(w, chef);
+        return;
+      }
+    }
+
+    var len = Math.hypot(mx, my);
+    if (len > 0.01) {
+      mx /= len; my /= len;
+      chef.faceX = mx; chef.faceY = my;
+      chef.vx = mx * sp;
+      chef.vy = my * sp;
+      chef.x += chef.vx * dt;
+      chef.y += chef.vy * dt;
+      resolveCollisions(w, chef);
+      checkProximityAutoSnap(w, chef);
+    } else {
+      chef.vx = 0;
+      chef.vy = 0;
+    }
+
+    if (inp.act) interact(w, chef.index);
+  }
+
+  function stepSousBot(w, dt) {
+    var bot = w.sousBot;
+    if (!bot) return;
+    if (bot.cd > 0) {
+      bot.cd = Math.max(0, bot.cd - dt);
+      if (bot.cd === 0 && bot.state === 'cooldown') bot.state = 'ready';
+    }
+    if (bot.state === 'go') {
+      var dx = bot.tx - bot.x, dy = bot.ty - bot.y, d = Math.hypot(dx, dy);
+      var sp = 520 * dt;
+      if (d <= sp + 6) {
+        bot.x = bot.tx; bot.y = bot.ty;
+        if (bot.targetSt && !bot.targetSt.item) {
+          bot.targetSt.item = { kind: bot.gift };
+          bot.targetSt.wobble = 0.35;
+          w.ev.push({ t: 'botDrop', kind: bot.gift, x: bot.targetSt.x, y: bot.targetSt.y });
+        }
+        bot.state = 'return';
+      } else {
+        bot.x += (dx / d) * sp;
+        bot.y += (dy / d) * sp;
+      }
+    } else if (bot.state === 'return') {
+      var hx = bot.homeX - bot.x, hy = bot.homeY - bot.y, hd = Math.hypot(hx, hy);
+      var hsp = 480 * dt;
+      if (hd <= hsp + 6) {
+        bot.x = bot.homeX; bot.y = bot.homeY;
+        bot.state = 'cooldown';
+        bot.cd = 7.5;
+      } else {
+        bot.x += (hx / hd) * hsp;
+        bot.y += (hy / hd) * hsp;
+      }
+    }
+  }
+
+  function stepStations(w, dt) {
+    var cookMul = w.fever ? 2.0 : 1.0;
+    for (var i = 0; i < w.stations.length; i++) {
+      var st = w.stations[i];
+      if (st.wobble > 0) st.wobble = Math.max(0, st.wobble - dt * 2.4);
+      if (st.warpCd > 0) st.warpCd = Math.max(0, st.warpCd - dt);
+      if (st.snapLock > 0) st.snapLock = Math.max(0, st.snapLock - dt);
+
+      // Conveyor belts slide items smoothly to neighbor counter/belt
+      if (st.type === 'belt' && st.item) {
+        st.beltT += dt;
+        if (st.beltT >= 0.6) {
+          var nc = st.c + st.dir;
+          var nextSt = (nc >= 0 && nc < COLS) ? w.grid[st.r][nc] : null;
+          if (nextSt && (nextSt.type === 'counter' || nextSt.type === 'belt' || nextSt.type === 'warp')) {
+            if (!nextSt.item) {
+              nextSt.item = st.item;
+              nextSt.beltT = 0;
+              st.item = null;
+              st.beltT = 0;
+              w.ev.push({ t: 'beltMove', x: nextSt.x, y: nextSt.y });
+              applyWarpIfPossible(w, nextSt);
             } else {
-              chef.y = chef.y < cy ? y0 - cr : y1 + cr;
+              var bCombo = combineItems(st.item.kind, nextSt.item.kind);
+              if (bCombo) {
+                nextSt.item = { kind: bCombo };
+                st.item = null;
+                st.beltT = 0;
+                nextSt.wobble = 0.35;
+                w.ev.push({ t: 'combine', kind: bCombo, x: nextSt.x, y: nextSt.y });
+              }
             }
           }
         }
       }
-    }
-  }
 
-  function stepChef(w, chef, dt, inp) {
-    inp = inp || {};
-    if (inp.click) RK.clickAt(w, chef.id, inp.click.x, inp.click.y);
-
-    var mx = +inp.mx || 0, my = +inp.my || 0;
-    var keyMoving = Math.hypot(mx, my) > 0.05;
-    var navActive = false;
-    if (keyMoving) {
-      chef.nav = null;
-      var ml = Math.hypot(mx, my);
-      if (ml > 1) { mx /= ml; my /= ml; }
-      chef.moved = true;
-    } else if (inp.hold && !chef.nav) {
-      var hdx = inp.hold.x - chef.x, hdy = inp.hold.y - chef.y, hd = Math.hypot(hdx, hdy);
-      if (hd > 14) { mx = hdx / hd; my = hdy / hd; chef.moved = true; }
-    } else if (chef.nav && chef.nav.path.length) {
-      navActive = true;
-      var wp = chef.nav.path[0];
-      var ndx = wp.x - chef.x, ndy = wp.y - chef.y, nd = Math.hypot(ndx, ndy);
-      if (nd <= (chef.nav.path.length === 1 ? 14 : 18)) {
-        chef.nav.path.shift();
-        if (!chef.nav.path.length) {
-          var targetSt = chef.nav.station, doAct = chef.nav.act;
-          chef.nav = null;
-          navActive = false;
-          chef.vx *= 0.35; chef.vy *= 0.35;
-          if (targetSt) {
-            var sdx = targetSt.x - chef.x, sdy = targetSt.y - chef.y, sdl = Math.hypot(sdx, sdy) || 1;
-            chef.dirX = sdx / sdl; chef.dirY = sdy / sdl;
-            updateChefFocus(w, chef);
-            if (doAct) interactWith(w, chef, targetSt);
-          }
-          mx = 0; my = 0;
-        } else {
-          wp = chef.nav.path[0];
-          ndx = wp.x - chef.x; ndy = wp.y - chef.y; nd = Math.hypot(ndx, ndy) || 1;
-          mx = ndx / nd; my = ndy / nd;
-        }
-      } else {
-        mx = ndx / nd; my = ndy / nd;
-      }
-    }
-
-    if (Math.hypot(mx, my) > 0.05) {
-      var dl = Math.hypot(mx, my);
-      chef.dirX = mx / dl; chef.dirY = my / dl;
-    }
-
-    if (chef.dashCd > 0) chef.dashCd = Math.max(0, chef.dashCd - dt);
-    if (chef.dashT > 0) chef.dashT = Math.max(0, chef.dashT - dt);
-
-    if (inp.dash && chef.dashCd <= 0) {
-      chef.dashT = RK.DASH_DUR;
-      chef.dashCd = RK.DASH_CD;
-      chef.moved = true;
-      var ddx = Math.hypot(mx, my) > 0.05 ? mx : chef.dirX;
-      var ddy = Math.hypot(mx, my) > 0.05 ? my : chef.dirY;
-      var ddl = Math.hypot(ddx, ddy) || 1;
-      chef.vx = (ddx / ddl) * RK.DASH_SPEED;
-      chef.vy = (ddy / ddl) * RK.DASH_SPEED;
-      w.ev.push({ t: 'dash', chef: chef.id, x: chef.x, y: chef.y });
-    }
-
-    var curCell = RK.cellAt(chef.x, chef.y);
-    var tile = (curCell.r >= 0 && curCell.r < ROWS && curCell.c >= 0 && curCell.c < COLS) ? w.grid[curCell.r][curCell.c] : '.';
-    chef.onIce = tile === 'I';
-
-    if (chef.dashT <= 0) {
-      var wantVx = mx * RK.SPEED, wantVy = my * RK.SPEED;
-      if (chef.onIce) {
-        // Cheerful slippery ice physics: gradual acceleration & low friction glide!
-        var iceRate = navActive ? 10.5 : (Math.hypot(mx, my) > 0.05 ? 4.2 : 1.7);
-        var k = Math.min(1, dt * iceRate);
-        chef.vx += (wantVx - chef.vx) * k;
-        chef.vy += (wantVy - chef.vy) * k;
-      } else {
-        var normRate = Math.hypot(mx, my) > 0.05 ? 20 : 24;
-        var kn = Math.min(1, dt * normRate);
-        chef.vx += (wantVx - chef.vx) * kn;
-        chef.vy += (wantVy - chef.vy) * kn;
-        if (Math.hypot(mx, my) <= 0.05 && Math.hypot(chef.vx, chef.vy) < 8) { chef.vx = 0; chef.vy = 0; }
-      }
-    }
-
-    var oldX = chef.x, oldY = chef.y;
-    chef.x += chef.vx * dt;
-    chef.y += chef.vy * dt;
-    collideGrid(w, chef);
-    var stepDist = Math.hypot(chef.x - oldX, chef.y - oldY);
-    chef.walk += stepDist;
-    if (stepDist > 0.05) chef.moved = true;
-
-    if (inp.interact) RK.interact(w, chef.id);
-  }
-
-  /* ---------------------------------------------- appliances, belts, queue */
-  function stepStations(w, dt) {
-    var cs = w.opts.cookSpeed, bd = w.opts.burnDelay;
-    for (var i = 0; i < w.stations.length; i++) {
-      var st = w.stations[i];
-      // Auto-chopping when any chef stands beside a cutting board with raw tomato!
-      if (st.type === 'chop' && st.item && st.item.kind === 'tomatoRaw') {
-        var near = false;
-        for (var p = 0; p < w.chefs.length; p++) {
-          if (Math.hypot(w.chefs[p].x - st.x, w.chefs[p].y - st.y) <= RK.CHOP_DIST) { near = true; break; }
-        }
-        if (near) {
-          st.item.prog = (st.item.prog || 0) + dt * 0.68 * cs;
-          var m = Math.floor(st.item.prog * 4);
-          if (m > (st.chopMilestone || 0) && m < 4) {
-            st.chopMilestone = m;
-            w.ev.push({ t: 'chop', x: st.x, y: st.y });
-          }
-          if (st.item.prog >= 1) {
-            st.item = { kind: 'tomato' };
-            st.chopMilestone = 0;
-            w.ev.push({ t: 'chopped', x: st.x, y: st.y });
-          }
-        }
-      }
-
-      // Fryer & Grill (cooking -> done -> warning wiggle -> cartoon burnt puff)
-      if (st.type === 'fryer' || st.type === 'grill') {
-        var baseDur = st.type === 'fryer' ? 2.8 : 3.0;
-        var ck = st.cook;
+      if (st.cook) {
+        var ap = APPLIANCES[st.type], ck = st.cook;
         if (ck.state === 'cooking') {
-          ck.prog += (dt * cs) / baseDur;
-          if (ck.prog >= 1) {
-            ck.prog = 1; ck.state = 'done'; ck.over = 0;
-            w.ev.push({ t: 'cooked', station: st.type, x: st.x, y: st.y });
+          ck.t += dt * cookMul;
+          ck.prog = clamp(ck.t / ck.dur, 0, 1);
+          if (ck.t >= ck.dur) {
+            ck.state = 'done';
+            ck.t = 0;
+            ck.prog = 1;
+            st.wobble = 0.3;
+            w.ev.push({ t: 'cooked', station: st.type, kind: ap.outKind, x: st.x, y: st.y });
           }
-        } else if (ck.state === 'done' || ck.state === 'warning') {
-          ck.over += dt / bd;
-          if (ck.state === 'done' && ck.over >= 0.5) {
+        } else if (ck.state === 'done' && w.diff.canBurn && ap.canBurn) {
+          ck.t += dt;
+          if (ck.t >= w.burnHold) {
             ck.state = 'warning';
+            ck.t = 0;
             w.ev.push({ t: 'warn', station: st.type, x: st.x, y: st.y });
           }
-          if (ck.over >= 1) {
-            ck.over = 1; ck.state = 'burnt';
+        } else if (ck.state === 'warning' && w.diff.canBurn && ap.canBurn) {
+          ck.t += dt;
+          if (ck.t >= w.warnHold) {
+            ck.state = 'burnt';
+            ck.t = 0;
             w.burnt++;
+            w.streak = 0; w.mult = 1; w.fever = false;
             w.ev.push({ t: 'burn', station: st.type, x: st.x, y: st.y });
           }
         }
       }
-
-      // Blender (cooking -> done, never burns!)
-      if (st.type === 'blender' && st.cook.state === 'cooking') {
-        st.cook.prog += (dt * cs) / 2.4;
-        if (st.cook.prog >= 1) {
-          st.cook.prog = 1; st.cook.state = 'done';
-          w.ev.push({ t: 'cooked', station: 'blender', x: st.x, y: st.y });
-        }
-      }
-    }
-
-    // Conveyor belts: step downstream-first so chains of items advance smoothly together!
-    for (var pass = w.belts.length - 1; pass >= 0; pass--) {
-      var b = w.belts[pass];
-      if (!b.item) { b.beltT = 0; continue; }
-      var dst = RK.stationAt(w, b.c + b.dir[0], b.r + b.dir[1]);
-      if (dst && (dst.type === 'belt' || dst.type === 'counter') && !dst.item) {
-        b.beltT = (b.beltT || 0) + dt * 1.45;
-        if (b.beltT >= 1) {
-          dst.item = b.item;
-          if (dst.type === 'belt') dst.beltT = 0;
-          b.item = null; b.beltT = 0;
-          w.ev.push({ t: 'beltMove', x: dst.x, y: dst.y });
-        }
-      } else {
-        b.beltT = 0;
-      }
-    }
-
-    // Clean plates magically return to the rack with the fewest plates
-    for (var k = w.plateReturns.length - 1; k >= 0; k--) {
-      w.plateReturns[k] -= dt;
-      if (w.plateReturns[k] <= 0) {
-        w.plateReturns.splice(k, 1);
-        if (w.racks.length) {
-          var targetRack = w.racks[0];
-          for (var ri = 1; ri < w.racks.length; ri++) {
-            if (w.racks[ri].plates < targetRack.plates) targetRack = w.racks[ri];
-          }
-          targetRack.plates++;
-          w.ev.push({ t: 'plateReturn', x: targetRack.x, y: targetRack.y });
-        }
-      }
     }
   }
 
-  function stepOrders(w, dt) {
-    for (var i = w.orders.length - 1; i >= 0; i--) {
-      var o = w.orders[i];
-      o.left -= dt;
-      if (o.left <= 0) {
-        w.orders.splice(i, 1);
+  function step(w, dt, inputs) {
+    if (w.done || !(dt > 0)) return w;
+    dt = Math.min(dt, 0.1);
+    w.time += dt;
+    w.timeLeft = Math.max(0, w.duration - w.time);
+
+    var pair = normalizeInputs(inputs, w.chefs.length);
+    for (var ci = 0; ci < w.chefs.length; ci++) {
+      stepChef(w, w.chefs[ci], pair[ci], dt);
+    }
+    if (w.chefs.length === 2) {
+      // Gentle friendly chef-to-chef nudge so they never overlap completely
+      var a = w.chefs[0], b = w.chefs[1];
+      var dx = b.x - a.x, dy = b.y - a.y, dist = Math.hypot(dx, dy);
+      if (dist > 0.1 && dist < CHEF_R * 1.7) {
+        var push = (CHEF_R * 1.7 - dist) * 0.5;
+        a.x -= (dx / dist) * push; a.y -= (dy / dist) * push;
+        b.x += (dx / dist) * push; b.y += (dy / dist) * push;
+        resolveCollisions(w, a);
+        resolveCollisions(w, b);
+      }
+    }
+
+    if (pair[0] && pair[0].bot) triggerSousBot(w);
+    stepSousBot(w, dt);
+    stepStations(w, dt);
+
+    // Order spawning & patience countdown
+    w.orderTimer -= dt;
+    if (w.orderTimer <= 0) {
+      spawnOrder(w, false);
+      w.orderTimer = w.diff.orderGap * (0.85 + w.rng() * 0.3);
+    }
+    for (var oi = w.orders.length - 1; oi >= 0; oi--) {
+      var ord = w.orders[oi];
+      ord.patience -= dt;
+      if (ord.patience <= 0) {
+        w.orders.splice(oi, 1);
         w.expired++;
-        w.streak = 0;
-        w.ev.push({ t: 'expire', id: o.id, slot: o.slot, dish: o.dish });
-        if (w.orders.length < 2) w.spawnTimer = Math.min(w.spawnTimer, 1.0);
+        w.streak = 0; w.mult = 1; w.fever = false;
+        w.ev.push({ t: 'expire', slot: ord.slot, dish: ord.dish });
+        if (w.orders.length === 0) spawnOrder(w, false);
       }
     }
-    var cap = w.players === 2 ? 4 : (w.world === 0 ? 3 : 4);
-    if (w.orders.length < cap) {
-      w.spawnTimer -= dt;
-      if (w.spawnTimer <= 0) {
-        spawnOrder(w);
-        w.spawnTimer = w.players === 2 ? 7.5 : 9.5;
-      }
-    }
-  }
 
-  RK.step = function (w, dt, inputs) {
-    if (w.done) return;
-    w.t += dt;
-    w.timeLeft = Math.max(0, w.timeLeft - dt);
+    for (var si = w.shots.length - 1; si >= 0; si--) {
+      w.shots[si].t += dt;
+      if (w.shots[si].t >= w.shots[si].dur) w.shots.splice(si, 1);
+    }
+    for (var hi = w.hints.length - 1; hi >= 0; hi--) {
+      w.hints[hi].life -= dt;
+      if (w.hints[hi].life <= 0) w.hints.splice(hi, 1);
+    }
+
     if (w.timeLeft <= 0) {
       w.done = true;
-      w.ev.push({ t: 'bell' });
-      return;
+      updateStars(w);
+      w.ev.push({ t: 'finish', stars: w.stars, coins: w.coins, served: w.served });
     }
+    return w;
+  }
 
-    var list = Array.isArray(inputs) ? inputs : [inputs || {}];
-    for (var i = 0; i < w.chefs.length; i++) stepChef(w, w.chefs[i], dt, list[i] || {});
-
-    // Soft chef-to-chef nudge in 2P co-op
-    if (w.chefs.length === 2) {
-      var a = w.chefs[0], b = w.chefs[1];
-      var dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy), minD = RK.CR * 1.75;
-      if (d < minD) {
-        var nx = d > 0.01 ? dx / d : 1, ny = d > 0.01 ? dy / d : 0;
-        var sep = (minD - d) * 0.5;
-        a.x -= nx * sep; a.y -= ny * sep;
-        b.x += nx * sep; b.y += ny * sep;
-        collideGrid(w, a); collideGrid(w, b);
-      }
+  /* ------------------------------------------------ Save & Locker Helpers */
+  function loadSave(raw) {
+    var src = raw && typeof raw === 'object' ? raw : {};
+    var lvSrc = Array.isArray(src.lv) ? src.lv : [];
+    var lv = [];
+    for (var i = 0; i < LEVELS.length; i++) {
+      var e = lvSrc[i] && typeof lvSrc[i] === 'object' ? lvSrc[i] : {};
+      lv.push({
+        s: clamp(e.s | 0, 0, 3),
+        best: Math.max(0, e.best | 0)
+      });
     }
-
-    stepStations(w, dt);
-    stepOrders(w, dt);
-    updateFocus(w);
-  };
-
-  /* --------------------------------------------- stars, DDA outcome, saves */
-  RK.stars = function (w) {
-    var c = w.coins, g = w.goals;
-    return c >= g[2] ? 3 : c >= g[1] ? 2 : c >= g[0] ? 1 : 0;
-  };
-
-  RK.outcome = function (w) {
-    var ratio = w.coins / Math.max(1, w.goals[2]);
-    var penalty = (w.expired * 0.12) + (w.burnt * 0.06);
-    return Math.round(clamp(ratio - penalty, 0, 1) * 1000) / 1000;
-  };
-
-  RK.freshSave = function () {
+    var aprons = [1, 0, 0, 0], hats = [1, 0, 0, 0];
+    if (Array.isArray(src.aprons)) for (var a = 1; a < APRONS.length; a++) aprons[a] = src.aprons[a] ? 1 : 0;
+    if (Array.isArray(src.hats)) for (var h = 1; h < HATS.length; h++) hats[h] = src.hats[h] ? 1 : 0;
+    var apIdx = clamp(src.apron | 0, 0, APRONS.length - 1);
+    var htIdx = clamp(src.hat | 0, 0, HATS.length - 1);
+    var diff = DIFFICULTIES[src.difficulty] ? src.difficulty : 'normal';
     return {
-      v: 1,
-      lv: RK.LEVELS.map(function () { return { s: 0, best: 0 }; }),
-      coins: 0,
-      aprons: RK.APRONS.map(function (_, i) { return i === 0 ? 1 : 0; }),
-      hats: RK.HATS.map(function (_, i) { return i === 0 ? 1 : 0; }),
-      apron: 0,
-      hat: 0
+      v: 2,
+      lv: lv,
+      coins: Math.max(0, src.coins | 0),
+      aprons: aprons,
+      hats: hats,
+      apron: aprons[apIdx] ? apIdx : 0,
+      hat: hats[htIdx] ? htIdx : 0,
+      difficulty: diff
     };
-  };
+  }
 
-  function isInt(v, lo, hi) { return typeof v === 'number' && Math.floor(v) === v && v >= lo && v <= hi; }
-  function isObj(v) { return v && typeof v === 'object' && !Array.isArray(v) ? v : null; }
+  function totalStars(save) {
+    var sum = 0;
+    for (var i = 0; i < save.lv.length; i++) sum += save.lv[i].s | 0;
+    return sum;
+  }
 
-  RK.loadSave = function (raw) {
-    var s = RK.freshSave(), r = isObj(raw);
-    if (!r || r.v !== 1) return s;
-    var lv = Array.isArray(r.lv) ? r.lv : [];
-    s.lv.forEach(function (e, i) {
-      var o = isObj(lv[i]);
-      if (!o) return;
-      e.s = isInt(o.s, 0, 3) ? o.s : 0;
-      e.best = isInt(o.best, 0, 99999) ? o.best : 0;
-    });
-    s.coins = isInt(r.coins, 0, 99999) ? r.coins : 0;
-    var ap = Array.isArray(r.aprons) ? r.aprons : [];
-    s.aprons = s.aprons.map(function (_, i) { return i === 0 || ap[i] === 1 ? 1 : 0; });
-    var ht = Array.isArray(r.hats) ? r.hats : [];
-    s.hats = s.hats.map(function (_, i) { return i === 0 || ht[i] === 1 ? 1 : 0; });
-    s.apron = isInt(r.apron, 0, RK.APRONS.length - 1) && s.aprons[r.apron] ? r.apron : 0;
-    s.hat = isInt(r.hat, 0, RK.HATS.length - 1) && s.hats[r.hat] ? r.hat : 0;
-    return s;
-  };
+  function recordRound(save, w) {
+    var entry = save.lv[w.levelIndex];
+    var isNewBest = w.coins > entry.best;
+    if (w.stars > entry.s) entry.s = w.stars;
+    if (isNewBest) entry.best = w.coins;
+    save.coins += w.coins;
+    return isNewBest;
+  }
 
-  RK.isOpen = function (s, i) {
-    return i === 0 || (i > 0 && i < RK.LEVELS.length && s.lv[i - 1].s > 0);
-  };
-
-  RK.totalStars = function (s) {
-    var n = 0;
-    for (var i = 0; i < s.lv.length; i++) n += s.lv[i].s;
-    return n;
-  };
-
-  RK.nextLevel = function (s) {
-    var top = 0;
-    for (var i = 0; i < RK.LEVELS.length; i++) {
-      if (!RK.isOpen(s, i)) break;
-      top = i;
-      if (!s.lv[i].s) return i;
+  function buyOrEquip(save, cat, idx) {
+    var list = cat === 'hat' ? HATS : APRONS;
+    var owned = cat === 'hat' ? save.hats : save.aprons;
+    if (idx < 0 || idx >= list.length) return { ok: false };
+    if (owned[idx]) {
+      if (cat === 'hat') save.hat = idx; else save.apron = idx;
+      return { ok: true, action: 'equip' };
     }
-    return top;
+    var cost = list[idx].cost;
+    if (save.coins < cost) return { ok: false, reason: 'coins' };
+    save.coins -= cost;
+    owned[idx] = 1;
+    if (cat === 'hat') save.hat = idx; else save.apron = idx;
+    return { ok: true, action: 'buy' };
+  }
+
+  var RKEngine = {
+    W: W, H: H, COLS: COLS, ROWS: ROWS, TILE: TILE, GX: GX, GY: GY, CHEF_R: CHEF_R,
+    WORLDS: WORLDS, CUSTOMERS: CUSTOMERS, DIFFICULTIES: DIFFICULTIES,
+    ITEMS: ITEMS, DISHES: DISHES, APRONS: APRONS, HATS: HATS, LEVELS: LEVELS, APPLIANCES: APPLIANCES,
+    cellCenter: cellCenter, posToCell: posToCell, combineItems: combineItems, isDish: isDish, dishOf: dishOf,
+    create: create, step: step, interact: interact, dash: dash, clickAt: clickAt,
+    triggerSousBot: triggerSousBot, nearestStation: nearestStation, promptFor: promptFor,
+    loadSave: loadSave, totalStars: totalStars, recordRound: recordRound, buyOrEquip: buyOrEquip
   };
 
-  RK.applyResult = function (s, i, stars, coins) {
-    var e = s.lv[i];
-    var out = {
-      first: e.s === 0 && stars > 0,
-      best: e.best > 0 && coins > e.best,
-      moreStars: stars > e.s,
-      earned: Math.max(0, coins | 0),
-      opened: -1,
-      world: -1
-    };
-    if (stars > e.s) e.s = stars;
-    if (coins > e.best) e.best = coins;
-    s.coins = Math.min(99999, s.coins + out.earned);
-    if (out.first && i + 1 < RK.LEVELS.length) {
-      out.opened = i + 1;
-      if ((i + 1) % 3 === 0) out.world = (i + 1) / 3;
-    }
-    return out;
-  };
-
-  RK.buy = function (s, kind, k) {
-    var isHat = kind === 'hat';
-    var list = isHat ? RK.HATS : RK.APRONS;
-    var own = isHat ? s.hats : s.aprons;
-    var key = isHat ? 'hat' : 'apron';
-    if (!list[k]) return '';
-    if (own[k]) { s[key] = k; return 'wear'; }
-    if (s.coins < list[k].price) return '';
-    s.coins -= list[k].price;
-    own[k] = 1;
-    s[key] = k;
-    return 'bought';
-  };
-
-  return RK;
-});
+  if (typeof module !== 'undefined' && module.exports) module.exports = RKEngine;
+  if (typeof window !== 'undefined') {
+    window.RKEngine = RKEngine;
+    window.RK = RKEngine;
+  }
+})();

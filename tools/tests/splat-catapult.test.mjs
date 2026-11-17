@@ -1,7 +1,8 @@
-// Splat Catapult (مقلاع الألوان) in real Chromium:
-// Mouse drag-and-release launch, mid-air click special, keyboard Arrow/Space aim & special,
-// pause simulation/render freeze & restart, solo win + save + quota retry, 2P hotseat duel,
-// shop skins/frames, reduced motion, smaller portal viewport, and zero console/page errors.
+// Splat Catapult (مقلاع الألوان: Mega Paint-Cannon & Toppling Forts) in real Chromium:
+// Drag-Anywhere slingshot, mid-air click/Space abilities, rotational fort toppling,
+// simple keyboard aim, pause simulation/render freeze & restart, all 4 open worlds,
+// solo win + save + quota retry, dynamic-camera 2P Fort Duel, Workshop, reduced motion,
+// 1100x620 portal fit, and zero console/page/network errors.
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import path from 'node:path';
@@ -22,19 +23,19 @@ after(async () => {
   await server?.close();
 });
 
-const SAVE = (open = 0, extra = {}) => ({
-  v: 1,
-  lv: Array.from({ length: 16 }, (_, i) => ({ s: i < open ? 2 : 0, best: i < open ? 1800 : 0 })),
+const SAVE = (extra = {}) => ({
+  v: 2,
+  diff: 'mid',
   coins: 0,
-  skins: [1, 0, 0, 0, 0, 0],
-  frames: [1, 0, 0, 0, 0],
-  skin: 0,
-  frame: 0,
-  coach: true,
+  launcher: 0,
+  launchers: [1, 0, 0, 0, 0],
+  palette: 0,
+  palettes: [1, 0, 0, 0],
+  lv: Array.from({ length: 16 }, () => ({ s: 0, best: 0 })),
   ...extra
 });
 
-async function game(t, { save, dda = 0.3, reducedMotion = 'reduce', size = [1280, 720] } = {}) {
+async function game(t, { save, dda = 0.35, reducedMotion = 'reduce', size = [1280, 720] } = {}) {
   const ctx = await browser.newContext({ viewport: { width: size[0], height: size[1] }, reducedMotion });
   const errors = [], requests = [];
   ctx.on('page', page => {
@@ -57,12 +58,7 @@ async function game(t, { save, dda = 0.3, reducedMotion = 'reduce', size = [1280
       }
     }
     let kit;
-    const sc = window.sc = { results: [], failSave: false, draws: 0 };
-    const origDrawImage = CanvasRenderingContext2D.prototype.drawImage;
-    CanvasRenderingContext2D.prototype.drawImage = function () {
-      if (this.canvas && this.canvas.id === 'game') sc.draws++;
-      return origDrawImage.apply(this, arguments);
-    };
+    const sc = window.sc = { results: [], failSave: false };
     Object.defineProperty(window, 'Kit', {
       configurable: true,
       get: () => kit,
@@ -104,165 +100,182 @@ const stored = page => page.evaluate(() => {
   const raw = localStorage.getItem('sg:splat-catapult:save');
   return raw ? JSON.parse(raw) : null;
 });
-const pagePoint = (page, x, y) => page.evaluate(([x, y]) => __game.point(x, y), [x, y]);
+const clientPt = (page, wx, wy) => page.evaluate(([x, y]) => __game.worldToClient(x, y), [wx, wy]);
 
-async function dragAndRelease(page, dx, dy) {
-  const sl = await page.evaluate(() => __game.sling);
-  const start = await pagePoint(page, sl.x, sl.y);
-  const end = await pagePoint(page, sl.x + dx, sl.y + dy);
-  await page.mouse.move(start.x, start.y);
+async function dragAnywhere(page, startWx, startWy, dx, dy) {
+  const a = await clientPt(page, startWx, startWy);
+  const b = await clientPt(page, startWx + dx, startWy + dy);
+  await page.mouse.move(a.x, a.y);
   await page.mouse.down();
   await step(page);
-  assert.equal((await state(page)).dragging, true, 'started dragging slingshot pouch');
-  await page.mouse.move(end.x, end.y, { steps: 6 });
+  assert.equal((await state(page)).dragging, true, 'drag started anywhere on playfield');
+  await page.mouse.move(b.x, b.y, { steps: 6 });
   await step(page);
   await page.mouse.up();
   await step(page);
 }
 
-test('title screen waits calmly; corner click stays on title; Play enters Level 1-1 on fresh save and shows wordless coach', async t => {
+test('title screen waits calmly; corner (3,3) click stays on title; difficulty tiers switch; Play opens Stage 1-1', async t => {
   const page = await game(t);
-  await step(page, 30);
+  await step(page, 25);
   assert.equal((await state(page)).screen, 'title');
   assert.equal(await page.locator('#titleStars b').textContent(), '0/48');
   assert.match(await page.locator('.logo').textContent(), /مقلاع الألوان/);
 
-  // Clicking (3, 3) top-left corner must NOT start gameplay
+  // Top-left corner click must NOT start gameplay
   await page.mouse.click(3, 3);
   await step(page, 5);
   assert.equal((await state(page)).screen, 'title');
 
+  // Difficulty selector: سهل gives +2 bonus shots, بطل enables wind gusts
+  await page.locator('#diffEasy').click();
+  await step(page);
+  assert.equal((await state(page)).diff, 'easy');
+  assert.equal((await state(page)).shotsLeft, 6);
+
+  await page.locator('#diffHero').click();
+  await step(page);
+  assert.equal((await state(page)).diff, 'hero');
+  assert.notEqual((await state(page)).wind, 0, 'hero difficulty activates wind');
+
+  await page.locator('#diffMid').click();
   await page.locator('#btnPlay').click();
   await step(page);
-  let s = await state(page);
+  const s = await state(page);
   assert.equal(s.screen, 'play');
   assert.equal(s.mode, 'solo');
-  assert.equal(s.level, 0);
   assert.equal(s.id, '1-1');
   assert.equal(s.shots, 0);
-  assert.equal(s.botsLeft, 2);
+  assert.equal(s.goblinsLeft, 3);
 
-  // Wordless coach hand appears after idle wait without firing
-  await run(page, 95);
-  s = await state(page);
-  assert.equal(s.coach, true);
-  assert.equal(s.shots, 0);
+  // Aim angle never drifts without player input
+  const before = s.aimAngle;
+  await run(page, 40);
+  assert.equal((await state(page)).aimAngle, before, 'aimAngle unchanged when idle');
 });
 
-test('real mouse drag-and-release launches balloon, and mid-air click triggers trick special ability', async t => {
-  const page = await game(t, { save: SAVE(2), reducedMotion: 'no-preference' });
+test('Drag-Anywhere mouse launch, mid-air click cluster split, and real 2D rotational fort toppling', async t => {
+  const page = await game(t, { save: SAVE(), reducedMotion: 'no-preference' });
   await page.locator('#btnLevels').click();
   await step(page);
-  // Pick Level 1-2 (index 1), whose first balloon is `triple` (ثلاثي التوت)!
+  // Pick Stage 1-2 (index 1, first projectile is cluster = الثلاثي المتفرّع)
   await page.locator('.lvl').nth(1).click();
   await step(page);
   let s = await state(page);
   assert.equal(s.id, '1-2');
-  assert.equal(s.currentBalloon, 'triple');
+  assert.equal(s.nextType, 'cluster');
 
-  // Drag back-left and release!
-  await dragAndRelease(page, -95, 42);
+  // Drag back starting in open mid-field (x=620, y=340 — far away from catapult!)
+  await dragAnywhere(page, 620, 340, -118, 56);
   s = await state(page);
   assert.equal(s.shots, 1);
-  assert.ok(s.activeProjectile, 'projectile launched into flight');
+  assert.ok(s.activeProjectile, 'projectile launched via Drag-Anywhere');
   assert.equal(s.projectileCount, 1);
 
-  await run(page, 12);
-  assert.ok((await state(page)).trail > 0, 'paint trail emitted when motion is allowed');
+  await run(page, 14);
+  assert.ok((await state(page)).trailLen > 0, 'paint trail emitted when motion is full');
 
-  // Click mid-air to split `triple` balloon into 3 spread berries!
-  const mid = await pagePoint(page, 640, 320);
+  // Click mid-air to split cluster into 3 whistling mini-rockets!
+  const mid = await clientPt(page, 640, 320);
   await page.mouse.click(mid.x, mid.y);
   await step(page);
   s = await state(page);
   assert.equal(s.activeProjectile.specialUsed, true);
-  assert.equal(s.projectileCount, 3, 'triple balloon split into 3 berries on mid-air click');
+  assert.equal(s.projectileCount, 3, 'cluster split into 3 mini-rockets on mid-air click');
+
+  // Let rockets strike fort and verify genuine rotational toppling + neon paint splatters!
+  await run(page, 150);
+  const impactStats = await page.evaluate(() => ({
+    maxRot: Math.max(...__game.world.blocks.map(b => Math.abs(b.rot))),
+    splats: __game.world.splats.length
+  }));
+  assert.ok(impactStats.maxRot > 0.15, `fort beams rotated & toppled (maxRot=${impactStats.maxRot})`);
+  assert.ok(impactStats.splats > 0, 'permanent neon paint splatters coated fort/ground');
 });
 
-test('keyboard controls via Kit.keys adjust aim, fire on tap or hold-charge, trigger mid-air special, and never hijack focused buttons', async t => {
+test('simple keyboard aim (ArrowUp/ArrowRight), KeyC swap, single-press Space launch & mid-air special, and focused button safety', async t => {
   const page = await game(t);
-  await page.keyboard.press('Enter');
+  await page.locator('#btnPlay').click();
   await step(page);
-  let s0 = await state(page);
-  assert.equal(s0.screen, 'play');
+  await page.evaluate(() => document.activeElement?.blur());
 
-  // ArrowUp increases angle; ArrowLeft pulls back more power
-  await page.keyboard.press('ArrowUp');
+  const s0 = await state(page);
+  assert.equal(s0.nextType, 'bomb');
+
+  // Hold ArrowUp to raise positive elevation angle; hold ArrowRight to raise power
+  await page.keyboard.down('ArrowUp');
+  await run(page, 8);
+  await page.keyboard.up('ArrowUp');
+  const s1 = await state(page);
+  assert.ok(s1.aimAngle > s0.aimAngle, `ArrowUp raised aimAngle: ${s0.aimAngle} -> ${s1.aimAngle}`);
+
+  await page.keyboard.down('ArrowRight');
+  await run(page, 8);
+  await page.keyboard.up('ArrowRight');
+  const s2 = await state(page);
+  assert.ok(s2.aimPower > s1.aimPower, `ArrowRight raised aimPower: ${s1.aimPower} -> ${s2.aimPower}`);
+
+  // KeyC swaps active projectile with next in queue
+  await page.keyboard.press('KeyC');
   await step(page);
-  let s1 = await state(page);
-  assert.ok(s1.aimAngle > s0.aimAngle, `ArrowUp raised angle: ${s0.aimAngle} -> ${s1.aimAngle}`);
-
-  await page.keyboard.press('ArrowLeft');
+  assert.equal((await state(page)).nextType, 'cluster');
+  await page.keyboard.press('KeyC');
   await step(page);
-  let s2 = await state(page);
-  assert.ok(s2.aimPower > s1.aimPower, `ArrowLeft increased pull power: ${s1.aimPower} -> ${s2.aimPower}`);
+  assert.equal((await state(page)).nextType, 'bomb');
 
-  // Tapping Space launches immediately
+  // Single Space press fires immediately; second Space press mid-air triggers shockwave surge!
   await page.keyboard.press('Space');
   await step(page);
-  let s3 = await state(page);
-  assert.equal(s3.shots, 1);
-  assert.ok(s3.activeProjectile);
+  assert.equal((await state(page)).shots, 1);
+  assert.equal((await state(page)).phase, 'flight');
 
-  // Advance 8 frames in flight, then press Space to trigger classic mid-air surge!
-  await run(page, 8);
+  await run(page, 10);
   await page.keyboard.press('Space');
   await step(page);
   assert.equal((await state(page)).activeProjectile.specialUsed, true, 'Space mid-air activated special');
 
-  // Wait for shot to settle, then test hold-Space charge & release!
-  await run(page, 220);
-  assert.equal((await state(page)).phase, 'aim');
-  const powBefore = (await state(page)).aimPower;
-  await page.keyboard.down('Space');
-  await run(page, 10);
-  const powCharged = (await state(page)).aimPower;
-  assert.notEqual(powCharged, powBefore, 'holding Space charges power');
-  await page.keyboard.up('Space');
-  await step(page);
-  assert.equal((await state(page)).shots, 2, 'releasing Space fires charged shot');
-
-  // Native focused button receives Enter/Space without raw keydown interference
+  // Focused native UI button handles Enter without firing or hijacking
   await page.locator('#btnPause').focus();
   await page.keyboard.press('Enter');
   await step(page);
   assert.equal((await state(page)).screen, 'pause');
 });
 
-test('pause freezes physics AND canvas redraws; Resume continues; Restart resets shots to 0', async t => {
+test('pause freezes physics AND canvas redraws; Resume continues; Restart resets shots=0 and time<0.5', async t => {
   const page = await game(t);
   await page.locator('#btnPlay').click();
   await step(page);
+  await page.evaluate(() => document.activeElement?.blur());
   await page.keyboard.press('Space');
   await run(page, 10);
 
-  const snap = () => page.evaluate(() => JSON.stringify([__game.state.time, __game.state.activeProjectile, __game.state.botsLeft]));
+  const snap = () => page.evaluate(() => JSON.stringify([__game.state.time, __game.state.aimAngle, __game.state.shots, __game.state.activeProjectile]));
 
   for (const how of ['button', 'KeyP', 'Escape', 'blur']) {
     if (how === 'button') await page.locator('#btnPause').click();
     else if (how === 'blur') await page.evaluate(() => window.dispatchEvent(new Event('blur')));
-    else await page.keyboard.press(how);
+    else { await page.evaluate(() => document.activeElement?.blur()); await page.keyboard.press(how); }
     await step(page);
 
-    let s = await state(page);
+    const s = await state(page);
     assert.equal(s.screen, 'pause', how);
     assert.equal(s.paused, true, how);
 
     const frozen = await snap();
-    const drawsBefore = await page.evaluate(() => sc.draws);
+    const drawsBefore = (await state(page)).draws;
     await run(page, 60);
-    const drawsAfter = await page.evaluate(() => sc.draws);
-    assert.equal(await snap(), frozen, `${how}: physics completely frozen while paused`);
-    assert.equal(drawsAfter, drawsBefore, `${how}: canvas not redrawn while paused and !dirty`);
+    const drawsAfter = (await state(page)).draws;
+    assert.equal(await snap(), frozen, `${how}: simulation frozen while paused`);
+    assert.equal(drawsAfter, drawsBefore, `${how}: canvas not redrawn while paused`);
 
     await page.locator('#btnResume').click();
     await step(page);
     assert.equal((await state(page)).screen, 'play');
-    await step(page, 4);
-    assert.notEqual(await snap(), frozen, 'simulation advances again after resume');
+    await run(page, 4);
+    assert.notEqual(await snap(), frozen, 'simulation advances after resume');
   }
 
-  // Restart from pause resets shots to 0
+  // Restart from pause resets stage cleanly
   await page.locator('#btnPause').click();
   await step(page);
   await page.locator('#btnRestart').click();
@@ -270,57 +283,61 @@ test('pause freezes physics AND canvas redraws; Resume continues; Restart resets
   const sr = await state(page);
   assert.equal(sr.screen, 'play');
   assert.equal(sr.shots, 0);
-  assert.equal(sr.botsLeft, 2);
+  assert.ok(sr.time < 0.5);
+  assert.equal(sr.goblinsLeft, 3);
 });
 
-test('solo victory awards stars & coins, persists save, handles QuotaExceededError with Retry, and unlocks next level', async t => {
-  const page = await game(t, { save: SAVE(0) });
-  await page.evaluate(() => { sc.failSave = true; });
-  await page.locator('#btnPlay').click();
+test('all 4 Open Worlds unlocked on fresh save; solo win awards stars/coins, handles QuotaExceededError retry, and recovers bad save', async t => {
+  const page = await game(t, { save: SAVE() });
+  await page.locator('#btnLevels').click();
+  await step(page);
+  assert.equal(await page.locator('.world-box').count(), 4, 'all 4 worlds displayed');
+  assert.equal(await page.locator('.lvl').count(), 16, 'all 16 stages displayed');
+
+  // Jump straight to World 4 Stage 4-1 on a brand-new save!
+  await page.locator('.lvl[data-stage="12"]').click();
+  await step(page);
+  assert.equal((await state(page)).id, '4-1');
+
+  // Now play Stage 1-1 with storage quota blocked, win, and test Retry!
+  await page.evaluate(() => { sc.failSave = true; __game.startStage(0); });
   await step(page);
 
-  // Clear Level 1-1 in 1-2 shots
-  let guard = 0;
-  while ((await state(page)).screen === 'play' && !(await state(page)).celebrate && guard++ < 4) {
-    if ((await state(page)).phase === 'aim') {
-      await dragAndRelease(page, -92, 42);
-      await run(page, 25);
-      const mid = await pagePoint(page, 640, 320);
-      await page.mouse.click(mid.x, mid.y);
-    }
-    await run(page, 180);
-  }
-  assert.equal((await state(page)).botsLeft, 0, 'all bots in Level 1-1 cleared');
-  assert.equal((await page.evaluate(() => sc.results)).length, 1, 'recorded 1 DDA result on solo win');
+  // Aim TNT-domino chain reaction strike on Stage 1-1 and launch via Space
+  await page.evaluate(() => {
+    document.activeElement?.blur();
+    __game.engine.setAim(__game.world, 0.32, 0.72);
+  });
+  await page.keyboard.press('Space');
+  await run(page, 210);
 
-  // Verify storage quota warning & retry via Kit.saveStatus
+  assert.equal((await state(page)).screen, 'result', 'Stage 1-1 cleared to result screen');
+  assert.equal((await page.evaluate(() => sc.results)).length, 1, 'recorded 1 solo DDA result');
+
   const status = page.locator('.sg-save-status');
   assert.equal(await status.getAttribute('data-state'), 'failed');
   assert.equal((await stored(page)).lv[0].s, 0, 'disk write blocked while failSave=true');
-  assert.ok((await page.evaluate(() => __game.save)).lv[0].s >= 1, 'in-memory save kept stars');
+  assert.ok((await page.evaluate(() => __game.save.lv[0].s)) >= 1, 'in-memory save kept stars');
 
   await page.evaluate(() => { sc.failSave = false; });
   await status.locator('button').click();
   assert.equal(await status.getAttribute('data-state'), 'saved');
   assert.ok((await stored(page)).lv[0].s >= 1, 'Retry persisted stars to localStorage');
 
-  // Wait for celebration -> Result screen -> Enter goes to Level 1-2
-  await run(page, 120);
-  assert.equal((await state(page)).screen, 'result');
-  assert.equal(await page.locator('#scrResult').isVisible(), true);
-  await run(page, 60);
+  // Enter advances to Stage 1-2
+  await page.evaluate(() => document.activeElement?.blur());
   await page.keyboard.press('Enter');
   await step(page);
   assert.equal((await state(page)).id, '1-2');
 
-  // Corrupted save recovers cleanly to fresh save
+  // Corrupted save recovers cleanly
   const badPage = await game(t, { save: 'broken{' });
   assert.equal((await state(badPage)).screen, 'title');
   assert.equal(await badPage.locator('#titleStars b').textContent(), '0/48');
 });
 
-test('2-Player Hotseat Duel alternates turns on the same mouse/keyboard, never touches solo DDA, and crowns winner', async t => {
-  const page = await game(t);
+test('2P Fort Duel pans dynamic camera across battlefield, alternates turns, crowns winner, and never touches solo DDA', async t => {
+  const page = await game(t, { reducedMotion: 'no-preference' });
   await page.locator('#btnDuel').click();
   await step(page);
 
@@ -328,54 +345,53 @@ test('2-Player Hotseat Duel alternates turns on the same mouse/keyboard, never t
   assert.equal(s.screen, 'play');
   assert.equal(s.mode, 'duel');
   assert.equal(s.turn, 1);
-  assert.equal(s.p1Bots, 3);
-  assert.equal(s.p2Bots, 3);
+  assert.equal(s.p1Goblins, 3);
+  assert.equal(s.p2Goblins, 3);
+  assert.ok(s.camZoom < 1, 'Duel camera zooms out to frame catapult & battlefield');
+  const startCamX = s.camX;
 
-  // Turn 1 -> P1 fires via Space -> settles -> becomes Turn 2!
+  // Player 1 fires across arena -> camera pans rightward following projectile!
+  await page.evaluate(() => document.activeElement?.blur());
   await page.keyboard.press('Space');
-  await run(page, 220);
+  await run(page, 35);
+  assert.ok((await state(page)).camX > startCamX + 80, 'Dynamic camera tracks flying paint-rocket rightward');
+
+  await run(page, 210);
   s = await state(page);
   if (s.winner === 0) {
     assert.equal(s.turn, 2, 'turn alternated to Player 2');
-    // P2 aims weak short shot so P1 can win cleanly
-    for (let k = 0; k < 6; k++) await page.keyboard.press('ArrowLeft');
-    await step(page);
-    await page.keyboard.press('Space');
-    await run(page, 220);
+    // Player 2 fires a weak shot
+    await page.evaluate(() => { __game.engine.setAim(__game.world, 0.4, 0.25); __game.engine.fire(__game.world); });
+    await run(page, 200);
     assert.equal((await state(page)).turn, 1, 'turn alternated back to Player 1');
   }
 
-  // Finish rival fort so Player 1 wins
+  // Clear Player 2's fort so Player 1 wins
   let guard = 0;
-  while ((await state(page)).winner === 0 && guard++ < 14) {
+  while ((await state(page)).winner === 0 && guard++ < 12) {
     const cur = await state(page);
     if (cur.turn === 1) {
-      if (cur.p2Bots === 1) {
-        await dragAndRelease(page, -108, 56);
-      } else {
-        await dragAndRelease(page, -96, 48);
-      }
-      await run(page, 28);
-      await page.keyboard.press('Space');
-      await run(page, 200);
+      const pwr = 0.84 + (guard % 3) * 0.06;
+      await page.evaluate(pw => { __game.engine.setAim(__game.world, 0.56, pw); __game.engine.fire(__game.world); }, pwr);
+      await run(page, 32);
+      await page.evaluate(() => __game.engine.activateSpecial(__game.world));
+      await run(page, 210);
     } else {
-      await dragAndRelease(page, 32, 12);
+      await page.evaluate(() => { __game.engine.setAim(__game.world, 0.35, 0.24); __game.engine.fire(__game.world); });
       await run(page, 180);
     }
   }
 
   s = await state(page);
   assert.equal(s.winner, 1);
-  assert.equal(s.p2Bots, 0);
-  assert.deepEqual(await page.evaluate(() => sc.results), [], '2P duel never calls dda.result');
-
-  await run(page, 120);
-  assert.equal((await state(page)).screen, 'result');
+  assert.equal(s.p2Goblins, 0);
+  assert.equal(s.screen, 'result');
   assert.match(await page.locator('#resDuelText').textContent(), /فاز اللاعب 1/);
+  assert.deepEqual(await page.evaluate(() => sc.results), [], '2P Fort Duel never touches solo DDA');
 });
 
-test('shop unlocks balloon skins & slingshot frames; mute button & KeyM work; reduced motion suppresses shake/trail/fx; fits 1100x620', async t => {
-  const page = await game(t, { save: SAVE(2, { coins: 20 }), reducedMotion: 'reduce', size: [1100, 620] });
+test('Catapult Workshop unlocks launchers & palettes; mute & KeyM work; reduced motion suppresses trails; fits 1100x620', async t => {
+  const page = await game(t, { save: SAVE({ coins: 35 }), reducedMotion: 'reduce', size: [1100, 620] });
   const canvasBox = await page.locator('#game').boundingBox();
   assert.ok(canvasBox.width <= 1100 && canvasBox.height <= 620);
   for (const sel of ['#btnPlay', '#btnDuel', '#btnLevels', '#btnShop']) {
@@ -391,41 +407,38 @@ test('shop unlocks balloon skins & slingshot frames; mute button & KeyM work; re
   assert.equal(await page.evaluate(() => Kit.audio.muted), false);
   assert.equal((await state(page)).screen, 'title');
 
-  // Open Shop & buy skin 1 (price 8) + frame 1 (price 10)
+  // Open Catapult Workshop (ورشة المقلاع)
   await page.locator('#btnShop').click();
   await step(page);
   assert.equal((await state(page)).screen, 'shop');
 
-  // Unaffordable galaxy skin (price 42) does not buy
-  await page.locator('#shelfSkins .tile').nth(5).click();
+  // Unaffordable المقلاع الذهبي (price 65) stays locked
+  await page.locator('#shelfLaunchers .tile').nth(4).click();
   await step(page);
-  assert.equal((await stored(page)).skin, 0);
+  assert.equal((await stored(page)).launcher, 0);
 
-  await page.locator('#shelfSkins .tile').nth(1).click();
+  // Buy مدفع التنين (price 15) + لهب البركان palette (price 12)
+  await page.locator('#shelfLaunchers .tile').nth(1).click();
   await step(page);
-  assert.equal((await stored(page)).skin, 1);
-  assert.equal((await stored(page)).coins, 12);
+  assert.equal((await stored(page)).launcher, 1);
+  assert.equal((await stored(page)).coins, 20);
 
-  await page.locator('#shelfFrames .tile').nth(1).click();
+  await page.locator('#shelfPalettes .tile').nth(1).click();
   await step(page);
-  assert.equal((await stored(page)).frame, 1);
-  assert.equal((await stored(page)).coins, 2);
+  assert.equal((await stored(page)).palette, 1);
+  assert.equal((await stored(page)).coins, 8);
 
   await page.keyboard.press('Escape');
   await step(page);
   assert.equal((await state(page)).screen, 'title');
 
-  // Verify reduced motion during gameplay: zero trail, zero shake, zero particle fx
-  await page.locator('#btnLevels').click();
+  // Verify reduced motion suppresses projectile trails
+  await page.locator('#btnPlay').click();
   await step(page);
-  await page.locator('.lvl').nth(0).click();
-  await step(page);
+  await page.evaluate(() => document.activeElement?.blur());
   await page.keyboard.press('Space');
-  for (let i = 0; i < 90; i++) {
+  for (let i = 0; i < 45; i++) {
     await step(page);
-    const st = await state(page);
-    assert.equal(st.trail, 0, 'no trail under reduced motion');
-    assert.equal(st.shake, 0, 'no screen shake under reduced motion');
-    assert.equal(st.fx, 0, 'no particle bursts under reduced motion');
+    assert.equal((await state(page)).trailLen, 0, 'no projectile trail under reduced motion');
   }
 });

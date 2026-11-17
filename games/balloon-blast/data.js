@@ -1,223 +1,83 @@
-/* Balloon Blast — arenas, critters, power-ups and the 18 adventure grids.
- * Plain data plus a tiny grid carver. Node tests load it with the engine. */
-(function (BBD) {
+/* Balloon Blast — pure arena, stage, power-up, difficulty, and hero skin data. */
+(function () {
   'use strict';
 
-  BBD.COLS = 15;
-  BBD.ROWS = 11;
+  var BBData = {
+    COLS: 13, ROWS: 9, TILE: 64,
+    EMPTY: 0, PILLAR: 1, CRATE: 2, JELLY: 3, PIPE: 4,
+    SPAWNS: [[1, 1], [11, 1], [1, 7], [11, 7]],
 
-  BBD.POWERUPS = [
-    { id: 'balloon', icon: '🎈', name: 'بالون زائد', max: 6 },
-    { id: 'range', icon: '💧', name: 'رش أبعد', max: 7 },
-    { id: 'speed', icon: '👟', name: 'سرعة', max: 4 },
-    { id: 'kick', icon: '🧤', name: 'ركلة', max: 1 },
-    { id: 'slow', icon: '🐢', name: 'بطء', max: 1 }
-  ];
+    DIFFICULTIES: {
+      easy: { id: 'easy', name: 'سهل', desc: 'درع فقاعة مجاني وحماية من بالونك', fuse: 2.8, startShield: 1, selfMercy: true, botTier: 1, crateRate: 0.56 },
+      normal: { id: 'normal', name: 'متوسط', desc: 'معركة متوازنة وسريعة الإيقاع', fuse: 2.3, startShield: 0, selfMercy: false, botTier: 3, crateRate: 0.65 },
+      hero: { id: 'hero', name: 'بطل', desc: 'خصوم محترفون يركلون البالونات ويحاصرونك', fuse: 1.95, startShield: 0, selfMercy: false, botTier: 5, crateRate: 0.72 }
+    },
 
-  // wins / stars are the cheapest way to unlock. Frog is free.
-  BBD.CRITTERS = [
-    { id: 'frog', name: 'ضفدع', wins: 0, stars: 0, body: '#3dce6e', belly: '#d8ffb0', extra: '#2a9a4a', accent: '#ff5a7a' },
-    { id: 'penguin', name: 'بطريق', wins: 1, stars: 2, body: '#2c3148', belly: '#fff7ea', extra: '#ffb703', accent: '#ffd23f' },
-    { id: 'robot', name: 'روبوت', wins: 2, stars: 4, body: '#9aa8b8', belly: '#e7eef6', extra: '#ff5a7a', accent: '#7ec8ff' },
-    { id: 'cat', name: 'قط', wins: 3, stars: 6, body: '#ffb703', belly: '#fff1c9', extra: '#ff7a1a', accent: '#ff8fb1' },
-    { id: 'dino', name: 'دينو', wins: 4, stars: 9, body: '#6ed38a', belly: '#e7ffd4', extra: '#3aaa62', accent: '#ffd23f' },
-    { id: 'panda', name: 'باندا', wins: 5, stars: 12, body: '#f4f1ea', belly: '#ffffff', extra: '#2a2a2a', accent: '#ff8fb1' },
-    { id: 'bee', name: 'نحلة', wins: 7, stars: 16, body: '#ffd23f', belly: '#fff6c8', extra: '#2a2a2a', accent: '#ff7a1a' },
-    { id: 'camel', name: 'جمل', wins: 9, stars: 20, body: '#e0a35a', belly: '#f6ddb0', extra: '#a56b32', accent: '#c47a3a' }
-  ];
+    POWERUPS: [
+      { id: 'balloon', icon: '🎈', name: 'بالون إضافي', weight: 26, max: 6 },
+      { id: 'range', icon: '💦', name: 'نافورة عملاقة', weight: 24, max: 6 },
+      { id: 'speed', icon: '👟', name: 'حذاء التيربو', weight: 18, max: 4 },
+      { id: 'kick', icon: '🥊', name: 'قفاز الركل', weight: 12, max: 1 },
+      { id: 'shield', icon: '🫧', name: 'درع الفقاعة', weight: 11, max: 1 },
+      { id: 'turtle', icon: '🐢', name: 'سلحفاة نفاثة', weight: 9, max: 1 }
+    ],
 
-  BBD.BALLOONS = [
-    { id: 'plain', name: 'ماء', stars: 0 },
-    { id: 'stripes', name: 'خطوط', stars: 3 },
-    { id: 'stars', name: 'نجوم', stars: 8 },
-    { id: 'dots', name: 'نقاط', stars: 14 }
-  ];
+    SKINS: [
+      { id: 'ninja', name: 'نينجا الماء', desc: 'عصابة المحيط ورذاذ أزرق نفاث', cost: 0, suit: '#1d8cf8', suitDk: '#0f5cad', visor: '#d8f3ff', band: '#ff3b5c', splash: '#22b8ff', splashHi: '#e6f9ff' },
+      { id: 'shark', name: 'قرش الموج', desc: 'خوذة الزعنفة وتيار فيروزي', cost: 25, suit: '#00a896', suitDk: '#026c61', visor: '#d9fff8', band: '#00f5d4', splash: '#00d2b8', splashHi: '#e3fffb' },
+      { id: 'neon', name: 'رائد النيون', desc: 'قناع السايبر ورشاش أرجواني مضيء', cost: 50, suit: '#8b3dff', suitDk: '#5218b5', visor: '#b8fff9', band: '#38f987', splash: '#d946ef', splashHi: '#fdf4ff' },
+      { id: 'gold', name: 'بطل الذهب', desc: 'تاج الأبطال ونوافير ذهبية لامعة', cost: 80, suit: '#f59e0b', suitDk: '#b45309', visor: '#fffbeb', band: '#ef4444', splash: '#fbbf24', splashHi: '#fffef0' }
+    ],
 
-  BBD.ARENAS = [
-    { id: 'garden', name: 'الحديقة', wins: 0, stars: 0,
-      sky: ['#8ee0ff', '#fff3b0'], floor: ['#7dce6a', '#69c056'], grass: '#4e9a3e',
-      pillar: '#7fbf78', pillarHi: '#e7ffd8', pillarDk: '#3e7a45',
-      crate: '#d3924a', crateDk: '#a86a2c', nail: '#f3d7a1', edge: '#2f6a32' },
-    { id: 'pool', name: 'المسبح', wins: 2, stars: 5,
-      sky: ['#7fd4ff', '#e8fbff'], floor: ['#3ec6ff', '#2eb3f0'], grass: '#1e90d0',
-      pillar: '#8fd4f2', pillarHi: '#ffffff', pillarDk: '#2a7eab',
-      crate: '#ffb703', crateDk: '#e08a00', nail: '#fff1c2', edge: '#14608a' },
-    { id: 'kitchen', name: 'المطبخ', wins: 4, stars: 10,
-      sky: ['#ffe1c4', '#fff7ef'], floor: ['#f6e3c0', '#edd3a4'], grass: '#e7c48a',
-      pillar: '#f2f0f4', pillarHi: '#ffffff', pillarDk: '#b9b4c2',
-      crate: '#e07a5f', crateDk: '#b85540', nail: '#ffe0d4', edge: '#8c4a32' },
-    { id: 'desert', name: 'مخيم الصحراء', wins: 6, stars: 15,
-      sky: ['#ffd27a', '#fff0c2'], floor: ['#f0c36a', '#e6b350'], grass: '#d39a3e',
-      pillar: '#e7b07a', pillarHi: '#fff0d2', pillarDk: '#a86b3c',
-      crate: '#c47a3a', crateDk: '#8a4e22', nail: '#f0d0a0', edge: '#7a4a22' }
-  ];
+    ARENAS: {
+      sand: { id: 'sand', name: 'قلعة الرمل', sky: ['#56ccf2', '#fef08a'], rim: '#9a5b25', rimDk: '#693b14', floor: ['#fde68a', '#fcd34d'], pillar: '#fb7185', pillarHi: '#ffe4e6', pillarDk: '#be123c', crate: '#d97706', crateDk: '#92400e', crateHi: '#fde68a', pipe: '#06b6d4', pipeDk: '#0e7490' },
+      soda: { id: 'soda', name: 'مصنع الصودا', sky: ['#38bdf8', '#c084fc'], rim: '#1e3a8a', rimDk: '#0f172a', floor: ['#e0f2fe', '#bae6fd'], pillar: '#64748b', pillarHi: '#f1f5f9', pillarDk: '#334155', crate: '#f97316', crateDk: '#c2410c', crateHi: '#ffedd5', pipe: '#22c55e', pipeDk: '#15803d' },
+      soap: { id: 'soap', name: 'بركان الصابون', sky: ['#a855f7', '#fb7185'], rim: '#4c1d95', rimDk: '#2e1065', floor: ['#f3e8ff', '#e9d5ff'], pillar: '#7e22ce', pillarHi: '#f5d0fe', pillarDk: '#4c1d95', crate: '#ec4899', crateDk: '#9d174d', crateHi: '#fce7f3', pipe: '#eab308', pipeDk: '#a16207' }
+    },
 
-  BBD.WORLDS = [
-    { id: 1, name: 'الحديقة', tint: 'garden' },
-    { id: 2, name: 'حفلة المسبح', tint: 'pool' },
-    { id: 3, name: 'مصنع الألعاب', tint: 'kitchen' }
-  ];
+    WORLDS: [
+      { id: 1, key: 'sand', name: 'قلعة الرمل', bossName: 'السلطعون المدرّع' },
+      { id: 2, key: 'soda', name: 'مصنع الصودا', bossName: 'أخطبوط المدافع' },
+      { id: 3, key: 'soap', name: 'بركان الصابون', bossName: 'إمبراطور الفقاعات' }
+    ],
 
-  function snakeH(max) {
-    const path = [];
-    let r = 1, dir = 1;
-    while (path.length < max && r <= 9) {
-      if (dir === 1) { for (let c = 1; c <= 13 && path.length < max; c++) path.push([c, r]); }
-      else { for (let c = 13; c >= 1 && path.length < max; c--) path.push([c, r]); }
-      if (path.length >= max || r + 2 > 9) break;
-      path.push([dir === 1 ? 13 : 1, r + 1]);
-      r += 2; dir = -dir;
+    STAGES: [
+      { id: 'w1-s1', roundKey: 'adv-w1-s1', world: 1, stage: 1, arena: 'sand', name: 'ساحل المرجان', par: 45, boss: null,
+        grid: ['#############', '#1...CP..C.m#', '#2#C#.#C#.#.#', '#..C.....C..#', '#.#.#C.C#.#.#', '#..C..m..C..#', '#.#.#C#.#C#.#', '#m.C..P..C..#', '#############'] },
+      { id: 'w1-s2', roundKey: 'adv-w1-s2', world: 1, stage: 2, arena: 'sand', name: 'مضيق القلعة', par: 50, boss: null,
+        grid: ['#############', '#1..C...C..m#', '#2#.#C#C#.#.#', '#..C..m..C..#', '#P.#C...C#.P#', '#..C..s..C..#', '#.#.#C#C#.#.#', '#m..C...C..m#', '#############'] },
+      { id: 'w1-s3', roundKey: 'adv-w1-s3', world: 1, stage: 3, arena: 'sand', name: 'السلطعون المدرّع', par: 65,
+        boss: { kind: 'crab', name: 'السلطعون المدرّع', hp: 5, speed: 2.3, atkCd: 3.1 },
+        grid: ['#############', '#1..C.P.C..m#', '#2#.#...#.#.#', '#..C.....C..#', '#.#...B...#.#', '#..C.....C..#', '#.#.#...#.#.#', '#m..C.P.C...#', '#############'] },
+      { id: 'w2-s1', roundKey: 'adv-w2-s1', world: 2, stage: 1, arena: 'soda', name: 'قاعة الفوران', par: 50, boss: null,
+        grid: ['#############', '#1..C.P.C..f#', '#2#C#.#.#C#.#', '#..C..f..C..#', '#.#.#...#.#.#', '#..C..m..C..#', '#.#C#.#.#C#.#', '#f..C.P.C..m#', '#############'] },
+      { id: 'w2-s2', roundKey: 'adv-w2-s2', world: 2, stage: 2, arena: 'soda', name: 'أنابيب التيربو', par: 55, boss: null,
+        grid: ['#############', '#1..C...C..f#', '#2#.#C#C#.#.#', '#C...f.f...C#', '#P#C.....C#P#', '#C....s....C#', '#.#.#C#C#.#.#', '#f..C...C..f#', '#############'] },
+      { id: 'w2-s3', roundKey: 'adv-w2-s3', world: 2, stage: 3, arena: 'soda', name: 'أخطبوط المدافع', par: 70,
+        boss: { kind: 'octo', name: 'أخطبوط المدافع', hp: 6, speed: 2.6, atkCd: 2.6 },
+        grid: ['#############', '#1..C...C..f#', '#2#.#.C.#.#.#', '#..C.....C..#', '#P....B....P#', '#..C.....C..#', '#.#.#.C.#.#.#', '#f..C...C...#', '#############'] },
+      { id: 'w3-s1', roundKey: 'adv-w3-s1', world: 3, stage: 1, arena: 'soap', name: 'حمم الرغوة', par: 55, boss: null,
+        grid: ['#############', '#1..C.P.C..s#', '#2#C#.#.#C#.#', '#..C.s.f.C..#', '#.#.#C.C#.#.#', '#..C..s..C..#', '#.#C#.#.#C#.#', '#s..C.P.C..f#', '#############'] },
+      { id: 'w3-s2', roundKey: 'adv-w3-s2', world: 3, stage: 2, arena: 'soap', name: 'متاهة النوافير', par: 60, boss: null,
+        grid: ['#############', '#1..C...C..s#', '#2#.#C#C#.#.#', '#C..f...f..C#', '#P#C..s..C#P#', '#C..s...m..C#', '#.#.#C#C#.#.#', '#f..C...C..s#', '#############'] },
+      { id: 'w3-s3', roundKey: 'adv-w3-s3', world: 3, stage: 3, arena: 'soap', name: 'إمبراطور الفقاعات', par: 75,
+        boss: { kind: 'king', name: 'إمبراطور الفقاعات', hp: 7, speed: 2.9, atkCd: 2.2 },
+        grid: ['#############', '#1..C.P.C..s#', '#2#.#...#.#.#', '#..C.....C..#', '#.#...B...#.#', '#..C.....C..#', '#.#.#...#.#.#', '#f..C.P.C..s#', '#############'] }
+    ],
+
+    skinById: function (id) {
+      for (var i = 0; i < BBData.SKINS.length; i++) if (BBData.SKINS[i].id === id) return BBData.SKINS[i];
+      return BBData.SKINS[0];
+    },
+    arenaById: function (id) { return BBData.ARENAS[id] || BBData.ARENAS.sand; },
+    diffById: function (id) { return BBData.DIFFICULTIES[id] || BBData.DIFFICULTIES.normal; },
+    stageById: function (id) {
+      for (var i = 0; i < BBData.STAGES.length; i++) if (BBData.STAGES[i].id === id) return BBData.STAGES[i];
+      return BBData.STAGES[0];
     }
-    return path;
-  }
-
-  function snakeV(max) {
-    const path = [];
-    let c = 1, dir = 1;
-    while (path.length < max && c <= 13) {
-      if (dir === 1) { for (let r = 1; r <= 9 && path.length < max; r++) path.push([c, r]); }
-      else { for (let r = 9; r >= 1 && path.length < max; r--) path.push([c, r]); }
-      if (path.length >= max || c + 2 > 13) break;
-      path.push([c + 1, dir === 1 ? 9 : 1]);
-      c += 2; dir = -dir;
-    }
-    return path;
-  }
-
-  function straight(path, i) {
-    if (i <= 0 || i >= path.length - 1) return false;
-    const a = path[i - 1], b = path[i + 1];
-    return a[0] === b[0] || a[1] === b[1];
-  }
-
-  function carve(spec) {
-    const path = (spec.vert ? snakeV : snakeH)(spec.len || 62);
-    const grid = Array.from({ length: 11 }, () => Array(15).fill('#'));
-    const set = (c, r, ch) => { if (r >= 0 && r < 11 && c >= 0 && c < 15) grid[r][c] = ch; };
-    const get = (c, r) => (r >= 0 && r < 11 && c >= 0 && c < 15) ? grid[r][c] : '#';
-    for (const [c, r] of path) set(c, r, '.');
-    const crates = [];
-    const spots = [];
-    const conflicts = (c, r) => spots.some(([pc, pr]) => {
-      const dc = Math.abs(pc - c), dr = Math.abs(pr - r);
-      if (dc <= 1 && dr <= 1 && dc !== 0 && dr !== 0) return true;
-      if ((dc === 0 || dr === 0) && dc + dr === 2 && get((pc + c) / 2, (pr + r) / 2) !== '#') return true;
-      return false;
-    });
-    let prev = -99;
-    for (let i = 4; i < path.length - 4 && crates.length < spec.crates; i++) {
-      if (!straight(path, i) || i - prev < 4) continue;
-      const [c, r] = path[i];
-      if ((c === 1 && r === 1) || (c === 2 && r === 1) || (c === 1 && r === 2)) continue;
-      if (conflicts(c, r)) continue;
-      set(c, r, 'C');
-      crates.push(i);
-      spots.push([c, r]);
-      prev = i;
-    }
-    if (crates.length < spec.crates) throw new Error(spec.id + ' only carved ' + crates.length + ' crates');
-    const robots = [];
-    (spec.robotEvery || []).forEach(n => {
-      const ci = crates[n];
-      if (ci == null) return;
-      const ri = ci + 2;
-      if (ri >= path.length || crates.indexOf(ri) >= 0) return;
-      const [c, r] = path[ri];
-      if (get(c, r) !== '.') return;
-      set(c, r, 'R');
-      robots.push(ri);
-    });
-    set(path[0][0], path[0][1], '1');
-    set(path[1][0], path[1][1], '2');
-    let exit = null, cake = null, duck = null;
-    if (spec.kind === 'exit') {
-      const [c, r] = path[path.length - 1];
-      set(c, r, 'E');
-      exit = [c, r];
-    }
-    if (spec.kind === 'cake') cake = path[0].slice();
-    if (spec.kind === 'boss') {
-      const di = crates[crates.length - 1] + 3;
-      if (di >= path.length) throw new Error(spec.id + ' duck is off the path');
-      const [c, r] = path[di];
-      set(c, r, 'D');
-      // A second cell beside the duck, also next to the approach cell, so a waddle stays in the splash.
-      const approach = path[di - 1];
-      const options = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-      let c2 = c, r2 = r;
-      for (const [dc, dr] of options) {
-        const nc = c + dc, nr = r + dr;
-        if (nc === approach[0] && nr === approach[1]) continue;
-        if (get(nc, nr) === '#' && Math.abs(nc - approach[0]) + Math.abs(nr - approach[1]) === 1) {
-          set(nc, nr, '.'); c2 = nc; r2 = nr; break;
-        }
-      }
-      duck = { at: di, c: c, r: r, c2: c2, r2: r2 };
-    }
-    const plan = [];
-    crates.forEach((ci, n) => {
-      plan.push({ op: 'bomb', at: ci });
-      const rob = robots.find(ri => ri === ci + 2);
-      if (rob != null && spec.kind !== 'boss') plan.push({ op: 'pop', at: rob });
-    });
-    if (spec.kind === 'exit') plan.push({ op: 'exit', at: path.length - 1 });
-    if (spec.kind === 'cake') plan.push({ op: 'hold' });
-    if (spec.kind === 'boss') plan.push({ op: 'boss', at: duck.at });
-    return {
-      path: path, crates: crates, robots: robots, exit: exit, cake: cake, duck: duck, plan: plan,
-      grid: grid.map(row => row.join(''))
-    };
-  }
-
-  const NAMES = {
-    'w1-1': 'بوابة الزهور', 'w1-2': 'سياج الجزر', 'w1-3': 'روبوتات الورد', 'w1-4': 'كعكة النزهة',
-    'w1-5': 'مخرج الدفيئة', 'w1-6': 'البطة العملاقة',
-    'w2-1': 'ممر العوامات', 'w2-2': 'روبوتات الماء', 'w2-3': 'كعكة المسبح', 'w2-4': 'مخرج الزحليقة',
-    'w2-5': 'حراس النوافير', 'w2-6': 'بطة المسبح',
-    'w3-1': 'سير الصناديق', 'w3-2': 'روبوتات الزنبرك', 'w3-3': 'كعكة المعمل', 'w3-4': 'مخرج الورشة',
-    'w3-5': 'حراس الدمى', 'w3-6': 'البطة الرئيسة'
   };
 
-  // 3 worlds × 6 stages. Crates sit on a one-cell snake so a starting range of 1
-  // has to wait out a fuse for every gate. That is what keeps a clear over 20s.
-  const SPECS = [];
-  for (let w = 1; w <= 3; w++) {
-    const kinds = ['exit', 'robots', 'cake', 'exit', 'robots', 'boss'];
-    for (let s = 1; s <= 6; s++) {
-      const kind = kinds[s - 1];
-      SPECS.push({
-        id: 'w' + w + '-' + s, world: w, stage: s, kind: kind,
-        name: NAMES['w' + w + '-' + s],
-        vert: (w + s) % 2 === 0,
-        len: kind === 'boss' ? 48 : 62,
-        crates: kind === 'boss' ? 4 : 9,
-        robotEvery: kind === 'robots' ? [1, 4, 7] : kind === 'cake' ? [2, 6] : [],
-        par: kind === 'boss' ? 70 : kind === 'cake' ? 75 : kind === 'robots' ? 70 : 65,
-        wake: kind === 'cake' ? 70 : 0
-      });
-    }
-  }
-
-  BBD.STAGES = SPECS.map(spec => {
-    const built = carve(spec);
-    return {
-      id: spec.id, world: spec.world, stage: spec.stage, kind: spec.kind, name: spec.name,
-      par: spec.par, wake: spec.wake, arena: BBD.WORLDS[spec.world - 1].tint,
-      grid: built.grid, path: built.path, plan: built.plan,
-      crates: built.crates, robots: built.robots, exit: built.exit, cake: built.cake, duck: built.duck
-    };
-  });
-
-  BBD.stageById = function (id) {
-    for (let i = 0; i < BBD.STAGES.length; i++) if (BBD.STAGES[i].id === id) return BBD.STAGES[i];
-    return BBD.STAGES[0];
-  };
-  BBD.critter = function (id) {
-    for (let i = 0; i < BBD.CRITTERS.length; i++) if (BBD.CRITTERS[i].id === id) return BBD.CRITTERS[i];
-    return BBD.CRITTERS[0];
-  };
-  BBD.arena = function (id) {
-    for (let i = 0; i < BBD.ARENAS.length; i++) if (BBD.ARENAS[i].id === id) return BBD.ARENAS[i];
-    return BBD.ARENAS[0];
-  };
-})(globalThis.BBD = globalThis.BBD || {});
+  if (typeof module !== 'undefined' && module.exports) module.exports = BBData;
+  if (typeof window !== 'undefined') window.BBData = BBData;
+  globalThis.BBData = BBData;
+})();

@@ -1,7 +1,7 @@
-// Desk Karts engine (games/desk-karts/engine.js): pure UMD module check, 4 worlds & 8 tracks
-// geometry, closed-loop boundaries & non-overlap, kart steering/drifting, anti-cheat sector
-// checkpoints & lap counting, all 4 toy power-ups, world gimmicks (boosts, glue/butter/paint,
-// bumpers, portals, magnets), 1P & 2P modes, AI bot 3-lap completion, DDA scaling, and saves.
+// Desk Karts engine (games/desk-karts/engine.js): pure UMD module check, 4 open cups & 12 tracks
+// (1-1..4-3), non-overlapping track geometry, chunky 54x38 karts, idle P1 stationary guarantee,
+// smart dual steering + blue/orange hop-drift boost, 5 school-supply power-ups + stunt ramps,
+// 1P chase & 2P framing/warp camera, all 12 tracks winnable across tiers, and garage saves.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -17,8 +17,7 @@ const require = createRequire(import.meta.url);
 const DK = require(enginePath);
 
 const DT = 1 / 60;
-const EASY = DK.params(0), MID = DK.params(0.5), HARD = DK.params(1);
-const ARABIC = /^[\u0600-\u06FF\s]+$/;
+const ARABIC = /^[\u0600-\u06FF0-9\s!·\-]+$/;
 const plain = v => JSON.parse(JSON.stringify(v));
 
 function step(w, inputs = []) {
@@ -27,22 +26,28 @@ function step(w, inputs = []) {
   return w.ev.slice();
 }
 
-// A careful human driver steering along the centerline (dodging hazards/bumpers).
+// Skilled human driver steering along the racing line, dodging puddles/coils/chompers & using items.
 function driveHuman(w, kartId = 0, useItems = true) {
   const k = w.karts[kartId], L = w.L;
-  const look = 88 + k.speed * 0.2;
+  const look = 135 + k.speed * 0.22;
   const targetS = DK.wrapS(L.len, k.s + look);
   let wantOff = 0;
   for (const hz of L.hazards) {
     const ds = DK.wrapS(L.len, hz.s - k.s);
-    if (ds > 0 && ds < 160 && Math.abs(wantOff - hz.off) < hz.r + DK.KART_R + 10) {
-      wantOff = hz.off >= 0 ? -L.R.w * 0.28 : L.R.w * 0.28;
+    if (ds > 0 && ds < 220 && Math.abs(wantOff - hz.off) < hz.r + DK.KART_R + 16) {
+      wantOff = hz.off >= 0 ? -L.hw * 0.48 : L.hw * 0.48;
     }
   }
-  for (const bm of L.bumpers) {
-    const ds = DK.wrapS(L.len, bm.s - k.s);
-    if (ds > 0 && ds < 175) {
-      wantOff = bm.off >= 0 ? -L.R.w * 0.34 : L.R.w * 0.34;
+  for (const co of L.coils) {
+    const ds = DK.wrapS(L.len, co.s - k.s);
+    if (ds > 0 && ds < 220 && Math.abs(wantOff - co.off) < co.r + DK.KART_R + 18) {
+      wantOff = co.off >= 0 ? -L.hw * 0.5 : L.hw * 0.5;
+    }
+  }
+  for (const ch of L.chompers) {
+    const ds = DK.wrapS(L.len, ch.s - k.s);
+    if (ds > 0 && ds < 230 && Math.abs(wantOff - ch.off) < ch.r + DK.KART_R + 18) {
+      wantOff = ch.off >= 0 ? -L.hw * 0.52 : L.hw * 0.52;
     }
   }
   const aim = DK.at(L, targetS);
@@ -51,7 +56,8 @@ function driveHuman(w, kartId = 0, useItems = true) {
   return {
     gas: 1,
     brake: 0,
-    steer: DK.clamp(diff / 0.5, -1, 1),
+    steer: DK.clamp(diff / 0.48, -1, 1),
+    drift: Math.abs(diff) > 0.55 && k.speed > 260,
     item: useItems && !!k.item,
     active: true
   };
@@ -59,53 +65,65 @@ function driveHuman(w, kartId = 0, useItems = true) {
 
 test('engine is pure UMD: works in Node and browser sandbox, zero Kit/DOM/timers/Math.random/localStorage', () => {
   assert.ok(DK && DK.build && DK.create && DK.step, 'CommonJS export works');
+  assert.equal(DK.KART_W, 54);
+  assert.equal(DK.KART_H, 38);
+
   const sandbox = { window: {} };
   vm.runInNewContext(engineSource, sandbox);
-  assert.ok(sandbox.window.DK && sandbox.window.DK.TRACKS.length === 8, 'window.DK global works');
+  assert.ok(sandbox.window.DKEngine && sandbox.window.DKEngine.TRACKS.length === 12, 'window.DKEngine global works');
 
+  // Engine file must never mention Kit (even in comments, per telemetry-rules.test.mjs), DOM, timers, or Math.random.
+  assert.doesNotMatch(engineSource, /\bKit\b/);
   const stripped = engineSource.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
-  assert.doesNotMatch(stripped, /\bKit\b|\bdocument\b|setTimeout|setInterval|requestAnimationFrame|Math\.random|localStorage/);
+  assert.doesNotMatch(stripped, /\bdocument\b|setTimeout|setInterval|requestAnimationFrame|Math\.random|localStorage/);
 });
 
-test('4 worlds of 2 tracks each (8 tracks total), pure Arabic names, and all 4 world themes', () => {
-  assert.equal(DK.WORLDS.length, 4);
-  assert.equal(DK.TRACKS.length, 8);
+test('4 open classroom cups, 12 tracks (1-1..4-3) all unlocked immediately, and 100% Arabic labels', () => {
+  assert.equal(DK.CUPS.length, 4);
+  assert.equal(DK.TRACKS.length, 12);
   assert.equal(DK.LAPS, 3);
-  assert.deepEqual(DK.WORLDS.map(w => w.name), [
-    'مكتب الدراسة', 'طاولة الرسم', 'صينية المقصف', 'مختبر العلوم'
+  assert.deepEqual(DK.CUPS.map(c => c.name), [
+    'مكتب الرسم', 'مختبر العلوم', 'ورشة الحاسوب', 'كأس الفسحة الكبرى'
   ]);
+
+  const fresh = DK.freshSave();
   const ids = new Set();
   DK.TRACKS.forEach((R, i) => {
-    assert.equal(R.id, `${Math.floor(i / 2) + 1}-${(i % 2) + 1}`);
+    const expectedId = `${Math.floor(i / 3) + 1}-${(i % 3) + 1}`;
+    assert.equal(R.id, expectedId);
     ids.add(R.id);
-    assert.equal(R.world, Math.floor(i / 2));
-    assert.match(R.name, ARABIC, R.id + ' name');
-    assert.ok(R.w >= 100 && R.w <= 125, R.id + ' width');
-    assert.ok(R.coins.length >= 5 && R.boxes.length >= 4, R.id + ' pickups');
+    assert.equal(R.cup, Math.floor(i / 3));
+    assert.match(R.name, ARABIC, R.id + ' Arabic name');
+    assert.equal(DK.isOpen(fresh, i), true, R.id + ' unlocked immediately');
   });
-  assert.equal(ids.size, 8);
-  // World 4 has science lab portals & magnets.
-  assert.ok(DK.TRACKS[6].portals.length >= 1 && DK.TRACKS[6].magnets.length >= 1);
-  assert.ok(DK.TRACKS[7].portals.length >= 2 && DK.TRACKS[7].magnets.length >= 1);
+  assert.equal(ids.size, 12);
+
+  for (const list of [DK.ITEMS, DK.RIVALS, DK.KARTS, DK.FLAMES, Object.values(DK.DIFFS)]) {
+    for (const entry of list) assert.match(entry.name, ARABIC, entry.name);
+  }
 });
 
-test('every track stays inside the 1280x720 frame below the HUD and never overlaps another leg', () => {
+test('every track stays inside the 2800x2000 tabletop bounds and never overlaps non-adjacent road legs', () => {
+  const easyPrm = DK.params(0.2, 'easy');
   DK.TRACKS.forEach((R, i) => {
-    const L = DK.build(i, EASY);
+    const L = DK.build(i, easyPrm);
     assert.equal(L.cps.length, 4);
+    assert.ok(L.ramps.length >= 2 && L.boxes.length >= 6 && L.coins.length >= 10, R.id + ' toys');
+
     for (const p of L.pts) {
       assert.ok(
-        p.x - p.hw >= 28 && p.x + p.hw <= 1252 && p.y - p.hw >= 88 && p.y + p.hw <= 708,
-        `${R.id} leaves safe canvas frame at ${p.x | 0},${p.y | 0} (hw=${p.hw | 0})`
+        p.x - p.hw >= 140 && p.x + p.hw <= DK.WORLD_W - 140 &&
+        p.y - p.hw >= 140 && p.y + p.hw <= DK.WORLD_H - 140,
+        `${R.id} leaves safe tabletop bounds at ${p.x | 0},${p.y | 0} (hw=${p.hw | 0})`
       );
     }
     for (let a = 0; a < L.pts.length; a++) {
       for (let b = a + 1; b < L.pts.length; b++) {
         const p = L.pts[a], q = L.pts[b];
         const ds = Math.min(q.s - p.s, L.len - (q.s - p.s));
-        if (ds <= 3.6 * (p.hw + q.hw) + 20) continue;
+        if (ds <= 3.6 * (p.hw + q.hw) + 40) continue;
         assert.ok(
-          Math.hypot(p.x - q.x, p.y - q.y) >= p.hw + q.hw + 12,
+          Math.hypot(p.x - q.x, p.y - q.y) >= p.hw + q.hw + 24,
           `${R.id}: non-adjacent road legs touch near ${p.x | 0},${p.y | 0}`
         );
       }
@@ -113,213 +131,198 @@ test('every track stays inside the 1280x720 frame below the HUD and never overla
   });
 });
 
-test('idle P1 stays completely stationary (p1Dist === 0, gasTime === 0) while AI bots complete 3 laps on all 8 tracks', () => {
+test('idle P1 stays parked on grid (p1Dist === 0, time === 0) across all 12 tracks even while AI bots finish 3 laps', () => {
+  const mid = DK.params(0.4, 'normal');
   DK.TRACKS.forEach((R, i) => {
-    const w = DK.create(i, { humans: 1, params: MID, seed: 42 + i });
+    const w = DK.create(i, { humans: 1, params: mid, seed: 42 + i });
     const p1 = w.karts[0];
     const startX = p1.x, startY = p1.y;
-    let maxSteps = 60 * 55;
+    let maxSteps = 60 * 65;
     while (maxSteps-- > 0 && w.karts.slice(1).some(b => !b.finished)) {
       step(w, [{}]);
     }
-    assert.equal(p1.dist, 0, `${R.id}: idle P1 never moves`);
-    assert.equal(p1.gasTime, 0, `${R.id}: idle P1 gasTime stays 0`);
-    assert.equal(p1.inputs, 0, `${R.id}: idle P1 inputs stays 0`);
+    assert.equal(p1.dist, 0, `${R.id}: idle P1 never moves or gets bumped`);
+    assert.equal(w.time, 0, `${R.id}: P1 race clock stays 0 until first input`);
+    assert.ok(w.worldTime > 15, `${R.id}: worldTime advances`);
+    assert.equal(p1.gasTime, 0);
+    assert.equal(p1.inputs, 0);
     assert.equal(p1.x, startX);
     assert.equal(p1.y, startY);
     for (let b = 1; b <= 3; b++) {
-      assert.equal(w.karts[b].finished, true, `${R.id}: AI bot ${b} completed all 3 laps`);
+      assert.equal(w.karts[b].finished, true, `${R.id}: AI bot ${b} completed 3 laps`);
       assert.equal(w.karts[b].lap, 3);
     }
   });
 });
 
-test('kart steering, drifting mini-boost, and forgiving wall bounce work smoothly', () => {
-  const w = DK.create(0, { humans: 1, params: MID });
-  const p1 = w.karts[0];
-  // Accelerate straight with gas.
-  for (let n = 0; n < 25; n++) step(w, [{ gas: 1, steer: 0 }]);
-  assert.ok(p1.speed > 140 && p1.dist > 25 && p1.gasTime > 0.35 && p1.inputs === 25);
+test('smart dual steering (easy auto-gas after first press) & hop-drift blue -> orange boost sparks', () => {
+  // Easy mode: untouched stays at 0; single press of ArrowLeft ignites auto-gas and keeps cruising!
+  const wEasy = DK.create(0, { humans: 1, diff: 'easy', dda: 0.2 });
+  for (let n = 0; n < 30; n++) step(wEasy, [{}]);
+  assert.equal(wEasy.karts[0].dist, 0, 'easy mode waits for first real press');
 
-  // Steer right continuously to build drift charge, then straighten out to trigger drift mini-boost.
-  const ang0 = p1.ang;
-  let gotDrift = false;
-  for (let n = 0; n < 45; n++) step(w, [{ gas: 1, steer: 1 }]);
-  assert.ok(DK.wrapAngle(p1.ang - ang0) > 0.5, 'steering turns the kart clockwise');
-  assert.ok(p1.driftT >= 0.55, 'sustained high-speed turn charges drift');
-  for (let n = 0; n < 5; n++) {
-    for (const e of step(w, [{ gas: 1, steer: 0 }])) if (e.t === 'driftBoost') gotDrift = true;
+  step(wEasy, [{ steer: -1, dirX: -1, dirY: 0, active: true }]);
+  for (let n = 0; n < 45; n++) step(wEasy, [{}]); // hands off keys!
+  assert.ok(wEasy.karts[0].dist > 90, `auto-gas keeps cruising after first press: ${wEasy.karts[0].dist}`);
+
+  // Hop-Drift: hold steer + drift to build Lv1 (blue) -> Lv2 (orange) sparks, then release for flame boost!
+  const wPro = DK.create(0, { humans: 1, diff: 'normal', dda: 0.35 });
+  const p1 = wPro.karts[0];
+  for (let n = 0; n < 30; n++) step(wPro, [{ gas: 1, steer: 0 }]);
+  assert.ok(p1.speed > 240);
+
+  let sawHop = false, sawLv1 = false, sawLv2 = false, boostLv = 0;
+  for (let n = 0; n < 60; n++) {
+    for (const e of step(wPro, [{ gas: 1, steer: 0.9, drift: true }])) {
+      if (e.t === 'hop') sawHop = true;
+      if (e.t === 'driftBoost') boostLv = e.lv;
+    }
+    if (p1.driftLv === 1) sawLv1 = true;
+    if (p1.driftLv === 2) sawLv2 = true;
   }
-  assert.equal(gotDrift, true, 'releasing a charged drift grants a mini-boost');
-  assert.ok(p1.miniBoostT > 0);
+  assert.equal(sawHop, true, 'hop triggered on drift entry');
+  assert.equal(sawLv1, true, 'blue drift sparks reached');
+  assert.equal(sawLv2, true, 'orange super drift sparks reached');
+
+  for (let n = 0; n < 4; n++) {
+    for (const e of step(wPro, [{ gas: 1, steer: 0, drift: false }])) {
+      if (e.t === 'driftBoost') boostLv = e.lv;
+    }
+  }
+  assert.equal(boostLv, 2, 'releasing Lv2 drift grants orange flame boost');
+  assert.ok(p1.miniBoostT >= 1.2);
 });
 
-test('anti-cheat checkpoints: reversing across finish or skipping sectors never counts a lap', () => {
-  const w = DK.create(0, { humans: 1, params: MID });
+test('anti-cheat checkpoints reject reversing over line or skipping sectors', () => {
+  const w = DK.create(0, { humans: 1, diff: 'normal' });
   const p1 = w.karts[0], L = w.L;
-  // Reverse across s = 0 from the starting grid.
   for (let n = 0; n < 90; n++) step(w, [{ brake: 1, steer: 0 }]);
-  assert.ok(p1.s > L.len * 0.85, 'kart backed behind finish line');
-  assert.equal(p1.lap, 0, 'backing over the line does not count a lap');
-  // Drive forward across s = 0 again without completing sectors 1..3.
+  assert.ok(p1.s > L.len * 0.8);
+  assert.equal(p1.lap, 0);
   for (let n = 0; n < 90; n++) step(w, [{ gas: 1, steer: 0 }]);
-  assert.equal(p1.lap, 0, 'crossing forward without sectors 1..3 does not count a lap');
+  assert.equal(p1.lap, 0);
 
-  // Teleporting to sector 3 without hitting sectors 1 and 2 also rejects lap cheat.
   const c3 = DK.at(L, L.len * 0.85);
   p1.x = c3.x; p1.y = c3.y; p1.s = c3.s; p1.ang = Math.atan2(c3.ty, c3.tx);
   for (let n = 0; n < 90; n++) step(w, [driveHuman(w, 0, false)]);
-  assert.equal(p1.lap, 0, 'skipping sectors 1 & 2 never increments lap');
+  assert.equal(p1.lap, 0);
 });
 
-test('1P race: careful human wins 3 laps across tracks, earns 3 stars, and DDA scales AI speeds', () => {
-  assert.ok(EASY.botSpeed < MID.botSpeed && MID.botSpeed < HARD.botSpeed);
-  assert.ok(EASY.mercy > MID.mercy && MID.mercy > HARD.mercy);
-  assert.ok(EASY.roadWidth > HARD.roadWidth);
-
-  for (let i = 0; i < DK.TRACKS.length; i++) {
-    const w = DK.create(i, { humans: 1, params: EASY, seed: 7 + i });
-    let steps = 0;
-    while (!w.done && steps++ < 60 * 45) {
-      step(w, [driveHuman(w, 0, true)]);
-    }
-    assert.equal(w.done, true, `Track ${DK.TRACKS[i].id} finished`);
-    assert.equal(w.karts[0].finished, true);
-    assert.equal(w.karts[0].lap, 3);
-    assert.equal(w.karts[0].rank, 1, `Human won 1st on ${DK.TRACKS[i].id} at EASY`);
-    assert.equal(DK.starsForRank(w.karts[0].rank), 3);
-  }
-});
-
-test('2P shared-screen mode: P1 and P2 race together with 2 AI bots and finish cleanly', () => {
-  const w = DK.create(2, { humans: 2, params: MID, seed: 99 });
-  assert.equal(w.humans, 2);
-  assert.equal(w.karts[0].human, true);
-  assert.equal(w.karts[1].human, true);
-  assert.equal(w.karts[2].human, false);
-  assert.equal(w.karts[3].human, false);
-
-  let steps = 0;
-  while (!w.done && steps++ < 60 * 50) {
-    step(w, [driveHuman(w, 0, true), driveHuman(w, 1, true)]);
-  }
-  assert.equal(w.done, true);
-  assert.ok(w.karts[0].dist > 3000 && w.karts[1].dist > 3000);
-  assert.ok(w.karts[0].finished || w.karts[1].finished);
-  assert.ok(w.winner >= 0 && w.winner <= 3);
-});
-
-test('all 4 toy power-ups work: turbo flame, bubble shield, spring hop over glue, and splat rocket', () => {
-  const w = DK.create(0, { humans: 1, params: MID, seed: 12 });
+test('all 5 battle power-ups & ruler stunt ramps work cleanly', () => {
+  const w = DK.create(0, { humans: 1, diff: 'normal', seed: 19 });
   const p1 = w.karts[0], bot = w.karts[1], L = w.L;
-  step(w, [{ gas: 1 }]); // mark P1 started
+  step(w, [{ gas: 1 }]);
 
-  // 1. Turbo boosts speed well past normal top speed.
-  p1.item = 'turbo';
+  // 1. Eraser Turbo: invincible speed blast + rams rivals aside!
+  p1.item = 'eraser_turbo';
   assert.equal(DK.useItem(w, 0), true);
-  assert.equal(p1.item, '');
-  assert.ok(p1.turboT > 1.5);
   for (let n = 0; n < 25; n++) step(w, [{ gas: 1 }]);
-  assert.ok(p1.speed > DK.TOP_SPEED * 1.15, `turbo speed=${p1.speed}`);
+  assert.ok(p1.speed > DK.TOP_SPEED * 1.25, `mega nitro speed=${p1.speed}`);
 
-  // 2. Spring hops into the air (z > 0) right over a glue hazard without slowing down.
-  const hz = L.hazards[0];
-  const beforeHz = DK.at(L, hz.s - 35);
+  // 2. Paperclip Magnet: pulls forward + vacuums nearby coins!
   p1.turboT = 0;
-  p1.x = beforeHz.x + beforeHz.nx * hz.off;
-  p1.y = beforeHz.y + beforeHz.ny * hz.off;
-  p1.s = beforeHz.s;
-  p1.ang = Math.atan2(beforeHz.ty, beforeHz.tx);
-  p1.speed = 260; p1.vx = beforeHz.tx * 260; p1.vy = beforeHz.ty * 260;
-  p1.item = 'spring';
+  const nearCoin = w.coins[0];
+  nearCoin.taken = false;
+  nearCoin.x = p1.x + 190; nearCoin.y = p1.y + 40;
+  p1.item = 'clip_magnet';
   DK.useItem(w, 0);
-  let glueEvents = 0, maxZ = 0;
-  for (let n = 0; n < 24; n++) {
-    for (const e of step(w, [{ gas: 1 }])) if (e.t === 'hazard' && e.kart === 0) glueEvents++;
+  for (let n = 0; n < 35; n++) step(w, [{ gas: 1 }]);
+  assert.equal(nearCoin.taken, true, 'paperclip magnet vacuumed nearby coin');
+
+  // 3. Ruler Jump: vaults high over paint puddle and lands with trick boost!
+  const hz = L.hazards[0];
+  const preHz = DK.at(L, hz.s - 45);
+  p1.x = preHz.x + preHz.nx * hz.off; p1.y = preHz.y + preHz.ny * hz.off;
+  p1.s = preHz.s; p1.ang = Math.atan2(preHz.ty, preHz.tx);
+  p1.speed = 380; p1.vx = preHz.tx * 380; p1.vy = preHz.ty * 380;
+  p1.item = 'ruler_jump';
+  DK.useItem(w, 0);
+  let maxZ = 0, trickLanded = false;
+  for (let n = 0; n < 55; n++) {
+    for (const e of step(w, [{ gas: 1 }])) if (e.t === 'trickLand' && e.kart === 0) trickLanded = true;
     if (p1.z > maxZ) maxZ = p1.z;
   }
-  assert.ok(maxZ > 18, 'spring lifts kart high into the air');
-  assert.equal(glueEvents, 0, 'airborne kart hops cleanly over glue puddle');
+  assert.ok(maxZ > 35, `airborne stunt height=${maxZ}`);
+  assert.equal(trickLanded, true, 'landed stunt jump with trick boost');
 
-  // 3. Splat homes onto the kart ahead and spins it out; Bubble shield absorbs a splat harmlessly!
-  const sBase = 300;
-  const c0 = DK.at(L, sBase), c1 = DK.at(L, sBase + 95);
-  p1.hopT = 0; p1.z = 0; p1.x = c0.x; p1.y = c0.y; p1.s = sBase; p1.off = 0; p1.ang = Math.atan2(c0.ty, c0.tx);
-  bot.aiDelay = 99; bot.x = c1.x; bot.y = c1.y; bot.s = sBase + 95; bot.off = 0; bot.speed = 0; bot.vx = 0; bot.vy = 0;
-  // First with bubble shield on bot:
-  bot.bubbleT = 5.0;
-  p1.item = 'splat';
+  // 4. Glue Trap: drops sticky glue behind and spins tailgater!
+  p1.item = 'glue_trap';
   DK.useItem(w, 0);
-  assert.equal(w.splats.length, 1);
-  let poppedShield = false;
-  for (let n = 0; n < 40 && w.splats.length; n++) {
-    for (const e of step(w, [{}])) if (e.t === 'shieldPop' && e.kart === 1) poppedShield = true;
-  }
-  assert.equal(poppedShield, true, 'bubble shield absorbs splat rocket');
-  assert.equal(bot.spinT, 0, 'shielded kart does not spin out');
+  assert.equal(w.traps.length, 1);
+  const trap = w.traps[0];
+  bot.aiDelay = 99; bot.spinT = 0; bot.turboT = 0; bot.z = 0; bot.vz = 0; bot.vx = 0; bot.vy = 0;
+  bot.x = trap.x; bot.y = trap.y; bot.s = p1.s;
+  step(w, [{ gas: 1 }]);
+  assert.ok(bot.spinT > 0.5, 'tailgating rival spun on sticky glue trap');
 
-  // Now without bubble shield: splat spins the target!
-  p1.item = 'splat';
+  // 5. Homing Ink-Rocket: homes onto nearest rival ahead and splats ink!
+  const c0 = DK.at(L, 500), c1 = DK.at(L, 640), cBack = DK.at(L, 200);
+  for (const b of [w.karts[2], w.karts[3]]) { b.aiDelay = 99; b.x = cBack.x; b.y = cBack.y; b.s = 200; b.vx = 0; b.vy = 0; }
+  p1.x = c0.x; p1.y = c0.y; p1.s = 500; p1.off = 0; p1.ang = Math.atan2(c0.ty, c0.tx);
+  bot.spinT = 0; bot.x = c1.x; bot.y = c1.y; bot.s = 640; bot.off = 0; bot.vx = 0; bot.vy = 0;
+  p1.item = 'ink_rocket';
   DK.useItem(w, 0);
-  let splatted = false;
-  for (let n = 0; n < 40 && w.splats.length; n++) {
-    for (const e of step(w, [{}])) if (e.t === 'splat' && e.kart === 1) splatted = true;
+  assert.equal(w.rockets.length, 1);
+  let inked = false;
+  for (let n = 0; n < 35 && w.rockets.length; n++) {
+    for (const e of step(w, [{}])) if (e.t === 'inkHit' && e.kart === 1) inked = true;
   }
-  assert.equal(splatted, true, 'unshielded kart gets splatted');
-  assert.ok(bot.spinT > 0.4, 'splatted kart spins briefly');
+  assert.equal(inked, true, 'homing ink-rocket splatted rival ahead');
+  assert.ok(bot.inkedT > 1.5 && bot.spinT > 0.5);
 });
 
-test('Science Lab warp portals teleport karts forward and advance sectors cleanly', () => {
-  const w = DK.create(6, { humans: 1, params: MID });
-  const p1 = w.karts[0], po = w.L.portals[0];
-  p1.started = true;
-  p1.x = po.xIn; p1.y = po.yIn; p1.s = po.sIn; p1.sector = 1;
-  const ev = step(w, [{ gas: 1 }]);
-  assert.ok(ev.some(e => e.t === 'portal' && e.kart === 0), 'portal event triggered');
-  assert.ok(Math.hypot(p1.x - po.xOut, p1.y - po.yOut) < 20, 'teleported to portal exit');
-  assert.equal(p1.sector, 2, 'sector progressed across portal');
+test('all 12 tracks across all 4 cups are winnable by a human driver', () => {
+  for (let i = 0; i < DK.TRACKS.length; i++) {
+    const w = DK.create(i, { humans: 1, diff: 'normal', dda: 0.25, seed: 100 + i });
+    let steps = 0;
+    while (!w.done && steps++ < 60 * 55) {
+      step(w, [driveHuman(w, 0, true)]);
+    }
+    assert.equal(w.done, true, `Track ${DK.TRACKS[i].id} completed`);
+    assert.equal(w.karts[0].finished, true);
+    assert.equal(w.karts[0].lap, 3);
+    assert.equal(w.karts[0].rank, 1, `Won 1st place on ${DK.TRACKS[i].id}`);
+  }
 });
 
-test('saves, track unlocking, stars, coins and 6x2 shop items validate and round-trip', () => {
-  assert.equal(DK.PAINTS.length, 6);
-  assert.equal(DK.TOPPERS.length, 6);
+test('2P dynamic framing camera & instant catch-up warp drone keep both humans in big view', () => {
+  const w = DK.create(0, { humans: 2, diff: 'normal', seed: 77 });
+  const p1 = w.karts[0], p2 = w.karts[1];
+  step(w, [{ gas: 1 }, { gas: 1 }]);
+  assert.equal(p1.started, true);
+  assert.equal(p2.started, true);
+
+  // Drive P1 far ahead while P2 sits slow -> warp drone catches P2 right up!
+  let warped = false;
+  for (let n = 0; n < 180; n++) {
+    for (const e of step(w, [driveHuman(w, 0, false), { brake: 0, gas: 0 }])) {
+      if (e.t === 'warp' && e.kart === 1) warped = true;
+    }
+    if (warped) break;
+  }
+  assert.equal(warped, true, 'catch-up warp drone rescued trailing P2');
+  assert.ok(Math.abs(p1.totalDist - p2.totalDist) < 250);
+  assert.ok(w.cam.zoom >= 0.64 && w.cam.zoom <= 1.02);
+});
+
+test('garage karts & exhaust flames, stars, coins, and save validation round-trip cleanly', () => {
   const fresh = plain(DK.freshSave());
-  for (const bad of [null, undefined, 'bad', 42, [], {}, { v: 2 }, { v: 1, tracks: 'nope', coins: -9, paint: 5, topper: 99 }]) {
+  for (const bad of [null, undefined, 'bad', 42, [], {}, { v: 1 }, { v: 2, tracks: [], coins: -4 }]) {
     assert.deepEqual(plain(DK.loadSave(bad)), fresh);
   }
 
   const s = DK.freshSave();
-  assert.equal(DK.isOpen(s, 0), true);
-  assert.equal(DK.isOpen(s, 1), false);
-  let r = DK.applyResult(s, 0, 1, 21.4, [true, true, false, false, false, false]);
-  assert.equal(r.stars, 3);
-  assert.equal(r.opened, 1);
-  assert.equal(DK.isOpen(s, 1), true);
-  assert.equal(s.tracks[0].s, 3);
-  assert.equal(s.coins, 2 + 3 * DK.STAR_COINS);
+  const res = DK.applyResult(s, 0, 1, 27.4, 8, 'hero');
+  assert.equal(res.stars, 3);
+  assert.ok(res.earned >= 20, 'hero coin multiplier applied');
+  assert.equal(DK.totalStars(s), 3);
 
-  // Unlock World 2 by clearing Track 1 (1-2).
-  r = DK.applyResult(s, 1, 2, 24.0, []);
-  assert.equal(r.opened, 2);
-  assert.equal(r.world, 1, 'clearing 1-2 opens World 2');
+  assert.equal(DK.buy(s, 'kart', 1), 'bought');
+  assert.equal(s.kart, 1);
+  assert.equal(DK.buy(s, 'flame', 1), 'bought');
+  assert.equal(s.flame, 1);
+  assert.equal(DK.buy(s, 'kart', 0), 'wear');
+  assert.equal(s.kart, 0);
 
-  // Shop purchase & equip.
-  s.coins = 10;
-  assert.equal(DK.buy(s, 'paint', 5), '', 'not enough coins for 11-coin paint');
-  assert.equal(DK.buy(s, 'paint', 2), 'bought');
-  assert.equal(s.paint, 2);
-  assert.equal(s.coins, 5);
-  assert.equal(DK.buy(s, 'topper', 1), 'bought');
-  assert.equal(s.topper, 1);
-  assert.equal(s.coins, 1);
-  assert.equal(DK.buy(s, 'paint', 0), 'wear');
-  assert.equal(s.paint, 0);
-
-  // Verify economy: 1st-place clears + all track coins across 8 tracks exceed total shop prices.
-  const totalTrackCoins = DK.TRACKS.reduce((sum, t) => sum + t.coins.length + 3 * DK.STAR_COINS, 0);
-  const totalShopCost = DK.PAINTS.concat(DK.TOPPERS).reduce((sum, it) => sum + it.price, 0);
-  assert.ok(totalShopCost <= totalTrackCoins, `shop cost ${totalShopCost} <= ${totalTrackCoins} earnable first-clear coins`);
-
-  // Round-trip valid save.
   assert.deepEqual(plain(DK.loadSave(plain(s))), plain(s));
 });

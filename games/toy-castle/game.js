@@ -1,1074 +1,1235 @@
-/* Toy Castle Clash (قلعة الألعاب): UI screens, 1P & 2P controls via Kit.keys and cards,
- * sky star-bubble popping, saves, shop, DDA, telemetry, and one-shot Juice SFX. */
+/* Toy Castle: Mega-Mech & Lego-Knight Siege (قلعة الألعاب) — Presentation, Input & HUD */
 (function () {
   'use strict';
-  const A = TC.art, J = Kit.juice, W = TC.W, H = TC.H;
-  const $ = id => document.getElementById(id);
-  const canvas = $('game'), ui = $('ui');
-  const calm = () => Kit.motion.reduced();
-  const clamp = Kit.clamp;
 
-  let dirty = true;
-  const view = Kit.fit(canvas, W, H, {
-    maxDpr: 1.5,
-    onResize: v => {
-      ui.style.left = canvas.style.left;
-      ui.style.top = canvas.style.top;
-      ui.style.transform = 'scale(' + v.scale + ')';
-      dirty = true;
-    }
+  var TC = window.TCEngine;
+  var Kit = window.Kit;
+  var art = Kit.art;
+  var J = Kit.juice;
+
+  var canvas = document.getElementById('game');
+  var ui = document.getElementById('ui');
+  var liveEl = document.getElementById('live');
+
+  /* MUST call Kit.art.init BEFORE Kit.fit so HiDPI sprite buckets bind cleanly */
+  art.init({ canvas: canvas, mode: '2d', theme: 'day' });
+
+  var pauseDrawn = false;
+  function syncUi(v) {
+    var cw = Math.round(TC.W * v.scale), ch = Math.round(TC.H * v.scale);
+    ui.style.left = Math.round((window.innerWidth - cw) / 2) + 'px';
+    ui.style.top = Math.round((window.innerHeight - ch) / 2) + 'px';
+    ui.style.transform = 'scale(' + v.scale + ')';
+  }
+  var view = Kit.fit(canvas, TC.W, TC.H, {
+    onResize: function (v) { syncUi(v); pauseDrawn = false; }
   });
-  const fx = Kit.particles(), shake = Kit.shake();
-  const pixelScale = () => clamp(Math.round(view.scale * view.dpr * 4) / 4, 0.5, 2);
-  const KEYS_GO = ['Enter', 'NumpadEnter', 'Space'];
-  const CELEBRATE = 1.35;
-  const CONF_COLS = ['#ff5d73', '#ffd23f', '#38bdf8', '#34d399', '#a855f7', '#ffffff'];
+  var ctx = view.ctx;
+  syncUi(view);
 
-  /* ---------------------------------------------------------------- save */
-  const store = Kit.store('toy-castle');
-  const saveStatus = Kit.saveStatus({ retry: persist });
-  let save = TC.loadSave(store.get('save', null));
+  Kit.muteButton();
+  var store = Kit.store('toy-castle');
+  var save = TC.loadSave(store.get('save'));
+  var saveFlag = Kit.saveStatus({ retry: function () { return persist(); } });
+  var dda = Kit.dda('toy-castle', { id: 'main', start: 0.35 });
+
   function persist() {
-    if (store.set('save', save) === false) { saveStatus.failed(); return false; }
-    saveStatus.saved();
+    var ok = store.set('save', save);
+    if (ok) saveFlag.saved(); else saveFlag.failed();
+    return ok;
+  }
+
+  function announce(msg) {
+    if (liveEl) liveEl.textContent = msg;
+  }
+
+  /* ------------------------------ Visual FX & Springs ------------------------------ */
+  var fx = art.fx(280);
+  var fxCount = 0, shakeAmt = 0;
+  var cannonSpring = [art.spring(280, 14), art.spring(280, 14)];
+  var fortSpring = [art.spring(240, 13), art.spring(240, 13)];
+  var rings = [];
+  var titleTick = 0;
+
+  function addBurst(x, y, opts) {
+    if (Kit.motion.reduced()) return;
+    var n = (opts && opts.n) || 10;
+    fxCount = Math.min(280, fxCount + n);
+    fx.burst(x, y, opts);
+  }
+
+  function addRing(x, y, maxR, color) {
+    if (Kit.motion.reduced()) return;
+    if (rings.length < 18) rings.push({ x: x, y: y, r: 10, maxR: maxR, life: 0.28, max: 0.28, color: color });
+  }
+
+  function addShake(power) {
+    if (Kit.motion.reduced()) { shakeAmt = 0; return; }
+    shakeAmt = Math.min(1, shakeAmt + power);
+    art.shake.add(power);
+  }
+
+  function clearFx() {
+    rings.length = 0;
+    fxCount = 0;
+    shakeAmt = 0;
+  }
+
+  /* ------------------------------ Baked Sprites (Bounded Static Keys) ------------------------------ */
+  var WORLD_THEMES = [
+    { sky: ['#1e40af', '#38bdf8', '#fde68a'], bridge: '#64748b', trim: '#fbbf24', moat: '#0284c7', hill: '#1e3a8a' },
+    { sky: ['#0f172a', '#0e7490', '#67e8f9'], bridge: '#334155', trim: '#22d3ee', moat: '#083344', hill: '#1e293b' },
+    { sky: ['#450a0a', '#c2410c', '#fde047'], bridge: '#44403c', trim: '#fb923c', moat: '#ea580c', hill: '#7c2d12' },
+    { sky: ['#09061e', '#3b0764', '#818cf8'], bridge: '#1e293b', trim: '#c084fc', moat: '#312e81', hill: '#1e1b4b' }
+  ];
+
+  function getWorldBg(wIdx) {
+    wIdx = wIdx | 0;
+    return art.bake('bg_w' + wIdx, TC.W, TC.H, function (c, w, h) {
+      var th = WORLD_THEMES[wIdx] || WORLD_THEMES[0];
+      var g = c.createLinearGradient(0, 0, 0, h);
+      g.addColorStop(0, th.sky[0]);
+      g.addColorStop(0.58, th.sky[1]);
+      g.addColorStop(1, th.sky[2]);
+      c.fillStyle = g;
+      c.fillRect(0, 0, w, h);
+
+      /* Stars / distant world silhouettes */
+      var i;
+      if (wIdx === 3) {
+        c.fillStyle = 'rgba(255,255,255,0.75)';
+        for (i = 0; i < 42; i++) {
+          c.beginPath();
+          c.arc((i * 173 + 41) % w, (i * 89 + 23) % 340, (i % 3) + 1.2, 0, 6.283);
+          c.fill();
+        }
+        c.fillStyle = '#a855f7';
+        c.beginPath(); c.arc(920, 150, 48, 0, 6.283); art.outlined(c, '#a855f7', 3);
+        c.strokeStyle = '#fde047'; c.lineWidth = 6;
+        c.beginPath(); c.ellipse(920, 150, 86, 18, -0.25, 0, 6.283); c.stroke();
+      } else {
+        c.fillStyle = 'rgba(255,255,255,0.22)';
+        for (i = 0; i < 4; i++) {
+          var cx = 210 + i * 280, cy = 115 + (i % 2) * 32;
+          art.round(c, cx - 70, cy - 18, 140, 36, 18); c.fill();
+          art.round(c, cx - 38, cy - 34, 80, 28, 14); c.fill();
+        }
+      }
+
+      /* Distant jagged mountains / hangar girders */
+      c.beginPath();
+      c.moveTo(0, 520);
+      var peaks = [0, 380, 190, 290, 380, 395, 560, 265, 740, 385, 930, 275, 1110, 370, 1280, 310];
+      for (i = 0; i < peaks.length; i += 2) c.lineTo(peaks[i], peaks[i + 1]);
+      c.lineTo(w, 520);
+      c.closePath();
+      c.fillStyle = th.hill;
+      c.fill();
+
+      if (wIdx === 1) {
+        c.strokeStyle = 'rgba(34,211,238,0.22)';
+        c.lineWidth = 4;
+        for (i = 220; i < 1080; i += 140) {
+          c.strokeRect(i, 160, 70, 360);
+        }
+      }
+
+      /* Moat / lava / energy trench under bridge */
+      c.fillStyle = th.moat;
+      c.fillRect(0, TC.GROUND_Y + 18, w, h - TC.GROUND_Y - 18);
+      c.fillStyle = 'rgba(255,255,255,0.16)';
+      for (i = 0; i < 9; i++) {
+        art.round(c, 90 + i * 135, TC.GROUND_Y + 58 + (i % 2) * 26, 86, 10, 5);
+        c.fill();
+      }
+
+      /* Bridge arches & pillars */
+      for (i = 0; i < 5; i++) {
+        var px = 220 + i * 195;
+        art.round(c, px, TC.GROUND_Y + 10, 50, 190, 8);
+        art.outlined(c, art.shade(th.bridge, -0.24), 3);
+      }
+
+      /* Snap-brick studs along bridge top */
+      for (i = 176; i < 1104; i += 34) {
+        art.round(c, i, TC.GROUND_Y - 11, 20, 12, 4);
+        art.outlined(c, th.trim, 2.5);
+      }
+
+      /* Main armored battle bridge deck */
+      art.round(c, 0, TC.GROUND_Y - 2, w, 36, 6);
+      art.outlined(c, th.bridge, 3.5);
+      art.gloss(c, 0, TC.GROUND_Y, w, 18);
+
+      /* Center tactical pad visual */
+      var pad = TC.WORLDS[wIdx].pad;
+      if (pad !== 'none') {
+        var pCol = pad === 'turbo' ? '#22d3ee' : pad === 'lava' ? '#f97316' : '#c084fc';
+        art.round(c, TC.PAD_X - 46, TC.GROUND_Y - 8, 92, 16, 7);
+        art.outlined(c, pCol, 3);
+      }
+    });
+  }
+
+  function getFortSprite(side, styleIdx) {
+    var key = side === 0 ? 'fort_0_' + styleIdx : 'fort_1_' + styleIdx;
+    return art.sprite(key, 210, 350, function (c, w, h) {
+      var arm = side === 0 ? (TC.ARMORS[styleIdx] || TC.ARMORS[0]) : null;
+      var rivalCols = [
+        { main: '#991b1b', trim: '#f59e0b', glow: '#fb7185' },
+        { main: '#334155', trim: '#ef4444', glow: '#f43f5e' },
+        { main: '#7c2d12', trim: '#facc15', glow: '#fb923c' },
+        { main: '#4c1d95', trim: '#f43f5e', glow: '#e879f9' }
+      ];
+      var pal = arm || rivalCols[styleIdx % 4];
+      var dark = art.shade(pal.main, -0.28);
+
+      c.save();
+      if (side === 1) { c.translate(w, 0); c.scale(-1, 1); }
+
+      /* Flagpole & War Banner */
+      c.strokeStyle = '#1b1640'; c.lineWidth = 5;
+      c.beginPath(); c.moveTo(64, 14); c.lineTo(64, 78); c.stroke();
+      c.beginPath();
+      c.moveTo(66, 16); c.lineTo(132, 26); c.lineTo(116, 40); c.lineTo(132, 52); c.lineTo(66, 56); c.closePath();
+      art.outlined(c, pal.trim, 3);
+
+      /* Rear High Keep */
+      art.round(c, 16, 74, 114, 266, 12);
+      art.outlined(c, dark, 3.5);
+
+      /* Snap-brick battlements */
+      for (var i = 0; i < 4; i++) {
+        art.round(c, 14 + i * 31, 54, 24, 28, 6);
+        art.outlined(c, pal.trim, 3);
+      }
+
+      /* Front Armored Bastion */
+      art.round(c, 26, 118, 152, 224, 14);
+      art.outlined(c, pal.main, 4);
+      art.gloss(c, 30, 122, 144, 52);
+
+      /* Roof Cannon Turret Pedestal */
+      art.round(c, 98, 92, 76, 32, 10);
+      art.outlined(c, pal.trim, 3.5);
+
+      /* Glowing Reactor Window */
+      art.round(c, 52, 154, 42, 58, 20);
+      art.outlined(c, '#090e1f', 3);
+      art.round(c, 58, 162, 30, 42, 14);
+      c.fillStyle = pal.glow; c.fill();
+
+      /* Armored Siege Gate */
+      art.round(c, 116, 226, 62, 116, 28);
+      art.outlined(c, '#0f172a', 4);
+      c.strokeStyle = pal.trim; c.lineWidth = 3;
+      c.beginPath();
+      c.moveTo(132, 232); c.lineTo(132, 338);
+      c.moveTo(148, 230); c.lineTo(148, 338);
+      c.moveTo(164, 234); c.lineTo(164, 338);
+      c.stroke();
+
+      c.restore();
+    }, { pad: 8 });
+  }
+
+  function getCannonSprite(side, skinIdx) {
+    var key = side === 0 ? 'can_0_' + skinIdx : 'can_1';
+    return art.sprite(key, 92, 52, function (c) {
+      var sk = side === 0 ? (TC.CANNONS[skinIdx] || TC.CANNONS[0]) : { barrel: '#7f1d1d', tip: '#fb7185', bolt: '#ef4444' };
+      /* Barrel */
+      art.round(c, 24, 11, 56, 30, 9);
+      art.outlined(c, sk.barrel, 3.5);
+      art.gloss(c, 26, 13, 50, 14);
+      /* Muzzle Tip */
+      art.round(c, 70, 7, 16, 38, 6);
+      art.outlined(c, sk.tip, 3.5);
+      /* Breech Core */
+      c.beginPath(); c.arc(28, 26, 18, 0, 6.283);
+      art.outlined(c, art.shade(sk.barrel, -0.2), 3.5);
+      c.beginPath(); c.arc(28, 26, 8, 0, 6.283);
+      c.fillStyle = sk.bolt; c.fill();
+    }, { pad: 6 });
+  }
+
+  function getCrateSprite() {
+    return art.sprite('crate_sky', 64, 80, function (c) {
+      /* Parachute */
+      c.beginPath();
+      c.arc(32, 28, 26, Math.PI, 0);
+      c.closePath();
+      art.outlined(c, '#f97316', 3);
+      c.beginPath(); c.arc(32, 28, 14, Math.PI, 0); c.closePath();
+      c.fillStyle = '#fde047'; c.fill();
+      c.strokeStyle = '#1b1640'; c.lineWidth = 2;
+      c.beginPath();
+      c.moveTo(10, 28); c.lineTo(22, 46);
+      c.moveTo(54, 28); c.lineTo(42, 46);
+      c.stroke();
+      /* Supply Box */
+      art.round(c, 14, 42, 36, 34, 8);
+      art.outlined(c, '#eab308', 3.5);
+      art.round(c, 18, 46, 28, 26, 5);
+      c.fillStyle = '#0284c7'; c.fill();
+      /* Bolt icon */
+      c.fillStyle = '#fef08a';
+      c.beginPath();
+      c.moveTo(35, 48); c.lineTo(25, 60); c.lineTo(32, 60); c.lineTo(29, 70); c.lineTo(39, 57); c.lineTo(32, 57);
+      c.closePath(); c.fill();
+    }, { pad: 6 });
+  }
+
+  function getUnitSprite(side, type, gold, step, wIdx) {
+    var key = type === 'boss' ? ('boss_' + wIdx + '_' + step) : ('u_' + side + '_' + type + '_' + (gold ? 1 : 0) + '_' + step);
+    var dims = type === 'boss' ? [112, 108] : type === 'mech' ? [92, 92] : type === 'dino' ? [84, 68] : type === 'balloon' ? [68, 66] : [60, 62];
+    return art.sprite(key, dims[0], dims[1], function (c, w, h) {
+      var main = side === 0 ? (gold ? '#eab308' : '#2563eb') : '#dc2626';
+      var trim = side === 0 ? (gold ? '#fef08a' : '#38bdf8') : '#fb923c';
+      var metal = side === 0 ? '#cbd5e1' : '#94a3b8';
+      var bob = step ? 3 : -2;
+
+      if (type === 'sword') {
+        /* Legs */
+        art.round(c, 18 - bob, 44, 10, 14, 4); art.outlined(c, '#334155', 2.5);
+        art.round(c, 30 + bob, 44, 10, 14, 4); art.outlined(c, '#334155', 2.5);
+        /* Snap-brick Torso */
+        art.round(c, 16, 25, 26, 22, 6); art.outlined(c, main, 3);
+        /* Plumed Knight Helmet */
+        c.beginPath(); c.moveTo(22, 8); c.quadraticCurveTo(10, 2, 14, 16); c.lineTo(28, 14); c.closePath();
+        art.outlined(c, trim, 2.5);
+        art.round(c, 16, 10, 26, 19, 8); art.outlined(c, metal, 3);
+        art.round(c, 26, 16, 14, 6, 3); c.fillStyle = '#090e1f'; c.fill();
+        /* Energy Sword & Shield */
+        c.save(); c.translate(42, 30); c.rotate(step ? 0.35 : -0.25);
+        art.round(c, -3, -24, 8, 28, 4); art.outlined(c, trim, 2.5);
+        c.restore();
+        art.round(c, 26, 26, 16, 20, 7); art.outlined(c, trim, 2.5);
+      } else if (type === 'rocket') {
+        art.round(c, 18 - bob, 45, 10, 14, 4); art.outlined(c, '#1e293b', 2.5);
+        art.round(c, 30 + bob, 45, 10, 14, 4); art.outlined(c, '#1e293b', 2.5);
+        /* Backpack + Trooper Body */
+        art.round(c, 10, 24, 10, 18, 4); art.outlined(c, '#475569', 2.5);
+        art.round(c, 17, 25, 25, 22, 6); art.outlined(c, main, 3);
+        /* Visor Helmet */
+        art.round(c, 17, 10, 25, 18, 8); art.outlined(c, main, 3);
+        art.round(c, 26, 14, 15, 8, 4); art.outlined(c, '#fde047', 2);
+        /* Shoulder Bazooka */
+        art.round(c, 14, 18, 40, 13, 5); art.outlined(c, '#334155', 3);
+        art.round(c, 48, 16, 8, 17, 3); art.outlined(c, '#f97316', 2.5);
+      } else if (type === 'dino') {
+        /* Stomping Armored Legs */
+        art.round(c, 18 - bob, 48, 15, 16, 5); art.outlined(c, '#334155', 3);
+        art.round(c, 44 + bob, 48, 15, 16, 5); art.outlined(c, '#334155', 3);
+        /* Tail & Armored Dino Shell */
+        c.beginPath(); c.moveTo(16, 36); c.lineTo(3, 28 + bob); c.lineTo(16, 46); c.closePath();
+        art.outlined(c, trim, 3);
+        art.round(c, 14, 22, 48, 30, 13); art.outlined(c, side === 0 ? '#15803d' : '#991b1b', 3.5);
+        art.round(c, 22, 18, 30, 14, 6); art.outlined(c, main, 3);
+        /* Triceratops Frill Shield & Chrome Horns */
+        art.round(c, 50, 12, 18, 34, 8); art.outlined(c, trim, 3);
+        art.round(c, 56, 22, 20, 22, 8); art.outlined(c, side === 0 ? '#22c55e' : '#ef4444', 3);
+        c.beginPath(); c.moveTo(72, 24); c.lineTo(83, 16); c.lineTo(75, 31); c.closePath();
+        art.outlined(c, '#fef08a', 2.5);
+        c.beginPath(); c.arc(67, 29, 3.5, 0, 6.283); c.fillStyle = '#090e1f'; c.fill();
+      } else if (type === 'mech') {
+        /* Heavy Mech Legs */
+        art.round(c, 24 - bob, 64, 16, 24, 5); art.outlined(c, '#334155', 3.5);
+        art.round(c, 50 + bob, 64, 16, 24, 5); art.outlined(c, '#334155', 3.5);
+        /* Shoulder Laser Pod */
+        art.round(c, 16, 10, 26, 14, 5); art.outlined(c, '#475569', 3);
+        art.round(c, 38, 12, 10, 10, 3); art.outlined(c, trim, 2.5);
+        /* Broad Armored Chest */
+        art.round(c, 18, 22, 54, 46, 14); art.outlined(c, main, 4);
+        art.gloss(c, 22, 25, 46, 20);
+        /* Glowing Cockpit Visor */
+        art.round(c, 34, 30, 30, 14, 6); art.outlined(c, '#090e1f', 3);
+        art.round(c, 38, 33, 22, 8, 4); c.fillStyle = trim; c.fill();
+        /* Power Core */
+        c.beginPath(); c.arc(46, 54, 8, 0, 6.283); art.outlined(c, '#fde047', 2.5);
+        /* Giant Smash Fist */
+        art.round(c, 62, 42 + bob, 24, 22, 8); art.outlined(c, trim, 3.5);
+      } else if (type === 'balloon') {
+        /* Armored Rival Bomb-Blimp */
+        art.round(c, 8, 10, 52, 32, 16); art.outlined(c, '#b91c1c', 3.5);
+        art.gloss(c, 14, 13, 40, 14);
+        c.fillStyle = '#fde047'; c.fillRect(28, 12, 12, 28);
+        /* Gondola */
+        art.round(c, 22, 44, 24, 14, 5); art.outlined(c, '#334155', 3);
+        c.beginPath(); c.arc(34, 58, 5, 0, 6.283); art.outlined(c, '#f97316', 2);
+      } else {
+        /* World Boss! */
+        var bCols = ['#7c2d12', '#0f766e', '#991b1b', '#581c87'];
+        var bMain = bCols[wIdx % 4];
+        art.round(c, 28 - bob, 74, 20, 30, 6); art.outlined(c, '#1e293b', 4);
+        art.round(c, 62 + bob, 74, 20, 30, 6); art.outlined(c, '#1e293b', 4);
+        /* Crown Spikes */
+        c.beginPath();
+        c.moveTo(32, 22); c.lineTo(24, 4); c.lineTo(44, 16); c.lineTo(56, 2); c.lineTo(68, 16); c.lineTo(86, 4); c.lineTo(78, 22);
+        c.closePath(); art.outlined(c, '#facc15', 3.5);
+        /* Boss Titan Torso */
+        art.round(c, 18, 20, 74, 58, 18); art.outlined(c, bMain, 4.5);
+        art.gloss(c, 24, 24, 62, 24);
+        /* Menacing Visor */
+        art.round(c, 42, 32, 38, 14, 6); art.outlined(c, '#090e1f', 3);
+        art.round(c, 46, 35, 30, 8, 4); c.fillStyle = '#fb7185'; c.fill();
+        /* Twin Plasma Siege Claws */
+        art.round(c, 76, 46 + bob, 30, 24, 8); art.outlined(c, '#f97316', 4);
+      }
+    }, { pad: 6 });
+  }
+
+  /* ------------------------------ DOM Elements & HUD Building ------------------------------ */
+  var screens = {
+    title: document.getElementById('scrTitle'),
+    map: document.getElementById('scrMap'),
+    armory: document.getElementById('scrShop'),
+    pause: document.getElementById('scrPause'),
+    result: document.getElementById('scrResult')
+  };
+  var elHud = document.getElementById('hud');
+  var elTray1p = document.getElementById('tray1p');
+  var elTray2p = document.getElementById('tray2p');
+  var elTrayP1 = document.getElementById('trayP1');
+  var elTrayP2 = document.getElementById('trayP2');
+  var elWorlds = document.getElementById('worlds');
+  var elShelfArmors = document.getElementById('shelfArmors');
+  var elShelfCannons = document.getElementById('shelfCannons');
+
+  var screen = 'title', fromScreen = 'title';
+  var world = null, roundOpen = false, nextStageIdx = 0;
+  var hudRefs = { p1: null, p2: null };
+
+  var UNIT_ICONS = { sword: 'i-sword', rocket: 'i-rocket', dino: 'i-dino', mech: 'i-mech' };
+  var SHORT_NAMES = { sword: 'محارب السيف', rocket: 'رامي الصواريخ', dino: 'دبابة الديناصور', mech: 'العملاق الآلي' };
+
+  function makeCard(opts) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'u-card' + (opts.cls ? ' ' + opts.cls : '');
+    if (opts.id) b.id = opts.id;
+    b.setAttribute('aria-label', opts.label);
+    b.innerHTML =
+      '<div class="cd-bar"></div>' +
+      '<svg aria-hidden="true"><use href="#' + opts.icon + '"/></svg>' +
+      '<span class="u-name">' + opts.name + '</span>' +
+      '<div class="u-foot"><span class="u-cost" dir="ltr">' + opts.cost + '</span>' +
+      '<span class="sg-key" dir="ltr">' + opts.key + '</span></div>';
+    b.addEventListener('click', function (e) {
+      opts.onClick();
+      if (e.detail > 0) canvas.focus({ preventScroll: true });
+    });
+    return {
+      el: b,
+      cd: b.querySelector('.cd-bar'),
+      cost: b.querySelector('.u-cost'),
+      name: b.querySelector('.u-name')
+    };
+  }
+
+  function buildDeck(container, side, keys, compact) {
+    container.innerHTML = '';
+    var eBox = document.createElement('div');
+    eBox.className = 'e-box';
+    eBox.innerHTML =
+      '<div class="e-top"><svg aria-hidden="true"><use href="#i-bolt"/></svg><span class="e-val" dir="ltr">35</span></div>' +
+      '<div class="e-sub">طاقة القلعة</div>';
+    container.appendChild(eBox);
+
+    var refs = { eVal: eBox.querySelector('.e-val'), eSub: eBox.querySelector('.e-sub'), units: {} };
+
+    if (!compact) {
+      refs.cannon = makeCard({
+        id: 'card-cannon', cls: 'cannon-card', icon: 'i-cannon',
+        name: 'مدفع القلعة', label: 'مدفع القلعة', cost: 'إطلاق', key: 'مسافة',
+        onClick: function () { triggerFireOrSuper(0, false); }
+      });
+      container.appendChild(refs.cannon.el);
+    }
+
+    for (var i = 0; i < TC.UNIT_ORDER.length; i++) {
+      (function (uType, kLabel) {
+        var def = TC.UNITS[uType];
+        var cRef = makeCard({
+          id: side === 0 && !compact ? 'card-' + uType : '',
+          icon: UNIT_ICONS[uType],
+          name: compact ? SHORT_NAMES[uType].split(' ')[0] : SHORT_NAMES[uType],
+          label: def.name, cost: String(def.cost), key: kLabel,
+          onClick: function () { trySummon(side, uType); }
+        });
+        refs.units[uType] = cRef;
+        container.appendChild(cRef.el);
+      })(TC.UNIT_ORDER[i], keys.units[i]);
+    }
+
+    refs.sup = makeCard({
+      id: side === 0 && !compact ? 'card-super' : '',
+      cls: 'super-card', icon: 'i-meteor',
+      name: compact ? 'خارقة' : 'الضربة الخارقة',
+      label: 'الضربة الخارقة', cost: '0%', key: keys.sup,
+      onClick: function () {
+        if (compact) triggerFireOrSuper(side, false);
+        else trySuper(side);
+      }
+    });
+    container.appendChild(refs.sup.el);
+
+    refs.gen = makeCard({
+      id: side === 0 && !compact ? 'card-gen' : '',
+      cls: 'gen-card', icon: 'i-bolt',
+      name: compact ? 'المولّد' : 'تطوير المولّد',
+      label: 'تطوير المولّد', cost: '40', key: keys.gen,
+      onClick: function () { tryUpgrade(side); }
+    });
+    container.appendChild(refs.gen.el);
+    return refs;
+  }
+
+  function setupTrays(humans) {
+    if (humans === 1) {
+      elTray1p.hidden = false;
+      elTray2p.hidden = true;
+      hudRefs.p1 = buildDeck(elTray1p, 0, { units: ['1', '2', '3', '4'], sup: '5', gen: '6' }, false);
+      hudRefs.p2 = null;
+    } else {
+      elTray1p.hidden = true;
+      elTray2p.hidden = false;
+      hudRefs.p1 = buildDeck(elTrayP1, 0, { units: ['1', '2', '3', '4'], sup: 'مسافة', gen: '6' }, true);
+      hudRefs.p2 = buildDeck(elTrayP2, 1, { units: ['7', '8', '9', '0'], sup: '⏎', gen: '=' }, true);
+    }
+  }
+
+  function syncDeck(refs, side) {
+    if (!refs || !world) return;
+    var s = world.sides[side];
+    var eFloor = Math.floor(s.energy);
+    refs.eVal.textContent = String(eFloor);
+    refs.eSub.textContent = 'مولّد ' + (s.genLv + 1) + '/' + TC.GEN_LEVELS.length;
+
+    if (refs.cannon) {
+      var cPct = Math.round((s.cannonCd / 0.62) * 100);
+      refs.cannon.cd.style.height = (cPct > 0 ? cPct : 0) + '%';
+    }
+
+    for (var i = 0; i < TC.UNIT_ORDER.length; i++) {
+      var t = TC.UNIT_ORDER[i], def = TC.UNITS[t], uRef = refs.units[t];
+      var cdRatio = s.cds[t] > 0 ? Math.min(100, Math.round((s.cds[t] / def.cd) * 100)) : 0;
+      uRef.cd.style.height = cdRatio + '%';
+      uRef.el.classList.toggle('dim', s.energy < def.cost || s.cds[t] > 0);
+    }
+
+    var supPct = Math.floor(s.superCharge);
+    var supReady = supPct >= 100;
+    refs.sup.el.classList.toggle('ready', supReady);
+    refs.sup.el.classList.toggle('dim', !supReady && ! hudRefs.p2);
+    refs.sup.cost.textContent = supReady ? 'جاهز!' : (supPct + '%');
+
+    var nextGen = TC.GEN_LEVELS[s.genLv + 1];
+    if (!nextGen) {
+      refs.gen.cost.textContent = 'أقصى';
+      refs.gen.el.classList.add('dim');
+    } else {
+      refs.gen.cost.textContent = String(nextGen.cost);
+      refs.gen.el.classList.toggle('dim', s.energy < nextGen.cost);
+    }
+  }
+
+  /* ------------------------------ Screens, Map & Armory ------------------------------ */
+  function syncHeaderChips() {
+    var st = TC.totalStars(save) + '/' + (TC.LEVELS.length * 3);
+    document.querySelector('#titleStars b').textContent = st;
+    document.querySelector('#mapStars b').textContent = st;
+    document.querySelector('#titleCoins b').textContent = Kit.fmt(save.coins);
+    document.querySelector('#shopCoins b').textContent = Kit.fmt(save.coins);
+    var pills = document.querySelectorAll('.diff-pill');
+    for (var i = 0; i < pills.length; i++) {
+      pills[i].classList.toggle('on', pills[i].getAttribute('data-diff') === save.diff);
+    }
+  }
+
+  function renderMap() {
+    syncHeaderChips();
+    elWorlds.innerHTML = '';
+    for (var w = 0; w < TC.WORLDS.length; w++) {
+      var col = document.createElement('div');
+      col.className = 'w-col';
+      var head = document.createElement('div');
+      head.className = 'w-head';
+      head.innerHTML = '<h3>' + TC.WORLDS[w].name + '</h3>';
+      col.appendChild(head);
+
+      for (var i = 0; i < TC.LEVELS.length; i++) {
+        if (TC.LEVELS[i].world !== w) continue;
+        (function (idx) {
+          var stg = TC.LEVELS[idx], rec = save.lv[idx];
+          var b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'lvl';
+          b.setAttribute('data-idx', String(idx));
+          var starsHtml = '';
+          for (var k = 1; k <= 3; k++) {
+            starsHtml += '<svg class="' + (rec.s >= k ? 'on' : '') + '" aria-hidden="true"><use href="#i-star"/></svg>';
+          }
+          b.innerHTML =
+            '<span class="l-id" dir="ltr">' + stg.id + '</span>' +
+            '<span class="l-name">' + stg.name + '</span>' +
+            '<span class="l-stars">' + starsHtml + '</span>';
+          b.addEventListener('click', function () { J.select(); startBattle(idx, 1); });
+          col.appendChild(b);
+        })(i);
+      }
+      elWorlds.appendChild(col);
+    }
+  }
+
+  function renderShelf(el, list, ownedArr, wornIdx, kind, iconId) {
+    el.innerHTML = '';
+    for (var i = 0; i < list.length; i++) {
+      (function (idx) {
+        var it = list[idx], isOwned = !!ownedArr[idx], isWorn = wornIdx === idx;
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'tile' + (isOwned ? ' owned' : '') + (isWorn ? ' wear' : '');
+        b.setAttribute('data-kind', kind);
+        b.setAttribute('data-idx', String(idx));
+        var swBg = kind === 'armor' ? it.main : it.barrel;
+        var swBorder = kind === 'armor' ? it.trim : it.tip;
+        var tagHtml = isWorn ? 'مجهّز' : isOwned ? 'تجهيز' : ('<i class="coin"></i><span dir="ltr">' + it.price + '</span>');
+        b.innerHTML =
+          '<div class="sw" style="background:' + swBg + ';border-color:' + swBorder + '">' +
+          '<svg aria-hidden="true"><use href="#' + iconId + '"/></svg></div>' +
+          '<div class="t-name">' + it.name + '</div>' +
+          '<div class="t-tag">' + tagHtml + '</div>';
+        b.addEventListener('click', function () {
+          var res = TC.buy(save, kind, idx);
+          if (res === 'bought') { J.coin(3); J.chime(2); persist(); renderArmory(); }
+          else if (res === 'wear') { J.select(); persist(); renderArmory(); }
+          else J.error();
+        });
+        el.appendChild(b);
+      })(i);
+    }
+  }
+
+  function renderArmory() {
+    syncHeaderChips();
+    renderShelf(elShelfArmors, TC.ARMORS, save.armors, save.armor, 'armor', 'i-shield');
+    renderShelf(elShelfCannons, TC.CANNONS, save.cannons, save.cannon, 'cannon', 'i-cannon');
+  }
+
+  function showScreen(next) {
+    screen = next;
+    pauseDrawn = false;
+    for (var k in screens) screens[k].hidden = (k !== next);
+    elHud.hidden = (next !== 'play');
+    if (next === 'title') syncHeaderChips();
+    else if (next === 'map') renderMap();
+    else if (next === 'armory') renderArmory();
+  }
+
+  /* ------------------------------ Battle Lifecycle & Actions ------------------------------ */
+  function startBattle(idx, humans) {
+    if (roundOpen) { Kit.stats.end('quit', 0); roundOpen = false; }
+    clearFx();
+    Kit.keys.reset();
+    if (humans === 2) {
+      world = TC.createVersus({ worldIdx: idx % TC.WORLDS.length, seed: (Date.now() & 0xffff) || 4242 });
+    } else {
+      var prm = TC.params(dda.level, save.diff);
+      world = TC.create(idx, prm, { diff: save.diff, seed: ((Date.now() & 0xffff) + idx * 97) || 1337 });
+    }
+    var roundTag = humans === 2 ? 'tc_vs' : 'tc_' + world.stage.id;
+    Kit.stats.round(roundTag);
+    roundOpen = true;
+    setupTrays(humans);
+    syncDeck(hudRefs.p1, 0);
+    if (hudRefs.p2) syncDeck(hudRefs.p2, 1);
+    showScreen('play');
+    announce('بدأت المعركة: ' + world.stage.name);
+    canvas.focus({ preventScroll: true });
+  }
+
+  function restartBattle() {
+    if (!world) return;
+    J.tap();
+    startBattle(world.humans === 2 ? world.worldIdx : world.level, world.humans);
+  }
+
+  function setPause(on) {
+    if (on && screen === 'play') {
+      Kit.keys.reset();
+      showScreen('pause');
+      announce('استراحة');
+    } else if (!on && screen === 'pause') {
+      Kit.keys.reset();
+      showScreen('play');
+      canvas.focus({ preventScroll: true });
+    }
+  }
+
+  function quitTo(target) {
+    if (roundOpen) { Kit.stats.end('quit', 0); roundOpen = false; }
+    world = null;
+    clearFx();
+    J.back();
+    showScreen(target);
+  }
+
+  function trySummon(side, type) {
+    if (screen !== 'play' || !world || world.done) return false;
+    var u = TC.summon(world, side, type);
+    if (!u) return false;
     return true;
   }
-  const dda = Kit.dda('toy-castle', { id: 'main', start: 0.3 });
 
-  /* --------------------------------------------------------------- state */
-  let screen = 'title', cur = 0, humans = 1, world = null, uiClock = 0, tried = false, justStarted = false;
-  let celebrate = 0, result = null, resultT = 0, resultLock = 0, intro = 0;
-  let floats = [], rings = [], popQ = [];
-  const ptr = { x: W / 2, y: H / 2, inside: false };
+  function tryUpgrade(side) {
+    if (screen !== 'play' || !world || world.done) return false;
+    return TC.upgradeGen(world, side);
+  }
 
-  const SHORT_NAMES = {
-    duck: 'بطة',
-    frog: 'ضفدع',
-    bear: 'دبّ',
-    plane: 'طائرة',
-    train: 'قطار'
+  function trySuper(side) {
+    if (screen !== 'play' || !world || world.done) return false;
+    return TC.fireSuper(world, side);
+  }
+
+  function tryCannon(side, opts) {
+    if (screen !== 'play' || !world || world.done) return false;
+    return TC.fireCannon(world, side, opts);
+  }
+
+  function triggerFireOrSuper(side, withAssist) {
+    if (screen !== 'play' || !world || world.done) return;
+    var s = world.sides[side];
+    if (s && s.superCharge >= 100) TC.fireSuper(world, side);
+    TC.fireCannon(world, side, { assist: withAssist !== false });
+  }
+
+  function finishBattle() {
+    if (!world || !roundOpen) return;
+    roundOpen = false;
+    var resBest = document.getElementById('resBest');
+    var resTitle = document.getElementById('resTitle');
+    var resStars = document.getElementById('resStars');
+    var resNext = document.getElementById('resNext');
+    var starNodes = resStars.querySelectorAll('svg');
+
+    var hpPct = Math.round((world.sides[0].hp / world.sides[0].hpMax) * 100);
+    document.querySelector('#resHp b').textContent = hpPct + '%';
+    document.querySelector('#resTime b').textContent = Math.round(world.t) + 's';
+
+    if (world.humans === 2) {
+      Kit.stats.end('end', TC.scoreOf(world));
+      resBest.hidden = true;
+      resStars.hidden = true;
+      resNext.hidden = true;
+      resTitle.textContent = world.winner === 1 ? 'فاز اللاعب 1!' : 'فاز اللاعب 2!';
+      document.querySelector('#resCoins b').textContent = '+0';
+      J.levelUp();
+    } else {
+      var won = world.winner === 1;
+      var st = TC.stars(world);
+      var sc = TC.scoreOf(world);
+      dda.result(won ? (0.62 + st * 0.12) : 0);
+      Kit.stats.end(won ? 'win' : 'lose', sc);
+      var out = TC.applyResult(save, world.level, st, world.t, save.diff);
+      nextStageIdx = out.nextIdx;
+      persist();
+
+      resBest.hidden = !out.best;
+      resStars.hidden = false;
+      for (var i = 0; i < 3; i++) starNodes[i].classList.toggle('on', i < st);
+      resTitle.textContent = won ? 'انتصار ساحق!' : 'حاول مجدداً!';
+      document.querySelector('#resCoins b').textContent = '+' + out.earned;
+      resNext.hidden = !won;
+      if (won) { J.levelUp(); J.coin(2); } else J.fail();
+    }
+    showScreen('result');
+    announce(resTitle.textContent);
+  }
+
+  /* ------------------------------ Event Drain (SFX, FX & Telemetry) ------------------------------ */
+  function drainEvents(w) {
+    var evs = w.ev;
+    for (var i = 0; i < evs.length; i++) {
+      var ev = evs[i];
+      if (ev.t === 'summon') {
+        if (ev.side === 0 || w.humans === 2) J.pop(ev.unit === 'mech' ? 0.9 : 0.45);
+        addBurst(ev.x, ev.y - 18, { n: 7, color: ev.side === 0 ? '#38bdf8' : '#fb7185', speed: 120, life: 0.35, size: 6 });
+      } else if (ev.t === 'deny') {
+        J.error();
+      } else if (ev.t === 'upgrade') {
+        J.chime(ev.lv);
+        if (!Kit.motion.reduced()) art.pop('مولّد ' + ev.lv + '!', ev.side === 0 ? 160 : 1120, 320, { color: '#fde047', size: 28 });
+      } else if (ev.t === 'cannon') {
+        cannonSpring[ev.side].kick(-4.2);
+        J.whoosh(0.75);
+        addBurst(ev.x, ev.y, { n: 8, color: '#fde047', speed: 160, life: 0.28, size: 6, shape: 'spark' });
+      } else if (ev.t === 'super') {
+        J.streak(4);
+        addShake(0.38);
+        art.flash('#fde047', 160);
+        if (!Kit.motion.reduced()) art.pop('الضربة الخارقة!', 640, 180, { color: '#fde047', size: 36 });
+      } else if (ev.t === 'cratePop') {
+        if (ev.side === 0) Kit.track.hit();
+        J.coin(2);
+        addBurst(ev.x, ev.y, { n: 14, color: '#fde047', speed: 210, life: 0.5, size: 8, shape: 'star' });
+        if (!Kit.motion.reduced()) art.pop('+' + ev.energy, ev.x, ev.y - 12, { color: '#38bdf8', size: 28 });
+      } else if (ev.t === 'clash') {
+        J.tap();
+        addBurst(ev.x, ev.y, { n: 5, color: '#fef08a', speed: 130, life: 0.25, size: 5, shape: 'spark' });
+      } else if (ev.t === 'slam') {
+        J.impact(0.65);
+        addRing(ev.x, ev.y - 6, 68, ev.side === 0 ? '#38bdf8' : '#fb923c');
+        addShake(0.16);
+      } else if (ev.t === 'boom') {
+        if (ev.kind === 'meteor' || ev.kind === 'cannon') {
+          J.impact(ev.kind === 'meteor' ? 0.9 : 0.55);
+          addRing(ev.x, ev.y, ev.kind === 'meteor' ? 92 : 58, '#fb923c');
+          if (ev.kind === 'meteor') addShake(0.22);
+        }
+        addBurst(ev.x, ev.y, { n: ev.kind === 'meteor' ? 14 : 8, color: '#fb923c', speed: 190, life: 0.4, size: 7 });
+      } else if (ev.t === 'kill') {
+        if (ev.side === 0) Kit.track.hit();
+        J.pop(0.7);
+        addBurst(ev.x, ev.y - 20, { n: 12, color: ev.victimSide === 1 ? '#fb923c' : '#60a5fa', speed: 200, life: 0.45, size: 7, shape: 'confetti' });
+      } else if (ev.t === 'castleHit') {
+        fortSpring[ev.side].kick(-3.2);
+        J.impact(0.5);
+        addShake(0.14);
+        if (ev.side === 1) Kit.track.hit();
+        else if (w.humans === 1) Kit.track.miss();
+      } else if (ev.t === 'boss') {
+        J.impact(0.95);
+        addShake(0.35);
+        if (!Kit.motion.reduced()) art.pop(TC.WORLDS[w.worldIdx].bossName + '!', 920, 220, { color: '#fb7185', size: 34 });
+      } else if (ev.t === 'pad' || ev.t === 'vent') {
+        J.whoosh(0.5);
+        addBurst(ev.x, ev.y - 10, { n: 8, color: '#22d3ee', speed: 150, life: 0.35, size: 6 });
+      }
+    }
+    evs.length = 0;
+  }
+
+  /* ------------------------------ UI & Keyboard Wiring ------------------------------ */
+  document.getElementById('btnPlay').addEventListener('click', function () { J.select(); startBattle(0, 1); });
+  document.getElementById('btnLevels').addEventListener('click', function () { J.tap(); showScreen('map'); });
+  document.getElementById('btnTwo').addEventListener('click', function () { J.select(); startBattle(0, 2); });
+  document.getElementById('btnShop').addEventListener('click', function () { fromScreen = 'title'; J.tap(); showScreen('armory'); });
+
+  document.getElementById('mapHome').addEventListener('click', function () { J.back(); showScreen('title'); });
+  document.getElementById('mapShop').addEventListener('click', function () { fromScreen = 'map'; J.tap(); showScreen('armory'); });
+  document.getElementById('shopBack').addEventListener('click', function () { J.back(); showScreen(fromScreen || 'title'); });
+
+  document.getElementById('btnPause').addEventListener('click', function () { J.tap(); setPause(true); });
+  document.getElementById('btnResume').addEventListener('click', function () { J.tap(); setPause(false); });
+  document.getElementById('btnRestart').addEventListener('click', restartBattle);
+  document.getElementById('btnMap').addEventListener('click', function () { quitTo('map'); });
+  document.getElementById('btnPauseHome').addEventListener('click', function () { quitTo('title'); });
+
+  document.getElementById('resNext').addEventListener('click', function () { J.select(); startBattle(nextStageIdx, 1); });
+  document.getElementById('resAgain').addEventListener('click', restartBattle);
+  document.getElementById('resMap').addEventListener('click', function () { J.tap(); showScreen('map'); });
+  document.getElementById('resShop').addEventListener('click', function () { fromScreen = 'result'; J.tap(); showScreen('armory'); });
+
+  var diffBtns = document.querySelectorAll('.diff-pill');
+  for (var di = 0; di < diffBtns.length; di++) {
+    diffBtns[di].addEventListener('click', function () {
+      var d = this.getAttribute('data-diff');
+      if (TC.DIFFS[d]) {
+        save.diff = d;
+        J.select();
+        persist();
+        syncHeaderChips();
+      }
+    });
+  }
+
+  /* Mouse aiming & firing directly on the battlefield canvas */
+  canvas.addEventListener('pointermove', function (e) {
+    if (screen !== 'play' || !world || world.humans !== 1) return;
+    var p = view.toLogical(e.clientX, e.clientY);
+    if (p.x > TC.CANNON_LX + 24 && p.y < 590) TC.aimAtPoint(world, 0, p.x, p.y);
+  });
+
+  canvas.addEventListener('pointerdown', function (e) {
+    if (screen !== 'play' || !world || world.done || e.button === 2) return;
+    var p = view.toLogical(e.clientX, e.clientY);
+    if (p.y > 592) return;
+    var cSide = (world.humans === 2 && p.x > 640) ? 1 : 0;
+    if (TC.popCrate(world, p.x, p.y, cSide)) return;
+    if (world.humans === 1) {
+      tryCannon(0, { tx: p.x, ty: p.y, assist: false });
+    } else if (p.x < 640) {
+      tryCannon(0, { tx: p.x + 340, ty: p.y, assist: true });
+    } else {
+      tryCannon(1, { tx: p.x - 340, ty: p.y, assist: true });
+    }
+  });
+
+  var P1_KEY_MAP = { Digit1: 'sword', Digit2: 'rocket', Digit3: 'dino', Digit4: 'mech' };
+  var P1_PAD_MAP = { Numpad1: 'sword', Numpad2: 'rocket', Numpad3: 'dino', Numpad4: 'mech' };
+  var P2_KEY_MAP = {
+    Digit7: 'sword', Digit8: 'rocket', Digit9: 'dino', Digit0: 'mech',
+    KeyU: 'sword', KeyI: 'rocket', KeyO: 'dino', KeyK: 'mech',
+    Numpad1: 'sword', Numpad2: 'rocket', Numpad3: 'dino', Numpad4: 'mech'
   };
 
-  /* ------------------------------------------------------------ helpers */
-  const SCREENS = { title: 'scrTitle', map: 'scrMap', pause: 'scrPause', result: 'scrResult', shop: 'scrShop' };
-  function setScreen(next) {
-    screen = next;
-    for (const k in SCREENS) $(SCREENS[k]).hidden = k !== next;
-    $('hud').hidden = next !== 'play';
-    dirty = true;
-    setCursor('');
-    if (next === 'play') focusGame();
-  }
-  function focusGame() { try { canvas.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }
-  function say(msg) { $('live').textContent = msg; }
-  function chip(id, val) { $(id).querySelector('b').textContent = String(val); }
-  let curClass = '';
-  function setCursor(c) { if (c !== curClass) { curClass = c; canvas.className = c; } }
-  function wiggle(el) {
-    if (!el) return;
-    el.classList.remove('wiggle');
-    void el.offsetWidth;
-    el.classList.add('wiggle');
-    setTimeout(() => el.classList.remove('wiggle'), 460);
-  }
+  window.addEventListener('keydown', function (e) {
+    if (!Kit.isGameKeyEvent(e)) return;
+    var code = e.code;
 
-  // Navigation buttons ignore accidental double-clicks; battle cards allow rapid clicks.
-  function onNav(el, fn) {
-    el.addEventListener('click', e => {
-      e.stopPropagation();
-      if (e.detail > 1) return;
-      Kit.audio.unlock();
-      if (e.detail > 0) { el.blur(); focusGame(); }
-      fn(e);
-    });
-  }
-  function onAct(el, fn) {
-    el.addEventListener('click', e => {
-      e.stopPropagation();
-      Kit.audio.unlock();
-      if (e.detail > 0) { el.blur(); focusGame(); }
-      fn(e);
-    });
-  }
-
-  /* ------------------------------------------------------------ build HUD */
-  const hudRefs = { p1: null, two: [null, null] };
-
-  function makeDeck(container, sideIdx, isTwo) {
-    container.innerHTML = '';
-    const prefix = isTwo ? (sideIdx === 0 ? 'p1-' : 'p2-') : 'card-';
-    const unitKeys = isTwo
-      ? (sideIdx === 0 ? ['1', '2', '3', '4', '5'] : ['6', '7', '8', '9', '0'])
-      : ['1', '2', '3', '4', '5'];
-    const upKey = isTwo ? (sideIdx === 0 ? 'F' : 'H') : '6';
-    const canKey = isTwo ? (sideIdx === 0 ? 'Space' : 'Enter') : 'Space';
-
-    const epod = document.createElement('div');
-    epod.className = 'epod spin';
-    epod.innerHTML = '<svg aria-hidden="true"><use href="#i-key"/></svg>' +
-      '<div class="eval"><b>30</b><small>/100</small></div>' +
-      '<span class="klv">مفتاح 1</span>';
-    container.appendChild(epod);
-
-    const cards = {};
-    TC.UNIT_ORDER.forEach((uId, idx) => {
-      const def = TC.UNITS[uId];
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.id = prefix + uId;
-      b.className = 'ucard';
-      b.setAttribute('aria-label', def.name + ' (' + def.cost + ')');
-      b.innerHTML = '<span class="ukey">' + unitKeys[idx] + '</span>' +
-        '<canvas width="96" height="84"></canvas>' +
-        '<span class="uname">' + SHORT_NAMES[uId] + '</span>' +
-        '<span class="ucost">' + def.cost + '</span>' +
-        '<span class="cdbar"></span>';
-      A.unitIcon(b.querySelector('canvas'), uId, sideIdx);
-      onAct(b, () => actSummon(sideIdx, uId, b));
-      container.appendChild(b);
-      cards[uId] = b;
-    });
-
-    const upBtn = document.createElement('button');
-    upBtn.type = 'button';
-    upBtn.id = isTwo ? (sideIdx === 0 ? 'p1-upgrade' : 'p2-upgrade') : 'btnUpgrade';
-    upBtn.className = 'ucard act-up';
-    upBtn.setAttribute('aria-label', 'تطوير المفتاح');
-    upBtn.innerHTML = '<span class="ukey">' + upKey + '</span>' +
-      '<svg aria-hidden="true"><use href="#i-key"/></svg>' +
-      '<span class="uname">تطوير المفتاح</span>' +
-      '<span class="ucost">35</span>' +
-      '<span class="cdbar"></span>';
-    onAct(upBtn, () => actUpgrade(sideIdx, upBtn));
-    container.appendChild(upBtn);
-
-    const canBtn = document.createElement('button');
-    canBtn.type = 'button';
-    canBtn.id = isTwo ? (sideIdx === 0 ? 'p1-cannon' : 'p2-cannon') : 'btnCannon';
-    canBtn.className = 'ucard act-can';
-    canBtn.setAttribute('aria-label', 'مدفع القصاصات');
-    canBtn.innerHTML = '<span class="ukey">' + canKey + '</span>' +
-      '<svg aria-hidden="true"><use href="#i-cannon"/></svg>' +
-      '<span class="uname">المدفع</span>' +
-      '<span class="ucost">جاهز!</span>' +
-      '<span class="cdbar"></span>';
-    onAct(canBtn, () => actCannon(sideIdx, canBtn));
-    container.appendChild(canBtn);
-
-    return {
-      epod: epod,
-      eVal: epod.querySelector('.eval b'),
-      eMax: epod.querySelector('.eval small'),
-      kLv: epod.querySelector('.klv'),
-      cards: cards,
-      upBtn: upBtn,
-      upCost: upBtn.querySelector('.ucost'),
-      canBtn: canBtn,
-      canCost: canBtn.querySelector('.ucost'),
-      canCd: canBtn.querySelector('.cdbar')
-    };
-  }
-
-  function buildHud() {
-    hudRefs.p1 = makeDeck($('tray1p'), 0, false);
-    hudRefs.two[0] = makeDeck($('trayP1'), 0, true);
-    hudRefs.two[1] = makeDeck($('trayP2'), 1, true);
-  }
-
-  function syncDeck(ref, side) {
-    const en = Math.floor(side.energy);
-    ref.eVal.textContent = String(en);
-    ref.eMax.textContent = '/' + side.energyMax;
-    ref.kLv.textContent = 'مفتاح ' + (side.keyLv + 1);
-
-    for (let i = 0; i < TC.UNIT_ORDER.length; i++) {
-      const uId = TC.UNIT_ORDER[i], def = TC.UNITS[uId], b = ref.cards[uId];
-      const cd = side.cds[uId];
-      const canBuy = en >= def.cost && cd <= 0.001;
-      b.classList.toggle('dim', !canBuy);
-      b.querySelector('.cdbar').style.height = cd > 0 ? Math.round((cd / def.cd) * 100) + '%' : '0%';
+    if (code === 'KeyP' && !e.repeat) {
+      if (screen === 'play') { J.tap(); setPause(true); }
+      else if (screen === 'pause') { J.tap(); setPause(false); }
+      return;
     }
-
-    const maxed = side.keyLv >= TC.KEY_LEVELS.length - 1;
-    const nextCost = maxed ? 0 : TC.KEY_LEVELS[side.keyLv + 1].cost;
-    ref.upCost.textContent = maxed ? 'أقصى' : String(nextCost);
-    ref.upBtn.classList.toggle('dim', maxed || en < nextCost);
-
-    const ccd = side.cannonCd;
-    ref.canCost.textContent = ccd > 0.05 ? Math.ceil(ccd) + 's' : 'جاهز!';
-    ref.canBtn.classList.toggle('dim', ccd > 0.05);
-    ref.canCd.style.height = ccd > 0 ? Math.round((ccd / TC.CANNON_CD) * 100) + '%' : '0%';
-  }
-
-  function syncHud() {
-    if (!world) return;
-    if (humans === 1) syncDeck(hudRefs.p1, world.sides[0]);
-    else {
-      syncDeck(hudRefs.two[0], world.sides[0]);
-      syncDeck(hudRefs.two[1], world.sides[1]);
+    if (code === 'Escape' && !e.repeat) {
+      if (screen === 'play') { J.tap(); setPause(true); }
+      else if (screen === 'pause') { J.tap(); setPause(false); }
+      else if (screen === 'armory') { J.back(); showScreen(fromScreen || 'title'); }
+      else if (screen === 'map') { J.back(); showScreen('title'); }
+      else if (screen === 'result') { J.back(); showScreen('map'); }
+      return;
     }
-  }
-
-  /* ---------------------------------------------------------------- map */
-  const levelBtns = [], worldRows = [];
-  function buildMap() {
-    const box = $('worlds');
-    TC.WORLDS.forEach((wd, wi) => {
-      const row = document.createElement('div');
-      row.className = 'wrow';
-      row.style.setProperty('--wc', wd.color);
-      row.innerHTML = '<div class="wname"><i>العالم ' + (wi + 1) + '</i><b>' + wd.name + '</b></div>';
-      for (let k = 0; k < 3; k++) {
-        const idx = wi * 3 + k;
-        const R = TC.LEVELS[idx];
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.className = 'tc-btn lvl';
-        b.innerHTML = '<b>' + R.id + '</b><em>' + R.name + '</em><span class="st">' +
-          '<svg><use href="#i-star"/></svg>'.repeat(3) +
-          '</span><svg class="lk" aria-hidden="true"><use href="#i-lock"/></svg>';
-        onNav(b, () => pickLevel(idx, b));
-        row.appendChild(b);
-        levelBtns.push(b);
-      }
-      box.appendChild(row);
-      worldRows.push(row);
-    });
-  }
-
-  function refreshMap() {
-    const next = TC.nextLevel(save);
-    levelBtns.forEach((b, i) => {
-      const open = TC.isOpen(save, i), st = save.lv[i].s, R = TC.LEVELS[i];
-      b.classList.toggle('locked', !open);
-      b.classList.toggle('next', open && i === next);
-      b.querySelectorAll('.st svg').forEach((s, k) => s.classList.toggle('on', k < st));
-      b.setAttribute('aria-label', R.id + ' ' + R.name + (open ? '، ' + st + ' من 3 نجوم' : ' (مقفلة)'));
-    });
-    worldRows.forEach((r, wi) => r.classList.toggle('locked', !TC.isOpen(save, wi * 3)));
-    chip('mapStars', TC.totalStars(save) + '/' + (TC.LEVELS.length * 3));
-  }
-
-  /* --------------------------------------------------------------- shop */
-  const shopTiles = { theme: [], topper: [] };
-  function buildShop() {
-    [['theme', TC.THEMES, 'shelfThemes'], ['topper', TC.TOPPERS, 'shelfToppers']].forEach(([kind, list, id]) => {
-      list.forEach((item, k) => {
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.className = 'tc-btn tile';
-        b.innerHTML = '<canvas width="232" height="232"></canvas><b>' + item.name +
-          '</b><span class="price"><i class="coin"></i><em>' + item.price + '</em></span>';
-        onNav(b, () => buyItem(kind, k, b));
-        $(id).appendChild(b);
-        shopTiles[kind].push(b);
-      });
-    });
-  }
-
-  function refreshShop() {
-    ['theme', 'topper'].forEach(kind => {
-      const own = kind === 'topper' ? save.toppers : save.themes;
-      const wear = kind === 'topper' ? save.topper : save.theme;
-      const list = kind === 'topper' ? TC.TOPPERS : TC.THEMES;
-      shopTiles[kind].forEach((b, k) => {
-        A.shopTile(b.querySelector('canvas'), kind, k, save);
-        b.classList.toggle('own', !!own[k]);
-        b.classList.toggle('wear', wear === k);
-        b.classList.toggle('poor', !own[k] && save.coins < list[k].price);
-        b.setAttribute('aria-label', list[k].name + (wear === k ? ' (مُجهّز)' : own[k] ? '' : '، السعر ' + list[k].price));
-      });
-    });
-    chip('shopCoins', save.coins);
-  }
-
-  function openShop() {
-    J.select();
-    refreshShop();
-    setScreen('shop');
-  }
-
-  function buyItem(kind, k, el) {
-    const did = TC.buy(save, kind, k);
-    if (!did) { J.error(); wiggle(el); return; }
-    persist();
-    if (did === 'bought') {
-      J.coin(3);
-      J.levelUp();
-      if (!calm()) {
-        const r = el.getBoundingClientRect(), p = view.toLogical(r.left + r.width / 2, r.top + r.height / 3);
-        fx.burst(p.x, p.y, { count: 26, colors: CONF_COLS, speed: 320, life: 0.75, size: 8, gravity: 320 });
-      }
-    } else J.tap();
-    refreshShop();
-  }
-
-  /* --------------------------------------------------- navigation & match */
-  function leaveMatch() {
-    if (tried) {
-      Kit.stats.end('quit');
-      if (world && humans === 1 && !world.done && (world.t > 8 || world.spawned[0] > 0)) {
-        dda.result(TC.outcome(world));
-      }
-      tried = false;
+    if (code === 'KeyR' && !e.repeat && (screen === 'play' || screen === 'pause' || screen === 'result')) {
+      restartBattle();
+      return;
     }
-  }
-
-  function toTitle() {
-    leaveMatch();
-    chip('titleStars', TC.totalStars(save) + '/' + (TC.LEVELS.length * 3));
-    chip('titleCoins', save.coins);
-    setScreen('title');
-  }
-
-  function toMap() {
-    leaveMatch();
-    refreshMap();
-    setScreen('map');
-    J.whoosh(0.4);
-  }
-
-  function play() {
-    J.select();
-    if (!TC.totalStars(save)) startLevel(0);
-    else toMap();
-  }
-
-  function pickLevel(i, el) {
-    if (!TC.isOpen(save, i)) { J.error(); wiggle(el); return; }
-    J.select();
-    startLevel(i);
-  }
-
-  function ddaParams() {
-    const E = TC.EASY, D = TC.HARD;
-    return {
-      aiEnergy: dda.value(E.aiEnergy, D.aiEnergy),
-      aiHp: dda.value(E.aiHp, D.aiHp),
-      aiThink: dda.value(E.aiThink, D.aiThink),
-      p1Energy: dda.value(E.p1Energy, D.p1Energy)
-    };
-  }
-
-  function startMatch(twoPlayer, levelIdx) {
-    leaveMatch();
-    humans = twoPlayer ? 2 : 1;
-    if (!twoPlayer) cur = clamp(levelIdx | 0, 0, TC.LEVELS.length - 1);
-    world = twoPlayer ? TC.createVersus() : TC.create(cur, ddaParams());
-    tried = true;
-    fx.clear();
-    floats = [];
-    rings = [];
-    popQ = [];
-    celebrate = 0;
-    result = null;
-    intro = 2.4;
-    justStarted = true;
-    $('tray1p').hidden = humans !== 1;
-    $('tray2p').hidden = humans !== 2;
-    syncHud();
-    Kit.keys.reset();
-
-    var rid = humans === 2 ? 'versus' : 'L' + (cur + 1);
-    Kit.stats.round(rid);
-
-    setScreen('play');
-    J.whoosh(0.45);
-    say(humans === 2 ? 'مواجهة اثنين' : world.L.id + ' ' + world.L.name);
-  }
-
-  function startLevel(i) { startMatch(false, i); }
-  function startVersus() { J.select(); startMatch(true, 0); }
-
-  function restart() {
-    if (!world) return;
-    J.select();
-    startMatch(humans === 2, cur);
-  }
-
-  function pause(byUser) {
-    if (screen !== 'play') return;
-    popQ = [];
-    setScreen('pause');
-    if (byUser) J.back();
-  }
-
-  function resume() {
-    if (screen !== 'pause') return;
-    J.select();
-    popQ = [];
-    setScreen('play');
-    Kit.keys.reset();
-  }
-
-  /* ------------------------------------------------------ battle actions */
-  function cardElFor(sideIdx, kind) {
-    if (humans === 1) {
-      if (kind === 'key') return hudRefs.p1.upBtn;
-      if (kind === 'cannon') return hudRefs.p1.canBtn;
-      return hudRefs.p1.cards[kind];
-    }
-    const ref = hudRefs.two[sideIdx];
-    if (kind === 'key') return ref.upBtn;
-    if (kind === 'cannon') return ref.canBtn;
-    return ref.cards[kind];
-  }
-
-  function actSummon(sideIdx, uId, btn) {
-    if (screen !== 'play' || !world || world.done || celebrate > 0) return;
-    const ok = TC.summon(world, sideIdx, uId);
-    if (!ok) {
-      wiggle(btn || cardElFor(sideIdx, uId));
-    }
-    handleEvents();
-    syncHud();
-    dirty = true;
-  }
-
-  function actUpgrade(sideIdx, btn) {
-    if (screen !== 'play' || !world || world.done || celebrate > 0) return;
-    const ok = TC.upgradeKey(world, sideIdx);
-    if (!ok) {
-      wiggle(btn || cardElFor(sideIdx, 'key'));
-    }
-    handleEvents();
-    syncHud();
-    dirty = true;
-  }
-
-  function actCannon(sideIdx, btn) {
-    if (screen !== 'play' || !world || world.done || celebrate > 0) return;
-    const ok = TC.fireCannon(world, sideIdx);
-    if (!ok) {
-      wiggle(btn || cardElFor(sideIdx, 'cannon'));
-    }
-    handleEvents();
-    syncHud();
-    dirty = true;
-  }
-
-  function addFloat(x, y, txt, color, size) {
-    floats.push({ x: x, y: y, txt: txt, color: color || '#ffd23f', size: size || 30, t: 0 });
-    if (floats.length > 14) floats.shift();
-  }
-
-  function burstFx(x, y, count, cols, spd) {
-    if (calm()) return;
-    fx.burst(x, y, { count: count, colors: cols || CONF_COLS, speed: spd || 260, life: 0.65, size: 7, gravity: 320 });
-  }
-
-  function addShake(pwr) {
-    if (!calm()) shake.add(pwr);
-  }
-
-  /* --------------------------------------------------- result & victory */
-  function finishMatch() {
-    tried = false;
-    if (humans === 2) {
-      Kit.stats.end('end');
-      const winLeft = world.winner === 1;
-      result = {
-        humans: 2,
-        won: true,
-        winner: world.winner,
-        stars: 0,
-        before: 0,
-        res: { best: false, world: -1, coins: 0 },
-        hpPct: Math.round((winLeft ? world.sides[0].hp / world.sides[0].hpMax : world.sides[1].hp / world.sides[1].hpMax) * 100),
-        time: world.t,
-        par: world.L.par
-      };
-      J.levelUp();
-      const fallX = winLeft ? TC.GATE_R : TC.GATE_L;
-      burstFx(fallX, TC.GROUND_Y - 80, 42, CONF_COLS, 400);
-      addShake(6);
-      celebrate = CELEBRATE;
+    if ((code === 'Enter' || code === 'NumpadEnter') && !e.repeat && screen === 'result') {
+      var rn = document.getElementById('resNext');
+      if (!rn.hidden) { J.select(); startBattle(nextStageIdx, 1); }
+      else restartBattle();
       return;
     }
 
-    const won = world.winner === 1;
-    const stars = won ? TC.stars(world) : 0;
-    const before = save.lv[cur].s;
-    let res = { first: false, best: false, moreStars: false, coins: 0, opened: -1, world: -1 };
-    if (won) {
-      res = TC.applyResult(save, cur, stars, world.t, world.bubblesPopped * 2);
-      persist();
-      J.levelUp();
-      burstFx(TC.GATE_R, TC.GROUND_Y - 80, 44, CONF_COLS, 400);
-    } else {
-      J.fail();
-      burstFx(TC.GATE_L, TC.GROUND_Y - 80, 24, ['#ff5d73', '#fde047', '#ffffff'], 280);
-    }
-    dda.result(TC.outcome(world));
-    Kit.stats.end(won ? 'win' : 'lose', stars);
-    addShake(6);
-    result = {
-      humans: 1,
-      won: won,
-      winner: world.winner,
-      stars: stars,
-      before: before,
-      res: res,
-      hpPct: Math.round((world.sides[0].hp / world.sides[0].hpMax) * 100),
-      time: world.t,
-      par: world.L.par
-    };
-    celebrate = CELEBRATE;
-  }
+    if (screen !== 'play' || !world || world.done || e.repeat) return;
 
-  function showResult() {
-    const r = result;
-    resultT = 0;
-    resultLock = 0.45;
-    if (r.humans === 2) {
-      $('resTitle').textContent = r.winner === 1 ? 'فازت قلعة اليسار!' : 'فازت قلعة اليمين!';
-      $('resStars').hidden = true;
-      $('resCoins').hidden = true;
-      $('resHp').querySelector('b').textContent = r.hpPct + '%';
-      $('resHp').classList.toggle('good', r.hpPct >= 60);
-      $('resTime').querySelector('b').textContent = r.time.toFixed(1) + 's';
-      $('resTime').classList.remove('good');
-      $('resBest').hidden = true;
-      $('resWorld').hidden = true;
-      $('resNext').hidden = true;
-      say($('resTitle').textContent);
-    } else {
-      $('resTitle').textContent = !r.won ? 'حاول مجددًا!' : r.stars === 3 ? 'ممتاز!' : r.stars === 2 ? 'رائع!' : 'أحسنت!';
-      $('resStars').hidden = false;
-      $('resStars').querySelectorAll('svg').forEach((s, i) => {
-        s.classList.toggle('on', r.won && i < Math.min(r.before, r.stars));
-        s.classList.remove('pop');
-      });
-      $('resHp').querySelector('b').textContent = r.hpPct + '%';
-      $('resHp').classList.toggle('good', r.won && r.hpPct >= 60);
-      $('resTime').querySelector('b').textContent = r.time.toFixed(1) + ' / ' + r.par;
-      $('resTime').classList.toggle('good', r.won && r.time <= r.par);
-      $('resCoins').hidden = !r.res.coins;
-      $('resCoins').querySelector('b').textContent = '+' + r.res.coins;
-      $('resBest').hidden = true;
-      $('resWorld').hidden = true;
-      $('resNext').hidden = !r.won || cur + 1 >= TC.LEVELS.length;
-      say(TC.LEVELS[cur].id + '، ' + r.stars + ' نجوم');
-    }
-    setScreen('result');
-  }
+    /* P1 Actions */
+    var u1 = P1_KEY_MAP[code] || (world.humans === 1 ? P1_PAD_MAP[code] : null);
+    if (u1) { trySummon(0, u1); return; }
+    if (code === 'Digit5' || (world.humans === 1 && code === 'Numpad5')) { trySuper(0); return; }
+    if (code === 'Digit6' || code === 'KeyG' || (world.humans === 1 && code === 'Numpad6')) { tryUpgrade(0); return; }
+    if (code === 'Space') { triggerFireOrSuper(0, true); return; }
 
-  function resultStep(dt) {
-    const r = result, before = resultT;
-    resultT += dt;
-    if (r.humans === 2 || !r.won) return;
-    const at = t => before < t && resultT >= t;
-    const base = Math.min(r.before, r.stars);
-    for (let i = base; i < r.stars; i++) {
-      if (at(0.32 + (i - base) * 0.36)) {
-        const s = $('resStars').children[i];
-        s.classList.add('on', 'pop');
-        J.star(i + 1);
-        burstFx(540 + i * 100, 260, 16, ['#ffd23f', '#ffffff'], 280);
-      }
-    }
-    const late = 0.48 + Math.max(0, r.stars - base) * 0.36;
-    if (at(late)) {
-      if (r.res.best) { $('resBest').hidden = false; J.chime(2); }
-      if (r.res.world >= 0) { $('resWorld').hidden = false; J.levelUp(); }
-      if (r.res.coins) J.coin(Math.min(5, Math.ceil(r.res.coins / 10)));
-    }
-  }
-
-  function resultNext() {
-    if (!result || resultLock > 0) return;
-    if (humans === 2 || !result.won) { resultAgain(); return; }
-    if (cur + 1 >= TC.LEVELS.length) { J.back(); toMap(); return; }
-    J.select();
-    startLevel(cur + 1);
-  }
-
-  function resultAgain() {
-    if (!result || resultLock > 0) return;
-    J.select();
-    startMatch(humans === 2, cur);
-  }
-
-  /* ------------------------------------------------------- engine events */
-  function handleEvents() {
-    if (!world) return;
-    for (const e of world.ev) {
-      const isHumanSide = humans === 2 || e.side === 0;
-      switch (e.t) {
-        case 'summon':
-          if (!e.free && isHumanSide) {
-            Kit.track.hit();
-            J.pop(0.5);
-          } else {
-            J.pop(0.28);
-          }
-          burstFx(e.x, e.y - 20, 8, [e.side === 0 ? '#38bdf8' : '#fb7185', '#ffd23f', '#ffffff'], 180);
-          break;
-        case 'deny':
-          if (isHumanSide) {
-            Kit.track.miss();
-            J.error();
-          }
-          break;
-        case 'upgrade':
-          if (isHumanSide) {
-            Kit.track.hit();
-            J.chime(e.lv);
-            addFloat(e.side === 0 ? 150 : W - 150, TC.GROUND_Y - 170, 'مفتاح ' + e.lv + '!', '#ffd23f', 32);
-          }
-          break;
-        case 'cannon':
-          if (isHumanSide) Kit.track.hit();
-          J.impact(0.75);
-          J.whoosh(0.7);
-          addShake(4.5);
-          burstFx(e.x, e.y, 18, CONF_COLS, 300);
-          break;
-        case 'bubble':
-          Kit.track.hit();
-          J.coin(2);
-          burstFx(e.x, e.y, 16, ['#ffd23f', '#ffffff', '#38bdf8'], 240);
-          addFloat(e.x, e.y - 18, '+' + e.gain, '#ffd23f', 34);
-          break;
-        case 'drum':
-          J.jump(0.55);
-          rings.push({ x: e.x, y: e.y - 16, t: 0, col: '#ffd23f' });
-          break;
-        case 'whistle':
-          J.chime(1);
-          addFloat(e.x, e.y - 68, 'توت توت!', '#ffd23f', 26);
-          break;
-        case 'chargeHit':
-          J.impact(0.85);
-          addShake(5);
-          burstFx(e.x, e.y, 20, ['#ffd23f', '#ff5d73', '#ffffff'], 310);
-          addFloat(e.x, e.y - 36, 'بوووم!', '#ffd23f', 34);
-          break;
-        case 'bonk':
-          J.tap();
-          burstFx(e.x, e.y, 5, ['#ffffff', '#ffd23f'], 150);
-          break;
-        case 'burst':
-          if (e.kind === 'cannon') {
-            J.pop(0.6);
-            burstFx(e.x, e.y, 14, CONF_COLS, 260);
-          } else {
-            burstFx(e.x, e.y, 8, [CONF_COLS[(e.colorIdx || 0) % CONF_COLS.length], '#ffffff'], 170);
-          }
-          break;
-        case 'castleHit':
-          J.land(0.5);
-          addShake(2.8);
-          break;
-        case 'defeat':
-          if (humans === 1) {
-            if (e.by === 0) Kit.track.hit();
-            else Kit.track.miss();
-          } else {
-            Kit.track.hit();
-          }
-          J.pop(0.45);
-          burstFx(e.x, e.y - 20, 14, CONF_COLS, 240);
-          break;
-        case 'boss':
-          J.impact(0.9);
-          addShake(5.5);
-          addFloat(W - 220, TC.GROUND_Y - 150, 'ملك الألعاب!', '#ff5d73', 40);
-          break;
-        case 'end':
-          finishMatch();
-          break;
-      }
-    }
-    world.ev.length = 0;
-  }
-
-  /* --------------------------------------------------------------- input */
-  onNav($('btnPlay'), play);
-  onNav($('btnTwo'), startVersus);
-  onNav($('btnLevels'), () => { J.select(); toMap(); });
-  onNav($('btnShop'), openShop);
-  onNav($('mapHome'), () => { J.back(); toTitle(); });
-  onNav($('shopBack'), () => { J.back(); toTitle(); });
-  onNav($('btnPause'), () => pause(true));
-  onNav($('btnResume'), resume);
-  onNav($('btnRestart'), restart);
-  onNav($('btnMap'), () => { J.back(); if (humans === 2) toTitle(); else toMap(); });
-  onNav($('resNext'), resultNext);
-  onNav($('resAgain'), resultAgain);
-  onNav($('resMap'), () => { if (resultLock <= 0) { J.back(); if (humans === 2) toTitle(); else toMap(); } });
-
-  const toLogical = e => view.toLogical(e.clientX, e.clientY);
-  const inFrame = p => p.x >= 0 && p.x <= W && p.y >= 0 && p.y <= H;
-
-  window.addEventListener('pointermove', e => {
-    const p = toLogical(e);
-    ptr.x = p.x;
-    ptr.y = p.y;
-    ptr.inside = inFrame(p);
-  });
-
-  canvas.addEventListener('pointerdown', e => {
-    focusGame();
-    if (e.button !== 0) return;
-    const p = toLogical(e);
-    ptr.x = p.x;
-    ptr.y = p.y;
-    ptr.inside = inFrame(p);
-    if (screen === 'play' && world && !celebrate && ptr.inside) {
-      popQ.push({ x: p.x, y: p.y });
+    /* P2 Actions (Shared Keyboard Duel — never touches P, R, M, Esc, Tab) */
+    if (world.humans === 2) {
+      var u2 = P2_KEY_MAP[code];
+      if (u2) { trySummon(1, u2); return; }
+      if (code === 'Minus' || code === 'KeyJ' || code === 'Numpad5') { trySuper(1); return; }
+      if (code === 'Equal' || code === 'KeyL' || code === 'Numpad6') { tryUpgrade(1); return; }
+      if (code === 'Enter' || code === 'NumpadEnter') { triggerFireOrSuper(1, true); }
     }
   });
 
-  function handleKeys() {
-    const K = Kit.keys, go = K.anyPressed(KEYS_GO);
-    if (screen === 'title') {
-      if (go) play();
-    } else if (screen === 'map') {
-      if (go) { J.select(); startLevel(TC.nextLevel(save)); }
-      else if (K.pressed('Escape')) { J.back(); toTitle(); }
-    } else if (screen === 'shop') {
-      if (go || K.pressed('Escape')) { J.back(); toTitle(); }
-    } else if (screen === 'play') {
-      // In 2P mode KeyP is P2's 4th toy (U I O P [) and KeyR is P1's 4th toy (Q W E R T).
-      if (K.pressed('Escape') || (humans === 1 && K.pressed('KeyP'))) {
-        pause(true);
-        return;
-      }
-      if (humans === 1 && K.pressed('KeyR') && !celebrate) {
-        restart();
-        return;
-      }
-      if (celebrate > 0) return;
+  Kit.lifecycle({
+    pause: function () { if (screen === 'play') setPause(true); }
+  });
 
-      if (humans === 1) {
-        if (K.pressed('Digit1')) actSummon(0, 'duck');
-        if (K.pressed('Digit2')) actSummon(0, 'frog');
-        if (K.pressed('Digit3')) actSummon(0, 'bear');
-        if (K.pressed('Digit4')) actSummon(0, 'plane');
-        if (K.pressed('Digit5')) actSummon(0, 'train');
-        if (K.anyPressed(['Digit6', 'KeyU'])) actUpgrade(0);
-        if (K.pressed('Space')) actCannon(0);
-      } else {
-        // Left Castle (P1): Digit1-Digit5 or Q W E R T, KeyF upgrade, Space cannon
-        if (K.anyPressed(['Digit1', 'KeyQ'])) actSummon(0, 'duck');
-        if (K.anyPressed(['Digit2', 'KeyW'])) actSummon(0, 'frog');
-        if (K.anyPressed(['Digit3', 'KeyE'])) actSummon(0, 'bear');
-        if (K.anyPressed(['Digit4', 'KeyR'])) actSummon(0, 'plane');
-        if (K.anyPressed(['Digit5', 'KeyT'])) actSummon(0, 'train');
-        if (K.pressed('KeyF')) actUpgrade(0);
-        if (K.pressed('Space')) actCannon(0);
-
-        // Right Castle (P2): Digit6-Digit0 or U I O P BracketLeft or Numpad1-Numpad5, KeyH upgrade, Enter cannon
-        if (K.anyPressed(['Digit6', 'KeyU', 'Numpad1'])) actSummon(1, 'duck');
-        if (K.anyPressed(['Digit7', 'KeyI', 'Numpad2'])) actSummon(1, 'frog');
-        if (K.anyPressed(['Digit8', 'KeyO', 'Numpad3'])) actSummon(1, 'bear');
-        if (K.anyPressed(['Digit9', 'KeyP', 'Numpad4'])) actSummon(1, 'plane');
-        if (K.anyPressed(['Digit0', 'BracketLeft', 'Numpad5'])) actSummon(1, 'train');
-        if (K.pressed('KeyH')) actUpgrade(1);
-        if (K.anyPressed(['Enter', 'NumpadEnter'])) actCannon(1);
-      }
-    } else if (screen === 'pause') {
-      if (K.anyPressed(['KeyP', 'Escape', 'Enter', 'NumpadEnter', 'Space'])) resume();
-      else if (K.pressed('KeyR')) restart();
-    } else if (screen === 'result' && resultLock <= 0) {
-      if (go) resultNext();
-      else if (K.pressed('KeyR')) resultAgain();
-      else if (K.pressed('Escape')) { J.back(); if (humans === 2) toTitle(); else toMap(); }
+  /* ------------------------------ Simulation & Rendering Loop ------------------------------ */
+  function pollHeldKeys(dt) {
+    if (!world || world.done) return;
+    /* Continuous unit deployment when holding key (silent when waiting for energy/cooldown) */
+    var codes1 = ['Digit1', 'Digit2', 'Digit3', 'Digit4'];
+    for (var i = 0; i < 4; i++) {
+      var t = TC.UNIT_ORDER[i], def = TC.UNITS[t];
+      var s0 = world.sides[0];
+      if (Kit.keys.down(codes1[i]) && s0.cds[t] <= 0 && s0.energy >= def.cost) TC.summon(world, 0, t);
     }
-  }
-
-  /* ---------------------------------------------------------------- loop */
-  function playStep(dt) {
-    if (celebrate > 0) {
-      popQ.length = 0;
-      celebrate -= dt;
-      if (celebrate <= 0) showResult();
-      return;
-    }
-
-    while (popQ.length) {
-      const p = popQ.shift();
-      TC.popBubble(world, p.x, p.y);
-    }
-
-    TC.step(world, dt);
-    handleEvents();
-    syncHud();
-
-    // Pointer hover cursor on sky star-bubbles
-    let overBubble = false;
-    if (ptr.inside && world.bubbles.length) {
-      for (const b of world.bubbles) {
-        if (Math.hypot(b.x - ptr.x, b.y - ptr.y) <= TC.BUBBLE_R) { overBubble = true; break; }
+    if (world.humans === 2) {
+      var codes2 = ['Digit7', 'Digit8', 'Digit9', 'Digit0'];
+      for (var j = 0; j < 4; j++) {
+        var t2 = TC.UNIT_ORDER[j], def2 = TC.UNITS[t2], s1 = world.sides[1];
+        if (Kit.keys.down(codes2[j]) && s1.cds[t2] <= 0 && s1.energy >= def2.cost) TC.summon(world, 1, t2);
       }
     }
-    setCursor(overBubble ? 'pop' : '');
-    if (intro > 0) intro = Math.max(0, intro - dt);
-  }
 
-  function decay(dt) {
-    for (let i = floats.length - 1; i >= 0; i--) {
-      const f = floats[i];
-      f.t += dt;
-      if (!calm()) f.y -= dt * 36;
-      if (f.t > 1.15) floats.splice(i, 1);
-    }
-    for (let i = rings.length - 1; i >= 0; i--) {
-      rings[i].t += dt;
-      if (rings[i].t > 0.45) rings.splice(i, 1);
+    /* Smooth Roof Cannon keyboard barrel tilt */
+    if (world.humans === 1) {
+      if (Kit.keys.anyDown(['ArrowUp', 'KeyW'])) TC.setAim(world, 0, world.sides[0].aim - 1.35 * dt);
+      if (Kit.keys.anyDown(['ArrowDown', 'KeyS'])) TC.setAim(world, 0, world.sides[0].aim + 1.35 * dt);
+      if (Kit.keys.down('Space') && world.sides[0].cannonCd <= 0) triggerFireOrSuper(0, true);
+    } else {
+      if (Kit.keys.down('KeyW')) TC.setAim(world, 0, world.sides[0].aim - 1.35 * dt);
+      if (Kit.keys.down('KeyS')) TC.setAim(world, 0, world.sides[0].aim + 1.35 * dt);
+      if (Kit.keys.down('Space') && world.sides[0].cannonCd <= 0) triggerFireOrSuper(0, true);
+      if (Kit.keys.down('ArrowUp')) TC.setAim(world, 1, world.sides[1].aim - 1.35 * dt);
+      if (Kit.keys.down('ArrowDown')) TC.setAim(world, 1, world.sides[1].aim + 1.35 * dt);
+      if ((Kit.keys.down('Enter') || Kit.keys.down('NumpadEnter')) && world.sides[1].cannonCd <= 0) triggerFireOrSuper(1, true);
     }
   }
 
   function update(dt) {
-    uiClock += dt;
-    handleKeys();
-    if (screen === 'play' && world) {
-      if (justStarted) { justStarted = false; dirty = true; }
-      else playStep(dt);
+    if (screen === 'pause') return;
+    if (screen !== 'play') {
+      if (!Kit.motion.reduced()) titleTick += dt;
+      return;
+    }
+    if (!world) return;
+
+    pollHeldKeys(dt);
+    TC.step(world, dt);
+    drainEvents(world);
+
+    cannonSpring[0].update(dt); cannonSpring[1].update(dt);
+    fortSpring[0].update(dt); fortSpring[1].update(dt);
+    fx.update(dt);
+    art.pop.update(dt);
+    art.flash.update(dt);
+    art.shake.update(dt);
+
+    if (Kit.motion.reduced()) {
+      fxCount = 0; shakeAmt = 0; rings.length = 0;
     } else {
-      justStarted = false;
-      popQ.length = 0;
+      fxCount = Math.max(0, fxCount - Math.ceil(dt * 45));
+      shakeAmt = Math.max(0, shakeAmt - dt * 2.4);
+      for (var i = rings.length - 1; i >= 0; i--) {
+        rings[i].life -= dt;
+        rings[i].r = rings[i].maxR * (1 - rings[i].life / rings[i].max);
+        if (rings[i].life <= 0) rings.splice(i, 1);
+      }
     }
-    if (screen !== 'pause') {
-      fx.update(dt);
-      shake.update(dt);
-      decay(dt);
-      if (fx.list.length > 260) fx.list.splice(0, fx.list.length - 260);
-      if (screen === 'result' && result) resultStep(dt);
-      if (resultLock > 0) resultLock = Math.max(0, resultLock - dt);
-    }
+
+    syncDeck(hudRefs.p1, 0);
+    if (hudRefs.p2) syncDeck(hudRefs.p2, 1);
+
+    if (world.done) finishBattle();
     Kit.keys.endFrame();
   }
 
-  /* -------------------------------------------------------------- render */
-  const RIVAL_TOPPERS = ['crown', 'windmill', 'rocket', 'dragon'];
-
-  function drawHpBar(ctx, x, y, w, side, label, fillCol, isRight) {
-    const pct = clamp(side.hp / side.hpMax, 0, 1);
-    A.rr(ctx, x, y, w, 40, 20);
-    ctx.fillStyle = 'rgba(30, 27, 75, 0.88)';
-    ctx.fill();
-    ctx.lineWidth = 4;
-    ctx.strokeStyle = A.INK;
-    ctx.stroke();
-
-    if (pct > 0) {
-      const fw = Math.max(24, (w - 8) * pct);
-      const fx0 = isRight ? x + w - 4 - fw : x + 4;
-      A.rr(ctx, fx0, y + 4, fw, 32, 16);
-      ctx.fillStyle = fillCol;
-      ctx.fill();
-    }
-
-    const txt = Math.ceil(side.hp) + '/' + side.hpMax;
-    A.text(ctx, txt, x + w / 2, y + 21, 22, '#ffffff', { lw: 4.5 });
-    A.text(ctx, label, isRight ? x + w - 14 : x + 14, y + 56, 20, '#ffffff', { align: isRight ? 'right' : 'left', lw: 4 });
-  }
-
-  function drawTopHud(ctx, still) {
-    const wd = TC.WORLDS[world.world] || TC.WORLDS[0];
-    const leftLabel = humans === 2 ? 'اللاعب 1' : 'قلعتك';
-    const rightLabel = humans === 2 ? 'اللاعب 2' : (world.L.bossWave ? 'ملك الألعاب' : 'قلعة الخصم');
-
-    drawHpBar(ctx, 90, 14, 286, world.sides[0], leftLabel, '#38bdf8', false);
-    drawHpBar(ctx, 904, 14, 286, world.sides[1], rightLabel, '#fb7185', true);
-
-    // Center stage pill
-    const cx = 446, cw = 388;
-    A.rr(ctx, cx, 12, cw, 48, 24);
-    ctx.fillStyle = 'rgba(30, 27, 75, 0.88)';
-    ctx.fill();
-    ctx.lineWidth = 4;
-    ctx.strokeStyle = wd.color;
-    ctx.stroke();
-
-    if (humans === 2) {
-      A.text(ctx, 'مواجهة اثنين', 640, 37, 26, '#ffd23f', { stroke: false });
-    } else {
-      A.rr(ctx, cx + cw - 88, 17, 80, 38, 19);
-      ctx.fillStyle = wd.color;
-      ctx.fill();
-      A.text(ctx, world.L.id, cx + cw - 48, 37, 24, A.INK, { stroke: false });
-      A.text(ctx, world.L.name, cx + cw - 98, 37, 22, '#ffffff', { align: 'right', stroke: false });
-
-      // Par clock on left end of center pill
-      const late = world.t > world.L.par;
-      const tStr = Math.floor(world.t) + '/' + world.L.par + 's';
-      A.text(ctx, tStr, cx + 18, 37, 20, late ? '#cbd5e1' : '#34d399', { align: 'left', stroke: false });
-    }
-
-    if (intro > 0 && !world.done) {
-      const a = clamp(Math.min(1, intro / 0.4, (2.4 - intro) / 0.25 + 0.2), 0, 1);
-      ctx.save();
-      ctx.globalAlpha = a;
-      const by = 104 - (still ? 0 : Math.max(0, intro - 2.1) * 30);
-      A.rr(ctx, 450, by - 26, 380, 52, 26);
-      ctx.fillStyle = 'rgba(30, 27, 75, 0.88)';
-      ctx.fill();
-      ctx.lineWidth = 4;
-      ctx.strokeStyle = '#ffd23f';
-      ctx.stroke();
-      const sub = humans === 2 ? 'أرسل الألعاب واهزم قلعة صديقك!' : (world.L.id + ' · ' + world.L.name);
-      A.text(ctx, sub, 640, by + 1, 25, '#ffd23f', { stroke: false });
-      ctx.restore();
-    }
-  }
-
-  function drawWorld(ctx) {
-    const still = calm(), t = world.t;
-    ctx.drawImage(A.backdrop(world.world, pixelScale()), 0, 0, W, H);
-
-    // Bouncy drum pad in middle of lane
-    A.drum(ctx, world.drum, t, still);
-
-    // Left & Right Toy Castles
-    const p1Theme = TC.THEMES[save.theme] || TC.THEMES[0];
-    const p1Top = (TC.TOPPERS[save.topper] || TC.TOPPERS[0]).id;
-    const p2Theme = humans === 2
-      ? TC.THEMES[(save.theme + 1) % TC.THEMES.length]
-      : (TC.RIVAL_THEMES[world.world] || TC.RIVAL_THEMES[0]);
-    const p2Top = humans === 2 ? 'dragon' : RIVAL_TOPPERS[world.world % RIVAL_TOPPERS.length];
-
-    A.castle(ctx, world.sides[0], p1Theme, p1Top, t, still);
-    A.castle(ctx, world.sides[1], p2Theme, p2Top, t, still);
-
-    // Ground toys first (sorted slightly by y/id), then flying paper gliders on top!
-    for (const u of world.units) {
-      if (!u.flying) A.unit(ctx, u, t, still);
-    }
-    for (const u of world.units) {
-      if (u.flying) A.unit(ctx, u, t, still);
-    }
-
-    // Projectiles & cannon shells
-    for (const sh of world.shots) A.shot(ctx, sh, t, still);
-
-    // Floating sky star-bubbles
-    for (const b of world.bubbles) A.bubble(ctx, b, t, still);
-
-    // Visual rings, particles & floating labels
-    for (const r of rings) {
-      const k = r.t / 0.45;
-      A.circle(ctx, r.x, r.y, still ? 26 : 16 + k * 42);
-      ctx.lineWidth = 5 * (1 - k) + 1;
-      ctx.strokeStyle = A.rgba(r.col, Math.max(0, 1 - k));
-      ctx.stroke();
-    }
-    fx.draw(ctx);
-    for (const f of floats) {
-      ctx.globalAlpha = clamp(1 - Math.max(0, f.t - 0.65) / 0.5, 0, 1);
-      A.text(ctx, f.txt, f.x, f.y, f.size, f.color);
-    }
-    ctx.globalAlpha = 1;
-
-    drawTopHud(ctx, still);
-  }
-
-  function drawMenu(ctx) {
-    const still = calm(), ps = pixelScale();
-    const bgWorld = screen === 'map' ? Math.floor(TC.nextLevel(save) / 3) : screen === 'shop' ? 2 : 0;
-    ctx.drawImage(A.backdrop(bgWorld, ps), 0, 0, W, H);
-
-    if (screen === 'title') {
-      // Silent cheerful toy parade marching along the bottom playroom floor!
-      const p1Theme = TC.THEMES[save.theme] || TC.THEMES[0];
-      const p1Top = (TC.TOPPERS[save.topper] || TC.TOPPERS[0]).id;
-      A.castle(ctx, { idx: 0, dir: 1, keyLv: 1, hitT: 0, cannonAnim: 0 }, p1Theme, p1Top, uiClock, still);
-      A.castle(ctx, { idx: 1, dir: -1, keyLv: 1, hitT: 0, cannonAnim: 0 }, TC.RIVAL_THEMES[0], 'dragon', uiClock, still);
-
-      const parade = ['duck', 'frog', 'bear', 'train'];
-      parade.forEach((type, idx) => {
-        const span = 860;
-        const px = still ? 260 + idx * 210 : 210 + ((uiClock * 75 + idx * 215) % span);
-        A.unit(ctx, {
-          type: type, side: 0, dir: 1, x: px, y: 668, r: TC.UNITS[type].r,
-          hp: 100, hpMax: 100, flying: false, anim: 0, hurtT: 0, phase: idx * 1.4
-        }, uiClock, still);
-      });
-      const planeX = still ? 880 : 1070 - ((uiClock * 95) % 860);
-      A.unit(ctx, {
-        type: 'plane', side: 1, dir: -1, x: planeX, y: 618, r: 22,
-        hp: 100, hpMax: 100, flying: true, anim: 0, hurtT: 0, phase: 0.7
-      }, uiClock, still);
-    }
-    fx.draw(ctx);
-  }
-
-  function render() {
-    if (screen === 'pause' && !dirty) return;
-    dirty = false;
-    const ctx = view.ctx;
+  function drawAimArc(side) {
+    var s = world.sides[side];
+    var dir = side === 0 ? 1 : -1;
+    var cx = (side === 0 ? TC.CANNON_LX : TC.CANNON_RX) + dir * 28;
+    var cy = TC.CANNON_Y + Math.sin(s.aim) * 24;
+    var vx = Math.cos(s.aim) * 820 * dir, vy = Math.sin(s.aim) * 820;
     ctx.save();
-    ctx.translate(shake.x, shake.y);
-    if (world && (screen === 'play' || screen === 'pause' || screen === 'result')) drawWorld(ctx);
-    else drawMenu(ctx);
+    ctx.fillStyle = side === 0 ? 'rgba(56, 189, 248, 0.78)' : 'rgba(251, 113, 133, 0.78)';
+    for (var i = 1; i <= 7; i++) {
+      var t = i * 0.095;
+      var px = cx + vx * t, py = cy + vy * t + 0.5 * 230 * t * t;
+      if (py > TC.GROUND_Y) break;
+      ctx.beginPath();
+      ctx.arc(px, py, i === 7 ? 6 : 4, 0, 6.283);
+      ctx.fill();
+    }
     ctx.restore();
   }
 
-  canvas.addEventListener('contextrestored', () => {
-    A.reset();
-    buildHud();
-    if (world) syncHud();
-    if (screen === 'shop') refreshShop();
-    dirty = true;
-  });
+  function drawHpBar(x, y, w, h, hp, maxHp, label, fillCol, alignRight) {
+    var ratio = maxHp > 0 ? Math.max(0, Math.min(1, hp / maxHp)) : 0;
+    art.round(ctx, x, y, w, h, 12);
+    art.outlined(ctx, '#090e1f', 3.5);
+    if (ratio > 0) {
+      var fw = Math.max(14, Math.round((w - 8) * ratio));
+      var fx0 = alignRight ? (x + w - 4 - fw) : (x + 4);
+      art.round(ctx, fx0, y + 4, fw, h - 8, 8);
+      ctx.fillStyle = fillCol;
+      ctx.fill();
+      art.gloss(ctx, fx0, y + 4, fw, h - 8);
+    }
+    ctx.font = '800 18px Fredoka';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#ffffff';
+    ctx.strokeStyle = '#1b1640';
+    ctx.lineWidth = 4;
+    ctx.textAlign = alignRight ? 'right' : 'left';
+    var tx = alignRight ? (x + w - 14) : (x + 14);
+    ctx.strokeText(label, tx, y + h / 2);
+    ctx.fillText(label, tx, y + h / 2);
 
-  if (document.fonts && document.fonts.load) {
-    document.fonts.load('700 40px Fredoka', 'قلعة 5').then(() => {
-      dirty = true;
-      if (screen === 'shop') refreshShop();
-    }, () => { /* fallback font */ });
+    var hpTxt = hp + '/' + maxHp;
+    ctx.textAlign = alignRight ? 'left' : 'right';
+    var nx = alignRight ? (x + 14) : (x + w - 14);
+    ctx.strokeText(hpTxt, nx, y + h / 2);
+    ctx.fillText(hpTxt, nx, y + h / 2);
   }
 
-  /* --------------------------------------------------- test & debug hook */
-  const pagePoint = (x, y) => {
-    const r = canvas.getBoundingClientRect();
-    return { x: r.left + x * view.scale, y: r.top + y * view.scale };
-  };
+  function drawPreviewScene() {
+    var bg = getWorldBg(0);
+    if (bg.canvas) ctx.drawImage(bg.canvas, 0, 0, TC.W, TC.H);
+    var gold = TC.ARMORS[save.armor] && TC.ARMORS[save.armor].goldTrim;
+    art.blit(ctx, getFortSprite(0, save.armor), 96, 366);
+    art.blit(ctx, getFortSprite(1, 0), TC.W - 96, 366);
+    var wob = Math.sin(titleTick * 2.2) * 0.08;
+    art.blit(ctx, getCannonSprite(0, save.cannon), TC.CANNON_LX + 12, TC.CANNON_Y, { rot: -0.18 + wob });
+    art.blit(ctx, getCannonSprite(1, 0), TC.CANNON_RX - 12, TC.CANNON_Y, { sx: -1, rot: 0.18 - wob });
 
+    /* Elevated Hero Clash Showcase visible above command box */
+    var step = ((titleTick * 3) | 0) % 2;
+    var hover = Math.sin(titleTick * 2.6) * 6;
+    art.round(ctx, 310, 382, 660, 22, 10);
+    art.outlined(ctx, '#334155', 3.5);
+    art.gloss(ctx, 314, 384, 652, 10);
+
+    art.blit(ctx, getUnitSprite(0, 'mech', gold, step, 0), 420, 336, { sx: 1.08, sy: 1.08 });
+    art.blit(ctx, getUnitSprite(0, 'sword', gold, step, 0), 525, 354);
+    art.blit(ctx, getCrateSprite(), 640, 258 + hover, { rot: wob * 0.8 });
+    art.blit(ctx, getUnitSprite(1, 'dino', false, step, 0), 760, 350, { sx: -1.05, sy: 1.05 });
+    art.blit(ctx, getUnitSprite(1, 'boss', false, step, 0), 875, 330, { sx: -1 });
+    art.blit(ctx, getUnitSprite(1, 'balloon', false, step, 0), 825, 214 - hover, { sx: -1 });
+
+    /* Cannon plasma shot arc */
+    ctx.beginPath(); ctx.arc(278, 240, 10, 0, 6.283); art.outlined(ctx, '#fde047', 3);
+    ctx.beginPath(); ctx.arc(242, 248, 6, 0, 6.283); ctx.fillStyle = '#38bdf8'; ctx.fill();
+    art.vignette(ctx, TC.W, TC.H, 0.28);
+  }
+
+  function render() {
+    if (screen === 'pause' && pauseDrawn) return;
+    if (screen === 'pause') pauseDrawn = true;
+
+    ctx.clearRect(0, 0, TC.W, TC.H);
+    if (!world) {
+      drawPreviewScene();
+      return;
+    }
+
+    ctx.save();
+    art.shake.apply(ctx);
+
+    var bg = getWorldBg(world.worldIdx);
+    if (bg.canvas) ctx.drawImage(bg.canvas, 0, 0, TC.W, TC.H);
+
+    /* Fortresses & Roof Cannons */
+    var gold = TC.ARMORS[save.armor] && TC.ARMORS[save.armor].goldTrim;
+    art.blit(ctx, getFortSprite(0, save.armor), 96, 366, { sx: fortSpring[0].sx, sy: fortSpring[0].sy });
+    art.blit(ctx, getFortSprite(1, world.worldIdx), TC.W - 96, 366, { sx: fortSpring[1].sx, sy: fortSpring[1].sy });
+
+    if (screen === 'play') {
+      drawAimArc(0);
+      if (world.humans === 2) drawAimArc(1);
+    }
+
+    art.blit(ctx, getCannonSprite(0, save.cannon), TC.CANNON_LX + 12, TC.CANNON_Y, {
+      rot: world.sides[0].aim, sx: cannonSpring[0].sy, sy: cannonSpring[0].sx
+    });
+    art.blit(ctx, getCannonSprite(1, 0), TC.CANNON_RX - 12, TC.CANNON_Y, {
+      sx: -cannonSpring[1].sy, sy: cannonSpring[1].sx, rot: -world.sides[1].aim
+    });
+
+    /* Sky Bonus Energy Crates */
+    var crateSpr = getCrateSprite();
+    for (var ci = 0; ci < world.crates.length; ci++) {
+      var cr = world.crates[ci];
+      art.blit(ctx, crateSpr, cr.x, cr.y - 10, { rot: Math.sin(cr.phase) * 0.1 });
+    }
+
+    /* Marching Toy Squads */
+    for (var i = 0; i < world.units.length; i++) {
+      var u = world.units[i];
+      var step = ((u.anim * 1.4) | 0) & 1;
+      var spr = getUnitSprite(u.side, u.type, u.side === 0 && gold, step, world.worldIdx);
+      if (!u.flying) art.shadow(ctx, u.x - u.r, TC.GROUND_Y - u.r * 1.4, u.r * 2, u.r * 1.5, 0.45);
+      var jumpSquash = u.atkT > 0 ? 1.12 : 1;
+      art.blit(ctx, spr, u.x, u.y - spr.h * 0.45, {
+        sx: (u.side === 0 ? 1 : -1) * jumpSquash,
+        sy: u.hurtT > 0 ? 0.9 : 1
+      });
+      if (u.hp < u.hpMax) {
+        var bw = Math.max(30, u.r * 1.6), bx = u.x - bw / 2, by = u.y - spr.h - 6;
+        ctx.fillStyle = '#090e1f';
+        ctx.fillRect(bx - 1, by - 1, bw + 2, 7);
+        ctx.fillStyle = u.side === 0 ? '#4ade80' : '#fb7185';
+        ctx.fillRect(bx, by, bw * (u.hp / u.hpMax), 5);
+      }
+    }
+
+    /* Projectiles (Cannonballs, Missiles, Lasers, Super Meteors) */
+    for (var pi = 0; pi < world.projs.length; pi++) {
+      var p = world.projs[pi];
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(Math.atan2(p.vy, p.vx));
+      if (p.kind === 'meteor') {
+        art.round(ctx, -28, -12, 42, 24, 12);
+        art.outlined(ctx, '#f97316', 3);
+        ctx.beginPath(); ctx.arc(8, 0, 12, 0, 6.283);
+        cFill(ctx, '#fef08a');
+      } else if (p.kind === 'laser') {
+        art.round(ctx, -16, -4, 32, 8, 4);
+        art.outlined(ctx, p.side === 0 ? '#38bdf8' : '#fb7185', 2.5);
+      } else {
+        art.round(ctx, -10, -7, 20, 14, 7);
+        art.outlined(ctx, p.side === 0 ? '#fde047' : '#fb7185', 3);
+      }
+      ctx.restore();
+    }
+
+    /* Shockwave Rings & Particles */
+    for (var ri = 0; ri < rings.length; ri++) {
+      var rg = rings[ri];
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, rg.life / rg.max);
+      ctx.strokeStyle = rg.color;
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.ellipse(rg.x, rg.y, rg.r, rg.r * 0.42, 0, 0, 6.283);
+      ctx.stroke();
+      ctx.restore();
+    }
+    fx.draw(ctx);
+    art.pop.draw(ctx);
+    ctx.restore();
+
+    art.flash.draw(ctx, TC.W, TC.H);
+
+    /* Top Fortress Health Bars & Stage Badge (clear of #btnPause at left & .sg-mute at right) */
+    var s0 = world.sides[0], s1 = world.sides[1];
+    drawHpBar(82, 18, 360, 34, s0.hp, s0.hpMax, world.humans === 2 ? 'لاعب 1' : 'قلعتك', '#22c55e', false);
+    drawHpBar(790, 18, 360, 34, s1.hp, s1.hpMax, world.humans === 2 ? 'لاعب 2' : 'الخصم', '#ef4444', true);
+
+    art.round(ctx, 516, 14, 248, 42, 20);
+    art.outlined(ctx, '#0f172a', 3.5);
+    ctx.font = '800 19px Fredoka';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#fde047';
+    var badge = world.humans === 2 ? 'مواجهة لاعبين' : (world.stage.id + ' • ' + world.stage.name);
+    ctx.fillText(badge, 640, 35);
+  }
+
+  function cFill(c, col) { c.fillStyle = col; c.fill(); }
+
+  /* ------------------------------ Public Debug/Test Handle & Ready ------------------------------ */
   window.__game = {
     get state() {
-      const w = world;
+      var s0 = world ? world.sides[0] : null, s1 = world ? world.sides[1] : null;
       return {
         screen: screen,
-        paused: screen === 'pause',
-        humans: humans,
-        level: cur,
-        id: w ? w.L.id : '',
-        time: w ? Math.round(w.t * 1000) / 1000 : 0,
-        energy: w ? Math.floor(w.sides[0].energy) : 0,
-        energyRight: w ? Math.floor(w.sides[1].energy) : 0,
-        keyLv: w ? w.sides[0].keyLv + 1 : 1,
-        keyLvRight: w ? w.sides[1].keyLv + 1 : 1,
-        p1Spawned: w ? w.spawned[0] : 0,
-        p2Spawned: w ? w.spawned[1] : 0,
-        units: w ? w.units.length : 0,
-        bubbles: w ? w.bubbles.map(b => ({ x: Math.round(b.x), y: Math.round(b.y) })) : [],
-        hpLeft: w ? w.sides[0].hp : 0,
-        hpRight: w ? w.sides[1].hp : 0,
-        done: !!(w && w.done),
-        winner: w ? w.winner : 0,
-        stars: result ? result.stars : 0,
-        celebrate: celebrate > 0,
-        tier: dda.tier,
-        fx: fx.list.length,
-        shake: shake.power
+        id: world ? world.stage.id : '',
+        level: world ? world.level : 0,
+        worldIdx: world ? world.worldIdx : 0,
+        humans: world ? world.humans : 1,
+        diff: save.diff,
+        time: world ? Math.round(world.t * 1000) / 1000 : 0,
+        energy: s0 ? Math.round(s0.energy * 100) / 100 : 0,
+        energyMax: s0 ? s0.energyMax : 0,
+        energyR: s1 ? Math.round(s1.energy * 100) / 100 : 0,
+        genLv: s0 ? s0.genLv + 1 : 1,
+        superCharge: s0 ? Math.round(s0.superCharge) : 0,
+        aim: s0 ? Math.round(s0.aim * 1000) / 1000 : 0,
+        shots: s0 ? s0.shots : 0,
+        shotsR: s1 ? s1.shots : 0,
+        hpL: s0 ? s0.hp : 0, hpLMax: s0 ? s0.hpMax : 0,
+        hpR: s1 ? s1.hp : 0, hpRMax: s1 ? s1.hpMax : 0,
+        p1Spawned: world ? world.spawned[0] : 0,
+        p2Spawned: world ? world.spawned[1] : 0,
+        units: world ? world.units.length : 0,
+        crates: world ? world.crates.length : 0,
+        cratesPopped: world ? world.cratesPopped : 0,
+        fx: fxCount,
+        shake: Math.round(shakeAmt * 100) / 100,
+        winner: world ? world.winner : 0
       };
     },
-    get save() { return JSON.parse(JSON.stringify(save)); },
-    point: pagePoint
+    get save() { return save; },
+    get world() { return world; },
+    point: function (x, y) {
+      var r = canvas.getBoundingClientRect();
+      return { x: r.left + x * view.scale, y: r.top + y * view.scale };
+    }
   };
 
-  buildHud();
-  buildMap();
-  buildShop();
-  Kit.muteButton();
-  Kit.lifecycle({
-    pause: () => pause(false),
-    reset: () => { popQ.length = 0; }
-  });
-  toTitle();
-  Kit.loop(update, render);
+  showScreen('title');
+  art.loop(update, render);
   Kit.ready();
 })();

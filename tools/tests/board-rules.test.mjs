@@ -166,3 +166,105 @@ test('kid-style players can beat the easy computer but rarely the hard one', () 
   assert.ok(kidWins('tic-tac-toe', 'easy', 200) > 0);
   assert.equal(kidWins('tic-tac-toe', 'hard', 100), 0);
 });
+
+test('Vanishing tic-tac-toe caps each player at 3 marks, removes oldest before win check and never draws', () => {
+  let state = rules.create('tic-tac-toe', { variant: 'twist' });
+  assert.equal(state.variant, 'twist');
+  assert.deepEqual(state.queues, { 1: [], 2: [] });
+
+  // P1: 0, P2: 3, P1: 1, P2: 4, P1: 7, P2: 6 -> both have 3 marks, P1's oldest (0) is marked vanishing.
+  for (const mv of [0, 3, 1, 4, 7, 6]) state = rules.play(state, mv);
+  assert.equal(state.moves, 6);
+  assert.deepEqual(state.queues, { 1: [0, 1, 7], 2: [3, 4, 6] });
+  assert.equal(state.vanishing, 0);
+
+  // P1 plays 2: cell 0 vanishes FIRST, so [0, 1, 2] is NOT a win!
+  state = rules.play(state, 2);
+  assert.equal(state.vanished, 0);
+  assert.equal(state.board[0], 0);
+  assert.equal(state.winner, 0);
+  assert.equal(state.draw, false);
+  assert.deepEqual(state.queues[1], [1, 7, 2]);
+  assert.equal(state.vanishing, 3);
+
+  // Cell 0 is empty again, so P2 can play on 0 (while P2's oldest cell 3 vanishes).
+  state = rules.play(state, 0);
+  assert.equal(state.vanished, 3);
+  assert.equal(state.board[3], 0);
+  assert.equal(state.board[0], 2);
+
+  // P1 has [1, 7, 2]; playing 8 shifts 1 out -> [7, 2, 8]; P2 plays 1 (shifts 4 -> [6, 0, 1]);
+  // then P1 plays 5 -> shifts 7 out, completing right-column win [2, 5, 8]!
+  state = rules.play(state, 8);
+  state = rules.play(state, 1);
+  state = rules.play(state, 5);
+  assert.equal(state.winner, 1);
+  assert.deepEqual([...state.winning].sort((a, b) => a - b), [2, 5, 8]);
+  assert.equal(state.draw, false);
+});
+
+test('Power-Disc Connect 4 supports Anvil top-crush on full columns and Zap flip-below wins', () => {
+  // Fill column 0 alternating P1 and P2: bottom..top = 1, 2, 1, 2, 1, 2 (row 0 index 0 is P2).
+  let state = rules.create('connect-four', { variant: 'twist' });
+  for (let i = 0; i < 6; i++) state = rules.play(state, 0);
+  assert.equal(state.board[0], 2);
+  // Normal drop in full column 0 is illegal, but Anvil is legal because top disc belongs to P2!
+  assert.equal(rules.play(state, 0), null);
+  assert.equal(rules.legalMoves(state).includes(0), false);
+  assert.equal(rules.legalMoves(state, 'anvil').includes(0), true);
+
+  const crushed = rules.play(state, 0, 'anvil');
+  assert.ok(crushed);
+  assert.equal(crushed.last, 0);
+  assert.equal(crushed.affected, 0);
+  assert.equal(crushed.board[0], 1);
+  assert.equal(crushed.powers[1].anvil, 0);
+  // Second anvil by P1 is rejected once charge is spent.
+  const afterP2 = rules.play(crushed, 1);
+  assert.equal(rules.play(afterP2, 1, 'anvil'), null);
+
+  // Zap flips opponent disc beneath it and detects a 4-in-a-row created by the flipped disc!
+  // Build P1 discs at row 5 cols 1, 2, 3 and a P2 blocker at row 5 col 0 (index 35):
+  let zapGame = rules.create('connect-four', { variant: 'twist' });
+  for (const mv of [1, 0, 2, 6, 3, 6]) zapGame = rules.play(zapGame, mv);
+  assert.equal(zapGame.board[35], 2); // P2 at bottom of col 0
+  const zapped = rules.play(zapGame, 0, 'zap');
+  assert.ok(zapped);
+  assert.equal(zapped.last, 28);      // P1 Zap landed at row 4 col 0
+  assert.equal(zapped.affected, 35);  // Flipped P2 at row 5 col 0 to P1!
+  assert.equal(zapped.board[35], 1);
+  assert.equal(zapped.winner, 1);
+  assert.deepEqual([...zapped.winning].sort((a, b) => a - b), [35, 36, 37, 38]);
+  assert.equal(zapped.powers[1].zap, 0);
+});
+
+test('Twist AI plays legal Vanishing XO and Power-Disc Connect 4 moves without mutating state', () => {
+  const random = seeded(99);
+  // Hard Connect 4 Twist AI spots an immediate Zap win when both open ends (cols 0 and 4) are blocked by P2!
+  let zapWinState = rules.create('connect-four', { variant: 'twist' });
+  for (const mv of [1, 0, 2, 4, 3, 6]) zapWinState = rules.play(zapWinState, mv);
+  const snap = structuredClone(zapWinState);
+  const aiChoice = rules.chooseMove(zapWinState, 'hard', random);
+  assert.deepEqual(zapWinState, snap);
+  assert.equal(aiChoice.power, 'zap');
+  assert.ok(aiChoice.col === 0 || aiChoice.col === 4);
+  assert.equal(rules.play(zapWinState, aiChoice).winner, 1);
+
+  // Simulate full Twist rounds across levels for both games.
+  for (const game of ['tic-tac-toe', 'connect-four']) {
+    for (const level of ['easy', 'medium', 'hard']) {
+      let state = rules.create(game, { variant: 'twist' });
+      let guard = 0;
+      while (!state.winner && !state.draw && guard++ < 80) {
+        const before = structuredClone(state);
+        const action = rules.chooseMove(state, level, random);
+        assert.deepEqual(state, before);
+        const next = rules.play(state, action);
+        assert.ok(next, `${game} twist ${level} action ${JSON.stringify(action)} should be legal`);
+        state = next;
+      }
+      if (game === 'tic-tac-toe') assert.equal(state.draw, false);
+    }
+  }
+});
+

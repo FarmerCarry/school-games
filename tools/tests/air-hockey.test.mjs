@@ -155,3 +155,77 @@ test('Air Hockey keeps a won match when Menu is chosen from a pause during the s
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('sg:air-hockey:save')));
   assert.deepEqual([saved.matches, saved.wins[ending.bot], saved.beaten[ending.bot]], [1, 1, true], 'the win counts and unlocks the next bot');
 });
+
+test('Air Hockey keeps the OS cursor visible, defaults power-pucks ON, and unlocks all 4 rivals and arenas', async t => {
+  const page = await hockey(t);
+  const info = await page.evaluate(() => {
+    const titleCursor = getComputedStyle(document.getElementById('game')).cursor;
+    const defaultChaos = __game.save.chaos && document.getElementById('chaosBtn').classList.contains('on');
+    const botIds = [...document.querySelectorAll('#bots .bot:not([disabled])')].map(b => b.dataset.bot);
+    const arenaIds = [...document.querySelectorAll('#arenaBar .seg.ar:not([disabled])')].map(b => b.dataset.arena);
+    document.querySelector('#bots .bot[data-bot="insane"]').click();
+    document.querySelector('#arenaBar .seg.ar[data-arena="space"]').click();
+    document.getElementById('chaosBtn').click();
+    const toggledOff = !__game.save.chaos;
+    document.getElementById('chaosBtn').click();
+    document.getElementById('btnPlay').click();
+    runtime.step(150);
+    const playCursor = getComputedStyle(document.getElementById('game')).cursor;
+    return {
+      titleCursor, playCursor, defaultChaos, toggledOff, chaosBackOn: __game.st.chaos,
+      botIds, arenaIds, selectedBot: __game.st.bot.id, selectedArena: __game.st.table.id
+    };
+  });
+  assert.notEqual(info.titleCursor, 'none');
+  assert.notEqual(info.playCursor, 'none');
+  assert.equal(info.defaultChaos, true);
+  assert.equal(info.toggledOff, true);
+  assert.equal(info.chaosBackOn, true);
+  assert.deepEqual(info.botIds, ['easy', 'medium', 'hard', 'insane']);
+  assert.deepEqual(info.arenaIds, ['neon', 'lava', 'cyber', 'space']);
+  assert.equal(info.selectedBot, 'insane');
+  assert.equal(info.selectedArena, 'space');
+});
+
+test('Air Hockey supports keyboard Turbo Smash and all five power-up pucks', async t => {
+  const page = await hockey(t);
+  await page.evaluate(() => {
+    document.getElementById('btnPlay').click();
+    runtime.step(150);
+    __game.st.mallets[0].x = 300;
+    __game.st.mallets[0].y = 406;
+    __game.shot(0, 0, 395, 406);
+  });
+  await page.keyboard.down('KeyD');
+  await page.keyboard.press('Space');
+  const smash = await page.evaluate(() => {
+    runtime.step(10);
+    const p = __game.st.pucks[0];
+    return { vx: p.vx, rocket: !!__game.save.awards.rocket };
+  });
+  await page.keyboard.up('KeyD');
+  assert.ok(smash.vx > 1500, `keyboard Turbo Smash launches puck fast (${smash.vx})`);
+  assert.equal(smash.rocket, true);
+
+  const powers = await page.evaluate(() => {
+    __game.shot(250, 0, 640, 406);
+    __game.power('multi', -1);
+    const afterMulti = __game.st.pucks.length;
+    __game.power('big', -1);
+    runtime.step(15);
+    const bigRadius = __game.st.mallets[0].r;
+    __game.power('tiny', -1);
+    const tinyTimer = __game.st.tiny[0];
+    __game.power('freeze', -1);
+    const foeFrozen = __game.st.mallets[1].frozen;
+    __game.power('fire', -1);
+    const fireTimer = __game.st.pucks[0].fire;
+    return { afterMulti, bigRadius, tinyTimer, foeFrozen, fireTimer };
+  });
+  assert.equal(powers.afterMulti, 2);
+  assert.ok(powers.bigRadius > 55);
+  assert.ok(powers.tinyTimer > 5);
+  assert.ok(powers.foeFrozen > 1.5);
+  assert.equal(powers.fireTimer, 5);
+});
+

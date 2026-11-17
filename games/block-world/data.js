@@ -1,9 +1,14 @@
-/* Block World — data: blocks, items, procedural pixel textures, recipes, quests. */
+/* Block World — data: blocks, items, procedural 16x16 pixel art, recipes, quests, skins. */
 (function () {
   'use strict';
   var BW = window.BW = window.BW || {};
 
-  // ------------------------------------------------------------------ ids
+  BW.TS = 16;
+  BW.W = 360;
+  BW.H = 138;
+  BW.SEA = 58;
+  BW.FLOWER = 999;
+
   var B = {
     AIR: 0, GRASS: 1, DIRT: 2, STONE: 3, SAND: 4, TRUNK: 5, LEAVES: 6, LOG: 7, PLANKS: 8,
     COAL_ORE: 9, COPPER_ORE: 10, IRON_ORE: 11, GOLD_ORE: 12, DIAMOND_ORE: 13, BEDROCK: 14,
@@ -12,499 +17,516 @@
     PINE_LEAVES: 28, CACTUS: 29, TALLGRASS: 30, FLOWER_RED: 31, FLOWER_YELLOW: 32, FLOWER_BLUE: 33,
     SAPLING: 34, PUMPKIN: 35, JACK: 36, MUSHROOM: 37, CLAY: 38, LANTERN: 39,
     IRON_BLOCK: 40, GOLD_BLOCK: 41, DIAMOND_BLOCK: 42, COPPER_BLOCK: 43, SANDSTONE: 44, DEADBUSH: 45,
-    WOOL: 50 // 50..60 = white, red, orange, yellow, lime, green, cyan, blue, purple, pink, black
+    TNT: 46, SPRING: 47, CHEST: 48, RUBY_ORE: 49,
+    WOOL: 50, // 50..60
+    VAULT_BRICK: 62, CRYSTAL: 63
   };
+
   var I = {
     STICK: 100, COAL: 101, COPPER_INGOT: 102, IRON_INGOT: 103, GOLD_INGOT: 104, DIAMOND: 105, DYE: 106,
-    DOOR: 107, PICK_WOOD: 110, PICK_STONE: 111, PICK_IRON: 112, PICK_DIAMOND: 113
+    DOOR: 107, RUBY: 108, SLIME_GEL: 109,
+    PICK_WOOD: 110, PICK_STONE: 111, PICK_IRON: 112, PICK_DIAMOND: 113,
+    JET_BOOTS: 114, PICK_RUBY: 115
   };
+
   var WOOL_NAMES = ['أبيض', 'أحمر', 'برتقالي', 'أصفر', 'ليموني', 'أخضر', 'سماوي', 'أزرق', 'بنفسجي', 'وردي', 'أسود'];
   var WOOL_COLS = ['#f4f4f4', '#e8413c', '#f89632', '#ffd93d', '#8ae03a', '#2f9e44', '#28c4d8', '#3b6fe0', '#9b4fe2', '#ff8fc8', '#2d2d36'];
   BW.B = B; BW.I = I; BW.WOOL_NAMES = WOOL_NAMES; BW.WOOL_COLS = WOOL_COLS;
 
-  // --------------------------------------------------------- block table
-  // solid: collides with player. opaque: blocks light. hard: seconds by hand.
-  // tier: pickaxe tier needed (0 hand, 1 wood, 2 stone, 3 iron). mat: sound.
-  // support: needs a solid block below. attach: needs any neighbour/wall.
-  var BLOCKS = [];
-  function def(id, o) {
-    var d = {
-      id: id, name: o.name, solid: o.solid !== false, opaque: o.opaque !== undefined ? o.opaque : o.solid !== false,
-      hard: o.hard == null ? 1 : o.hard, tier: o.tier || 0, drop: o.drop === undefined ? id : o.drop,
-      light: o.light || 0, mat: o.mat || 'stone', cols: o.cols || ['#888'], support: !!o.support, attach: !!o.attach,
-      replace: !!o.replace, climb: !!o.climb, liquid: !!o.liquid, animalSolid: !!o.animalSolid, dim: o.dim || 0,
-      noEdge: !!o.noEdge
+  function mulberry(a) {
+    return function () {
+      a |= 0; a = a + 0x6D2B79F5 | 0;
+      var t = Math.imul(a ^ a >>> 15, 1 | a);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
     };
-    BLOCKS[id] = d;
-    return d;
   }
-  def(B.AIR, { name: 'هواء', solid: false, opaque: false, hard: 0, drop: 0, replace: true });
-  def(B.GRASS, { name: 'عشب', hard: 0.5, drop: B.DIRT, mat: 'dirt', cols: ['#5cc23c', '#8a5a36'] });
-  def(B.DIRT, { name: 'تراب', hard: 0.45, mat: 'dirt', cols: ['#8a5a36', '#6e4527'] });
-  def(B.STONE, { name: 'حجر', hard: 1.4, tier: 1, mat: 'stone', cols: ['#8e8e96', '#76767e'] });
-  def(B.SAND, { name: 'رمل', hard: 0.4, mat: 'sand', cols: ['#f0d98c', '#dcc271'] });
-  def(B.TRUNK, { name: 'جذع شجرة', solid: false, opaque: false, hard: 1.0, drop: B.LOG, mat: 'wood', cols: ['#7a5230', '#553619'], noEdge: true });
-  def(B.LEAVES, { name: 'أوراق شجر', solid: false, opaque: false, dim: 2, hard: 0.15, drop: 0, mat: 'leaf', cols: ['#3fa535', '#2a7a25', '#5fcf50'] });
-  def(B.LOG, { name: 'خشب', hard: 1.0, mat: 'wood', cols: ['#7a5230', '#553619'] });
-  def(B.PLANKS, { name: 'ألواح خشب', hard: 0.9, mat: 'wood', cols: ['#c8955a', '#8f6334'] });
-  def(B.COAL_ORE, { name: 'خام الفحم', hard: 1.7, tier: 1, drop: I.COAL, mat: 'stone', cols: ['#8e8e96', '#2a2a2e'] });
-  def(B.COPPER_ORE, { name: 'خام النحاس', hard: 1.9, tier: 1, mat: 'stone', cols: ['#8e8e96', '#e07a3c'] });
-  def(B.IRON_ORE, { name: 'خام الحديد', hard: 2.3, tier: 2, mat: 'stone', cols: ['#8e8e96', '#e8c4a8'] });
-  def(B.GOLD_ORE, { name: 'خام الذهب', hard: 2.6, tier: 3, mat: 'stone', cols: ['#8e8e96', '#ffd23a'] });
-  def(B.DIAMOND_ORE, { name: 'خام الألماس', hard: 3.2, tier: 3, drop: I.DIAMOND, mat: 'stone', cols: ['#8e8e96', '#4ef0e6'] });
-  def(B.BEDROCK, { name: 'صخر القاع', hard: Infinity, tier: 99, drop: 0, mat: 'stone', cols: ['#333'] });
-  def(B.TORCH, { name: 'شعلة', solid: false, opaque: false, hard: 0.05, light: 14, mat: 'wood', attach: true, cols: ['#ffcc33', '#8a5f38'] });
-  def(B.TABLE, { name: 'طاولة الصنع', hard: 0.9, mat: 'wood', cols: ['#c8955a', '#6a4526'] });
-  def(B.FURNACE, { name: 'فرن', hard: 1.6, tier: 1, light: 6, mat: 'stone', cols: ['#8e8e96', '#ff8a2a'] });
-  def(B.GLASS, { name: 'زجاج', opaque: false, hard: 0.4, mat: 'glass', cols: ['#dff6ff', '#a8dcf0'] });
-  def(B.BRICKS, { name: 'طوب', hard: 1.6, tier: 1, mat: 'stone', cols: ['#b8483a', '#e8d8c8'] });
-  def(B.STONE_BRICKS, { name: 'طوب حجري', hard: 1.6, tier: 1, mat: 'stone', cols: ['#9a9aa2', '#6b6b73'] });
-  def(B.DOOR_B, { name: 'باب', solid: false, opaque: false, hard: 0.8, drop: I.DOOR, mat: 'wood', support: true, animalSolid: true, cols: ['#b98549', '#6a4526'] });
-  def(B.DOOR_T, { name: 'باب', solid: false, opaque: false, hard: 0.8, drop: 0, mat: 'wood', animalSolid: true, cols: ['#b98549', '#6a4526'] });
-  def(B.LADDER, { name: 'سُلّم', solid: false, opaque: false, hard: 0.4, mat: 'wood', climb: true, attach: true, cols: ['#b98549'] });
-  def(B.WATER, { name: 'ماء', solid: false, opaque: false, hard: Infinity, tier: 99, drop: 0, liquid: true, replace: true, mat: 'water', cols: ['#3b8fe8', '#8fd0ff'] });
-  def(B.SNOW_GRASS, { name: 'عشب مثلج', hard: 0.5, drop: B.DIRT, mat: 'snow', cols: ['#f4fbff', '#8a5a36'] });
-  def(B.SNOW, { name: 'ثلج', hard: 0.3, mat: 'snow', cols: ['#f4fbff', '#cfe4f4'] });
-  def(B.ICE, { name: 'جليد', opaque: false, hard: 0.5, mat: 'glass', cols: ['#bfe9ff', '#8fd0f4'] });
-  def(B.PINE_LEAVES, { name: 'أوراق الصنوبر', solid: false, opaque: false, dim: 2, hard: 0.15, drop: 0, mat: 'leaf', cols: ['#23703a', '#f4fbff'] });
-  def(B.CACTUS, { name: 'صبّار', solid: false, opaque: false, hard: 0.4, mat: 'leaf', support: true, animalSolid: true, cols: ['#4caf3c', '#2f7a28'] });
-  def(B.TALLGRASS, { name: 'عشب طويل', solid: false, opaque: false, hard: 0.05, drop: 0, mat: 'leaf', support: true, replace: true, cols: ['#5cc23c'] });
-  def(B.FLOWER_RED, { name: 'زهرة حمراء', solid: false, opaque: false, hard: 0.05, mat: 'leaf', support: true, cols: ['#ff4a4a', '#4fae33'] });
-  def(B.FLOWER_YELLOW, { name: 'زهرة صفراء', solid: false, opaque: false, hard: 0.05, mat: 'leaf', support: true, cols: ['#ffe03a', '#4fae33'] });
-  def(B.FLOWER_BLUE, { name: 'زهرة زرقاء', solid: false, opaque: false, hard: 0.05, mat: 'leaf', support: true, cols: ['#4a8cff', '#4fae33'] });
-  def(B.SAPLING, { name: 'شتلة', solid: false, opaque: false, hard: 0.05, mat: 'leaf', support: true, cols: ['#4fbf40', '#7a5230'] });
-  def(B.PUMPKIN, { name: 'يقطينة', hard: 0.6, mat: 'wood', cols: ['#f28a1e', '#c9661a'] });
-  def(B.JACK, { name: 'فانوس اليقطين', hard: 0.6, light: 13, mat: 'wood', cols: ['#f28a1e', '#ffe066'] });
-  def(B.MUSHROOM, { name: 'فطر مضيء', solid: false, opaque: false, hard: 0.1, light: 9, mat: 'leaf', support: true, cols: ['#4ff0ff', '#b8fbff'] });
-  def(B.CLAY, { name: 'طين', hard: 0.6, mat: 'dirt', cols: ['#9fa8c0', '#8a93ab'] });
-  def(B.LANTERN, { name: 'فانوس', hard: 0.6, light: 15, opaque: false, mat: 'glass', cols: ['#ffe066', '#555'] });
-  def(B.IRON_BLOCK, { name: 'مكعب حديد', hard: 2.5, tier: 1, mat: 'metal', cols: ['#e6e6ee', '#b8b8c4'] });
-  def(B.GOLD_BLOCK, { name: 'مكعب ذهب', hard: 2.5, tier: 1, mat: 'metal', cols: ['#ffd84a', '#e8a820'] });
-  def(B.DIAMOND_BLOCK, { name: 'مكعب ألماس', hard: 2.5, tier: 1, mat: 'metal', cols: ['#6ff5ee', '#2fc6c0'] });
-  def(B.COPPER_BLOCK, { name: 'مكعب نحاس', hard: 2.5, tier: 1, mat: 'metal', cols: ['#e8844a', '#b85a2a'] });
-  def(B.SANDSTONE, { name: 'حجر رملي', hard: 1.0, tier: 1, mat: 'stone', cols: ['#e2c47a', '#c8a85e'] });
-  def(B.DEADBUSH, { name: 'شجيرة يابسة', solid: false, opaque: false, hard: 0.05, drop: I.STICK, mat: 'leaf', support: true, replace: true, cols: ['#a07840'] });
-  for (var w = 0; w < 11; w++) def(B.WOOL + w, { name: 'صوف ' + WOOL_NAMES[w], hard: 0.5, mat: 'wool', cols: [WOOL_COLS[w]] });
+  BW.mulberry = mulberry;
+
+  // Compact block builder: flags string ('N'=non-solid, 'T'=transparent, 'S'=support, 'A'=attach,
+  // 'R'=replace, 'C'=climb, 'L'=liquid, 'M'=animalSolid, 'E'=noEdge), ex = [tier, drop, light, dim]
+  var BLOCKS = [];
+  function b(id, name, hard, mat, cols, fl, ex) {
+    fl = fl || ''; ex = ex || [];
+    var solid = fl.indexOf('N') < 0;
+    BLOCKS[id] = {
+      id: id, name: name, solid: solid, opaque: fl.indexOf('T') < 0 ? solid : false,
+      hard: hard, tier: ex[0] || 0, drop: ex[1] === undefined ? id : ex[1],
+      light: ex[2] || 0, dim: ex[3] || 0, mat: mat || 'stone', cols: cols || ['#888'],
+      support: fl.indexOf('S') >= 0, attach: fl.indexOf('A') >= 0, replace: fl.indexOf('R') >= 0,
+      climb: fl.indexOf('C') >= 0, liquid: fl.indexOf('L') >= 0, animalSolid: fl.indexOf('M') >= 0,
+      noEdge: fl.indexOf('E') >= 0
+    };
+  }
+
+  b(B.AIR, 'هواء', 0, 'stone', ['#888'], 'NTR', [0, 0]);
+  b(B.GRASS, 'عشب', 0.34, 'dirt', ['#5ce046', '#8a5a36'], '', [0, B.DIRT]);
+  b(B.DIRT, 'تراب', 0.30, 'dirt', ['#8a5a36', '#6e4527']);
+  b(B.STONE, 'حجر', 1.05, 'stone', ['#8e8e96', '#72727c']);
+  b(B.SAND, 'رمل', 0.28, 'sand', ['#f3dc8c', '#dcc271']);
+  b(B.TRUNK, 'جذع شجرة', 0.54, 'wood', ['#7a5230', '#553619'], 'NTE', [0, B.LOG]);
+  b(B.LEAVES, 'أوراق شجر', 0.14, 'leaf', ['#3fb535', '#2a7a25', '#68db58'], 'NT', [0, 0, 0, 2]);
+  b(B.LOG, 'خشب', 0.52, 'wood', ['#7a5230', '#553619']);
+  b(B.PLANKS, 'ألواح خشب', 0.46, 'wood', ['#c8955a', '#8f6334']);
+  b(B.COAL_ORE, 'خام الفحم', 1.25, 'stone', ['#8e8e96', '#26262c'], '', [1, I.COAL]);
+  b(B.COPPER_ORE, 'خام النحاس', 1.35, 'stone', ['#8e8e96', '#eb7f3d'], '', [1]);
+  b(B.IRON_ORE, 'خام الحديد', 1.55, 'stone', ['#8e8e96', '#ecd0b4'], '', [2]);
+  b(B.GOLD_ORE, 'خام الذهب', 1.75, 'stone', ['#8e8e96', '#ffd63a'], '', [2]);
+  b(B.DIAMOND_ORE, 'خام الألماس', 2.05, 'stone', ['#8e8e96', '#4ef6ec'], '', [3, I.DIAMOND, 5]);
+  b(B.BEDROCK, 'صخر القاع', Infinity, 'stone', ['#2c2c34'], '', [99, 0]);
+  b(B.TORCH, 'شعلة', 0.06, 'wood', ['#ffd23f', '#8a5f38'], 'NTA', [0, B.TORCH, 14]);
+  b(B.TABLE, 'طاولة الصنع', 0.48, 'wood', ['#c8955a', '#6a4526']);
+  b(B.FURNACE, 'فرن', 0.95, 'stone', ['#8e8e96', '#ff8a2a'], '', [0, B.FURNACE, 7]);
+  b(B.GLASS, 'زجاج', 0.28, 'glass', ['#dff6ff', '#a8dcf0'], 'T');
+  b(B.BRICKS, 'طوب أحمر', 0.95, 'stone', ['#c24b3c', '#ebdacc']);
+  b(B.STONE_BRICKS, 'طوب حجري', 0.95, 'stone', ['#9a9aa4', '#6b6b75']);
+  b(B.DOOR_B, 'باب', 0.45, 'wood', ['#b98549', '#6a4526'], 'NTSM', [0, I.DOOR]);
+  b(B.DOOR_T, 'باب', 0.45, 'wood', ['#b98549', '#6a4526'], 'NTM', [0, 0]);
+  b(B.LADDER, 'سُلّم', 0.28, 'wood', ['#c8955a'], 'NTCA');
+  b(B.WATER, 'ماء', Infinity, 'water', ['#3b8fe8', '#8fd0ff'], 'NTLR', [99, 0]);
+  b(B.SNOW_GRASS, 'عشب مثلج', 0.34, 'snow', ['#f4fbff', '#8a5a36'], '', [0, B.DIRT]);
+  b(B.SNOW, 'ثلج', 0.24, 'snow', ['#f4fbff', '#cfe4f4']);
+  b(B.ICE, 'جليد', 0.36, 'glass', ['#bfe9ff', '#8fd0f4'], 'T');
+  b(B.PINE_LEAVES, 'أوراق الصنوبر', 0.14, 'leaf', ['#23753c', '#f4fbff'], 'NT', [0, 0, 0, 2]);
+  b(B.CACTUS, 'صبّار', 0.30, 'leaf', ['#4cb83c', '#2f7a28'], 'NTSM');
+  b(B.TALLGRASS, 'عشب طويل', 0.05, 'leaf', ['#5ce046'], 'NTSR', [0, 0]);
+  b(B.FLOWER_RED, 'زهرة حمراء', 0.05, 'leaf', ['#ff4a4a', '#4fae33'], 'NTS');
+  b(B.FLOWER_YELLOW, 'زهرة صفراء', 0.05, 'leaf', ['#ffe03a', '#4fae33'], 'NTS');
+  b(B.FLOWER_BLUE, 'زهرة زرقاء', 0.05, 'leaf', ['#4a8cff', '#4fae33'], 'NTS');
+  b(B.SAPLING, 'شتلة', 0.05, 'leaf', ['#4fbf40', '#7a5230'], 'NTS');
+  b(B.PUMPKIN, 'يقطينة', 0.42, 'wood', ['#f28a1e', '#c9661a']);
+  b(B.JACK, 'فانوس اليقطين', 0.42, 'wood', ['#f28a1e', '#ffe066'], '', [0, B.JACK, 13]);
+  b(B.MUSHROOM, 'فطر مضيء', 0.08, 'leaf', ['#4ff0ff', '#b8fbff'], 'NTS', [0, B.MUSHROOM, 9]);
+  b(B.CLAY, 'طين', 0.38, 'dirt', ['#9fa8c0', '#8a93ab']);
+  b(B.LANTERN, 'فانوس', 0.42, 'glass', ['#ffe066', '#555'], 'T', [0, B.LANTERN, 15]);
+  b(B.IRON_BLOCK, 'مكعب حديد', 1.25, 'metal', ['#e6e6ee', '#b8b8c4'], '', [1]);
+  b(B.GOLD_BLOCK, 'مكعب ذهب', 1.25, 'metal', ['#ffd84a', '#e8a820'], '', [1]);
+  b(B.DIAMOND_BLOCK, 'مكعب ألماس', 1.35, 'metal', ['#6ff5ee', '#2fc6c0'], '', [1, B.DIAMOND_BLOCK, 6]);
+  b(B.COPPER_BLOCK, 'مكعب نحاس', 1.20, 'metal', ['#e8844a', '#b85a2a'], '', [1]);
+  b(B.SANDSTONE, 'حجر رملي', 0.72, 'stone', ['#e2c47a', '#c8a85e']);
+  b(B.DEADBUSH, 'شجيرة يابسة', 0.05, 'leaf', ['#a07840'], 'NTSR', [0, I.STICK]);
+  b(B.TNT, 'متفجرات TNT', 0.25, 'wood', ['#e63946', '#fff8d6', '#ff9f1c']);
+  b(B.SPRING, 'منصة قفز', 0.32, 'metal', ['#00f5d4', '#ffd60a', '#3a4466'], '', [0, B.SPRING, 5]);
+  b(B.CHEST, 'صندوق الكنز', 0.40, 'wood', ['#d97706', '#ffd60a', '#92400e'], '', [0, 0, 9]);
+  b(B.RUBY_ORE, 'خام الياقوت', 1.80, 'stone', ['#8e8e96', '#ff2a6d', '#ff8fa3'], '', [2, I.RUBY, 6]);
+  for (var w = 0; w < 11; w++) b(B.WOOL + w, 'صوف ' + WOOL_NAMES[w], 0.32, 'wool', [WOOL_COLS[w]]);
+  b(B.VAULT_BRICK, 'طوب غرفة الكنز', 1.10, 'stone', ['#43386b', '#2b224a', '#ffd60a'], '', [1]);
+  b(B.CRYSTAL, 'بلورة الكهف', 0.28, 'glass', ['#3bf6ee', '#c77dff', '#ffffff'], 'NTS', [0, I.SLIME_GEL, 10]);
+
   for (var k = 0; k < 256; k++) if (!BLOCKS[k]) BLOCKS[k] = null;
   BW.BLOCKS = BLOCKS;
 
-  // --------------------------------------------------------------- items
   var ITEMS = {};
-  function item(id, o) { o.id = id; ITEMS[id] = o; return o; }
-  BLOCKS.forEach(function (d) {
-    if (!d || d.id === 0) return;
-    item(d.id, { name: d.name, place: d.id, cols: d.cols });
+  BLOCKS.forEach(function (bl) {
+    if (bl && bl.id && bl.id !== B.DOOR_T && bl.id !== B.WATER && bl.id !== B.BEDROCK && bl.id !== B.TRUNK && bl.id !== B.CHEST) {
+      ITEMS[bl.id] = { id: bl.id, name: bl.name, place: bl.id, max: 99 };
+    }
   });
-  // blocks that are never items
-  [B.TRUNK, B.DOOR_B, B.DOOR_T, B.WATER, B.BEDROCK, B.GRASS, B.SNOW_GRASS, B.TALLGRASS, B.DEADBUSH].forEach(function (id) { delete ITEMS[id]; });
-  item(I.STICK, { name: 'عصا', cols: ['#a07040'] });
-  item(I.COAL, { name: 'فحم', cols: ['#2a2a2e'] });
-  item(I.COPPER_INGOT, { name: 'سبيكة نحاس', cols: ['#e8844a'] });
-  item(I.IRON_INGOT, { name: 'سبيكة حديد', cols: ['#e6e6ee'] });
-  item(I.GOLD_INGOT, { name: 'سبيكة ذهب', cols: ['#ffd84a'] });
-  item(I.DIAMOND, { name: 'ألماسة', cols: ['#6ff5ee'] });
-  item(I.DYE, { name: 'صبغة قوس قزح', cols: ['#ff5ab0', '#ffd93d', '#3b6fe0'] });
-  item(I.DOOR, { name: 'باب', place: B.DOOR_B, cols: ['#b98549'] });
-  item(I.PICK_WOOD, { name: 'معول خشبي', tool: 1, speed: 2, max: 1, cols: ['#c8955a'] });
-  item(I.PICK_STONE, { name: 'معول حجري', tool: 2, speed: 3, max: 1, cols: ['#9a9aa2'] });
-  item(I.PICK_IRON, { name: 'معول حديدي', tool: 3, speed: 4.5, max: 1, cols: ['#e6e6ee'] });
-  item(I.PICK_DIAMOND, { name: 'معول ألماسي', tool: 4, speed: 7, max: 1, cols: ['#6ff5ee'] });
+  ITEMS[B.DOOR_B] = { id: B.DOOR_B, name: 'باب', place: B.DOOR_B, max: 99 };
+  function item(id, name, extra) { ITEMS[id] = Object.assign({ id: id, name: name, max: 99 }, extra || {}); }
+  [[I.STICK, 'عصا'], [I.COAL, 'فحم'], [I.COPPER_INGOT, 'سبيكة نحاس'], [I.IRON_INGOT, 'سبيكة حديد'],
+   [I.GOLD_INGOT, 'سبيكة ذهب'], [I.DIAMOND, 'ألماسة'], [I.DYE, 'صبغة قوس قزح'], [I.RUBY, 'ياقوتة متوهجة'],
+   [I.SLIME_GEL, 'جل السلايم المشع']].forEach(function (a) { item(a[0], a[1]); });
+  item(I.DOOR, 'باب خشبي', { place: B.DOOR_B });
+  item(I.JET_BOOTS, 'حذاء القفز النفاث', { jet: true, max: 1 });
+  [[I.PICK_WOOD, 'معول خشبي', 1, 2.4], [I.PICK_STONE, 'معول حجري', 2, 3.6], [I.PICK_IRON, 'معول حديدي', 3, 5.2],
+   [I.PICK_DIAMOND, 'معول ألماسي', 4, 7.8], [I.PICK_RUBY, 'معول الياقوت الخارق', 5, 9.8]].forEach(function (p) {
+    item(p[0], p[1], { tool: p[2], speed: p[3], max: 1 });
+  });
+
   BW.ITEMS = ITEMS;
+  BW.itemName = function (id) { return id === BW.FLOWER ? 'زهرة' : (ITEMS[id] && ITEMS[id].name) || (BLOCKS[id] && BLOCKS[id].name) || ''; };
+  BW.maxStack = function (id) { return (ITEMS[id] && ITEMS[id].max) || 99; };
 
-  // ------------------------------------------------------------ recipes
-  // st: null (hand), 'table', 'furnace'. FLOWER = any flower (-1).
-  var FLOWER = -1;
-  BW.FLOWER = FLOWER;
-  var R = [];
-  function rec(out, n, ing, st, cat) { R.push({ out: out, n: n, ing: ing, st: st || null, cat: cat || 'block' }); }
-  rec(B.PLANKS, 4, [[B.LOG, 1]], null);
-  rec(I.STICK, 4, [[B.PLANKS, 2]], null, 'item');
-  rec(B.TABLE, 1, [[B.PLANKS, 4]], null);
-  rec(B.TORCH, 4, [[I.STICK, 1], [I.COAL, 1]], null);
-  rec(I.PICK_WOOD, 1, [[B.PLANKS, 3], [I.STICK, 2]], 'table', 'tool');
-  rec(I.PICK_STONE, 1, [[B.STONE, 3], [I.STICK, 2]], 'table', 'tool');
-  rec(B.FURNACE, 1, [[B.STONE, 8]], 'table');
-  rec(I.COPPER_INGOT, 1, [[B.COPPER_ORE, 1]], 'furnace', 'item');
-  rec(I.IRON_INGOT, 1, [[B.IRON_ORE, 1]], 'furnace', 'item');
-  rec(I.GOLD_INGOT, 1, [[B.GOLD_ORE, 1]], 'furnace', 'item');
-  rec(I.PICK_IRON, 1, [[I.IRON_INGOT, 3], [I.STICK, 2]], 'table', 'tool');
-  rec(I.PICK_DIAMOND, 1, [[I.DIAMOND, 3], [I.STICK, 2]], 'table', 'tool');
-  rec(B.GLASS, 1, [[B.SAND, 1]], 'furnace');
-  rec(B.BRICKS, 1, [[B.CLAY, 1]], 'furnace');
-  rec(B.STONE_BRICKS, 4, [[B.STONE, 4]], 'table');
-  rec(I.DOOR, 1, [[B.PLANKS, 6]], 'table');
-  rec(B.LADDER, 4, [[I.STICK, 5]], 'table');
-  rec(B.LANTERN, 2, [[I.COPPER_INGOT, 1], [B.TORCH, 1]], 'table');
-  rec(B.JACK, 1, [[B.PUMPKIN, 1], [B.TORCH, 1]], null);
-  rec(I.DYE, 2, [[FLOWER, 1]], null, 'item');
-  for (var c = 1; c < 11; c++) rec(B.WOOL + c, 1, [[B.WOOL, 1], [I.DYE, 1]], null, 'wool');
-  rec(B.SANDSTONE, 2, [[B.SAND, 4]], 'table');
-  rec(B.COPPER_BLOCK, 1, [[I.COPPER_INGOT, 4]], 'table');
-  rec(B.IRON_BLOCK, 1, [[I.IRON_INGOT, 4]], 'table');
-  rec(B.GOLD_BLOCK, 1, [[I.GOLD_INGOT, 4]], 'table');
-  rec(B.DIAMOND_BLOCK, 1, [[I.DIAMOND, 4]], 'table');
-  BW.RECIPES = R;
-
-  // ------------------------------------------------------------- quests
-  // Each: id, text, icon, need, val(stats) -> number
-  function S(obj, id) { return (obj && obj[id]) || 0; }
-  BW.QUESTS_SURVIVAL = [
-    { id: 'logs', text: 'اقطع شجرة (اضغط عليها مطوّلًا)', icon: B.LOG, need: 4, val: function (s) { return S(s.got, B.LOG); } },
-    { id: 'planks', text: 'اصنع ألواح خشب (اضغط E)', icon: B.PLANKS, need: 4, val: function (s) { return S(s.craft, B.PLANKS); } },
-    { id: 'table', text: 'اصنع طاولة الصنع', icon: B.TABLE, need: 1, val: function (s) { return S(s.craft, B.TABLE); } },
-    { id: 'tableplace', text: 'ضع طاولة الصنع على الأرض', icon: B.TABLE, need: 1, val: function (s) { return S(s.placed, B.TABLE); } },
-    { id: 'pickwood', text: 'اصنع معولًا خشبيًا', icon: I.PICK_WOOD, need: 1, val: function (s) { return S(s.craft, I.PICK_WOOD); } },
-    { id: 'stone', text: 'احفر للأسفل واجمع الحجر', icon: B.STONE, need: 10, val: function (s) { return S(s.got, B.STONE); } },
-    { id: 'pickstone', text: 'اصنع معولًا حجريًا', icon: I.PICK_STONE, need: 1, val: function (s) { return S(s.craft, I.PICK_STONE); } },
-    { id: 'coal', text: 'اعثر على الفحم', icon: I.COAL, need: 1, val: function (s) { return S(s.got, I.COAL); } },
-    { id: 'torch', text: 'اصنع مشاعل', icon: B.TORCH, need: 4, val: function (s) { return S(s.craft, B.TORCH); } },
-    { id: 'torchplace', text: 'أنِر كهفًا: ضع مشاعل', icon: B.TORCH, need: 5, val: function (s) { return S(s.placed, B.TORCH); } },
-    { id: 'furnace', text: 'ابنِ فرنًا', icon: B.FURNACE, need: 1, val: function (s) { return S(s.craft, B.FURNACE); } },
-    { id: 'copper', text: 'اصهر سبيكة نحاس في الفرن', icon: I.COPPER_INGOT, need: 1, val: function (s) { return S(s.craft, I.COPPER_INGOT); } },
-    { id: 'iron', text: 'اصهر سبائك حديد', icon: I.IRON_INGOT, need: 3, val: function (s) { return S(s.craft, I.IRON_INGOT); } },
-    { id: 'pickiron', text: 'اصنع معولًا حديديًا', icon: I.PICK_IRON, need: 1, val: function (s) { return S(s.craft, I.PICK_IRON); } },
-    { id: 'glass', text: 'اصنع زجاجًا من الرمل', icon: B.GLASS, need: 1, val: function (s) { return S(s.craft, B.GLASS); } },
-    { id: 'shear', text: 'خذ صوفًا من خروف (انقر عليه)', icon: B.WOOL, need: 1, val: function (s) { return s.sheared || 0; } },
-    { id: 'dye', text: 'لوّن الصوف', icon: B.WOOL + 7, need: 1, val: function (s) { var n = 0; for (var i = 1; i < 11; i++) n += S(s.craft, B.WOOL + i); return n; } },
-    { id: 'sapling', text: 'ازرع شتلة', icon: B.SAPLING, need: 1, val: function (s) { return S(s.placed, B.SAPLING); } },
-    { id: 'door', text: 'ابنِ بيتًا له باب', icon: I.DOOR, need: 1, val: function (s) { return S(s.placed, B.DOOR_B); } },
-    { id: 'gold', text: 'اعثر على الذهب في الأعماق', icon: B.GOLD_ORE, need: 1, val: function (s) { return S(s.got, B.GOLD_ORE); } },
-    { id: 'diamond', text: 'اعثر على ألماسة!', icon: I.DIAMOND, need: 1, val: function (s) { return S(s.got, I.DIAMOND); } },
-    { id: 'pickdiamond', text: 'اصنع معولًا ألماسيًا', icon: I.PICK_DIAMOND, need: 1, val: function (s) { return S(s.craft, I.PICK_DIAMOND); } },
-    { id: 'explore', text: 'زُر الصحراء والثلج والشاطئ', icon: B.CACTUS, need: 3, val: function (s) { var v = s.biomes || {}; return (v.desert ? 1 : 0) + (v.snow ? 1 : 0) + (v.beach ? 1 : 0); } },
-    { id: 'friends', text: 'داعب 5 حيوانات (انقر عليها)', icon: B.FLOWER_RED, need: 5, val: function (s) { return s.pets || 0; } },
-    { id: 'bedrock', text: 'احفر حتى تصل إلى صخر القاع', icon: B.BEDROCK, need: 1, val: function (s) { return (s.maxDepth || 0) >= 144 ? 1 : 0; } },
-    { id: 'builder', text: 'بنّاء ماهر: ضع 200 مكعب', icon: B.BRICKS, need: 200, val: function (s) { return s.placedTotal || 0; } },
-    { id: 'diamondblock', text: 'اصنع مكعب ألماس لامعًا', icon: B.DIAMOND_BLOCK, need: 1, val: function (s) { return S(s.craft, B.DIAMOND_BLOCK); } }
-  ];
-  BW.QUESTS_CREATIVE = [
-    { id: 'c50', text: 'ضع 50 مكعبًا', icon: B.PLANKS, need: 50, val: function (s) { return s.placedTotal || 0; } },
-    { id: 'cfly', text: 'طِر! (اضغط مسافة مرتين)', icon: B.GLASS, need: 1, val: function (s) { return s.flew ? 1 : 0; } },
-    { id: 'cwool', text: 'ابنِ بـ 6 ألوان من الصوف', icon: B.WOOL + 1, need: 6, val: function (s) { var n = 0; for (var i = 0; i < 11; i++) if (S(s.placed, B.WOOL + i)) n++; return n; } },
-    { id: 'cglass', text: 'نافذة كبيرة: ضع 20 زجاجًا', icon: B.GLASS, need: 20, val: function (s) { return S(s.placed, B.GLASS); } },
-    { id: 'clamp', text: 'أضئ المكان: ضع 10 فوانيس', icon: B.LANTERN, need: 10, val: function (s) { return S(s.placed, B.LANTERN); } },
-    { id: 'ctree', text: 'ازرع غابة: 5 شتلات', icon: B.SAPLING, need: 5, val: function (s) { return S(s.placed, B.SAPLING); } },
-    { id: 'csky', text: 'ابنِ حتى تصل إلى الغيوم', icon: B.SNOW, need: 1, val: function (s) { return (s.highestPlace || 999) <= 14 ? 1 : 0; } },
-    { id: 'cexplore', text: 'زُر الأراضي الخمس كلها', icon: B.CACTUS, need: 5, val: function (s) { var v = s.biomes || {}; var n = 0; for (var k in v) if (v[k]) n++; return n; } },
-    { id: 'cpets', text: 'داعب 5 حيوانات', icon: B.FLOWER_RED, need: 5, val: function (s) { return s.pets || 0; } },
-    { id: 'c500', text: 'بنّاء خارق: ضع 500 مكعب', icon: B.GOLD_BLOCK, need: 500, val: function (s) { return s.placedTotal || 0; } }
-  ];
-
-  // --------------------------------------------------------------- skins
-  BW.SKINS = [
-    { name: 'رحّال', stars: 0, shirt: '#2fb5a8', pants: '#3b4a8c', hair: '#5a3418', skin: '#f2c49b', shoes: '#3a2a1a' },
-    { name: 'شمسي', stars: 3, shirt: '#ffcf2e', pants: '#2f6fd6', hair: '#d9772b', skin: '#ffd8b0', shoes: '#c43d3d' },
-    { name: 'توتة', stars: 8, shirt: '#b24de0', pants: '#2d2d4a', hair: '#1f1f2e', skin: '#c68a5e', shoes: '#ff6ab4' },
-    { name: 'روبو', stars: 14, shirt: '#b9c3cf', pants: '#6b7888', hair: '#6b7888', skin: '#dfe6ee', shoes: '#39424e', robot: true },
-    { name: 'ضفدوع', stars: 20, shirt: '#4cc94a', pants: '#2c8a3a', hair: '#4cc94a', skin: '#f2c49b', shoes: '#ffcc33', frog: true },
-    { name: 'الذهبي', stars: 30, shirt: '#ffd23a', pants: '#e8a820', hair: '#fff08a', skin: '#ffe4c0', shoes: '#b87a10', gold: true }
-  ];
-
-  // ============================================================ textures
-  function hex(h) { h = h.replace('#', ''); if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2]; var n = parseInt(h, 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
-  function shade(h, f) { var c = hex(h); return 'rgb(' + Math.min(255, Math.round(c[0] * f)) + ',' + Math.min(255, Math.round(c[1] * f)) + ',' + Math.min(255, Math.round(c[2] * f)) + ')'; }
-  BW.hex = hex; BW.shade = shade;
-  var seed = 1234567;
-  function r() { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; }
-  function ri(n) { return Math.floor(r() * n); }
-  function pick(a) { return a[ri(a.length)]; }
-  function canvas(w, h) { var c = document.createElement('canvas'); c.width = w; c.height = h || w; return c; }
-  // A context that stays on the CPU, so reading it back (toDataURL) never waits for the GPU.
-  function cpuCtx(c) { try { return c.getContext('2d', { willReadFrequently: true }); } catch (e) { return c.getContext('2d'); } }
-  function P(g, x, y, col) { g.fillStyle = col; g.fillRect(x, y, 1, 1); }
-  function R4(g, x, y, w, h, col) { g.fillStyle = col; g.fillRect(x, y, w, h); }
-  function speckle(g, pal, x0, y0, w, h) { for (var y = y0; y < y0 + h; y++) for (var x = x0; x < x0 + w; x++) P(g, x, y, pick(pal)); }
-  var dirtPal = ['#8a5a36', '#7b4f2e', '#946340', '#86573a', '#7f5232'];
-  var stonePal = ['#8e8e96', '#85858d', '#9a9aa2', '#8a8a92', '#93939b'];
-  function dirt(g) { speckle(g, dirtPal, 0, 0, 16, 16); for (var i = 0; i < 6; i++) { var x = ri(15), y = ri(15); P(g, x, y, '#5f3b1f'); P(g, x + 1, y, '#6a4426'); } for (i = 0; i < 4; i++) P(g, ri(16), ri(16), '#a07048'); }
-  function stone(g) {
-    speckle(g, stonePal, 0, 0, 16, 16);
-    for (var i = 0; i < 5; i++) { var x = ri(14), y = ri(14), l = 2 + ri(3); for (var k = 0; k < l; k++) { P(g, x, y, '#72727a'); x += ri(2); y += r() < 0.5 ? 1 : 0; } }
-    for (i = 0; i < 6; i++) P(g, ri(16), ri(16), '#a8a8b0');
+  // --------------------------------------------------- procedural 16x16 sprites
+  var TEX = {}, WALL_TEX = {}, ICON_URL = {};
+  function mkCanvas(w, h) { var c = document.createElement('canvas'); c.width = w || 16; c.height = h || 16; return c; }
+  function shade(hex, k) {
+    var n = parseInt(hex.slice(1), 16);
+    var r = Math.min(255, Math.max(0, Math.round(((n >> 16) & 255) * k)));
+    var g = Math.min(255, Math.max(0, Math.round(((n >> 8) & 255) * k)));
+    var b2 = Math.min(255, Math.max(0, Math.round((n & 255) * k)));
+    return 'rgb(' + r + ',' + g + ',' + b2 + ')';
   }
-  function sand(g) { speckle(g, ['#f0d98c', '#ecd483', '#f5e29c', '#e6cc7a', '#f2dd92'], 0, 0, 16, 16); for (var i = 0; i < 5; i++) P(g, ri(16), ri(16), '#d4b866'); for (i = 0; i < 4; i++) P(g, ri(16), ri(16), '#fff2c0'); }
-  function bark(g, x0, w) {
-    for (var x = x0; x < x0 + w; x++) {
-      var base = (x - x0) % 3 === 0 ? '#5e3e20' : pick(['#7a5230', '#6f4a2a', '#83593a']);
-      for (var y = 0; y < 16; y++) P(g, x, y, r() < 0.12 ? '#553619' : base);
+  function fr(g, col) {
+    if (col) g.fillStyle = col;
+    for (var i = 2; i < arguments.length; i += 4) g.fillRect(arguments[i], arguments[i + 1], arguments[i + 2], arguments[i + 3]);
+  }
+  BW.shade = shade;
+  BW.fr = fr;
+
+  function noisy(ctx, base, spread, seed, x0, y0, w, h) {
+    var rnd = mulberry(seed);
+    x0 = x0 || 0; y0 = y0 || 0; w = w || 16; h = h || 16;
+    for (var y = y0; y < y0 + h; y++) for (var x = x0; x < x0 + w; x++) {
+      fr(ctx, shade(base, 1 + (rnd() - 0.5) * spread), x, y, 1, 1);
     }
   }
-  function planks(g) {
-    speckle(g, ['#c8955a', '#c28f54', '#cd9b60'], 0, 0, 16, 16);
-    for (var row = 0; row < 4; row++) {
-      R4(g, 0, row * 4 + 3, 16, 1, '#8f6334');
-      var cut = (row * 7 + 3) % 16; R4(g, cut, row * 4, 1, 3, '#9b6c3c');
-      for (var k = 0; k < 3; k++) P(g, ri(16), row * 4 + ri(3), '#b8844a');
-      P(g, (cut + 2) % 16, row * 4 + 1, '#6f4a2a');
+  function px(ctx, col, pts) {
+    ctx.fillStyle = col;
+    for (var i = 0; i < pts.length; i += 2) ctx.fillRect(pts[i], pts[i + 1], 1, 1);
+  }
+  function ore(ctx, seed, col, hi, glow) {
+    noisy(ctx, '#888994', 0.22, seed);
+    var rnd = mulberry(seed + 77);
+    for (var i = 0; i < 6; i++) {
+      var x = 2 + Math.floor(rnd() * 11), y = 2 + Math.floor(rnd() * 11);
+      if (glow) fr(ctx, glow, x - 1, y, 4, 2, x, y - 1, 2, 4);
+      fr(ctx, col, x, y, 2, 2);
+      if (rnd() > 0.35) ctx.fillRect(x + 1, y - 1, 2, 2);
+      fr(ctx, hi, x, y, 1, 1);
     }
   }
-  function ore(g, col, hi, dark, n) {
-    stone(g);
-    for (var i = 0; i < (n || 5); i++) {
-      var x = 1 + ri(12), y = 1 + ri(12);
-      R4(g, x, y, 2, 2, col); P(g, x + 2, y + 1, dark || col); P(g, x + 1, y + 2, dark || col); P(g, x, y, hi);
+  function paint(id, fn) {
+    var c = mkCanvas(16, 16), g = c.getContext('2d');
+    g.imageSmoothingEnabled = false;
+    fn(g);
+    TEX[id] = c;
+    if (BLOCKS[id] && BLOCKS[id].solid && BLOCKS[id].opaque) {
+      var wc = mkCanvas(16, 16), wg = wc.getContext('2d');
+      wg.drawImage(c, 0, 0);
+      fr(wg, 'rgba(14,16,38,0.56)', 0, 0, 16, 16);
+      WALL_TEX[id] = wc;
     }
   }
-  function bricks(g, mortar, pal, dark) {
-    R4(g, 0, 0, 16, 16, mortar);
-    for (var row = 0; row < 4; row++) {
-      var off = row % 2 ? 4 : 0;
-      for (var bx = -8; bx < 16; bx += 8) {
-        var x0 = bx + off, col = pick(pal);
-        for (var y = row * 4; y < row * 4 + 3; y++) for (var x = Math.max(0, x0); x < Math.min(16, x0 + 7); x++) P(g, x, y, r() < 0.15 ? dark : col);
-        if (x0 + 1 >= 0 && x0 + 1 < 16) P(g, x0 + 1, row * 4, shade(col, 1.15));
+
+  paint(B.DIRT, function (g) {
+    noisy(g, '#8a5a36', 0.25, 11);
+    px(g, '#623d22', [3, 4, 11, 9, 6, 13, 13, 3]);
+    px(g, '#a87650', [2, 10, 9, 3, 14, 12]);
+  });
+  paint(B.GRASS, function (g) {
+    g.drawImage(TEX[B.DIRT], 0, 0);
+    noisy(g, '#52cf3d', 0.20, 22, 0, 0, 16, 4);
+    var oh = [5, 6, 5, 4, 5, 6, 5, 4, 6, 5, 4, 5, 6, 5, 4, 5];
+    for (var x = 0; x < 16; x++) {
+      fr(g, x % 2 ? '#4bc438' : '#63e04c', x, 3, 1, oh[x] - 3);
+      fr(g, '#2d8022', x, oh[x], 1, 1);
+    }
+    fr(g, '#8ef573', 0, 0, 16, 1);
+  });
+  paint(B.SNOW_GRASS, function (g) {
+    g.drawImage(TEX[B.DIRT], 0, 0);
+    noisy(g, '#f0f8ff', 0.08, 25, 0, 0, 16, 5);
+    var oh = [5, 6, 5, 4, 6, 5, 4, 5, 6, 5, 5, 4, 6, 5, 4, 5];
+    for (var x = 0; x < 16; x++) { fr(g, '#e8f4ff', x, 4, 1, oh[x] - 3); fr(g, '#aac6de', x, oh[x], 1, 1); }
+  });
+  paint(B.SNOW, function (g) { noisy(g, '#f2f9ff', 0.09, 26); });
+  paint(B.ICE, function (g) { noisy(g, '#a8defa', 0.12, 27); fr(g, 'rgba(255,255,255,0.6)', 2, 2, 5, 1, 3, 3, 3, 1, 9, 8, 5, 1, 6, 12, 6, 1); });
+  paint(B.STONE, function (g) { noisy(g, '#888994', 0.22, 33); fr(g, '#686974', 2, 6, 5, 1, 9, 12, 5, 1); fr(g, '#a8a9b4', 3, 5, 4, 1, 8, 2, 5, 1); });
+  paint(B.SAND, function (g) { noisy(g, '#f2dc8c', 0.14, 44); px(g, '#fff1b8', [2, 3, 9, 7, 13, 12, 5, 13]); });
+  paint(B.SANDSTONE, function (g) { noisy(g, '#e2c478', 0.12, 440); fr(g, '#f4dea0', 0, 0, 16, 3); fr(g, '#be9d52', 0, 4, 16, 1, 0, 10, 16, 1); });
+  paint(B.CLAY, function (g) { noisy(g, '#9fa8c0', 0.14, 38); });
+  paint(B.BEDROCK, function (g) { noisy(g, '#2e2e38', 0.55, 99); });
+
+  function paintLog(g) {
+    for (var x = 0; x < 16; x++) for (var y = 0; y < 16; y++) {
+      fr(g, shade((x < 2 || x > 13) ? '#4d3018' : '#7f5430', 1 + (((x * 7 + y * 3) % 5) - 2) * 0.05), x, y, 1, 1);
+    }
+    fr(g, '#5e3b1e', 5, 0, 1, 16, 10, 0, 1, 16);
+  }
+  paint(B.LOG, paintLog);
+  paint(B.TRUNK, paintLog);
+
+  paint(B.PLANKS, function (g) {
+    noisy(g, '#c8955a', 0.12, 88);
+    fr(g, '#8a5f32', 0, 3, 16, 1, 0, 7, 16, 1, 0, 11, 16, 1, 0, 15, 16, 1, 7, 0, 1, 4, 12, 4, 1, 4, 4, 8, 1, 4, 10, 12, 1, 4);
+    fr(g, '#deb078', 0, 0, 16, 1, 0, 4, 16, 1, 0, 8, 16, 1, 0, 12, 16, 1);
+  });
+  paint(B.LEAVES, function (g) {
+    var rnd = mulberry(66);
+    for (var y = 0; y < 16; y++) for (var x = 0; x < 16; x++) {
+      var r = rnd(); if (r >= 0.09) fr(g, r < 0.42 ? '#2e8828' : r < 0.78 ? '#45b83b' : '#6ae05a', x, y, 1, 1);
+    }
+  });
+  paint(B.PINE_LEAVES, function (g) {
+    var rnd = mulberry(280);
+    for (var y = 0; y < 16; y++) for (var x = 0; x < 16; x++) {
+      var r = rnd(); if (r >= 0.08) fr(g, y < 3 && r > 0.42 ? '#f4fbff' : r < 0.5 ? '#1d5c30' : '#2e8046', x, y, 1, 1);
+    }
+  });
+
+  paint(B.COAL_ORE, function (g) { ore(g, 90, '#1f2028', '#4c4e5c'); });
+  paint(B.COPPER_ORE, function (g) { ore(g, 100, '#e07236', '#ffb480'); });
+  paint(B.IRON_ORE, function (g) { ore(g, 110, '#d8b498', '#fff2e4'); });
+  paint(B.GOLD_ORE, function (g) { ore(g, 120, '#f5bc1e', '#fff59c', 'rgba(255,214,10,0.22)'); });
+  paint(B.DIAMOND_ORE, function (g) { ore(g, 130, '#2be4dc', '#d2ffff', 'rgba(63,246,238,0.28)'); });
+  paint(B.RUBY_ORE, function (g) { ore(g, 149, '#ff1f62', '#ffc2d4', 'rgba(255,42,109,0.30)'); });
+
+  paint(B.BRICKS, function (g) {
+    fr(g, '#e2d2c0', 0, 0, 16, 16);
+    var rnd = mulberry(190);
+    for (var row = 0; row < 4; row++) for (var bx = -4; bx < 16; bx += 8) {
+      fr(g, shade('#c24b3c', 0.92 + rnd() * 0.18), bx + (row % 2) * 4 + 1, row * 4 + 1, 7, 3);
+    }
+  });
+  paint(B.STONE_BRICKS, function (g) {
+    noisy(g, '#9495a0', 0.14, 200);
+    fr(g, '#585964', 0, 7, 16, 1, 0, 15, 16, 1, 7, 0, 1, 8, 15, 8, 1, 8);
+    fr(g, '#b8b9c4', 0, 0, 7, 1, 8, 0, 8, 1, 0, 8, 15, 1);
+  });
+  paint(B.VAULT_BRICK, function (g) {
+    noisy(g, '#3d3164', 0.16, 620);
+    fr(g, '#21193b', 0, 7, 16, 1, 0, 15, 16, 1, 7, 0, 1, 8, 15, 8, 1, 8);
+    fr(g, '#6c5aa6', 1, 1, 5, 1, 9, 9, 5, 1);
+    fr(g, '#ffd60a', 3, 3, 2, 2, 11, 11, 2, 2);
+  });
+  paint(B.GLASS, function (g) {
+    fr(g, 'rgba(190,238,255,0.28)', 1, 1, 14, 14);
+    fr(g, '#9ad4ec', 0, 0, 16, 1, 0, 15, 16, 1, 0, 0, 1, 16, 15, 0, 1, 16);
+    px(g, '#ffffff', [2, 2, 3, 2, 2, 3, 4, 4, 11, 11, 12, 12]);
+  });
+  paint(B.TABLE, function (g) {
+    g.drawImage(TEX[B.PLANKS], 0, 0);
+    fr(g, '#6b4222', 0, 0, 16, 4); fr(g, '#e0a868', 1, 1, 14, 2);
+    fr(g, '#3c2412', 4, 1, 1, 2, 8, 1, 1, 2, 12, 1, 1, 2);
+    fr(g, '#cfd6e6', 3, 7, 3, 5); fr(g, '#7a5230', 4, 11, 1, 3); fr(g, '#ffd60a', 10, 7, 3, 3);
+  });
+  paint(B.FURNACE, function (g) {
+    g.drawImage(TEX[B.STONE_BRICKS], 0, 0);
+    fr(g, '#24242c', 4, 4, 8, 9); fr(g, '#ff6d1f', 5, 8, 6, 4);
+    fr(g, '#ffd84a', 6, 9, 4, 3); fr(g, '#ffffff', 7, 10, 2, 1);
+  });
+  paint(B.TORCH, function (g) {
+    fr(g, '#7a5230', 7, 7, 2, 8); fr(g, '#ff8800', 6, 3, 4, 4);
+    fr(g, '#ffe04a', 7, 2, 2, 4); fr(g, '#ffffff', 7, 4, 2, 1);
+  });
+  paint(B.LANTERN, function (g) {
+    fr(g, '#3b3d4a', 7, 0, 2, 3, 4, 3, 8, 2, 4, 13, 8, 2, 4, 5, 1, 8, 11, 5, 1, 8);
+    fr(g, '#ffbe2e', 5, 5, 6, 8); fr(g, '#fff5a8', 6, 6, 4, 6); fr(g, '#ffffff', 7, 8, 2, 2);
+  });
+  paint(B.LADDER, function (g) {
+    fr(g, '#9a6836', 2, 0, 2, 16, 12, 0, 2, 16);
+    for (var y = 2; y < 16; y += 4) fr(g, '#d29c60', 2, y, 12, 2);
+  });
+  paint(B.DOOR_T, function (g) {
+    noisy(g, '#b98549', 0.1, 221);
+    fr(g, '#6e4720', 0, 0, 16, 2, 0, 0, 2, 16, 14, 0, 2, 16);
+    fr(g, '#bfe8ff', 4, 4, 3, 5, 9, 4, 3, 5);
+  });
+  paint(B.DOOR_B, function (g) {
+    noisy(g, '#b98549', 0.1, 222);
+    fr(g, '#6e4720', 0, 14, 16, 2, 0, 0, 2, 16, 14, 0, 2, 16);
+    fr(g, '#ffd84a', 11, 2, 2, 2);
+  });
+  paint(B.WATER, function (g) {
+    fr(g, 'rgba(42,136,236,0.72)', 0, 0, 16, 16);
+    fr(g, 'rgba(170,228,255,0.65)', 0, 0, 16, 2, 3, 6, 5, 1, 9, 11, 5, 1);
+  });
+  paint(B.CACTUS, function (g) {
+    for (var x = 2; x < 14; x++) fr(g, (x === 4 || x === 8 || x === 11) ? '#328228' : '#4cc03c', x, 0, 1, 16);
+    px(g, '#e8f8c8', [1, 3, 14, 6, 1, 11, 14, 13]);
+  });
+  paint(B.TALLGRASS, function (g) {
+    var cols = ['#3fa535', '#5ce046', '#7ef263'], hs = [6, 10, 8, 12, 7, 11, 9, 6];
+    for (var i = 0; i < 8; i++) fr(g, cols[i % 3], 1 + i * 2, 16 - hs[i], 1, hs[i]);
+  });
+  function flower(col, center) {
+    return function (g) {
+      fr(g, '#3da832', 7, 8, 2, 8, 5, 11, 2, 2, 9, 10, 2, 2);
+      fr(g, col, 5, 4, 6, 5, 6, 3, 4, 7); fr(g, center, 7, 5, 2, 3);
+    };
+  }
+  paint(B.FLOWER_RED, flower('#ff4252', '#ffe04a'));
+  paint(B.FLOWER_YELLOW, flower('#ffe03a', '#ff881e'));
+  paint(B.FLOWER_BLUE, flower('#4a90ff', '#ffffff'));
+  paint(B.DEADBUSH, function (g) { fr(g, '#8e6634', 7, 9, 2, 7, 4, 6, 3, 2, 9, 5, 3, 2, 2, 4, 2, 2, 12, 3, 2, 2); });
+  paint(B.SAPLING, function (g) { fr(g, '#7a5230', 7, 10, 2, 6); fr(g, '#3da832', 4, 5, 8, 6, 5, 3, 6, 3); fr(g, '#7ef263', 6, 4, 3, 3); });
+  paint(B.MUSHROOM, function (g) { fr(g, '#d8f8ff', 7, 10, 2, 6); fr(g, '#1fd8f0', 3, 6, 10, 4, 5, 4, 6, 2); px(g, '#ffffff', [5, 6, 9, 5, 11, 7, 6, 8]); });
+  paint(B.PUMPKIN, function (g) { noisy(g, '#f0841e', 0.12, 350); fr(g, '#bf5c12', 4, 0, 1, 16, 8, 0, 1, 16, 12, 0, 1, 16); fr(g, '#4a8a2a', 7, 0, 2, 2); });
+  paint(B.JACK, function (g) {
+    g.drawImage(TEX[B.PUMPKIN], 0, 0);
+    fr(g, '#ffe85a', 3, 4, 3, 3, 10, 4, 3, 3, 3, 10, 10, 3);
+    fr(g, '#f0841e', 5, 10, 2, 1, 9, 10, 2, 1, 7, 12, 2, 1);
+  });
+
+  function shinyBlock(base, hi, dk) {
+    return function (g) {
+      fr(g, base, 0, 0, 16, 16);
+      fr(g, hi, 0, 0, 16, 2, 0, 0, 2, 16, 3, 3, 4, 2, 3, 5, 2, 2);
+      fr(g, dk, 0, 14, 16, 2, 14, 0, 2, 16);
+    };
+  }
+  paint(B.COPPER_BLOCK, shinyBlock('#df783e', '#ffb07a', '#9e481c'));
+  paint(B.IRON_BLOCK, shinyBlock('#dcdce6', '#ffffff', '#9c9caa'));
+  paint(B.GOLD_BLOCK, shinyBlock('#f8c62c', '#fff49c', '#b8820c'));
+  paint(B.DIAMOND_BLOCK, shinyBlock('#38ece4', '#d4ffff', '#169e98'));
+
+  paint(B.TNT, function (g) {
+    fr(g, '#d62828', 0, 0, 16, 16);
+    fr(g, '#ff595e', 0, 0, 16, 2, 2, 2, 2, 12, 7, 2, 2, 12, 12, 2, 2, 12);
+    fr(g, '#9b111e', 0, 14, 16, 2);
+    fr(g, '#fff8e7', 0, 5, 16, 6);
+    fr(g, '#1b1640', 2, 6, 3, 1, 3, 7, 1, 3, 6, 6, 1, 4, 7, 7, 1, 1, 8, 8, 1, 1, 9, 6, 1, 4, 11, 6, 3, 1, 12, 7, 1, 3);
+  });
+  paint(B.SPRING, function (g) {
+    fr(g, '#2b3354', 0, 11, 16, 5); fr(g, '#536296', 1, 11, 14, 2);
+    fr(g, '#ffd60a', 4, 6, 8, 2, 5, 9, 6, 2);
+    fr(g, '#00f5d4', 1, 2, 14, 4); fr(g, '#b8fff4', 2, 2, 12, 1); fr(g, '#1b1640', 7, 3, 2, 2);
+  });
+  paint(B.CHEST, function (g) {
+    fr(g, '#1b1640', 1, 2, 14, 14); fr(g, '#b45309', 2, 3, 12, 12);
+    fr(g, '#d97706', 2, 3, 12, 5); fr(g, '#f59e0b', 3, 4, 10, 2);
+    fr(g, '#451a03', 2, 8, 12, 1);
+    fr(g, '#ffd60a', 2, 3, 2, 12, 12, 3, 2, 12, 6, 7, 4, 4);
+    fr(g, '#ffffff', 7, 8, 2, 1);
+  });
+  paint(B.CRYSTAL, function (g) {
+    fr(g, '#7b2cbf', 3, 9, 3, 7, 10, 8, 3, 8);
+    fr(g, '#c77dff', 4, 7, 2, 7, 11, 6, 2, 8);
+    fr(g, '#00bbf9', 6, 3, 4, 13); fr(g, '#72efdd', 7, 2, 2, 12);
+    px(g, '#ffffff', [7, 2, 7, 3, 4, 7, 11, 6]);
+  });
+
+  for (var wi = 0; wi < 11; wi++) {
+    (function (col, idx) {
+      paint(B.WOOL + idx, function (g) {
+        noisy(g, col, 0.15, 500 + idx);
+        g.fillStyle = shade(col, 1.12);
+        for (var y = 1; y < 16; y += 4) for (var x = (y % 8 ? 1 : 3); x < 15; x += 4) g.fillRect(x, y, 2, 2);
+      });
+    })(WOOL_COLS[wi], wi);
+  }
+
+  function paintItem(id, fn) { var c = mkCanvas(16, 16), g = c.getContext('2d'); g.imageSmoothingEnabled = false; fn(g); TEX[id] = c; }
+  paintItem(I.STICK, function (g) { for (var i = 0; i < 11; i++) fr(g, i % 2 ? '#9a6b3b' : '#b8834d', 3 + i, 13 - i, 2, 2); });
+  paintItem(I.COAL, function (g) { fr(g, '#22222a', 4, 4, 8, 9, 3, 6, 10, 6); fr(g, '#505262', 5, 5, 3, 2); });
+  function ingot(base, hi, dk) { return function (g) { fr(g, dk, 2, 7, 12, 6); fr(g, base, 3, 5, 10, 6); fr(g, hi, 4, 5, 8, 2); }; }
+  paintItem(I.COPPER_INGOT, ingot('#e07a3c', '#ffc08c', '#8e4418'));
+  paintItem(I.IRON_INGOT, ingot('#dcdce6', '#ffffff', '#888896'));
+  paintItem(I.GOLD_INGOT, ingot('#f8c62c', '#fff5a0', '#a87808'));
+  paintItem(I.DIAMOND, function (g) { fr(g, '#18a8a4', 4, 5, 8, 8, 6, 3, 4, 11); fr(g, '#4ef6ec', 5, 5, 6, 6, 6, 4, 4, 8); fr(g, '#e0ffff', 6, 5, 2, 3); });
+  paintItem(I.RUBY, function (g) { fr(g, '#a4133c', 4, 4, 8, 9, 5, 3, 6, 11); fr(g, '#ff2a6d', 5, 5, 6, 7); fr(g, '#ffc2d4', 6, 5, 2, 3); });
+  paintItem(I.SLIME_GEL, function (g) { fr(g, '#00b4d8', 3, 5, 10, 9, 4, 4, 8, 10); fr(g, '#72efdd', 4, 6, 8, 7); fr(g, '#ffffff', 5, 6, 2, 2, 9, 8, 1, 1); });
+  paintItem(I.DYE, function (g) {
+    var cs = ['#ff4252', '#ff9632', '#ffe03a', '#4fd84c', '#3bb4ff', '#b060ff'];
+    for (var i = 0; i < 6; i++) fr(g, cs[i], 3 + (i % 3) * 4, 4 + Math.floor(i / 3) * 5, 3, 4);
+  });
+  paintItem(I.DOOR, function (g) {
+    fr(g, '#b98549', 4, 1, 8, 14); fr(g, '#6e4720', 4, 1, 8, 1, 4, 14, 8, 1, 4, 1, 1, 14, 11, 1, 1, 14);
+    fr(g, '#bfe8ff', 6, 3, 4, 4); fr(g, '#ffd84a', 9, 9, 1, 2);
+  });
+  paintItem(I.JET_BOOTS, function (g) {
+    fr(g, '#1b1640', 1, 4, 6, 9, 9, 4, 6, 9); fr(g, '#3a86ff', 2, 5, 4, 7, 10, 5, 4, 7);
+    fr(g, '#00f5d4', 1, 9, 6, 3, 9, 9, 6, 3); fr(g, '#ff9f1c', 2, 13, 4, 2, 10, 13, 4, 2);
+    fr(g, '#ffe66d', 3, 14, 2, 2, 11, 14, 2, 2);
+  });
+  function pickaxe(head, hi) {
+    return function (g) {
+      for (var i = 0; i < 10; i++) fr(g, i % 2 ? '#7a5230' : '#9e6d40', 2 + i, 13 - i, 2, 2);
+      fr(g, head, 6, 1, 7, 2, 11, 2, 3, 3, 12, 5, 2, 4, 4, 2, 3, 2);
+      fr(g, hi, 7, 1, 5, 1, 12, 3, 1, 4);
+    };
+  }
+  paintItem(I.PICK_WOOD, pickaxe('#b8834d', '#e2b67c'));
+  paintItem(I.PICK_STONE, pickaxe('#8e8f9a', '#c8c9d4'));
+  paintItem(I.PICK_IRON, pickaxe('#d8d8e4', '#ffffff'));
+  paintItem(I.PICK_DIAMOND, pickaxe('#2be4dc', '#d4ffff'));
+  paintItem(I.PICK_RUBY, pickaxe('#ff1f62', '#ffc2d4'));
+
+  var CRACKS = [];
+  for (var st = 0; st < 8; st++) {
+    var cc = mkCanvas(16, 16), cg = cc.getContext('2d'), r = mulberry(700);
+    cg.fillStyle = 'rgba(15,12,28,0.72)';
+    for (var br = 0; br < (st + 1) * 3; br++) {
+      var cx = 8, cy = 8, a = r() * Math.PI * 2;
+      for (var s = 0; s < 2 + st; s++) {
+        cx += Math.cos(a) * 1.3; cy += Math.sin(a) * 1.3; a += (r() - 0.5) * 1.1;
+        cg.fillRect(cx | 0, cy | 0, 1, 1);
       }
     }
+    if (st >= 5) fr(cg, 'rgba(255,255,255,0.16)', 0, 0, 16, 16);
+    CRACKS.push(cc);
   }
-  function metal(g, base, hi, dark) {
-    R4(g, 0, 0, 16, 16, base);
-    R4(g, 0, 0, 16, 1, hi); R4(g, 0, 0, 1, 16, hi); R4(g, 0, 15, 16, 1, dark); R4(g, 15, 0, 1, 16, dark);
-    R4(g, 2, 2, 12, 12, shade(base, 0.95));
-    for (var i = 0; i < 5; i++) P(g, 3 + i, 7 - i, hi);
-    for (i = 0; i < 3; i++) P(g, 9 + i, 12 - i, hi);
-    P(g, 2, 2, '#fff'); P(g, 13, 13, dark);
-  }
-  function wool(g, col) {
-    for (var y = 0; y < 16; y++) for (var x = 0; x < 16; x++) {
-      var f = ((x + y * 3) % 5 === 0) ? 0.88 : ((x * 2 + y) % 7 === 0 ? 1.07 : 1);
-      if (r() < 0.12) f *= 0.94;
-      P(g, x, y, shade(col, f));
-    }
-  }
-  function leaves(g, base, light, dark, hi, snow) {
-    R4(g, 0, 0, 16, 16, base);
-    for (var i = 0; i < 10; i++) { var x = ri(14), y = ri(14); R4(g, x, y, 2 + ri(2), 2, dark); }
-    for (i = 0; i < 12; i++) { var x2 = ri(14), y2 = ri(14); R4(g, x2, y2, 3, 2, light); R4(g, x2 + 1, y2 - 1, 1, 1, light); P(g, x2, y2, hi); }
-    for (i = 0; i < 4; i++) P(g, ri(16), ri(16), shade(dark, 0.8));
-    if (snow) for (i = 0; i < 7; i++) { var sx = ri(14), sy = ri(10); R4(g, sx, sy, 2, 1, '#f4fbff'); P(g, sx, sy + 1, '#dcecf8'); }
-  }
-
-  var TEX = [];
-  // GEN[id] = [painter, seed]: lets BW.iconURL repaint a texture on a CPU canvas (see below).
-  var GEN = {};
-  function T(id, fn) { var c = canvas(16); var g = c.getContext('2d'); seed = 1000 + id * 7919; GEN[id] = [fn, seed]; fn(g); TEX[id] = c; return c; }
-  T(B.DIRT, dirt);
-  T(B.GRASS, function (g) {
-    dirt(g);
-    var grassPal = ['#5cc23c', '#52b534', '#66cc44', '#4fae33'];
-    for (var x = 0; x < 16; x++) {
-      var d = 3 + ri(3);
-      for (var y = 0; y < d; y++) P(g, x, y, y === d - 1 ? '#3f942a' : pick(grassPal));
-      if (r() < 0.3) P(g, x, d, '#3f942a');
-    }
-    for (var i = 0; i < 4; i++) P(g, ri(16), ri(2), '#8ae060');
-  });
-  T(B.SNOW_GRASS, function (g) {
-    dirt(g);
-    for (var x = 0; x < 16; x++) {
-      var d = 3 + ri(3);
-      for (var y = 0; y < d; y++) P(g, x, y, y === d - 1 ? '#c6dcee' : pick(['#f4fbff', '#e8f4fc', '#ffffff']));
-    }
-  });
-  T(B.STONE, stone);
-  T(B.SAND, sand);
-  T(B.TRUNK, function (g) { bark(g, 3, 10); R4(g, 3, 0, 1, 16, '#4a2f16'); R4(g, 12, 0, 1, 16, '#4a2f16'); });
-  T(B.LOG, function (g) { bark(g, 0, 16); R4(g, 0, 0, 16, 1, '#4a2f16'); R4(g, 0, 15, 16, 1, '#4a2f16'); });
-  T(B.LEAVES, function (g) { leaves(g, '#3a9e32', '#56c244', '#2a7a25', '#86e070'); });
-  T(B.PINE_LEAVES, function (g) { leaves(g, '#22703a', '#2f8a4a', '#185a2c', '#4aa860', true); });
-  T(B.PLANKS, planks);
-  T(B.COAL_ORE, function (g) { ore(g, '#2a2a2e', '#55555e', '#1a1a1e', 6); });
-  T(B.COPPER_ORE, function (g) { ore(g, '#e07a3c', '#ffc08a', '#a8521f', 5); });
-  T(B.IRON_ORE, function (g) { ore(g, '#e2b89a', '#fff0e2', '#b88a6a', 5); });
-  T(B.GOLD_ORE, function (g) { ore(g, '#ffd23a', '#fffbc0', '#d49a10', 5); });
-  T(B.DIAMOND_ORE, function (g) { ore(g, '#3fe6dc', '#e8ffff', '#1a9fa0', 5); });
-  T(B.BEDROCK, function (g) { speckle(g, ['#3a3a40', '#2a2a2e', '#55555c', '#1f1f24', '#46464c'], 0, 0, 16, 16); for (var i = 0; i < 6; i++) R4(g, ri(14), ri(14), 2, 2, '#18181c'); });
-  T(B.TORCH, function (g) {
-    R4(g, 7, 7, 2, 9, '#8a5f38'); R4(g, 7, 7, 1, 9, '#a87848');
-    R4(g, 6, 3, 4, 4, '#ff9a1a'); R4(g, 7, 2, 2, 5, '#ffcc33'); R4(g, 7, 4, 2, 2, '#fff6b0'); P(g, 8, 1, '#ffcc33');
-  });
-  T(B.TABLE, function (g) {
-    planks(g);
-    R4(g, 0, 0, 16, 4, '#9b6c3c'); R4(g, 0, 0, 16, 1, '#d6a468');
-    for (var x = 0; x < 16; x += 4) R4(g, x, 0, 1, 4, '#6a4526');
-    R4(g, 0, 4, 16, 1, '#553619'); R4(g, 1, 5, 2, 11, '#6a4526'); R4(g, 13, 5, 2, 11, '#6a4526');
-    R4(g, 4, 7, 3, 1, '#9a9aa2'); R4(g, 5, 7, 1, 5, '#6a4526'); // hammer
-    R4(g, 9, 6, 1, 6, '#6a4526'); R4(g, 8, 6, 3, 2, '#c0c0c8'); // saw-ish
-  });
-  T(B.FURNACE, function (g) {
-    bricks(g, '#5c5c64', ['#9a9aa2', '#8e8e96', '#a4a4ac'], '#7a7a82');
-    R4(g, 3, 7, 10, 7, '#2a2a2e'); R4(g, 4, 10, 8, 4, '#ff7a1a'); R4(g, 5, 11, 6, 3, '#ffcc33'); R4(g, 6, 12, 4, 2, '#fff2a0');
-    R4(g, 3, 6, 10, 1, '#55555c');
-  });
-  T(B.GLASS, function (g) {
-    R4(g, 0, 0, 16, 16, 'rgba(200,240,255,0.22)');
-    R4(g, 0, 0, 16, 1, '#e8fbff'); R4(g, 0, 15, 16, 1, '#a8d8ea'); R4(g, 0, 0, 1, 16, '#e8fbff'); R4(g, 15, 0, 1, 16, '#a8d8ea');
-    for (var i = 0; i < 4; i++) { P(g, 3 + i, 6 - i, 'rgba(255,255,255,0.85)'); P(g, 4 + i, 6 - i, 'rgba(255,255,255,0.5)'); }
-    for (i = 0; i < 3; i++) P(g, 9 + i, 12 - i, 'rgba(255,255,255,0.7)');
-  });
-  T(B.BRICKS, function (g) { bricks(g, '#e0d0bc', ['#b8483a', '#c4543f', '#a8402f', '#bd4c3c'], '#963628'); });
-  T(B.STONE_BRICKS, function (g) { bricks(g, '#6b6b73', ['#9a9aa2', '#a2a2aa', '#94949c'], '#86868e'); });
-  function doorTex(g, top) {
-    R4(g, 1, 0, 14, 16, '#b98549');
-    for (var x = 1; x < 15; x += 3) R4(g, x, 0, 1, 16, '#9b6c3c');
-    R4(g, 1, 0, 1, 16, '#6a4526'); R4(g, 14, 0, 1, 16, '#6a4526');
-    if (top) { R4(g, 1, 0, 14, 1, '#6a4526'); R4(g, 4, 3, 8, 7, '#6a4526'); R4(g, 5, 4, 6, 5, '#bfe9ff'); R4(g, 5, 4, 2, 2, '#ffffff'); R4(g, 7, 4, 1, 5, '#6a4526'); R4(g, 5, 6, 6, 1, '#6a4526'); }
-    else { R4(g, 11, 5, 2, 2, '#ffd23a'); P(g, 11, 5, '#fff08a'); R4(g, 4, 9, 8, 5, '#a87848'); R4(g, 4, 9, 8, 1, '#6a4526'); }
-  }
-  T(B.DOOR_B, function (g) { doorTex(g, false); });
-  T(B.DOOR_T, function (g) { doorTex(g, true); });
-  T(B.LADDER, function (g) {
-    R4(g, 2, 0, 2, 16, '#8a5f38'); R4(g, 12, 0, 2, 16, '#8a5f38'); R4(g, 2, 0, 1, 16, '#a87848'); R4(g, 12, 0, 1, 16, '#a87848');
-    for (var y = 1; y < 16; y += 4) { R4(g, 4, y, 8, 2, '#b98549'); R4(g, 4, y + 1, 8, 1, '#8a5f38'); }
-  });
-  T(B.WATER, function (g) { R4(g, 0, 0, 16, 16, 'rgba(48,130,230,0.62)'); for (var i = 0; i < 5; i++) R4(g, ri(12), ri(16), 3 + ri(3), 1, 'rgba(160,215,255,0.35)'); });
-  T(B.SNOW, function (g) { speckle(g, ['#f4fbff', '#eef7fd', '#ffffff', '#e4f0fa'], 0, 0, 16, 16); for (var i = 0; i < 5; i++) P(g, ri(16), ri(16), '#cfe2f2'); });
-  T(B.ICE, function (g) {
-    R4(g, 0, 0, 16, 16, 'rgba(170,225,255,0.75)');
-    for (var i = 0; i < 5; i++) { P(g, 3 + i, 7 - i, 'rgba(255,255,255,0.9)'); }
-    for (i = 0; i < 4; i++) P(g, 9 + i, 13 - i, 'rgba(255,255,255,0.7)');
-    R4(g, 0, 0, 16, 1, 'rgba(255,255,255,0.6)');
-  });
-  T(B.CACTUS, function (g) {
-    R4(g, 3, 0, 10, 16, '#4caf3c');
-    for (var x = 4; x < 13; x += 3) R4(g, x, 0, 1, 16, '#3a9230');
-    R4(g, 3, 0, 1, 16, '#2f7a28'); R4(g, 12, 0, 1, 16, '#2f7a28');
-    for (var i = 0; i < 6; i++) { var y = 1 + ri(14); P(g, r() < 0.5 ? 2 : 13, y, '#f4f0c0'); }
-    R4(g, 5, 0, 1, 16, '#62c552');
-  });
-  T(B.TALLGRASS, function (g) {
-    var cols = ['#5cc23c', '#4fae33', '#6fd24a'];
-    [[2, 9], [4, 6], [6, 10], [8, 4], [10, 8], [12, 5], [14, 9]].forEach(function (b) { R4(g, b[0], 16 - (16 - b[1]), 1, 16 - b[1], pick(cols)); P(g, b[0], b[1], '#8ae060'); });
-  });
-  function flower(g, petal, mid) {
-    R4(g, 7, 7, 2, 9, '#3f942a'); R4(g, 4, 11, 3, 2, '#4fae33'); R4(g, 9, 9, 3, 2, '#4fae33');
-    R4(g, 5, 3, 6, 4, petal); R4(g, 6, 2, 4, 6, petal); R4(g, 7, 4, 2, 2, mid); P(g, 6, 3, shade(petal, 1.3));
-  }
-  T(B.FLOWER_RED, function (g) { flower(g, '#ff4a4a', '#ffe03a'); });
-  T(B.FLOWER_YELLOW, function (g) { flower(g, '#ffe03a', '#ff9a1a'); });
-  T(B.FLOWER_BLUE, function (g) { flower(g, '#4a8cff', '#ffffff'); });
-  T(B.SAPLING, function (g) {
-    R4(g, 7, 8, 2, 8, '#7a5230');
-    R4(g, 3, 5, 5, 4, '#4fbf40'); R4(g, 8, 3, 5, 4, '#3fa535'); R4(g, 6, 1, 4, 4, '#5fcf50'); P(g, 7, 2, '#8ae060');
-  });
-  function pumpkin(g) {
-    R4(g, 1, 3, 14, 13, '#f28a1e');
-    for (var x = 1; x < 15; x += 4) R4(g, x, 3, 1, 13, '#c9661a');
-    R4(g, 1, 3, 14, 1, '#ffa94a'); R4(g, 1, 15, 14, 1, '#b85a14');
-    R4(g, 7, 0, 2, 4, '#5a8a2a'); R4(g, 9, 1, 3, 1, '#4fae33');
-  }
-  T(B.PUMPKIN, pumpkin);
-  T(B.JACK, function (g) {
-    pumpkin(g);
-    R4(g, 3, 6, 3, 3, '#ffe066'); R4(g, 10, 6, 3, 3, '#ffe066'); P(g, 4, 7, '#fff8c0'); P(g, 11, 7, '#fff8c0');
-    R4(g, 4, 11, 8, 2, '#ffe066'); R4(g, 5, 13, 2, 1, '#ffe066'); R4(g, 9, 13, 2, 1, '#ffe066'); P(g, 6, 11, '#f28a1e'); P(g, 9, 11, '#f28a1e');
-  });
-  T(B.MUSHROOM, function (g) {
-    R4(g, 6, 9, 4, 7, '#d8fbff'); R4(g, 7, 9, 1, 7, '#ffffff');
-    R4(g, 2, 5, 12, 4, '#2fd8f0'); R4(g, 4, 3, 8, 2, '#2fd8f0'); R4(g, 3, 4, 10, 1, '#4ff0ff');
-    P(g, 5, 5, '#e8ffff'); P(g, 9, 4, '#e8ffff'); P(g, 11, 6, '#e8ffff'); P(g, 7, 6, '#b8fbff');
-  });
-  T(B.CLAY, function (g) { speckle(g, ['#9fa8c0', '#a6afc6', '#98a1b9', '#a2abc2'], 0, 0, 16, 16); for (var i = 0; i < 4; i++) R4(g, ri(13), ri(15), 3, 1, '#8a93ab'); });
-  T(B.LANTERN, function (g) {
-    R4(g, 3, 2, 10, 13, '#3a3a42'); R4(g, 4, 3, 8, 11, '#ffe066'); R4(g, 5, 4, 6, 9, '#fff4b0'); R4(g, 6, 6, 4, 5, '#ffffff');
-    R4(g, 3, 7, 10, 1, '#3a3a42'); R4(g, 7, 3, 2, 11, '#3a3a42');
-    R4(g, 5, 0, 6, 2, '#55555c'); R4(g, 2, 14, 12, 2, '#55555c');
-  });
-  T(B.IRON_BLOCK, function (g) { metal(g, '#dcdce6', '#ffffff', '#9a9aa8'); });
-  T(B.GOLD_BLOCK, function (g) { metal(g, '#ffd23a', '#fff6b0', '#c8900f'); });
-  T(B.DIAMOND_BLOCK, function (g) { metal(g, '#5ff0e8', '#e8ffff', '#1fa8a4'); });
-  T(B.COPPER_BLOCK, function (g) { metal(g, '#e8844a', '#ffc8a0', '#a8521f'); });
-  T(B.SANDSTONE, function (g) {
-    for (var y = 0; y < 16; y++) { var band = [0, 1, 5, 6, 11, 12].indexOf(y) >= 0; for (var x = 0; x < 16; x++) P(g, x, y, band ? pick(['#c8a85e', '#d0b066']) : pick(['#e2c47a', '#dcbe74', '#e8cc84'])); }
-    R4(g, 0, 15, 16, 1, '#b8984e');
-  });
-  T(B.DEADBUSH, function (g) {
-    var c = '#a07840';
-    R4(g, 7, 9, 2, 7, c); R4(g, 4, 6, 1, 5, c); P(g, 5, 11, c); P(g, 6, 12, c); R4(g, 11, 5, 1, 5, c); P(g, 10, 10, c); P(g, 9, 11, c);
-    P(g, 3, 5, c); P(g, 12, 4, c); R4(g, 8, 4, 1, 5, '#8a6434');
-  });
-  for (w = 0; w < 11; w++) (function (w) { T(B.WOOL + w, function (g) { wool(g, WOOL_COLS[w]); }); })(w);
-
-  // Item-only icons
-  function IT(id, fn) { var c = canvas(16); var g = c.getContext('2d'); seed = 5000 + id * 131; GEN[id] = [fn, seed]; fn(g); TEX[id] = c; }
-  IT(I.STICK, function (g) { for (var i = 0; i < 11; i++) { R4(g, 3 + i, 13 - i, 2, 2, '#8a5f38'); P(g, 3 + i, 13 - i, '#b88a58'); } });
-  IT(I.COAL, function (g) { R4(g, 3, 4, 10, 9, '#2a2a2e'); R4(g, 4, 3, 7, 11, '#2a2a2e'); R4(g, 2, 6, 12, 5, '#2a2a2e'); R4(g, 5, 5, 3, 2, '#55555e'); P(g, 9, 9, '#44444c'); P(g, 5, 5, '#77777f'); });
-  function ingot(g, c, hi, dark) {
-    R4(g, 2, 6, 12, 6, c); R4(g, 4, 4, 10, 2, hi); R4(g, 2, 12, 12, 1, dark); R4(g, 13, 5, 1, 7, dark);
-    R4(g, 4, 7, 6, 1, hi); P(g, 4, 4, '#fff');
-  }
-  IT(I.COPPER_INGOT, function (g) { ingot(g, '#e07a3c', '#ffb07a', '#a8521f'); });
-  IT(I.IRON_INGOT, function (g) { ingot(g, '#d6d6e0', '#ffffff', '#8e8e9a'); });
-  IT(I.GOLD_INGOT, function (g) { ingot(g, '#ffd23a', '#fff6b0', '#c8900f'); });
-  IT(I.DIAMOND, function (g) {
-    R4(g, 4, 3, 8, 2, '#8ff8f2'); R4(g, 2, 5, 12, 3, '#3fe6dc'); R4(g, 4, 8, 8, 2, '#2fc6c0'); R4(g, 6, 10, 4, 2, '#1fa8a4'); R4(g, 7, 12, 2, 1, '#1a8f8c');
-    P(g, 5, 4, '#ffffff'); P(g, 4, 5, '#e8ffff'); R4(g, 7, 5, 1, 4, '#b8fffb');
-  });
-  IT(I.DYE, function (g) {
-    var cols = ['#ff4a4a', '#ff9a1a', '#ffe03a', '#6fd24a', '#3b8fe8', '#9b4fe2'];
-    R4(g, 5, 1, 6, 2, '#b8b8c4'); R4(g, 4, 3, 8, 12, '#ffffff'); R4(g, 3, 5, 10, 9, '#ffffff');
-    for (var i = 0; i < 6; i++) R4(g, 4, 4 + i * 2 - (i === 0 ? 0 : 0), 8, 2, cols[i]);
-    R4(g, 3, 6, 1, 7, cols[2]); R4(g, 12, 6, 1, 7, cols[3]); P(g, 5, 5, '#fff');
-  });
-  IT(I.DOOR, function (g) {
-    // Drawn from its own CPU canvases, not TEX, so BW.iconURL can repaint it without a GPU read-back.
-    var top = canvas(16), bot = canvas(16);
-    doorTex(cpuCtx(top), true); doorTex(cpuCtx(bot), false);
-    g.drawImage(top, 0, 0, 16, 16, 3, 0, 10, 8); g.drawImage(bot, 0, 0, 16, 16, 3, 8, 10, 8);
-  });
-  function pick_(g, head, hi, dark) {
-    for (var i = 0; i < 10; i++) { R4(g, 3 + i, 13 - i, 2, 2, '#7a5230'); P(g, 3 + i, 13 - i, '#a87848'); }
-    // head: arc from (1,4) to (12,15)? use a curved band
-    var pts = [[2, 5], [3, 4], [4, 3], [5, 2], [6, 2], [7, 1], [8, 1], [9, 1], [10, 2], [11, 2], [12, 3], [13, 4], [13, 5], [14, 6], [14, 7], [14, 8], [15, 9]];
-    pts.forEach(function (p, k) { R4(g, p[0], p[1], 2, 2, k % 5 === 0 ? dark : head); P(g, p[0], p[1], hi); });
-    R4(g, 9, 4, 3, 3, dark);
-  }
-  IT(I.PICK_WOOD, function (g) { pick_(g, '#c8955a', '#e8b878', '#8f6334'); });
-  IT(I.PICK_STONE, function (g) { pick_(g, '#9a9aa2', '#c8c8d0', '#6b6b73'); });
-  IT(I.PICK_IRON, function (g) { pick_(g, '#e6e6ee', '#ffffff', '#9a9aa8'); });
-  IT(I.PICK_DIAMOND, function (g) { pick_(g, '#4ef0e6', '#e8ffff', '#1fa8a4'); });
-  BW.TEX = TEX;
-
-  // Wall textures (1 dirt, 2 stone, 3 sandstone): darkened variants.
-  BW.WALL_TEX = [null];
-  [B.DIRT, B.STONE, B.SANDSTONE].forEach(function (src) {
-    var c = canvas(16); var g = c.getContext('2d');
-    g.drawImage(TEX[src], 0, 0);
-    g.fillStyle = 'rgba(20,14,30,0.55)'; g.fillRect(0, 0, 16, 16);
-    BW.WALL_TEX.push(c);
-  });
-
-  // Crack overlays (8 stages).
-  BW.CRACKS = [];
-  (function () {
-    seed = 999;
-    var segs = [];
-    for (var s = 0; s < 6; s++) {
-      var x = 8, y = 8, a = s * Math.PI / 3 + r() * 0.6;
-      for (var k = 0; k < 9; k++) { a += (r() - 0.5) * 1.1; x += Math.cos(a) * 1.2; y += Math.sin(a) * 1.2; segs.push([Math.round(x), Math.round(y), k]); }
-    }
-    for (var st = 0; st < 8; st++) {
-      var c = canvas(16), g = c.getContext('2d');
-      var lim = 1 + st;
-      segs.forEach(function (p) { if (p[2] <= lim && p[0] >= 0 && p[0] < 16 && p[1] >= 0 && p[1] < 16) { P(g, p[0], p[1], 'rgba(20,10,5,0.85)'); if (st > 4 && p[2] % 2) P(g, p[0] + 1, p[1], 'rgba(20,10,5,0.5)'); } });
-      BW.CRACKS.push(c);
-    }
-  })();
-
-  // Icon data-URLs for the DOM inventory (32px, crisp).
-  // Reading pixels back from a GPU canvas (toDataURL on a canvas fed by the GPU-backed TEX)
-  // stalls the main thread until the GPU has caught up with everything queued so far -
-  // hundreds of ms at startup or in the middle of play. So every icon is repainted from its
-  // seeded painter onto CPU canvases (willReadFrequently) instead: same pixels, same PNG,
-  // no GPU round-trip.
-  var iconCache = {};
+  BW.TEX = TEX; BW.WALL_TEX = WALL_TEX; BW.CRACKS = CRACKS;
   BW.iconURL = function (id) {
-    if (iconCache[id]) return iconCache[id];
-    var c = canvas(32), g = cpuCtx(c), gen = GEN[id];
-    g.imageSmoothingEnabled = false;
-    if (gen) {
-      var t = canvas(16), keep = seed;
-      seed = gen[1]; gen[0](cpuCtx(t)); seed = keep;
-      g.drawImage(t, 0, 0, 32, 32);
-    }
-    try { iconCache[id] = c.toDataURL(); } catch (e) { iconCache[id] = ''; }
-    return iconCache[id];
+    if (!ICON_URL[id] && TEX[id]) ICON_URL[id] = TEX[id].toDataURL();
+    return ICON_URL[id] || '';
   };
-  BW.itemName = function (id) { if (id === FLOWER) return 'أي زهرة'; var it = ITEMS[id]; return it ? it.name : '?'; };
-  BW.maxStack = function (id) { var it = ITEMS[id]; return it && it.max ? it.max : 99; };
+
+  // RECIPES[0] MUST stay 1 LOG -> 4 PLANKS (st: null) for quick-craft & double-click contracts!
+  var RECIPES = [
+    [B.PLANKS, 4, [[B.LOG, 1]]], [I.STICK, 4, [[B.PLANKS, 2]]], [B.TABLE, 1, [[B.PLANKS, 4]]],
+    [B.TORCH, 4, [[I.COAL, 1], [I.STICK, 1]]], [B.TORCH, 2, [[B.LOG, 1], [I.STICK, 1]]],
+    [B.TNT, 2, [[I.COAL, 1], [B.SAND, 2]]], [B.TNT, 3, [[I.SLIME_GEL, 1], [B.SAND, 1]]],
+    [I.PICK_WOOD, 1, [[B.PLANKS, 3], [I.STICK, 2]], 'table'], [I.PICK_STONE, 1, [[B.STONE, 3], [I.STICK, 2]], 'table'],
+    [I.PICK_IRON, 1, [[I.IRON_INGOT, 3], [I.STICK, 2]], 'table'], [I.PICK_DIAMOND, 1, [[I.DIAMOND, 3], [I.STICK, 2]], 'table'],
+    [I.PICK_RUBY, 1, [[I.RUBY, 3], [I.STICK, 2]], 'table'],
+    [B.SPRING, 2, [[I.SLIME_GEL, 1], [B.PLANKS, 2]], 'table'], [B.SPRING, 2, [[I.COPPER_INGOT, 1], [B.PLANKS, 2]], 'table'],
+    [I.JET_BOOTS, 1, [[I.IRON_INGOT, 2], [I.SLIME_GEL, 2]], 'table'], [B.FURNACE, 1, [[B.STONE, 8]], 'table'],
+    [B.LADDER, 4, [[I.STICK, 5]], 'table'], [I.DOOR, 1, [[B.PLANKS, 6]], 'table'],
+    [B.STONE_BRICKS, 4, [[B.STONE, 4]], 'table'], [B.SANDSTONE, 2, [[B.SAND, 4]], 'table'],
+    [B.LANTERN, 2, [[I.IRON_INGOT, 1], [B.TORCH, 1]], 'table'], [B.JACK, 1, [[B.PUMPKIN, 1], [B.TORCH, 1]]],
+    [I.DYE, 3, [[BW.FLOWER, 1]]], [B.COPPER_BLOCK, 1, [[I.COPPER_INGOT, 4]], 'table'],
+    [B.IRON_BLOCK, 1, [[I.IRON_INGOT, 4]], 'table'], [B.GOLD_BLOCK, 1, [[I.GOLD_INGOT, 4]], 'table'],
+    [B.DIAMOND_BLOCK, 1, [[I.DIAMOND, 4]], 'table'],
+    [I.COPPER_INGOT, 1, [[B.COPPER_ORE, 1], [I.COAL, 1]], 'furnace'], [I.IRON_INGOT, 1, [[B.IRON_ORE, 1], [I.COAL, 1]], 'furnace'],
+    [I.GOLD_INGOT, 1, [[B.GOLD_ORE, 1], [I.COAL, 1]], 'furnace'], [B.GLASS, 2, [[B.SAND, 2], [I.COAL, 1]], 'furnace'],
+    [B.BRICKS, 2, [[B.CLAY, 2], [I.COAL, 1]], 'furnace']
+  ].map(function (a) { return { out: a[0], n: a[1], ing: a[2], st: a[3] || null, cat: '' }; });
+  for (var cw = 1; cw < 11; cw++) RECIPES.push({ out: B.WOOL + cw, n: 1, ing: [[B.WOOL, 1], [I.DYE, 1]], st: null, cat: 'wool' });
+  BW.RECIPES = RECIPES;
+
+  function qMap(a) {
+    var v = a[4];
+    if (typeof v === 'string') v = function (s) { return s[a[4]] || 0; };
+    else if (typeof v === 'number') {
+      v = v < 0 ? function (s) { return s.placed[-a[4]] || 0; }
+        : v >= 1000 ? function (s) { return s.craft[a[4] - 1000] || 0; }
+        : function (s) { return s.got[a[4]] || 0; };
+    }
+    return { id: a[0], text: a[1], icon: a[2], need: a[3], val: v };
+  }
+
+  BW.QUESTS_SURVIVAL = [
+    ['logs', 'اقطع شجرة واجمع 4 قطع خشب', B.LOG, 4, B.LOG],
+    ['planks', 'اصنع ألواح خشب', B.PLANKS, 4, 1000 + B.PLANKS],
+    ['table', 'اصنع طاولة الصنع', B.TABLE, 1, 1000 + B.TABLE],
+    ['tableplace', 'ضع طاولة الصنع على الأرض', B.TABLE, 1, -B.TABLE],
+    ['pickwood', 'اصنع معولًا خشبيًا', I.PICK_WOOD, 1, 1000 + I.PICK_WOOD],
+    ['stone', 'احفر 12 مكعب حجر', B.STONE, 12, B.STONE],
+    ['pickstone', 'اصنع معولًا حجريًا', I.PICK_STONE, 1, 1000 + I.PICK_STONE],
+    ['coal', 'اعثر على 5 قطع فحم', I.COAL, 5, I.COAL],
+    ['torch', 'اصنع شعلات مضيئة', B.TORCH, 4, 1000 + B.TORCH],
+    ['torchplace', 'أضئ كهفًا بـ 4 شعلات', B.TORCH, 4, -B.TORCH],
+    ['tntblast', 'فجّر متفجرات TNT في المنجم!', B.TNT, 1, 'blasts'],
+    ['chest', 'افتح صندوق كنز تحت الأرض', B.CHEST, 1, 'chests'],
+    ['spring', 'اقفز عاليًا على منصة قفز', B.SPRING, 1, 'bounces'],
+    ['furnace', 'اصنع فرنًا لصهر المعادن', B.FURNACE, 1, 1000 + B.FURNACE],
+    ['copper', 'اصهر سبيكة نحاس', I.COPPER_INGOT, 1, 1000 + I.COPPER_INGOT],
+    ['iron', 'اصهر 3 سبائك حديد', I.IRON_INGOT, 3, 1000 + I.IRON_INGOT],
+    ['pickiron', 'اصنع معولًا حديديًا', I.PICK_IRON, 1, 1000 + I.PICK_IRON],
+    ['slime', 'اجمع جل السلايم أو البلور المشع', I.SLIME_GEL, 2, I.SLIME_GEL],
+    ['jetboots', 'اصنع حذاء القفز النفاث!', I.JET_BOOTS, 1, 1000 + I.JET_BOOTS],
+    ['pet', 'ربّت على حيوان أليف', B.WOOL, 1, function (s) { return (s.pets || 0) + (s.sheared || 0); }],
+    ['build50', 'ابنِ بـ 40 مكعبًا', B.BRICKS, 40, 'placedTotal'],
+    ['door', 'ضع بابًا لقاعدتك', I.DOOR, 1, -B.DOOR_B],
+    ['ruby', 'اعثر على ياقوتة متوهجة', I.RUBY, 1, I.RUBY],
+    ['diamond', 'اعثر على ألماسة!', I.DIAMOND, 1, I.DIAMOND],
+    ['pickdiamond', 'اصنع معولًا ألماسيًا أو ياقوتيًا', I.PICK_DIAMOND, 1, function (s) { return (s.craft[I.PICK_DIAMOND] || 0) + (s.craft[I.PICK_RUBY] || 0); }],
+    ['biomes', 'زُر المناطق الخمس كلها', B.CACTUS, 5, function (s) { return Object.keys(s.biomes || {}).length; }],
+    ['bedrock', 'انزل إلى صخر القاع السحيق', B.BEDROCK, 1, function (s) { return s.maxDepth >= 130 ? 1 : 0; }]
+  ].map(qMap);
+
+  BW.QUESTS_CREATIVE = [
+    ['c_fly', 'طِر في السماء (مرتان على مسافة)', B.GLASS, 1, 'flew'],
+    ['c_50', 'ضع 50 مكعبًا', B.PLANKS, 50, 'placedTotal'],
+    ['c_tnt', 'فجّر متفجرات TNT!', B.TNT, 1, 'blasts'],
+    ['c_spring', 'جرّب منصة القفز الخارقة', B.SPRING, 1, 'bounces'],
+    ['c_wool', 'ابنِ بـ 5 ألوان من الصوف', B.WOOL + 1, 5, function (s) { var n = 0; for (var i = 0; i < 11; i++) if (s.placed[B.WOOL + i]) n++; return n; }],
+    ['c_light', 'أضئ بـ 10 شعلات أو فوانيس', B.LANTERN, 10, function (s) { return (s.placed[B.TORCH] || 0) + (s.placed[B.LANTERN] || 0) + (s.placed[B.JACK] || 0); }],
+    ['c_200', 'ضع 200 مكعب', B.BRICKS, 200, 'placedTotal'],
+    ['c_sky', 'ابنِ برجًا في السماء', B.GOLD_BLOCK, 1, function (s) { return s.highestPlace <= 24 ? 1 : 0; }],
+    ['c_biomes', 'زُر المناطق الخمس كلها', B.CACTUS, 5, function (s) { return Object.keys(s.biomes || {}).length; }],
+    ['c_500', 'البنّاء الأسطوري: 500 مكعب!', B.DIAMOND_BLOCK, 500, 'placedTotal']
+  ].map(qMap);
+
+  BW.SKINS = [
+    ['المستكشف الشجاع', 0, '#4d2e16', '#f5c49c', '#29b6f6', '#283593'],
+    ['خبير المتفجرات', 3, '#22222c', '#ecc096', '#e63946', '#2b2d42', '#ffd60a'],
+    ['نينجا الكهوف', 7, '#191a24', '#f2c6a0', '#3a0ca3', '#141626', '#4cc9f0'],
+    ['فارس الزمرد', 12, '#6a3818', '#e6b48a', '#2dc653', '#1b4332', '#b7e4c7'],
+    ['رائد الفضاء النفاث', 18, '#ffd84a', '#f5c8a2', '#f8f9fa', '#3a86ff', '#00f5d4'],
+    ['ملك الألماس والياقوت', 24, '#fff1a8', '#f5c8a2', '#38ece4', '#7209b7', 'crown']
+  ].map(function (a) { return { name: a[0], stars: a[1], hair: a[2], skin: a[3], shirt: a[4], pants: a[5], hat: a[6] || null }; });
 })();

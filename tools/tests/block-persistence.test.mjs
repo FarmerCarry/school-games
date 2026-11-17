@@ -336,3 +336,32 @@ test('world metadata saved as a number, or with slots that are not a list, loads
     assert.deepEqual(meta.slots.slice(1), [null, null], raw);
   }
 });
+
+test('RLE-compressed world save stays under 8 KB and persists difficulty, TNT crates, and treasure vaults', async t => {
+  const page = await game(t);
+  await page.evaluate(() => {
+    document.getElementById('playBtn').click();
+    document.querySelector('#newDiffBar [data-d="hero"]').click();
+    document.getElementById('modeSurv').click();
+  });
+  await page.waitForFunction(() => __game.G.mode === 'play');
+  const savedInfo = await page.evaluate(() => {
+    const px = Math.floor(__game.player.x + 2), py = __game.surfaceY(px) - 1;
+    __game.give(BW.B.TNT, 2);
+    __game.G.sel = 0;
+    __game.placeAt(px, py);
+    __game.save();
+    const raw = localStorage.getItem('sg:block-world:slot1') || '';
+    return { bytes: raw.length, px, py, vaults: __game.G.world.vaults.length, diff: __game.G.diff };
+  });
+  assert.ok(savedInfo.bytes > 2048 && savedInfo.bytes < 8192, `expected RLE save < 8 KB, got ${savedInfo.bytes} bytes`);
+  assert.equal(savedInfo.diff, 'hero');
+  assert.ok(savedInfo.vaults >= 8);
+  await restore(page);
+  assert.deepEqual(await page.evaluate(({ px, py }) => ({
+    diff: __game.G.diff,
+    tile: __game.G.world.get(px, py),
+    vaults: __game.G.world.vaults.length
+  }), savedInfo), { diff: 'hero', tile: 46, vaults: savedInfo.vaults });
+});
+

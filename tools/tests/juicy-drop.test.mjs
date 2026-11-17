@@ -1,7 +1,9 @@
-// Juicy Drop (سلّة الفواكه) in real Chromium:
-// Space & mouse fruit dropping, mouse + arrow aiming, merge combos, Combo Shake,
-// 12-stage goals & World 2 ice melting, Endless mode & drops >= 5 coin guard,
-// pause freeze, restart, shop + storage quota retry, focus isolation, and reduced motion.
+// Juicy Drop: Turbo Monster-Fruit Blaster (سلة الفواكه) in real Chromium:
+// Open modes (Classic, Crate Smash, 90s Turbo Rush) & difficulties (Easy, Mid, Hero),
+// exact-X mouse + Arrow aiming & Space/click dropping (never random X jumps),
+// chain merges, Fever Mode + Rainbow Wildcard, all 3 Action Gadgets (Bomb, Shake, Swap),
+// Crate Smash & Rush stars, overflow warning/grace & drops >= 3 coin guard,
+// pause freeze, resume/restart, shop + storage quota retry, focus isolation, and reduced motion.
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import path from 'node:path';
@@ -23,16 +25,15 @@ after(async () => {
   await server?.close();
 });
 
-const SAVE = (open = 0, extra = {}) => ({
-  v: 1,
-  lv: Array.from({ length: 12 }, (_, i) => ({ s: i < open ? 2 : 0, hi: i < open ? 120 : 0 })),
-  bestEndless: 0,
+const SAVE = (extra = {}) => ({
+  v: 2,
   coins: 0,
-  jars: [1, 0, 0, 0, 0],
-  faces: [1, 0, 0, 0, 0],
-  jar: 0,
-  face: 0,
-  coach: true,
+  best: { classic: 0, crates: 0, rush: 0 },
+  stars: { crates: 0, rush: 0 },
+  dropper: 0,
+  droppers: [1, 0, 0, 0],
+  tank: 0,
+  tanks: [1, 0, 0, 0],
   ...extra
 });
 
@@ -111,232 +112,350 @@ const stored = page => page.evaluate(() => {
 });
 const pagePoint = (page, x, y) => page.evaluate(([x, y]) => __game.point(x, y), [x, y]);
 
-test('title waits quietly; first-visit Play opens Stage 1-1 with stationary cloud and drops === 0; returning Play opens Map', async t => {
-  const page = await game(t);
+test('title waits quietly; all 3 modes & 3 difficulties are open from start; #btnPlay launches Classic immediately', async t => {
+  const page = await game(t, {
+    save: SAVE({ coins: 14, best: { classic: 420, crates: 880, rush: 1350 } })
+  });
   await step(page, 30);
   assert.equal((await state(page)).screen, 'title');
-  assert.equal(await page.locator('#titleStars b').textContent(), '0/36');
+  assert.equal(await page.locator('#titleCoins b').textContent(), '14');
+  assert.equal(await page.locator('#titleBest b').textContent(), '420');
 
   // Clicking corner (3, 3) to unlock audio does not start play.
   await page.mouse.click(3, 3);
   await step(page, 10);
   assert.equal((await state(page)).screen, 'title');
 
-  for (const word of ['صوّب وأفلت', 'ادمج المتشابه', 'هزّ السلّة', 'اصنع البطيخة']) {
-    assert.ok(await page.locator('.howto figcaption', { hasText: word }).isVisible(), word);
+  for (const label of ['الدمج الكلاسيكي', 'تحطيم الصناديق', 'سباق الـ 90 ثانية']) {
+    assert.ok(await page.locator('.mode-card b', { hasText: label }).isVisible(), label);
+  }
+  for (const diffLabel of ['سهل', 'متوسط', 'بطل']) {
+    assert.ok(await page.locator('.diff-pill', { hasText: diffLabel }).isVisible(), diffLabel);
   }
 
+  // Switching mode updates high-score chip dynamically before launching.
+  await page.locator('#modeCrates').click();
+  assert.equal(await page.locator('#titleBest b').textContent(), '880');
+  await page.locator('#modeClassic').click();
+  assert.equal(await page.locator('#titleBest b').textContent(), '420');
+
+  // Default #btnPlay opens Classic + Mid immediately with stationary dropper and zero drops.
   await page.locator('#btnPlay').click();
   await step(page);
   let s = await state(page);
   assert.equal(s.screen, 'play');
-  assert.equal(s.mode, 'stage');
-  assert.equal(s.id, '1-1');
+  assert.equal(s.mode, 'classic');
+  assert.equal(s.diff, 'mid');
   assert.equal(s.cloudX, 640);
   assert.equal(s.drops, 0);
-  assert.equal(s.fruits, 0);
+  assert.equal(s.fruits.length, 0);
+  assert.equal(await page.evaluate(() => jd.rounds.at(-1)), 'classic_mid');
 
   // Idle frames never move cloudX or drop fruits before player input!
   await run(page, 120);
   s = await state(page);
   assert.equal(s.cloudX, 640);
   assert.equal(s.drops, 0);
-  assert.equal(s.fruits, 0);
+  assert.equal(s.fruits.length, 0);
 
-  // With stars earned, #btnPlay opens the stage map instead.
-  const returning = await game(t, { save: SAVE(2) });
-  await returning.locator('#btnPlay').click();
-  await step(returning);
-  assert.equal((await state(returning)).screen, 'map');
+  // Return to title, pick Crate Smash + Easy -> wider tank, 5 crates, Easy gadget loadout.
+  await page.locator('#btnPause').click();
+  await step(page);
+  await page.locator('#btnPauseHome').click();
+  await step(page);
+  assert.equal(await page.evaluate(() => jd.ends.at(-1)[0]), 'quit');
+
+  await page.locator('#modeCrates').click();
+  await page.locator('#diffEasy').click();
+  await page.locator('#btnPlay').click();
+  await step(page);
+  s = await state(page);
+  assert.equal(s.mode, 'crates');
+  assert.equal(s.diff, 'easy');
+  assert.equal(s.crates, 5);
+  assert.deepEqual(s.gadgets, { bomb: 2, shake: 2, swap: 3 });
+  assert.equal(await page.evaluate(() => __game.world.jar.hw), 276);
+  assert.equal(await page.evaluate(() => jd.rounds.at(-1)), 'crates_easy');
+
+  // Return to title, pick 90s Turbo Rush + Hero -> moving bumper, 90s clock, doubled gadgets.
+  await page.locator('#btnPause').click();
+  await step(page);
+  await page.locator('#btnPauseHome').click();
+  await step(page);
+  await page.locator('#modeRush').click();
+  await page.locator('#diffHero').click();
+  await page.locator('#btnPlay').click();
+  await step(page);
+  s = await state(page);
+  assert.equal(s.mode, 'rush');
+  assert.equal(s.diff, 'hero');
+  assert.equal(s.timeLeft, 90);
+  assert.deepEqual(s.gadgets, { bomb: 2, shake: 2, swap: 2 });
+  assert.ok(await page.evaluate(() => __game.world.bumper !== null), 'Hero Rush spawns moving bumper');
 });
 
-test('real mouse click, mouse aiming, ArrowLeft/ArrowRight steering, Space dropping, merge combos, and Combo Shake', async t => {
+test('exact-X mouse & Arrow aiming, Space/click dropping without random X jumps, chain merges, Fever Mode & Rainbow Wildcard', async t => {
   const page = await game(t, { reducedMotion: 'no-preference' });
   await page.locator('#btnPlay').click();
   await step(page);
 
-  // Move mouse to x = 560 inside jar and click to drop first fruit.
-  const pLeft = await pagePoint(page, 560, 320);
+  // Move mouse to x = 540 inside tank and click to drop right where aimed.
+  const pLeft = await pagePoint(page, 540, 320);
   await page.mouse.move(pLeft.x, pLeft.y);
   await step(page, 2);
-  assert.ok(Math.abs((await state(page)).cloudX - 560) < 2);
+  assert.ok(Math.abs((await state(page)).cloudX - 540) < 2);
 
   await page.mouse.click(pLeft.x, pLeft.y);
   await step(page, 2);
   let s = await state(page);
   assert.equal(s.drops, 1);
-  assert.equal(s.fruits, 1);
+  assert.equal(s.fruits.length, 1);
+  assert.ok(Math.abs(s.fruits[0].x - 540) < 2, 'clicked fruit spawns at aimed X');
 
-  // Arrow keys steer cloudX smoothly even after mouse movement.
-  await run(page, 25);
-  const beforeArrow = (await state(page)).cloudX;
+  // Arrow keys steer cloudX smoothly in both directions.
+  await run(page, 22);
+  const beforeRight = (await state(page)).cloudX;
   await page.keyboard.down('ArrowRight');
-  await step(page, 12);
+  await step(page, 14);
   await page.keyboard.up('ArrowRight');
-  const afterArrow = (await state(page)).cloudX;
-  assert.ok(afterArrow > beforeArrow + 40, `${afterArrow} > ${beforeArrow}`);
+  const afterRight = (await state(page)).cloudX;
+  assert.ok(afterRight > beforeRight + 50, `${afterRight} > ${beforeRight}`);
 
-  // Space drops at current cloudX and then steps cloudX for one-button play.
+  await page.keyboard.down('ArrowLeft');
+  await step(page, 6);
+  await page.keyboard.up('ArrowLeft');
+  const aimedX = (await state(page)).cloudX;
+  assert.ok(aimedX < afterRight - 15, `${aimedX} < ${afterRight}`);
+
+  // Space drops right at aimedX — NEVER randomly teleports cloudX!
   await page.keyboard.press('Space');
   await step(page, 2);
   s = await state(page);
   assert.equal(s.drops, 2);
-  assert.notEqual(s.cloudX, afterArrow);
+  assert.equal(s.cloudX, aimedX, 'Space never teleports cloudX');
+  assert.ok(Math.abs(s.fruits[1].x - aimedX) < 1.5, 'Space spawns fruit at exact cloudX');
 
-  // Force identical Dates (tier 2 -> Fig tier 3, keeping Stage 1-1 active) to verify merge + Combo Shake!
+  // Force identical Kiwis (tier 2) + near-full Fever Gauge -> merge triggers Fever Mode & Rainbow Wildcard!
   await page.evaluate(() => {
     const w = __game.world;
     w.fruits.length = 0;
     w.currentTier = 2;
     w.nextTier = 2;
-    w.shakeCharge = 65;
+    w.fever = 88;
   });
-  await run(page, 25);
+  await run(page, 22);
   const center = await pagePoint(page, 640, 300);
   await page.mouse.click(center.x, center.y);
-  await run(page, 75);
+  await run(page, 70);
   await page.evaluate(() => { __game.world.currentTier = 2; });
   await page.mouse.click(center.x, center.y);
-  await run(page, 75);
+  await run(page, 70);
 
   s = await state(page);
-  assert.ok(s.merges >= 1, 'identical fruits merged');
-  assert.ok(s.score >= 14, 'merge awarded points');
-  assert.equal(s.shakeCharge, 100, 'shake meter charged to 100');
-  assert.match(await page.locator('#btnShake').getAttribute('class'), /ready/);
+  assert.ok(s.merges >= 1, 'identical monster-fruits merged');
+  assert.ok(s.score >= 24, 'merge awarded points');
+  assert.ok((await page.evaluate(() => jd.hits)) >= 1, 'merge tracked Kit.track.hit()');
+  assert.equal(s.feverActive, true, 'full Fever Gauge launched Fever Mode');
+  assert.equal(s.currentPower, 'rainbow', 'Fever Mode armed free Rainbow Wildcard');
 
-  const dropsBeforeShake = s.drops;
-  await page.locator('#btnShake').click();
-  await step(page, 2);
+  // Dropping the Rainbow Wildcard onto the Tier-3 Lemon merges into Tier-4 Karate Orange!
+  await page.mouse.click(center.x, center.y);
+  await run(page, 70);
   s = await state(page);
-  assert.equal(s.shakesUsed, 1, 'Combo Shake activated by #btnShake');
-  assert.equal(s.shakeCharge, 0);
-  assert.equal(s.drops, dropsBeforeShake, 'clicking #btnShake never drops a fruit');
-
-  // Also verify KeyS activates Combo Shake when charged.
-  await page.evaluate(() => { __game.world.shakeCharge = 100; });
-  await step(page);
-  await page.keyboard.press('KeyS');
-  await step(page, 2);
-  assert.equal((await state(page)).shakesUsed, 2);
+  assert.ok(s.merges >= 2, 'Rainbow Wildcard merged with existing fruit');
+  assert.ok(s.fruits.some(f => f.tier === 4), 'evolved into Tier-4 fruit');
 });
 
-test('completing Stage 1-1 awards 3 stars & coins, records DDA & telemetry, and unlocks Stage 1-2; World 2 melts ice', async t => {
-  const page = await game(t, { save: SAVE(4) });
-  await page.locator('#btnLevels').click();
+test('all 3 Action Gadgets work via HUD buttons (#btnBomb, #btnShake, #btnSwap) and Digit1/2/3 hotkeys', async t => {
+  const page = await game(t);
+  await page.locator('#diffEasy').click();
+  await page.locator('#btnPlay').click();
   await step(page);
-  await page.locator('.lvl').nth(0).click();
-  await step(page);
-  assert.equal((await state(page)).id, '1-1');
 
-  // Drop two Figs (tier 3) at center to craft a Lemon (tier 4) and win Stage 1-1!
+  // Easy loadout starts with 2 Bombs, 2 Shakes, 3 Swaps.
+  assert.equal(await page.locator('#cntBomb').textContent(), '2');
+  assert.equal(await page.locator('#cntShake').textContent(), '2');
+  assert.equal(await page.locator('#cntSwap').textContent(), '3');
+
+  // 1) Juice Bomb (#btnBomb & Digit1): blasts the 3 smallest clutter fruits each time without dropping!
   await page.evaluate(() => {
     const w = __game.world;
-    w.currentTier = 3;
+    w.fruits.length = 0;
+    JDEngine.spawnFruit(w, 0, 420, 640, 0, 0);
+    JDEngine.spawnFruit(w, 0, 470, 640, 0, 0);
+    JDEngine.spawnFruit(w, 1, 525, 640, 0, 0);
+    JDEngine.spawnFruit(w, 1, 585, 640, 0, 0);
+    JDEngine.spawnFruit(w, 2, 650, 635, 0, 0);
+    JDEngine.spawnFruit(w, 3, 725, 628, 0, 0);
+    JDEngine.spawnFruit(w, 7, 815, 584, 0, 0); // Tier-7 Boxing Melon survives both Bombs!
+  });
+  await page.locator('#btnBomb').click();
+  await step(page, 2);
+  let s = await state(page);
+  assert.equal(s.drops, 0, 'clicking #btnBomb never drops a fruit');
+  assert.equal(s.fruits.length, 4, 'first Bomb blasted 3 smallest clutter fruits');
+  assert.equal(await page.locator('#cntBomb').textContent(), '1');
+
+  await page.keyboard.press('Digit1');
+  await step(page, 2);
+  s = await state(page);
+  assert.equal(s.fruits.length, 1, 'second Bomb via Digit1 blasted next 3 smallest fruits');
+  assert.equal(s.fruits[0].tier, 7, 'highest-tier monster fruit preserved');
+  assert.equal(await page.locator('#cntBomb').textContent(), '0');
+  assert.match(await page.locator('#btnBomb').getAttribute('class'), /empty/);
+
+  // 2) Tank Shake (#btnShake & Digit2): jolts separated matching fruits together and decrements count!
+  await page.evaluate(() => {
+    const w = __game.world;
+    w.fruits.length = 0;
+    JDEngine.spawnFruit(w, 3, 598, 625, 0, 0);
+    JDEngine.spawnFruit(w, 3, 682, 625, 0, 0);
+  });
+  await page.locator('#btnShake').click();
+  await run(page, 45);
+  s = await state(page);
+  assert.ok(s.merges >= 1, 'Tank Shake jolted separated fruits into merging');
+  assert.equal(await page.locator('#cntShake').textContent(), '1');
+
+  await page.keyboard.press('Digit2');
+  await step(page, 2);
+  assert.equal(await page.locator('#cntShake').textContent(), '0');
+  assert.match(await page.locator('#btnShake').getAttribute('class'), /empty/);
+
+  // 3) Swap (#btnSwap & Digit3): swaps current & next fruit cleanly!
+  await page.evaluate(() => {
+    const w = __game.world;
+    w.currentTier = 0;
     w.nextTier = 3;
   });
-  const center = await pagePoint(page, 640, 300);
-  await page.mouse.click(center.x, center.y);
-  await run(page, 75);
-  await page.mouse.click(center.x, center.y);
-  await run(page, 75);
-
-  let s = await state(page);
-  assert.equal(s.done, true);
-  assert.equal(s.won, true);
-  assert.equal(s.stars, 3);
-  assert.deepEqual(await page.evaluate(() => jd.results), [1]);
-  assert.deepEqual(await page.evaluate(() => jd.ends[jd.ends.length - 1][0]), 'win');
-
-  await run(page, 90);
+  await page.locator('#btnSwap').click();
+  await step(page, 2);
   s = await state(page);
-  assert.equal(s.screen, 'result');
-  await run(page, 90);
-  assert.equal(await page.locator('#resStars svg.on').count(), 3);
-  assert.ok((await stored(page)).lv[0].s === 3);
+  assert.equal(s.currentTier, 3);
+  assert.equal(s.nextTier, 0);
+  assert.equal(await page.locator('#cntSwap').textContent(), '2');
 
-  // Enter advances to Stage 1-2.
-  await page.keyboard.press('Enter');
-  await step(page);
-  assert.equal((await state(page)).id, '1-2');
-
-  // Open World 2 Stage 2-1 (index 4) and verify frosted cubes spawn & melt on adjacent merge!
-  await page.keyboard.press('Escape');
-  await step(page);
-  await page.locator('#btnMap').click();
-  await step(page);
-  await page.locator('.lvl').nth(4).click();
-  await step(page);
+  await page.keyboard.press('Digit3');
+  await step(page, 2);
   s = await state(page);
-  assert.equal(s.id, '2-1');
-  assert.equal(s.ices, 2);
-
-  await page.evaluate(() => {
-    const w = __game.world;
-    const ic = w.ices[0];
-    JD.addFruit(w, 0, ic.x - 16, ic.y - ic.r - 16, 0, 0);
-    JD.addFruit(w, 0, ic.x + 8, ic.y - ic.r - 16, 0, 0);
-  });
-  await run(page, 25);
-  assert.equal((await state(page)).ices, 1, 'adjacent merge melted one ice cube');
+  assert.equal(s.currentTier, 0);
+  assert.equal(await page.locator('#cntSwap').textContent(), '1');
 });
 
-test('Endless mode (#btnEndless), overflow warning/end grace, and drops >= 5 coin guard', async t => {
+test('Crate Smash win, 90s Turbo Rush win/time-up, and Classic overflow grace + drops >= 3 coin guard', async t => {
   const page = await game(t);
-  await page.locator('#btnEndless').click();
-  await step(page);
-  let s = await state(page);
-  assert.equal(s.screen, 'play');
-  assert.equal(s.mode, 'endless');
-  assert.equal(await page.evaluate(() => jd.rounds[jd.rounds.length - 1]), 'endless');
 
-  // 1) Under 5 drops: settled fruit above TOP_Y warns after 1.2s, ends after 2.8s+grace, pays ZERO coins!
+  // 1) Crate Smash win awards 3 stars & coins, records win telemetry & DDA.
+  await page.locator('#modeCrates').click();
+  await page.locator('#btnPlay').click();
+  await step(page);
   await page.evaluate(() => {
     const w = __game.world;
-    w.drops = 3;
-    w.score = 250;
-    const ic = JD.addIce(w, 5, 640, JD.TOP_Y + 62, 2);
-    const f = JD.addFruit(w, 5, 640, ic.y - ic.r - 56, 0, 0);
-    f.landed = true;
-    f.age = 2;
-  });
-  await run(page, 80); // ~1.33s -> warning active, not over yet
-  s = await state(page);
-  assert.equal(s.warning, true, 'overflow warns after 1.2s');
-  assert.equal(s.over, false, 'not over yet before 2.8s');
-
-  await run(page, 150); // past 2.8s + grace -> overflow!
-  s = await state(page);
-  assert.equal(s.over, true);
-  assert.equal(s.done, true);
-  assert.equal((await page.evaluate(() => __game.save)).coins, 0, 'zero endless coins when drops < 5');
-  assert.equal(await page.evaluate(() => jd.ends[jd.ends.length - 1][0]), 'end');
-
-  // Wait for result screen and play again with drops >= 5 -> pays coins!
-  await run(page, 70);
-  assert.equal((await state(page)).screen, 'result');
-  await run(page, 40);
-  await page.locator('#resAgain').click();
-  await step(page);
-  assert.equal((await state(page)).drops, 0);
-
-  await page.evaluate(() => {
-    const w = __game.world;
-    w.drops = 8;
-    w.score = 320;
-    w.overTime = 3.2;
-    const ic = JD.addIce(w, 5, 640, JD.TOP_Y + 62, 2);
-    const f = JD.addFruit(w, 5, 640, ic.y - ic.r - 56, 0, 0);
-    f.landed = true;
-    f.age = 2;
+    w.drops = 6;
+    w.crates.length = 1;
+    w.crates[0].x = 640;
+    w.crates[0].y = 630;
+    w.crates[0].hp = 1;
+    JDEngine.spawnFruit(w, 2, 634, 560, 0, 0);
+    JDEngine.spawnFruit(w, 2, 646, 560, 0, 0);
   });
   await run(page, 30);
-  assert.equal((await state(page)).over, true);
-  assert.ok((await stored(page)).coins >= 10, 'endless coins awarded when drops >= 5');
-  assert.equal((await stored(page)).bestEndless, 320);
+  let s = await state(page);
+  assert.equal(s.screen, 'win');
+  assert.equal(s.won, true);
+  assert.equal(s.stars, 3);
+  assert.equal(await page.locator('#endStars svg.on').count(), 3);
+  assert.equal(await page.evaluate(() => jd.ends.at(-1)[0]), 'win');
+  assert.equal(await page.evaluate(() => jd.results.at(-1)), 1);
+  assert.equal((await stored(page)).stars.crates, 3);
+  assert.ok((await stored(page)).coins >= 12);
+
+  // 2) 90s Turbo Rush win (score >= 3-star target) and lose (score below 1-star target on time-up).
+  await page.locator('#btnEndHome').click();
+  await step(page);
+  await page.locator('#modeRush').click();
+  await page.locator('#btnPlay').click();
+  await step(page);
+  await page.evaluate(() => {
+    const w = __game.world;
+    w.drops = 5;
+    w.score = 1950;
+    w.timeLeft = 0.04;
+  });
+  await run(page, 8);
+  s = await state(page);
+  assert.equal(s.screen, 'win');
+  assert.equal(s.stars, 3);
+  assert.equal((await stored(page)).stars.rush, 3);
+  assert.equal((await stored(page)).best.rush, 1950);
+
+  await page.locator('#btnEndAgain').click();
+  await step(page);
+  assert.equal((await state(page)).drops, 0);
+  await page.evaluate(() => {
+    const w = __game.world;
+    w.drops = 4;
+    w.score = 90;
+    w.timeLeft = 0.04;
+  });
+  await run(page, 8);
+  s = await state(page);
+  assert.equal(s.screen, 'over');
+  assert.equal(s.won, false);
+  assert.equal(await page.locator('#endTitle').textContent(), 'انتهى الوقت!');
+  assert.equal(await page.evaluate(() => jd.ends.at(-1)[0]), 'lose');
+
+  // 3) Classic overflow warns first, waits for grace timer, guards coins when drops < 3, and pays when drops >= 3!
+  await page.locator('#btnEndHome').click();
+  await step(page);
+  await page.locator('#modeClassic').click();
+  await page.locator('#btnPlay').click();
+  await step(page);
+
+  const coinsBefore = (await stored(page)).coins;
+  await page.evaluate(() => {
+    const w = __game.world;
+    w.drops = 2; // < 3 drops -> zero coin reward!
+    w.score = 300;
+    w.crates.push({ id: 99, x: 640, y: 215, r: 44, hp: 5, maxHp: 5, kind: 'ice', prize: 2, hitAnim: 0 });
+    const f = JDEngine.spawnFruit(w, 5, 640, 114, 0, 0);
+    f.landed = true;
+    f.age = 2.0;
+  });
+  await run(page, 35); // ~0.58s -> warning active, not over yet!
+  s = await state(page);
+  assert.equal(s.warning, true, 'overflow rim warning activates first');
+  assert.equal(s.over, false, 'grace timer prevents instant cheap game-over');
+
+  await run(page, 145); // past maxOverTime -> overflow!
+  s = await state(page);
+  assert.equal(s.screen, 'over');
+  assert.equal(s.over, true);
+  assert.ok((await page.evaluate(() => jd.misses)) >= 1, 'overflow tracked Kit.track.miss()');
+  assert.equal(await page.evaluate(() => jd.ends.at(-1)[0]), 'end');
+  assert.equal((await stored(page)).coins, coinsBefore, 'zero coins paid when drops < 3');
+
+  // Play again with drops >= 3 -> awards coins!
+  await page.locator('#btnEndAgain').click();
+  await step(page);
+  await page.evaluate(() => {
+    const w = __game.world;
+    w.drops = 6;
+    w.merges = 3;
+    w.score = 440;
+    w.overTimer = w.maxOverTime - 0.05;
+    w.crates.push({ id: 99, x: 640, y: 215, r: 44, hp: 5, maxHp: 5, kind: 'ice', prize: 2, hitAnim: 0 });
+    const f = JDEngine.spawnFruit(w, 5, 640, 114, 0, 0);
+    f.landed = true;
+    f.age = 2.0;
+  });
+  await run(page, 10);
+  assert.equal((await state(page)).screen, 'over');
+  assert.ok((await stored(page)).coins > coinsBefore, 'coins awarded when drops >= 3');
+  assert.equal((await stored(page)).best.classic, 440);
 });
 
-test('Pause (#btnPause, KeyP, Escape, blur) freezes simulation completely; Resume & Restart work', async t => {
+test('Pause (#btnPause, KeyP, Escape, blur) freezes simulation completely; Resume & Restart (#btnRestart, KeyR) work', async t => {
   const page = await game(t);
   await page.locator('#btnPlay').click();
   await step(page);
@@ -349,7 +468,7 @@ test('Pause (#btnPause, KeyP, Escape, blur) freezes simulation completely; Resum
     t: __game.state.time,
     cloudX: __game.state.cloudX,
     drops: __game.state.drops,
-    fy: __game.world.fruits.map(f => f.y)
+    fruits: __game.state.fruits
   }));
 
   for (const how of ['button', 'KeyP', 'Escape', 'blur']) {
@@ -371,27 +490,44 @@ test('Pause (#btnPause, KeyP, Escape, blur) freezes simulation completely; Resum
     assert.notEqual(await snap(), frozen, 'simulation resumes after #btnResume');
   }
 
-  // Restart from pause resets drops, score, and fruits to 0.
+  // Restart via #btnRestart resets time, drops, score, and fruits to 0.
   await page.locator('#btnPause').click();
   await step(page);
   await page.locator('#btnRestart').click();
-  await step(page);
-  const s = await state(page);
+  let s = await state(page);
   assert.equal(s.screen, 'play');
+  assert.equal(s.time, 0);
   assert.equal(s.drops, 0);
   assert.equal(s.score, 0);
-  assert.equal(s.fruits, 0);
+  assert.equal(s.fruits.length, 0);
+  await step(page);
+
+  // KeyR during active play also restarts cleanly.
+  await page.mouse.click(c.x, c.y);
+  await step(page, 4);
+  assert.equal((await state(page)).drops, 1);
+  await page.keyboard.press('KeyR');
+  await step(page);
+  s = await state(page);
+  assert.ok(s.time <= 0.02);
+  assert.equal(s.drops, 0);
+  assert.equal(s.fruits.length, 0);
 });
 
-test('Shop buys jars & faces, storage quota failure warns and Retry saves, focus isolation, [1100,620] fit, and reduced motion', async t => {
-  const page = await game(t, { save: SAVE(1, { coins: 15 }), size: [1100, 620], reducedMotion: 'reduce' });
+test('Shop buys droppers & tanks, storage quota failure warns and Retry saves, focus isolation, [1100,620] fit, and reduced motion', async t => {
+  const page = await game(t, { save: SAVE({ coins: 60 }), size: [1100, 620], reducedMotion: 'reduce' });
 
-  // Fit check inside [1100, 620] portal frame
+  // Fit check inside [1100, 620] portal viewport
   const canvasBox = await page.locator('#game').boundingBox();
   assert.ok(canvasBox.width <= 1100 && canvasBox.height <= 620);
-  for (const sel of ['#btnPlay', '#btnEndless', '#btnLevels', '#btnShop', '.howto .card >> nth=3']) {
+  for (const sel of ['#btnPlay', '#btnShop', '#modeClassic', '#modeCrates', '#modeRush', '#diffEasy', '#diffHero']) {
     const b = await page.locator(sel).boundingBox();
-    assert.ok(b.x >= canvasBox.x && b.x + b.width <= canvasBox.x + canvasBox.width && b.y + b.height <= canvasBox.y + canvasBox.height, sel);
+    assert.ok(
+      b.x >= canvasBox.x &&
+      b.x + b.width <= canvasBox.x + canvasBox.width &&
+      b.y + b.height <= canvasBox.y + canvasBox.height,
+      sel
+    );
   }
 
   // KeyM toggles mute and never starts the game
@@ -404,38 +540,41 @@ test('Shop buys jars & faces, storage quota failure warns and Retry saves, focus
   // Shop purchase + QuotaExceededError + Retry via Kit.saveStatus
   await page.locator('#btnShop').click();
   await step(page);
-  assert.equal((await state(page)).screen, 'shop');
+  assert.equal((await state(page)).shopOpen, true);
+  assert.ok(await page.locator('#scrShop').isVisible());
 
-  // Too expensive item (candy bowl = 30 coins) wiggles and does not buy
-  await page.locator('#shelfJars .tile').nth(4).click();
+  // Too-expensive item (Gold Tank = 90 coins > 60) wiggles and does not buy
+  await page.locator('#shelfTanks .shop-tile').nth(3).click();
   await step(page);
-  assert.equal((await page.evaluate(() => __game.save)).jar, 0);
+  assert.equal((await page.evaluate(() => __game.save)).tank, 0);
 
-  // Trigger storage failure when buying basket jar (6 coins)
+  // Trigger storage failure when buying Lightning Cloud dropper (25 coins)
   await page.evaluate(() => { jd.failSave = true; });
-  await page.locator('#shelfJars .tile').nth(1).click();
+  await page.locator('#shelfDroppers .shop-tile').nth(1).click();
   await step(page);
 
   const status = page.locator('.sg-save-status');
   assert.equal(await status.getAttribute('data-state'), 'failed');
-  assert.equal((await page.evaluate(() => __game.save)).jar, 1, 'kept in memory');
-  assert.equal((await stored(page)).jar, 0, 'storage write had failed');
+  assert.equal((await page.evaluate(() => __game.save)).dropper, 1, 'kept in memory');
+  assert.equal((await stored(page)).dropper, 0, 'storage write had failed');
 
   await page.evaluate(() => { jd.failSave = false; });
   await status.locator('button').click();
   assert.equal(await status.getAttribute('data-state'), 'saved');
-  assert.equal((await stored(page)).jar, 1);
+  assert.equal((await stored(page)).dropper, 1);
+  assert.equal((await stored(page)).coins, 35);
 
-  // Buy Cool Sunglasses face pack (6 coins -> 3 coins left)
-  await page.locator('#shelfFaces .tile').nth(1).click();
+  // Buy Magma Tank theme (30 coins -> 5 coins left)
+  await page.locator('#shelfTanks .shop-tile').nth(1).click();
   await step(page);
-  assert.equal((await stored(page)).face, 1);
-  assert.equal((await stored(page)).coins, 3);
+  assert.equal((await stored(page)).tank, 1);
+  assert.equal((await stored(page)).coins, 5);
 
-  // Return to title and start Endless to test focused button isolation & reduced motion
+  // Close shop with Escape and start Classic to test focused button isolation & reduced motion
   await page.keyboard.press('Escape');
   await step(page);
-  await page.locator('#btnEndless').click();
+  assert.equal((await state(page)).shopOpen, false);
+  await page.locator('#btnPlay').click();
   await step(page);
 
   // Focusing #btnPause and pressing Space pauses instead of dropping a fruit!
@@ -450,8 +589,8 @@ test('Shop buys jars & faces, storage quota failure warns and Retry saves, focus
   // Reduced motion keeps fx === 0 and shake === 0 during merges!
   await page.evaluate(() => {
     const w = __game.world;
-    JD.addFruit(w, 2, 640, 620, 0, 0);
-    JD.addFruit(w, 2, 660, 620, 0, 0);
+    JDEngine.spawnFruit(w, 2, 640, 620, 0, 0);
+    JDEngine.spawnFruit(w, 2, 652, 620, 0, 0);
   });
   await step(page, 6);
   const s = await state(page);
@@ -462,5 +601,6 @@ test('Shop buys jars & faces, storage quota failure warns and Retry saves, focus
   // Malformed saves boot cleanly
   const broken = await game(t, { save: 'not-json{' });
   assert.equal((await state(broken)).screen, 'title');
-  assert.equal(await broken.locator('#titleStars b').textContent(), '0/36');
+  assert.equal(await broken.locator('#titleCoins b').textContent(), '0');
+  assert.equal(await broken.locator('#titleBest b').textContent(), '0');
 });

@@ -1,133 +1,73 @@
-/* هجوم الروبوتات — robots, waves, upgrades, heroes. Plain data, no Kit, no DOM. */
-(function (RSD) {
+/* هجوم الروبوتات — Pure game data (arenas, difficulties, pods, enemies, skins). */
+(function () {
   'use strict';
 
-  RSD.W = 2400;
-  RSD.H = 1400;
-  RSD.CELL = 64;
+  var RSData = {
+    W: 1920, H: 1152, PAD: 56, VIEW_W: 1280, VIEW_H: 720, ROUND_SEC: 90, BOSS_AT: 70,
 
-  RSD.FOAM = 0;
-  RSD.RING = 1;
-  RSD.FRISBEE = 2;
-  RSD.BALLOON = 3;
-  RSD.DUCKS = 4;
-  RSD.PAINT = 5;
-  RSD.MAGNET = 6;
-  RSD.SNEAK = 7;
-  RSD.HEART = 8;
-  RSD.SHIELD = 9;
-  RSD.TORNADO = 10;
-  RSD.CANNON = 11;
-  RSD.UP_N = 10;
+    difficulties: [
+      { id: 'easy', name: 'سهل', badge: '6 قلوب · مغناطيس واسع', hearts: 6, botSpeedMul: 0.78, botHpMul: 0.76, spawnMul: 0.78, magnetBase: 265, dashCd: 1.30, bossHpMul: 0.74, bossPhases: 1 },
+      { id: 'normal', name: 'متوسط', badge: '4 قلوب · معركة متوازنة', hearts: 4, botSpeedMul: 1.00, botHpMul: 1.00, spawnMul: 1.00, magnetBase: 180, dashCd: 1.70, bossHpMul: 1.00, bossPhases: 1 },
+      { id: 'hero', name: 'بطل', badge: '3 قلوب · زعيم مزدوج', hearts: 3, botSpeedMul: 1.18, botHpMul: 1.20, spawnMul: 1.24, magnetBase: 150, dashCd: 1.95, bossHpMul: 1.28, bossPhases: 2 }
+    ],
 
-  // Level rows are Lv 1..5. cd seconds, dmg per hit, and the extra fields under each weapon.
-  RSD.weapons = [
-    { id: 0, name: 'قاذف الرغوة', desc: 'طلقات أسرع وأقوى وتخترق', color: '#ff8a24',
-      cd: [0.38, 0.32, 0.26, 0.21, 0.16], dmg: [12, 16, 20, 26, 34], pierce: [1, 2, 2, 3, 4], speed: 760 },
-    { id: 1, name: 'حلقة الفقاعات', desc: 'فقاعات تدور حولك وتفقع', color: '#3ec6ff',
-      cd: [0.50, 0.46, 0.42, 0.38, 0.34], dmg: [6, 8, 11, 14, 18], n: [1, 2, 2, 3, 4], orbit: 86 },
-    { id: 2, name: 'صحن طائر', desc: 'يطير ويعود ويقطع الصف', color: '#ffe14a',
-      cd: [1.15, 0.95, 0.80, 0.66, 0.54], dmg: [12, 16, 22, 28, 36], pierce: [6, 6, 7, 8, 8], speed: 460 },
-    { id: 3, name: 'بالون الماء', desc: 'ينفجر على أقرب تجمع', color: '#4d7dff',
-      cd: [1.45, 1.20, 1.00, 0.82, 0.68], dmg: [18, 26, 36, 48, 62], rad: [78, 92, 108, 124, 142] },
-    { id: 4, name: 'بطّ مطاطي', desc: 'بطّ يدور ويصطدم', color: '#ffd23a',
-      cd: [0.50, 0.44, 0.40, 0.36, 0.32], dmg: [7, 9, 12, 15, 18], n: [1, 2, 3, 3, 4], orbit: 78 },
-    { id: 5, name: 'درب الطلاء', desc: 'يترك بقعة تؤذي من يمشي عليها', color: '#ff4f93',
-      cd: [0.34, 0.30, 0.28, 0.26, 0.22], dmg: [12, 18, 26, 36, 48], rad: [30, 36, 42, 48, 56] },
-    { id: 6, name: 'مغناطيس', desc: 'يسحب البراغي من بعيد', color: '#c06bff',
-      cd: [1, 1, 1, 1, 1], dmg: [0, 0, 0, 0, 0], rad: [460, 580, 720, 880, 1080] },
-    { id: 7, name: 'حذاء رياضي', desc: 'تجري أسرع', color: '#3ddc84',
-      cd: [1, 1, 1, 1, 1], dmg: [0, 0, 0, 0, 0], bonus: [0.08, 0.16, 0.24, 0.34, 0.46] },
-    { id: 8, name: 'قلب إضافي', desc: 'قلب جديد وتعبئة واحدة', color: '#ff5a7a',
-      cd: [1, 1, 1, 1, 1], dmg: [0, 0, 0, 0, 0] },
-    { id: 9, name: 'فقاعة الدرع', desc: 'تصطدم الفقاعة بدلًا عنك', color: '#9af0ff',
-      cd: [1, 1, 1, 1, 1], dmg: [0, 0, 0, 0, 0] }
-  ];
+    arenas: [
+      {
+        id: 'spark', index: 0, name: 'مصنع الشرار', desc: 'أحزمة تسريع وملفات صعق كهربائية',
+        bg: '#10192e', grid: '#1f3358', border: '#28e7ff', accent: '#ffe14a',
+        boosts: [{ x: 380, y: 260, w: 300, h: 78, vx: 230, vy: 0 }, { x: 1240, y: 814, w: 300, h: 78, vx: -230, vy: 0 }],
+        coils: [{ x: 450, y: 810, r: 28 }, { x: 1470, y: 340, r: 28 }, { x: 450, y: 430, r: 28 }, { x: 1470, y: 720, r: 28 }],
+        vents: [], warps: [], bumpers: []
+      },
+      {
+        id: 'magma', index: 1, name: 'حفرة الحمم', desc: 'ينابيع لهب تحرق الروبوتات القريبة',
+        bg: '#231019', grid: '#461f2e', border: '#ff6b2b', accent: '#ffd23f',
+        boosts: [], coils: [],
+        vents: [{ x: 480, y: 300, r: 66 }, { x: 1440, y: 300, r: 66 }, { x: 480, y: 852, r: 66 }, { x: 1440, y: 852, r: 66 }, { x: 960, y: 230, r: 66 }, { x: 960, y: 922, r: 66 }],
+        warps: [], bumpers: []
+      },
+      {
+        id: 'orbit', index: 2, name: 'محطة الفضاء', desc: 'منصات انتقال فوري وحواجز ليزر مرتدة',
+        bg: '#120f2d', grid: '#29225e', border: '#ff3ea5', accent: '#3df5ff',
+        boosts: [], coils: [], vents: [],
+        warps: [{ x: 340, y: 576, r: 44, to: 1 }, { x: 1580, y: 576, r: 44, to: 0 }],
+        bumpers: [{ x: 640, y: 296, r: 34 }, { x: 1280, y: 296, r: 34 }, { x: 640, y: 856, r: 34 }, { x: 1280, y: 856, r: 34 }]
+      }
+    ],
 
-  RSD.evos = [
-    { id: 10, name: 'إعصار البطّ', desc: 'البطّ يسحب الروبوتات ويدور بسرعة', needs: [4, 6], color: '#ffe14a' },
-    { id: 11, name: 'مدفع الألوان', desc: 'الرغوة تنفجر طلاءً وتخترق أكثر', needs: [0, 5], color: '#ff4f93' }
-  ];
+    pods: [
+      { kind: 0, id: 'plasma', name: 'مدفع البلازما', popup: 'مدفع البلازما!', evoPopup: 'بلازما خارقة!', color: '#28e7ff', cd: [0.23, 0.20, 0.18, 0.16, 0.14], dmg: [18, 21, 25, 29, 34], shots: [1, 2, 3, 3, 4], pierce: [1, 1, 2, 2, 3] },
+      { kind: 1, id: 'saws', name: 'درع المناشير', popup: 'درع المناشير!', evoPopup: 'مناشير عملاقة!', color: '#ffe14a', count: [2, 3, 4, 5, 6], dmg: [19, 24, 30, 37, 45], orbit: 84 },
+      { kind: 2, id: 'missiles', name: 'صواريخ ذكية', popup: 'صواريخ ذكية!', evoPopup: 'وابل الصواريخ!', color: '#ff6b35', cd: [1.32, 1.12, 0.95, 0.82, 0.70], dmg: [36, 45, 56, 68, 82], count: [1, 2, 2, 3, 4], blast: 94 },
+      { kind: 3, id: 'lightning', name: 'برق عملاق', popup: 'برق عملاق!', evoPopup: 'عاصفة البرق!', color: '#c266ff', cd: [1.42, 1.20, 1.02, 0.88, 0.74], dmg: [30, 38, 48, 60, 74], chains: [2, 3, 4, 5, 6], range: 440 },
+      { kind: 4, id: 'magnet', name: 'مغناطيس خارق', popup: 'مغناطيس خارق!', evoPopup: 'جاذبية قصوى!', color: '#3ddc84', pullBonus: [95, 190, 290, 400, 520], speedBonus: [0.08, 0.15, 0.22, 0.28, 0.35] }
+    ],
 
-  // type: 0 walker 1 hopper 2 roller 3 tank 4 splitter 5 shooter 6 mini 7 miniboss 8 king
-  RSD.bots = [
-    { name: 'ماشي', hp: 12, speed: 80, r: 18, xp: 1, bolts: 1 },
-    { name: 'قفّاز', hp: 14, speed: 70, r: 16, xp: 1, bolts: 1 },
-    { name: 'دوّار', hp: 12, speed: 196, r: 16, xp: 1, bolts: 1 },
-    { name: 'دبّابة', hp: 54, speed: 56, r: 26, xp: 3, bolts: 3 },
-    { name: 'منقسم', hp: 20, speed: 78, r: 18, xp: 2, bolts: 2 },
-    { name: 'فقاعي', hp: 18, speed: 52, r: 18, xp: 2, bolts: 1 },
-    { name: 'صغير', hp: 8, speed: 118, r: 11, xp: 1, bolts: 0 },
-    { name: 'زعيم صغير', hp: 260, speed: 68, r: 36, xp: 8, bolts: 6 },
-    { name: 'ملك الروبوتات', hp: 5200, speed: 60, r: 54, xp: 24, bolts: 12 }
-  ];
+    enemies: [
+      { kind: 0, id: 'spider', name: 'عنكبوت آلي', hp: 22, speed: 152, r: 20, xp: 2, bolts: 1, score: 15, shield: 0 },
+      { kind: 1, id: 'sparkbug', name: 'شرارة آلية', hp: 13, speed: 196, r: 15, xp: 1, bolts: 1, score: 10, shield: 0 },
+      { kind: 2, id: 'ram', name: 'كبش نفاث', hp: 46, speed: 122, chargeSpeed: 440, r: 24, xp: 4, bolts: 2, score: 30, shield: 0 },
+      { kind: 3, id: 'drone', name: 'طائرة ليزر', hp: 36, speed: 126, r: 22, xp: 4, bolts: 2, score: 30, shield: 0 },
+      { kind: 4, id: 'crusher', name: 'محطّم مدرع', hp: 92, speed: 98, r: 30, xp: 6, bolts: 4, score: 50, shield: 44 },
+      { kind: 5, id: 'boss', name: 'الزعيم الآلي', hp: 1550, speed: 116, r: 58, xp: 30, bolts: 30, score: 500, shield: 0 }
+    ],
 
-  // Spawn pressure by schedule-seconds. interval is divided by the tier's spawn rate.
-  RSD.spawn = {
-    breaks: [0, 22, 45, 80, 120, 160, 200],
-    interval: [0.42, 0.38, 0.36, 0.30, 0.24, 0.18, 0.15],
-    weights: [
-      [6, 2, 0, 0, 0, 0],
-      [6, 2, 0, 0, 0, 0],
-      [6, 3, 1, 0, 0, 0],
-      [4, 3, 2, 1, 2, 0],
-      [3, 2, 3, 2, 2, 2],
-      [3, 2, 2, 3, 2, 3],
-      [2, 2, 2, 3, 3, 3]
+    waves: [
+      { id: 1, start: 0, end: 24, title: 'موجة 1: الكشّافة', interval: 0.68, weights: [7, 4, 0, 0, 0] },
+      { id: 2, start: 24, end: 48, title: 'موجة 2: الكباش والطائرات', interval: 0.54, weights: [4, 2, 3, 3, 0] },
+      { id: 3, start: 48, end: 70, title: 'موجة 3: المحطّمات المدرعة', interval: 0.45, weights: [3, 2, 3, 3, 3] }
+    ],
+
+    skins: [
+      { id: 'blue', index: 0, name: 'المدرع الأزرق', cost: 0, body: '#2596ff', dark: '#1254a1', trim: '#70e4ff', visor: '#ffe14a' },
+      { id: 'dragon', index: 1, name: 'التنين الناري', cost: 50, body: '#ff4d2e', dark: '#9e1f11', trim: '#ffb627', visor: '#fff275' },
+      { id: 'neon', index: 2, name: 'شبح النيون', cost: 110, body: '#8c3bff', dark: '#4a1896', trim: '#2cf5ff', visor: '#ff47b6' },
+      { id: 'gold', index: 3, name: 'العملاق الذهبي', cost: 180, body: '#f5b700', dark: '#996900', trim: '#fff099', visor: '#28f0ff' },
+      { id: 'shark', index: 4, name: 'قرش الفضاء', cost: 260, body: '#1ec8a5', dark: '#0d6e5b', trim: '#a8fff0', visor: '#ff526f' }
     ]
   };
 
-  // Solid toy blocks. They sit outside the middle of the arena so a circling run
-  // still has a clear floor, and they stop both kids and foam.
-  RSD.blocks = [
-    [[150, 150, 108, 76], [2120, 160, 118, 80], [170, 1140, 124, 74], [2060, 1100, 112, 84], [130, 620, 68, 120], [2188, 600, 72, 128]],
-    [[180, 180, 96, 96], [2080, 200, 100, 90], [200, 1080, 110, 86], [2040, 1060, 120, 90], [150, 640, 80, 100], [2140, 660, 86, 96]],
-    [[160, 170, 120, 70], [2100, 180, 130, 74], [190, 1120, 140, 68], [2000, 1080, 150, 72], [140, 600, 76, 130], [2160, 580, 80, 140]]
-  ];
-
-  RSD.maps = [
-    { id: 1, name: 'صندوق الألعاب', line: 'سجادة وقطع تركيب', hp: 1, speed: 1, add: [0, 0, 0, 0, 0, 0], floor: '#e7b45a', ink: '#c4843a' },
-    { id: 2, name: 'طاولة المطبخ', line: 'بسكويت عملاق وفتات', hp: 1.06, speed: 1.05, add: [0, 1, 1, 0, 0, 0], floor: '#f3d7b0', ink: '#e0b48a' },
-    { id: 3, name: 'قاعدة القمر', line: 'فوهات وغبار أزرق', hp: 1.1, speed: 1, add: [0, 0, 0, 1, 0, 1], floor: '#9aa4c4', ink: '#6d789c' }
-  ];
-
-  RSD.heroes = [
-    { name: 'سامي', line: 'قاذف رغوة', hp: 5, speed: 258, kind: 0, start: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0], need: '' },
-    { name: 'برق', line: 'حذاء من البداية', hp: 4, speed: 268, kind: 0, start: [1, 0, 0, 0, 0, 0, 0, 1, 0, 0], need: 'pops' },
-    { name: 'بطوط', line: 'يبدأ ومعه بطّة', hp: 5, speed: 242, kind: 0, start: [1, 0, 0, 0, 1, 0, 0, 0, 0, 0], need: 'nodash' },
-    { name: 'ماجد', line: 'مغناطيس قوي', hp: 5, speed: 238, kind: 0, start: [1, 0, 0, 0, 0, 0, 2, 0, 0, 0], need: 'bolts' },
-    { name: 'درع', line: 'قلب وفقّاعة', hp: 6, speed: 228, kind: 0, start: [1, 0, 0, 0, 0, 0, 0, 0, 1, 1], need: 'map2' },
-    { name: 'روبو', line: 'حلقة فقاعات', hp: 5, speed: 244, kind: 1, start: [1, 1, 0, 0, 0, 0, 0, 0, 0, 0], need: 'quick' }
-  ];
-
-  RSD.meta = [
-    { name: 'قلب إضافي', desc: '+1 قلب', cost: [40, 80, 140, 210, 300] },
-    { name: 'حذاء خفيف', desc: '+5% سرعة', cost: [40, 80, 140, 210, 300] },
-    { name: 'إعادة الاختيار', desc: '+1 تبديل', cost: [30, 70, 120, 180, 260] }
-  ];
-
-  RSD.trophies = [
-    { name: 'أول فقعة', line: 'افقع روبوتًا' },
-    { name: 'مئة فقعة', line: 'افقع 100 روبوت' },
-    { name: 'ألف فقعة', line: 'افقع 1000 روبوت' },
-    { name: 'بطل', line: 'اهزم ملك الروبوتات' },
-    { name: 'بلا اندفاع', line: 'اربح دون اندفاع' },
-    { name: 'فسحة قصيرة', line: 'اربح جولة سريعة' },
-    { name: 'كل الخرائط', line: 'اهزم الملك في الخرائط الثلاث' },
-    { name: 'جامع براغي', line: 'اجمع 500 برغيًا في جولة' },
-    { name: 'صديق وفي', line: 'أيقظ زميلك الدائخ' },
-    { name: 'الصيّاد', line: 'أصب الملك' }
-  ];
-
-  // A mid recess build: foam Lv 4, bubble ring Lv 3, water balloon Lv 3, ducks Lv 3.
-  // Single-target expected hits per second. Ducks and the ring sit on a large boss, so
-  // their contact uptime is counted at 0.85. Pierce does not add boss damage.
-  RSD.midDps = function () {
-    const W = RSD.weapons;
-    const foam = W[0].dmg[3] / W[0].cd[3];
-    const ring = W[1].n[2] * W[1].dmg[2] / W[1].cd[2];
-    const balloon = W[3].dmg[2] / W[3].cd[2];
-    const ducks = W[4].n[2] * W[4].dmg[2] / W[4].cd[2] * 0.85;
-    return foam + ring + balloon + ducks;
-  };
-})(globalThis.RSD = globalThis.RSD || {});
+  globalThis.RSData = RSData;
+  if (typeof window !== 'undefined') window.RSData = RSData;
+  if (typeof module !== 'undefined' && module.exports) module.exports = RSData;
+})();

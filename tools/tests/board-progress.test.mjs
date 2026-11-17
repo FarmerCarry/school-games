@@ -297,3 +297,72 @@ test('a failed progress save keeps the earlier record and recovers on retry', as
   assert.equal(await page.locator('.sg-save-status[data-state="saved"]').isVisible(), true);
   assert.deepEqual(await saved(page), { level: 'hard', wins: { easy: 1, medium: 0, hard: 0 } });
 });
+
+test('Robot Rival personas render expressive SVG badges and react when thinking or defeated', async t => {
+  const page = await openBoard(t, { init: () => { Math.random = () => 0.99; } });
+  await page.locator('#pcButton').click();
+  assert.equal(await page.locator('#seat1Avatar svg').count(), 1);
+  assert.equal(await page.locator('#seat2Avatar svg').count(), 1);
+  assert.equal(await page.locator('#seat2Name').textContent(), 'روبوت نعسان');
+  assert.equal(await page.locator('#seat2Avatar').getAttribute('data-persona'), 'easy');
+
+  await page.locator('[data-level="medium"]').click();
+  assert.equal(await page.locator('#rivalName').textContent(), 'روبوت مشاغب');
+  assert.equal(await page.locator('#seat2Name').textContent(), 'روبوت مشاغب');
+
+  await page.locator('[data-level="hard"]').click();
+  assert.equal(await page.locator('#rivalName').textContent(), 'البروفيسور الآلي');
+  assert.equal(await page.locator('#seat2Name').textContent(), 'البروفيسور الآلي');
+
+  await page.locator('[data-level="easy"]').click();
+  await page.locator('#gameBoard [data-move="0"]').click();
+  assert.equal(await page.locator('#seat2Avatar').getAttribute('data-mood'), 'thinking');
+  await moves(page, 2);
+  await play(page, [1, 2]);
+  assert.equal(await page.locator('#gameBoard').getAttribute('data-winner'), '1');
+  assert.equal(await page.locator('#seat1Avatar').getAttribute('data-mood'), 'happy');
+  assert.equal(await page.locator('#seat2Avatar').getAttribute('data-mood'), 'shocked');
+  assert.equal(await page.locator('#winBeam').isVisible(), true);
+});
+
+test('Twist mode supports Vanishing XO and Power-Disc Connect 4 while keeping Classic as default', async t => {
+  // 1. Vanishing XO in browser
+  const xo = await openBoard(t, { game: 'tic-tac-toe' });
+  assert.equal(await xo.locator('#boardApp').getAttribute('data-variant'), 'classic');
+  await xo.locator('[data-variant="twist"]').click();
+  assert.equal(await xo.locator('#boardApp').getAttribute('data-variant'), 'twist');
+  await xo.locator('#localButton').click();
+  for (const mv of [0, 3, 1, 4, 7, 6]) {
+    const prev = Number(await xo.locator('#gameBoard').getAttribute('data-moves'));
+    await xo.locator(`#gameBoard [data-move="${mv}"]`).click();
+    await moves(xo, prev + 1);
+  }
+  // Cell 0 is P1's oldest mark and must pulse as vanishing!
+  assert.equal(await xo.locator('#gameBoard [data-move="0"]').evaluate(el => el.classList.contains('vanishing')), true);
+  await xo.locator('#gameBoard [data-move="2"]').click();
+  await moves(xo, 7);
+  assert.equal(await xo.locator('#gameBoard .one').count(), 3, 'P1 still has at most 3 marks on board');
+  assert.equal(await xo.locator('#gameBoard [data-move="0"]').isEnabled(), true, 'vanished cell becomes playable again');
+
+  // 2. Power-Disc Connect 4 in browser
+  const c4 = await openBoard(t, { game: 'connect-four' });
+  assert.equal(await c4.locator('#boardApp').getAttribute('data-variant'), 'classic');
+  await c4.locator('[data-variant="twist"]').click();
+  await c4.locator('#localButton').click();
+  assert.equal(await c4.locator('#powerBar').isVisible(), true);
+  // Fill column 0 with 6 alternating discs so P2 sits on top at index 0.
+  for (let i = 0; i < 6; i++) {
+    await c4.locator('#gameBoard [data-move="0"]').click();
+    await moves(c4, i + 1);
+  }
+  assert.equal(await c4.locator('#gameBoard [data-move="0"]').isEnabled(), false, 'full column locked for normal disc');
+  // Toggle Anvil via keyboard shortcut Q — column 0 becomes playable to crush top enemy disc!
+  await c4.keyboard.press('KeyQ');
+  assert.equal(await c4.locator('#powerAnvil').getAttribute('aria-pressed'), 'true');
+  assert.equal(await c4.locator('#gameBoard [data-move="0"]').isEnabled(), true, 'Anvil unlocks enemy-topped full column');
+  await c4.locator('#gameBoard [data-move="0"]').click();
+  await moves(c4, 7);
+  assert.equal(await c4.locator('#anvilCount').textContent(), '1', 'now displays P2 remaining anvil count');
+  assert.equal(await c4.locator('#gameBoard [data-cell="0"]').evaluate(el => el.classList.contains('one')), true, 'Anvil replaced top disc with P1');
+});
+

@@ -1,680 +1,599 @@
-/* Math Gates (بوابات الحساب) engine: the five worlds and thirty levels, the seeded
- * generator of gate rows and questions, the run (three lanes, coins, soft obstacles,
- * gates), the number battle at the finish, the bonus staircase, stars and saves.
- * Pure: no DOM, no Kit, no THREE, no timers and no unseeded randomness, so
- * tools/tests/math-gates-engine.test.mjs loads it with { window: {} } and plays whole
- * levels with scripted players. game.js reads the DDA tier, steps a run with the
- * child's input and turns its events into pictures and sound.
- *
- * A level is a seeded generator. Coins and obstacles are laid out when the run is
- * created; each gate row is made the moment the crowd passes the row before it, for
- * the crowd's real number, so there is always exactly one best gate (the obstacles
- * between the two rows are taken into account: the best gate stays best whichever
- * of them the crowd hits). A ghost run of the same seed that always picks the best
- * gate, dodges every obstacle and answers every question sets the "par" number,
- * and the rival crowd at the finish is a share of it: picking the best gates wins. */
-(function () {
+/* Math Gates: Galactic Mech Squad (بوابات الحساب — كتيبة الآليين)
+ * Pure deterministic simulation engine: 3-lane space highway, fast math holo-gates,
+ * auto-blaster number meteors, jetpack turbo jump, endless warp waves, and Titan Boss clash.
+ * Zero DOM, zero Kit, zero timers, zero Math.random. Dual Node + browser export. */
+(function (root, factory) {
   'use strict';
-  var MG = window.MG = window.MG || {};
-  MG.TIERS = 5;
-  MG.WORLDS_N = 5;
-  MG.PER_WORLD = 6;
-  MG.LEVELS_N = 30;
-  MG.LANE_W = 4;            // m between lane centres
-  MG.FINISH = 30;           // m from the last row to the number battle
-  MG.FLOOR = 1;             // the crowd never drops below one runner
-  MG.FINISH_COINS = 5;      // every win pays this before the staircase multiplies, so a
-                            // perfect run on the best gates never ends with no coins
-  MG.STEPS = 10;            // the bonus staircase: ×1 .. ×10
-  MG.MINUS = '−';      // − (a real minus sign, not a hyphen)
+  var api = factory();
+  if (typeof module === 'object' && module.exports) module.exports = api;
+  if (root) root.MGEngine = api;
+})(typeof window !== 'undefined' ? window : null, function () {
+  'use strict';
 
-  // One entry per DDA tier: tier 1 is for a six-year-old (small numbers, a slow run,
-  // decoys that are clearly worse), tier 5 a real challenge for an eleven-year-old.
-  // MG.HARDER says which way each knob moves as the tiers get harder; the engine test
-  // checks every row.
-  MG.TUNE = {
-    speed: [6.25, 7.25, 8.25, 9.25, 10.25],    // run speed, m/s
-    gap: [34, 32, 31, 30, 29],                 // m between gate rows
-    margin: [0.34, 0.24, 0.15, 0.09, 0.05],    // every decoy is at least this share of the best result below it
-    marginMin: [3, 2, 2, 1, 1],                // .. and at least this many runners below it
-    size: [0.5, 0.65, 0.8, 0.9, 1],            // share of each world's number pools
-    quiz: [1, 1, 2, 2, 3],                     // question rows per level
-    rocks: [0, 1, 1, 2, 2],                    // extra obstacles per level (from the second level of a world)
-    double: [0, 0, 0, 0.3, 0.5],               // chance an obstacle stretch has two obstacles
-    loss: [0.05, 0.07, 0.08, 0.1, 0.12],       // share of the crowd an obstacle knocks off
-    lossMin: [1, 1, 2, 2, 3],
-    rival: [0.62, 0.66, 0.7, 0.72, 0.75],      // the rival crowd: this share of a perfect run
-    quizNear: [3, 2, 2, 1, 1],                 // wrong answers are at least this far from the right one
-    extraRows: [0, 0, 1, 1, 2]                 // more rows per level
-  };
-  MG.HARDER = { speed: 1, gap: -1, margin: -1, marginMin: -1, size: 1, quiz: 1, rocks: 1, double: 1, loss: 1, lossMin: 1, rival: 1, quizNear: -1, extraRows: 1 };
-  MG.BIG = 0.8;
-  // A slip costs more where gates halve the crowd: the division world's rival is smaller.
-  MG.RIVAL_WORLD = [1, 1, 1, 0.85, 0.95];             // the "big crowd" star: at least this share of a perfect run
-  var ROWS = [5, 6, 6, 7, 7, 8];
+  var MINUS = '−', FLOOR = 1, CAP_SQUAD = 999, LANE_W = 4;
 
-  MG.WORLDS = [
-    { id: 'add20', name: 'وادي الحلوى', sub: 'جمع وطرح حتى 20', icon: '+' + MG.MINUS, focus: '+' },
-    { id: 'add100', name: 'غابة المصاصات', sub: 'جمع وطرح حتى 100', icon: '100', focus: '+' },
-    { id: 'mul', name: 'جزر الجيلي', sub: 'الضرب', icon: '×', focus: '×' },
-    { id: 'div', name: 'قلعة الكعك', sub: 'القسمة', icon: '÷', focus: '÷' },
-    { id: 'mix', name: 'سماء قوس قزح', sub: 'كل العمليات', icon: '+' + MG.MINUS + '×÷', focus: 'two' }
+  var WORLDS = [
+    { id: 'galaxy', name: 'طريق المجرة', sub: 'مدار السفينة النجمية', bossName: 'حارس المجرة', icon: '🚀',
+      sky: ['#060b24', '#162d6e'], track: '#0f1c44', laneAlt: '#162a63', edge: '#00e5ff', accent: '#38bdf8' },
+    { id: 'mars', name: 'قاعدة المريخ', sub: 'وادي الحمم الآلية', bossName: 'عقرب المريخ', icon: '☄️',
+      sky: ['#1f0914', '#5c1826'], track: '#2b1020', laneAlt: '#3d172d', edge: '#ff5d3b', accent: '#fb923c' },
+    { id: 'reactor', name: 'مفاعل البرق', sub: 'قلب الطاقة الكهرومغناطيسية', bossName: 'عملاق البرق', icon: '⚡',
+      sky: ['#12082e', '#3b1578'], track: '#1c1044', laneAlt: '#291861', edge: '#ffd23f', accent: '#c084fc' },
+    { id: 'titan', name: 'عرين العملاق', sub: 'قلعة التيتان المدرعة', bossName: 'إمبراطور التيتان', icon: '🤖',
+      sky: ['#051c1d', '#0f4c45'], track: '#0b272a', laneAlt: '#123a3e', edge: '#2eff9b', accent: '#f43f5e' }
   ];
-  MG.LEVELS = [];
-  for (var li = 0; li < MG.LEVELS_N; li++) MG.LEVELS.push({ i: li, world: Math.floor(li / MG.PER_WORLD), n: li % MG.PER_WORLD, tag: (Math.floor(li / MG.PER_WORLD) + 1) + '-' + (li % MG.PER_WORLD + 1) });
+
+  var PER_WORLD = 3, STAGES_N = WORLDS.length * PER_WORLD, ENDLESS_INDEX = STAGES_N;
+  var STAGES = [];
+  for (var si = 0; si < STAGES_N; si++) {
+    var wIdx = Math.floor(si / PER_WORLD), sIdx = si % PER_WORLD;
+    STAGES.push({
+      i: si, world: wIdx, sub: sIdx, endless: false,
+      tag: (wIdx + 1) + '-' + (sIdx + 1),
+      name: WORLDS[wIdx].name + ' ' + (wIdx + 1) + '-' + (sIdx + 1),
+      roundKey: 'mg_w' + (wIdx + 1) + '_' + (sIdx + 1),
+      rows: 7 + sIdx
+    });
+  }
+  STAGES.push({ i: ENDLESS_INDEX, world: 0, sub: 0, endless: true, tag: '∞', name: 'طور الفضاء اللانهائي', roundKey: 'mg_endless', rows: 6 });
+
+  var DIFFS = {
+    easy: { id: 'easy', name: 'سهل', badge: '5–7', speed: 22, gap: 33, firstRowD: 28, startCount: 5, shieldRatio: 0.54, marginMin: 2, meteorHp: [4, 7], movingChance: 0, mysteryChance: 0, exprChance: 0.25, laserChance: 0.22, pips: true },
+    normal: { id: 'normal', name: 'متوسط', badge: '7–9', speed: 25, gap: 37.5, firstRowD: 30, startCount: 5, shieldRatio: 0.67, marginMin: 2, meteorHp: [6, 12], movingChance: 0.36, mysteryChance: 0, exprChance: 0.48, laserChance: 0.42, pips: false },
+    pro: { id: 'pro', name: 'بطل', badge: '10–11', speed: 28, gap: 42, firstRowD: 32, startCount: 6, shieldRatio: 0.75, marginMin: 1, meteorHp: [9, 18], movingChance: 0.46, mysteryChance: 0.34, exprChance: 0.62, laserChance: 0.58, pips: false }
+  };
+  var DIFF_KEYS = ['easy', 'normal', 'pro'];
+
+  var SKINS = [
+    { id: 'neon', name: 'فرسان النيون', cost: 0, primary: '#2563eb', secondary: '#00f0ff', visor: '#7dd3fc', flame: '#38bdf8' },
+    { id: 'dragon', name: 'التنين الأحمر', cost: 60, primary: '#dc2626', secondary: '#facc15', visor: '#fef08a', flame: '#fb923c' },
+    { id: 'hawk', name: 'صقور الذهب', cost: 140, primary: '#eab308', secondary: '#f8fafc', visor: '#38bdf8', flame: '#fde047' },
+    { id: 'plasma', name: 'آليو البلازما', cost: 250, primary: '#9333ea', secondary: '#2eff9b', visor: '#86efac', flame: '#c084fc' }
+  ];
 
   function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
-  function tierOf(t) { t = Math.round(Number(t)); return t >= 1 && t <= MG.TIERS ? t : 1; }
-  MG.clamp = clamp;
-  MG.tierOf = tierOf;
-  MG.laneX = function (lane) { return (lane - 1) * MG.LANE_W; };
-  // Seeded random numbers (mulberry32), so a run replays exactly in tests.
-  MG.rng = function (seed) {
-    var a = (seed >>> 0) || 1;
+  function laneX(lane) { return (clamp(lane, 0, 2) - 1) * LANE_W; }
+  function validDiff(d) { return DIFFS[d] ? d : 'easy'; }
+
+  function rng(seed) {
+    var a = (seed >>> 0) || 0x13579bdf;
     return function () {
       a = (a + 0x6D2B79F5) | 0;
       var t = Math.imul(a ^ (a >>> 15), 1 | a);
       t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
       return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
-  };
-  function knob(T, key) { return MG.TUNE[key][T - 1]; }
-  MG.knob = function (tier, key) { return knob(tierOf(tier), key); };
+  }
   function rint(r, a, b) { return a + Math.floor(r() * (b - a + 1)); }
-  function range(a, b) { var out = []; for (var i = a; i <= b; i++) out.push(i); return out; }
-  function shuffle(r, list) {
-    for (var i = list.length - 1; i > 0; i--) { var j = Math.floor(r() * (i + 1)), t = list[i]; list[i] = list[j]; list[j] = t; }
-    return list;
-  }
+  function pick(r, list) { return list[Math.floor(r() * list.length)]; }
 
-  /* -------------------------------------------------------- gate maths */
-  // One operation on a whole number. ÷ rounds down (the generator only makes ÷ gates
-  // that divide exactly; MG.exact says whether a gate needs no rounding).
-  function op1(op, n, c) {
+  /* --------------------------------------------------------- Gate Math */
+  function evalOp(op, n, c) {
     if (op === '+') return c + n;
-    if (op === MG.MINUS) return c - n;
+    if (op === MINUS) return c - n;
     if (op === '×') return c * n;
-    return Math.floor(c / n);
+    if (op === '÷') return Math.floor(c / Math.max(1, n));
+    return c;
   }
-  MG.apply = function (g, c) {
-    var r = op1(g.op, g.n, c);
-    return g.op2 ? op1(g.op2, g.n2, r) : r;
-  };
-  MG.exact = function (g, c) {
-    if (g.op === '÷' && c % g.n) return false;
-    return !(g.op2 === '÷' && op1(g.op, g.n, c) % g.n2);
-  };
-  // What a gate does to the crowd: never below one runner.
-  MG.pass = function (g, c) { return Math.max(MG.FLOOR, MG.apply(g, c)); };
-  MG.label = function (g) { return g.op + g.n; };
-  MG.labels = function (g) { return g.op2 ? [g.op + g.n, g.op2 + g.n2] : [g.op + g.n]; };
-  MG.gateText = function (g) { return MG.labels(g).join(' '); };
-  function family(op) { return op === '+' || op === MG.MINUS ? 'add' : 'mul'; }
-  function bigNum(g) { return g.op2 ? Math.max(g.n, g.n2) : g.n; }
+  function applyRaw(gate, c) {
+    if (!gate) return c;
+    if (gate.kind === 'expr') return c + gate.val;
+    var r = evalOp(gate.op, gate.n, c);
+    return gate.op2 ? evalOp(gate.op2, gate.n2, r) : r;
+  }
+  function applyGate(gate, c) { return clamp(applyRaw(gate, c), FLOOR, CAP_SQUAD); }
+  function isExactGate(gate, c) {
+    if (!gate || gate.kind === 'expr') return true;
+    if (gate.op === '÷' && c % gate.n !== 0) return false;
+    return !(gate.op2 === '÷' && evalOp(gate.op, gate.n, c) % gate.n2 !== 0);
+  }
 
-  /* ------------------------------------------------------ number pools */
-  // What each world's gates and questions may use at a tier and level.
-  function pools(world, n, T) {
-    var k = knob(T, 'size'), sc = function (max, min) { return Math.max(min, Math.round(max * k)); };
-    var P = { add: [], sub: [], mul: [], div: [], two: false, cap: 20, start: 3 };
-    if (world === 0) {
-      var top = sc(9, 5);
-      P.add = range(1, top); P.sub = range(1, top); P.cap = 20; P.start = n < 2 ? 2 : 3;
-    } else if (world === 1) {
-      var ta = sc(20, 12), ts = sc(30, 12);
-      P.add = range(2, ta).concat([20].filter(function (v) { return v > ta; }));
-      P.sub = range(2, ts).concat([20, 30].filter(function (v) { return v > ts; }));
-      P.cap = 100; P.start = 8 + n * 2;
-    } else if (world === 2) {
-      P.mul = n < 3 ? (T === 1 ? [2, 3, 5] : [2, 3, 5, 10]) : T <= 2 ? [2, 3, 4, 5, 10] : range(2, 10);
-      P.add = range(1, sc(30, 10)); P.sub = range(1, sc(20, 6));
-      P.cap = sc(999, 400); P.start = 2;
-    } else if (world === 3) {
-      P.div = n < 3 ? [2, 5, 10] : T <= 2 ? [2, 3, 4, 5, 10] : range(2, 10);
-      P.mul = [2, 3]; P.add = range(2, sc(30, 10)); P.sub = range(2, sc(40, 10));
-      P.cap = sc(800, 300); P.start = 12;
-    } else {
-      P.mul = [2, 3, 4, 5]; P.div = [2, 3, 4, 5, 10]; P.add = range(1, sc(50, 15)); P.sub = range(1, sc(40, 10));
-      P.two = n > 0; P.cap = sc(999, 400); P.start = 4;
+  function makeOpGate(op, n, op2, n2) {
+    var g = { kind: 'op', op: op, n: n };
+    if (op2) { g.op2 = op2; g.n2 = n2; }
+    g.label = op2 ? (op + n + ' ' + op2 + n2) : (op + n);
+    g.tone = (op === '×' || (op === '+' && n >= 8)) ? 'mega' : (op === MINUS || op === '÷') ? 'bad' : 'good';
+    return g;
+  }
+
+  function makeExprGate(a, eOp, b, val, mixed) {
+    var inner = a + ' ' + eOp + ' ' + b;
+    var lbl = val < 0 ? (MINUS + Math.abs(val)) : (mixed ? '+(' + inner + ')' : inner);
+    return { kind: 'expr', op: val >= 0 ? '+' : MINUS, n: Math.abs(val), val: val, expr: inner, label: lbl, tone: val >= 10 ? 'mega' : val > 0 ? 'good' : 'bad' };
+  }
+
+  function buildExprForValue(r, diffId, world, val, mixed) {
+    val = Math.max(1, Math.round(val));
+    var style = r(), f, factors;
+    if (diffId === 'easy') {
+      if (val >= 2 && style < 0.65) { var a1 = rint(r, 1, Math.min(val - 1, 7)); return makeExprGate(a1, '+', val - a1, val, mixed); }
+      var subB = rint(r, 1, Math.max(1, 10 - val));
+      return makeExprGate(val + subB, MINUS, subB, val, mixed);
     }
-    return P;
-  }
-  MG.pools = function (world, n, tier) { return pools(world, n, tierOf(tier)); };
-
-  // Every gate the pools allow that is valid for each crowd number in A: whole
-  // results of at least one runner and at most the world's cap.
-  function nice(v) { return v < 20 ? Math.round(v) : v < 100 ? Math.round(v / 5) * 5 : Math.round(v / 10) * 10; }
-  function candidates(P, A, style) {
-    var out = [], seen = {};
-    function add(g) {
-      var r = [], key = MG.gateText(g);
-      if (seen[key]) return;
-      seen[key] = 1;
-      for (var k = 0; k < A.length; k++) {
-        if (!MG.exact(g, A[k])) return;
-        if (g.op2 && op1(g.op, g.n, A[k]) < 1) return;
-        var v = MG.apply(g, A[k]);
-        if (v < 1 || (v > P.cap && v >= A[k])) return;
-        r.push(v);
+    if (diffId === 'normal') {
+      if (style < 0.4 && val >= 4) {
+        factors = [];
+        for (f = 2; f <= 6; f++) if (val % f === 0 && val / f <= 9) factors.push(f);
+        if (factors.length) { var mf = pick(r, factors); return makeExprGate(mf, '×', val / mf, val, mixed); }
       }
-      g.r = r; out.push(g);
+      if (style < 0.72 && val >= 3) { var a2 = rint(r, 1, val - 1); return makeExprGate(a2, '+', val - a2, val, mixed); }
+      var sb2 = rint(r, 2, 9);
+      return makeExprGate(val + sb2, MINUS, sb2, val, mixed);
     }
-    P.add.forEach(function (n) { add({ op: '+', n: n }); });
-    P.sub.forEach(function (n) { add({ op: MG.MINUS, n: n }); });
-    // A row that takes runners away also offers round shares of a big crowd: −20, −50.
-    if (style === 'cut' && A[0] > 30) [0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5, 0.6].forEach(function (f) { var v = nice(A[0] * f); if (v > 0) add({ op: MG.MINUS, n: v }); });
-    P.mul.forEach(function (n) { add({ op: '×', n: n }); });
-    P.div.forEach(function (n) { add({ op: '÷', n: n }); });
-    if (P.two) {
-      // Two steps from two different families: "×2 then +5", "+4 then ×3", "÷2 then −3".
-      var small = [1, 2, 3, 4, 5, 6, 8, 10].filter(function (v) { return v <= P.add[P.add.length - 1]; });
-      var firsts = [['×', 2], ['×', 3], ['÷', 2]].concat(small.map(function (v) { return ['+', v]; }), small.map(function (v) { return [MG.MINUS, v]; }));
-      firsts.forEach(function (f) {
-        var seconds = family(f[0]) === 'add' ? [['×', 2], ['×', 3]] : small.map(function (v) { return ['+', v]; }).concat(small.map(function (v) { return [MG.MINUS, v]; }));
-        seconds.forEach(function (s) { add({ op: f[0], n: f[1], op2: s[0], n2: s[1] }); });
-      });
+    if (style < 0.45 && val <= 12) { var divB = rint(r, 2, 5); return makeExprGate(val * divB, '÷', divB, val, mixed); }
+    if (style < 0.8 && val >= 6) {
+      factors = [];
+      for (f = 2; f <= 9; f++) if (val % f === 0 && val / f <= 9) factors.push(f);
+      if (factors.length) { var pm = pick(r, factors); return makeExprGate(pm, '×', val / pm, val, mixed); }
     }
-    return out;
+    var sb3 = rint(r, 4, 14);
+    return makeExprGate(val + sb3, MINUS, sb3, val, mixed);
   }
 
-  // The crowd numbers a row may be reached with: A[0] is the number when the row is
-  // made, then one value more for each obstacle in the stretch before it that the
-  // crowd might hit (obstacles take a share of the crowd at that moment).
-  MG.loss = function (tier, c) {
-    var T = tierOf(tier);
-    return Math.min(c - MG.FLOOR, Math.max(knob(T, 'lossMin'), Math.round(c * knob(T, 'loss'))));
-  };
-  function arrivals(run, c, obstacles) {
-    var A = [c];
-    for (var i = 0; i < obstacles; i++) {
-      var a = A[A.length - 1], b = Math.max(MG.FLOOR, a - MG.loss(run.tier, a));
-      if (b !== a) A.push(b);
-    }
-    return A;
+  function computePips(results) {
+    var lo = Math.min(results[0], results[1], results[2]), hi = Math.max(results[0], results[1], results[2]);
+    var span = Math.max(1, hi - lo);
+    return results.map(function (v) { return clamp(2 + Math.round(((v - lo) / span) * 6), 1, 8); });
   }
 
-  // How much worse every decoy must be than the best gate: the tier's share of the
-  // best gate's change plus a little of the crowd (so +5 against +2 needs less than
-  // ×2 against +30), at least the tier's minimum.
-  function need(T, a, v) { return Math.max(knob(T, 'marginMin'), Math.ceil(knob(T, 'margin') * (Math.abs(v - a) + 0.3 * a))); }
-  MG.need = function (tier, a, v) { return need(tierOf(tier), a, v); };
-  // Three gates for crowd numbers A: B (the best for every number in A, by at least
-  // the tier's margin) and two decoys. One decoy is tempting: a bigger number, or the
-  // other kind of operation (+10 next to ×2). Returns null when the pools cannot.
-  function pickGates(run, A, style) {
-    var P = run.P, T = run.tier, r = run.rand, all = candidates(P, A, style), focus = MG.WORLDS[run.world].focus;
-    function gain(g) { for (var k = 0; k < A.length; k++) if (g.r[k] <= A[k]) return false; return true; }
-    function cut(g) { for (var k = 0; k < A.length; k++) if (g.r[k] >= A[k]) return false; return true; }
-    function isFocus(g) { return focus === 'two' ? !!g.op2 : g.op === focus || g.op2 === focus; }
-    var bests = all.filter(style === 'grow' ? gain : cut);
-    if (!bests.length) return null;
-    var top = 1;
-    bests.forEach(function (g) { top = Math.max(top, Math.abs(g.r[0] - A[0])); });
-    bests.forEach(function (g) {
-      g.s = r() + (isFocus(g) ? (run.world === 3 && style === 'cut' ? 1.1 : 0.55) : 0) - (g.op === run.lastOp ? 0.45 : 0) + 0.5 * Math.abs(g.r[0] - A[0]) / top * (style === 'grow' ? 1 : -1);
-    });
-    bests.sort(function (a, b) { return b.s - a.s; });
-    for (var bi = 0; bi < bests.length && bi < 14; bi++) {
-      var B = bests[bi], lb = MG.gateText(B);
-      var m = B.r.map(function (v, k) { return need(T, A[k], v); });
-      var ds = all.filter(function (d) {
-        if (d === B || MG.gateText(d) === lb) return false;
-        if (style === 'cut' && !cut(d)) return false;
-        for (var k = 0; k < A.length; k++) if (d.r[k] > B.r[k] - m[k]) return false;
-        return true;
-      });
-      if (ds.length < 2) continue;
-      ds.forEach(function (d) {
-        d.t = (bigNum(d) > bigNum(B) ? 2 : 0) + (family(d.op) !== family(B.op) || !!d.op2 !== !!B.op2 ? 1 : 0) +
-          (1 - Math.min(1, (B.r[0] - d.r[0]) / Math.max(1, B.r[0]))) + (isFocus(d) ? 1.2 : 0) + r() * 0.7;
-      });
-      ds.sort(function (a, b) { return b.t - a.t; });
-      var D1 = ds[0], l1 = MG.gateText(D1), rest = ds.slice(1).filter(function (d) { return d.r[0] !== D1.r[0] && MG.gateText(d) !== l1; });
-      if (!rest.length) continue;
-      // The second decoy: clearly worse for the youngest (a loss next to two gains),
-      // another close call for the oldest.
-      var easy = T <= 2 && style === 'grow', pool2 = rest.filter(function (d) { return easy ? cut(d) : gain(d) || style === 'cut'; });
-      if (!pool2.length) pool2 = rest;
-      var D2 = pool2[Math.floor(r() * Math.min(pool2.length, easy ? pool2.length : 6))];
-      return [B, D1, D2];
-    }
-    return null;
+  function bestLaneOf(gates, c) {
+    var res = gates.map(function (g) { return applyGate(g, c); });
+    var maxV = Math.max(res[0], res[1], res[2]), idx = -1, ties = 0;
+    for (var i = 0; i < 3; i++) if (res[i] === maxV) { idx = i; ties++; }
+    return ties === 1 ? idx : -1;
   }
-  // When the pools have nothing (a crowd of one at the cap, say): plain gates that are
-  // always valid.
-  function fallback(run, A, style) {
-    var T = run.tier, lo = A[A.length - 1], K = 1, B, D1, D2;
-    if (style === 'cut') {
-      // −1, and two bigger cuts.
-      var M = 1;
-      A.forEach(function (a) { M = Math.max(M, need(T, a, a - 1)); });
-      return lo - 1 - M - 1 >= 1 ? [{ op: MG.MINUS, n: 1 }, { op: MG.MINUS, n: 1 + M }, { op: MG.MINUS, n: 2 + M }] : null;
-    }
-    D1 = { op: '+', n: 1 }; D2 = lo > 1 ? { op: MG.MINUS, n: 1 } : { op: '+', n: 2 };
-    function ok(a) { return K - Math.max(1, MG.apply(D2, a) - a) >= need(T, a, a + K); }
-    while (!A.every(ok)) K++;
-    B = { op: '+', n: K };
-    return [B, D1, D2];
-  }
-  // Which row style: "grow" (pick the biggest gain) or "cut" (every gate takes some
-  // away: pick the one that takes the least). Near the world's cap, every second row in
-  // the division world, and now and then elsewhere.
-  function rowStyle(run, row, c) {
-    if (c <= 2) return 'grow';
-    if (c >= run.P.cap) return 'cut';
-    return row.plan;
-  }
-  // The share of gate rows that take runners away, by world and level; the division
-  // world takes turns. Planned with the layout, so every player meets the same kinds.
-  function cutShare(world, n) { return [n ? 0.35 : 0, n ? 0.3 : 0.15, n >= 2 ? 0.15 : 0, 0.5, n ? 0.25 : 0.1][world]; }
 
-  /* ---------------------------------------------------------- questions */
-  // A question: its text (Western digits and the signs + − × ÷ =), its answer and three
-  // answers to choose from (exactly one right, all different, all positive).
-  function q(a, op, b, op2, c2) {
-    var ans = op1(op, b, a), text = a + ' ' + op + ' ' + b;
-    if (op2) { ans = op1(op2, c2, ans); text += ' ' + op2 + ' ' + c2; }
-    return { a: a, op: op, b: b, op2: op2 || '', c: op2 ? c2 : 0, ans: ans, text: text + ' = ?' };
-  }
-  function makeQuestion(run) {
-    var r = run.rand, T = run.tier, w = run.world, n = run.n, Q;
-    if (w === 0) {
-      var S = T === 1 ? 10 : T === 2 ? 15 : 20;
-      if (n === 0 || r() < 0.6) { var a = rint(r, 1, S - 1); Q = q(a, '+', rint(r, 1, S - a)); }
-      else { var x = rint(r, 3, S); Q = q(x, MG.MINUS, rint(r, 1, x - 1)); }
-    } else if (w === 1) {
-      if (r() < 0.6) {
-        var a2 = T <= 2 ? rint(r, 1, 8) * 10 : rint(r, 11, 80), b2 = T <= 2 ? rint(r, 1, 9) : rint(r, 3, 99 - a2);
-        if (T <= 2 && r() < 0.5) b2 = rint(r, 1, Math.max(1, 9 - a2 / 10)) * 10;
-        Q = q(a2, '+', b2);
-      } else {
-        var x2 = T <= 2 ? rint(r, 2, 9) * 10 + rint(r, 0, 9) : rint(r, 30, 99), y2 = T <= 2 ? rint(r, 1, 9) : rint(r, 11, x2 - 5);
-        Q = q(x2, MG.MINUS, Math.min(x2 - 1, y2));
-      }
-    } else if (w === 2) {
-      var tab = n < 3 ? (T === 1 ? [2, 3, 10] : [2, 3, 5, 10]) : T <= 2 ? [2, 3, 4, 5, 10] : range(2, 9);
-      Q = q(rint(r, 1, T === 1 ? 5 : T === 2 ? 6 : 10), '×', tab[Math.floor(r() * tab.length)]);
-      if (r() < 0.5) Q = q(Q.b, '×', Q.a);
-    } else if (w === 3) {
-      var dv = n < 3 ? [2, 5, 10] : T <= 2 ? [2, 3, 4, 5, 10] : range(2, 9), d = dv[Math.floor(r() * dv.length)];
-      var k = rint(r, 1, T === 1 ? 5 : 10);
-      Q = q(k * d, '÷', d);
+  function generateRowGates(r, cfg, world, rowIdx, c, prevBest1, prevBest2, hintAllowed) {
+    var diffId = cfg.id;
+    var candidates = [0, 1, 2].filter(function (l) { return !(prevBest1 === l && prevBest2 === l); });
+    var targetBest = pick(r, candidates);
+    var softCap = diffId === 'easy' ? 75 : diffId === 'normal' ? 140 : 220;
+    var canMultiply = c <= Math.floor(softCap * 0.44) && (rowIdx % 2 === 1 || r() < 0.45);
+    var duelRow = r() < cfg.exprChance * 0.55;
+    var bestGate;
+
+    if (duelRow) {
+      bestGate = buildExprForValue(r, diffId, world, diffId === 'easy' ? rint(r, 5, 9) : diffId === 'normal' ? rint(r, 8, 16) : rint(r, 12, 24), false);
+    } else if (canMultiply && (diffId !== 'easy' || (c <= 18 && r() < 0.55))) {
+      var mulN = diffId === 'easy' ? 2 : (c <= 17 && r() < 0.46 ? 3 : 2);
+      bestGate = (diffId === 'pro' && r() < 0.4 && c <= 30) ? makeOpGate('×', 2, '+', rint(r, 2, 6)) : makeOpGate('×', mulN);
+    } else if (r() < cfg.exprChance) {
+      bestGate = buildExprForValue(r, diffId, world, diffId === 'easy' ? rint(r, 4, 9) : diffId === 'normal' ? rint(r, 7, 15) : rint(r, 10, 24), true);
     } else {
-      var f = Math.floor(r() * 4), m1 = rint(r, 2, T <= 2 ? 5 : 9), m2 = rint(r, 2, T <= 2 ? 5 : 9);
-      if (f === 0) Q = q(m1, '×', m2, '+', rint(r, 1, 10));
-      else if (f === 1) Q = q(m1, '×', m2, MG.MINUS, rint(r, 1, Math.min(10, m1 * m2 - 1)));
-      else if (f === 2) { var s1 = rint(r, 5, 30), s2 = rint(r, 2, 20); Q = q(s1, '+', s2, MG.MINUS, rint(r, 1, s1 + s2 - 1)); }
-      else Q = q(m1 * m2, '÷', m2, '+', rint(r, 1, 10));
+      bestGate = makeOpGate('+', diffId === 'easy' ? rint(r, 4, 9) : diffId === 'normal' ? rint(r, 6, 14) : rint(r, 9, 20));
     }
-    // Wrong answers: near misses and classic slips (a + b for a × b, the next number in the table).
-    var near = knob(T, 'quizNear'), ans = Q.ans, step = Q.op === '×' || Q.op === '÷' ? Q.b : 0;
-    var pool = [ans + 1, ans - 1, ans + 2, ans - 2, ans + 3, ans - 3, ans + 10, ans - 10, ans + 5, ans - 5];
-    if (step) pool.push(ans + step, ans - step);
-    if (Q.op === '×' && !Q.op2) pool.push(Q.a + Q.b);
-    if (Q.op === '÷') pool.push(Q.a - Q.b);
-    var seen = {}, wrong = [];
-    shuffle(r, pool).forEach(function (v) {
-      if (v >= 1 && v !== ans && Math.abs(v - ans) >= near && !seen[v]) { seen[v] = 1; wrong.push(v); }
-    });
-    // The first wrong answer is a near one, the second may be a slip.
-    wrong.sort(function (x, y) { return Math.abs(x - ans) - Math.abs(y - ans); });
-    var w1 = wrong[0], w2 = wrong[Math.min(wrong.length - 1, 1 + Math.floor(r() * Math.min(3, wrong.length - 1)))];
-    if (w2 === w1) w2 = wrong[1];
-    Q.wrong = [w1, w2];
-    return Q;
-  }
-  MG.question = function (o) {
-    var run = { rand: MG.rng(o.seed), tier: tierOf(o.tier), world: clamp(o.world | 0, 0, 4), n: clamp(o.n | 0, 0, 5) };
-    return makeQuestion(run);
-  };
-  MG.quizBonus = function (c) { return Math.max(3, Math.round(c * 0.2)); };
-  MG.quizLoss = function (c) { return Math.max(0, Math.min(c - MG.FLOOR, Math.max(2, Math.round(c * 0.1)))); };
 
-  /* -------------------------------------------------------------- a run */
-  function base(o) {
-    var level = clamp(o.level | 0, 0, MG.LEVELS_N - 1), L = MG.LEVELS[level], T = tierOf(o.tier);
+    var bestRes = applyGate(bestGate, c);
+    var margin = Math.max(cfg.marginMin, Math.ceil((bestRes - c) * 0.25));
+    if (bestRes < c + margin + 1) { bestGate = makeOpGate('+', diffId === 'easy' ? 6 : 10); bestRes = applyGate(bestGate, c); }
+
+    var maxAllowed = Math.max(FLOOR, bestRes - margin), decoy1, decoy2;
+    if (duelRow) {
+      var d1Val = clamp(bestGate.val - rint(r, 2, Math.max(2, Math.floor(bestGate.val * 0.45))), 1, Math.max(1, maxAllowed - c));
+      decoy1 = buildExprForValue(r, diffId, world, d1Val, false);
+    } else if (bestGate.op === '×' && maxAllowed - c >= 3) {
+      var temptAdd = clamp(rint(r, 3, Math.min(14, maxAllowed - c)), 1, maxAllowed - c);
+      decoy1 = r() < cfg.exprChance ? buildExprForValue(r, diffId, world, temptAdd, true) : makeOpGate('+', temptAdd);
+    } else if (maxAllowed > c + 1) {
+      decoy1 = makeOpGate('+', rint(r, 1, Math.max(1, maxAllowed - c)));
+    } else {
+      decoy1 = makeOpGate(MINUS, clamp(rint(r, 1, 3), 1, Math.max(1, c - 1)));
+    }
+    if (applyGate(decoy1, c) > maxAllowed || decoy1.label === bestGate.label) {
+      decoy1 = maxAllowed > c ? makeOpGate('+', Math.max(1, maxAllowed - c)) : makeOpGate(MINUS, 1);
+    }
+
+    if (duelRow) {
+      var usedVal = decoy1.val || 2;
+      var d2Val = clamp(usedVal - rint(r, 1, 3), 1, Math.max(1, maxAllowed - c));
+      if (d2Val === usedVal) d2Val = Math.max(1, d2Val - 1);
+      decoy2 = buildExprForValue(r, diffId, world, d2Val, false);
+      if (decoy2.label === decoy1.label || decoy2.label === bestGate.label || applyGate(decoy2, c) >= bestRes) {
+        decoy2 = makeOpGate(MINUS, clamp(rint(r, 1, 4), 1, Math.max(1, c - 1)));
+      }
+    } else if (diffId === 'pro' && c >= 8 && r() < 0.55) {
+      decoy2 = makeOpGate('÷', (c % 3 === 0) ? 3 : 2);
+    } else {
+      var subLim = diffId === 'easy' ? Math.min(5, Math.max(1, c - 2)) : Math.min(9, Math.max(1, c - 2));
+      decoy2 = makeOpGate(MINUS, clamp(rint(r, 1, subLim), 1, 9));
+    }
+    if (decoy2.label === decoy1.label || decoy2.label === bestGate.label || applyGate(decoy2, c) >= bestRes) {
+      decoy2 = makeOpGate(MINUS, decoy1.op === MINUS && decoy1.n === 2 ? 3 : 2);
+    }
+
+    var gates = [null, null, null];
+    gates[targetBest] = bestGate;
+    var others = [0, 1, 2].filter(function (l) { return l !== targetBest; });
+    if (r() < 0.5) { gates[others[0]] = decoy1; gates[others[1]] = decoy2; }
+    else { gates[others[0]] = decoy2; gates[others[1]] = decoy1; }
+
+    for (var gi = 0; gi < 3; gi++) { gates[gi].mystery = false; gates[gi].revealed = true; }
+    if (cfg.mysteryChance > 0 && rowIdx >= 1 && r() < cfg.mysteryChance) {
+      gates[targetBest].mystery = true; gates[targetBest].shieldHp = 3; gates[targetBest].revealed = false;
+    }
+    var results = gates.map(function (g) { return applyGate(g, c); });
+    return { gates: gates, best: targetBest, results: results, pips: computePips(results), hintBest: !!hintAllowed };
+  }
+
+  /* --------------------------------------------------- Stage & Run Creation */
+  function spawnStretchObjects(run, r, cfg, segIdx, prevD, rowD) {
+    var midD = prevD + (rowD - prevD) * 0.48;
+    var meteorCount = (segIdx >= 1 && r() < 0.52) ? 2 : 1;
+    var lanes = [0, 1, 2];
+    var bonusMax = cfg.id === 'easy' ? 4 : cfg.id === 'normal' ? 6 : 8;
+    for (var m = 0; m < meteorCount; m++) {
+      var mLane = lanes.splice(Math.floor(r() * lanes.length), 1)[0];
+      var hp = rint(r, cfg.meteorHp[0], cfg.meteorHp[1]);
+      var kr = r();
+      var kind = (segIdx > 0 && kr < 0.22) ? 'laser' : (kr < 0.65 ? 'mech' : 'coin');
+      var val = kind === 'mech' ? rint(r, 2, bonusMax) : kind === 'coin' ? rint(r, 4, 7) : 2;
+      run.meteors.push({ id: ++run._seq, d: Math.round((midD + (m === 1 ? 2.4 : 0)) * 10) / 10, lane: mLane, hp: hp, maxHp: hp, kind: kind, val: val, shattered: false, passed: false });
+    }
+    var coinLane = lanes.length ? lanes[0] : rint(r, 0, 2);
+    for (var ci = 0; ci < 3; ci++) {
+      run.coins.push({ id: ++run._seq, d: Math.round((prevD + 6 + ci * 3.2) * 10) / 10, lane: coinLane, got: false });
+    }
+    if (segIdx >= 1 && r() < cfg.laserChance) {
+      var barLanes = [rint(r, 0, 2)];
+      if (cfg.id !== 'easy' && r() < 0.45) barLanes.push((barLanes[0] + 1) % 3);
+      run.hazards.push({ id: ++run._seq, d: Math.round((prevD + (rowD - prevD) * 0.24) * 10) / 10, lanes: barLanes, passed: false, hit: false });
+    } else if (segIdx >= 1 && r() < 0.35) {
+      run.pads.push({ id: ++run._seq, d: Math.round((prevD + (rowD - prevD) * 0.24) * 10) / 10, lane: rint(r, 0, 2), used: false });
+    }
+  }
+
+  function populateRow(run, rowIdx, forCount) {
+    var row = run.rows[rowIdx];
+    if (!row || row.shown) return;
+    var p1 = rowIdx >= 1 ? run.rows[rowIdx - 1].best : -1;
+    var p2 = rowIdx >= 2 ? run.rows[rowIdx - 2].best : -1;
+    var built = generateRowGates(row._rng, DIFFS[run.diff], run.world, rowIdx, forCount, p1, p2, run.diff === 'easy' && (run.ddaHint || run.misses > 0));
+    row.gates = built.gates; row.best = built.best; row.results = built.results; row.pips = built.pips;
+    row.hintBest = built.hintBest; row.madeFor = forCount; row.shown = true;
+    run.ev.push({ t: 'reveal', row: rowIdx });
+  }
+
+  function appendRows(run, countRows, baseD) {
+    var cfg = DIFFS[run.diff], r = run._waveRng;
+    for (var k = 0; k < countRows; k++) {
+      var idx = run.rows.length;
+      var rowD = idx === 0 ? cfg.firstRowD : (baseD + k * cfg.gap);
+      var prevD = idx === 0 ? 4 : (k === 0 ? baseD - 18 : rowD - cfg.gap);
+      run.rows.push({
+        i: idx, d: rowD, shown: false, cued: false, passed: false, pick: -1, best: 0,
+        gates: null, results: null, pips: null, hintBest: false,
+        moving: cfg.movingChance > 0 && idx >= 1 && r() < cfg.movingChance,
+        movePhase: r() * 6.283, moveOffset: 0,
+        _rng: rng(((run.seed ^ ((idx + 1) * 0x9e3779b9)) >>> 0) || 1)
+      });
+      spawnStretchObjects(run, r, cfg, idx, prevD, rowD);
+    }
+    run.R = run.rows.length;
+    run.bossD = run.rows[run.R - 1].d + (run.endless ? 22 : 24);
+    run.battleD = run.bossD;
+  }
+
+  function estimateWavePar(run, fromRow, toRow, startCount) {
+    var cfg = DIFFS[run.diff], c = startCount, p1 = -1, p2 = -1;
+    for (var i = fromRow; i < toRow; i++) {
+      var built = generateRowGates(rng(((run.seed ^ ((i + 1) * 0x9e3779b9)) >>> 0) || 1), cfg, run.world, i, c, p1, p2, false);
+      c = built.results[built.best]; p2 = p1; p1 = built.best;
+    }
+    return c;
+  }
+
+  function create(opts) {
+    opts = opts || {};
+    var stageIdx = clamp(Math.round(Number(opts.stage != null ? opts.stage : (opts.level || 0))), 0, ENDLESS_INDEX);
+    var st = STAGES[stageIdx], diffId = validDiff(opts.diff), cfg = DIFFS[diffId];
+    var seed = (opts.seed >>> 0) || 1;
+    var ddaLevel = typeof opts.ddaLevel === 'number' ? clamp(opts.ddaLevel, 0, 1) : 0.25;
+
     var run = {
-      level: level, world: L.world, n: L.n, tag: L.tag, tier: T, seed: (o.seed >>> 0) || 1,
-      rand: MG.rng((o.seed >>> 0) || 1), P: pools(L.world, L.n, T),
-      speed: knob(T, 'speed'), gap: knob(T, 'gap'), t: 0, d: 0, lane: 1, x: 0, count: 0,
-      rows: [], segs: [], coins: [], obs: [], R: ROWS[L.n] + knob(T, 'extraRows'), made: 0, lastOp: '', lastLanes: [],
-      phase: 'run', ev: [], runCoins: 0, asked: 0, right: 0, picks: 0, bestPicks: 0, hits: 0, par: 0, rival: 0, battleD: 0,
-      battle: null, stairs: null, result: null, next: 0
+      stage: stageIdx, level: stageIdx, world: st.world, endless: st.endless, wave: 1,
+      diff: diffId, seed: seed, ddaLevel: ddaLevel, ddaHint: diffId === 'easy' && ddaLevel < 0.3,
+      lane: 1, x: 0, d: 0, t: 0, speed: cfg.speed + st.world * 0.8 + st.sub * 0.4,
+      count: cfg.startCount, phase: 'run', jumpT: 0, jumpDur: 0.68, jumpCd: 0, turboT: 0,
+      blasterBoost: 0, fireAcc: 0, runCoins: 0, bestPicks: 0, picks: 0, misses: 0, hits: 0,
+      shatteredCount: 0, next: 0, R: 0, rows: [], meteors: [], hazards: [], pads: [], coins: [],
+      bolts: [], ev: [], par: 20, bossMax: 12, bossHp: 12, rival: 12, battleD: 0, bossD: 0,
+      clashT: 0, finishCount: 0, result: null, _seq: 0, _waveRng: rng((seed ^ 0x5bd1e995) >>> 0)
     };
-    run.count = run.P.start;
-    if (L.world === 0 && L.n === 0) run.R = Math.min(run.R, 6);
-    return run;
-  }
-  // The level's layout: row distances and kinds, coin lines and obstacles.
-  function layout(run) {
-    var r = run.rand, T = run.tier, R = run.R, i;
-    for (i = 0; i < R; i++) run.rows.push({ i: i, d: run.gap * (i + 1), kind: 'gate', plan: 'grow', shown: false, passed: false, pick: -1, best: -1, gates: null, q: null, answers: null, before: 0, after: 0 });
-    run.battleD = run.rows[R - 1].d + MG.FINISH;
-    // Question rows: never the first row, never two in a row.
-    var nq = Math.min(knob(T, 'quiz'), Math.floor(R / 2)), slots = shuffle(r, range(1, R - 1)), picked = [];
-    for (i = 0; i < slots.length && picked.length < nq; i++) {
-      var s = slots[i];
-      if (picked.every(function (p) { return Math.abs(p - s) > 1; })) picked.push(s);
-    }
-    picked.forEach(function (s) { run.rows[s].kind = 'quiz'; });
-    // Gate row kinds: the first is always a "grow" row, and no two "cut" rows follow each other.
-    var share = cutShare(run.world, run.n), prev = 'grow', made = 0;
-    run.rows.forEach(function (row) {
-      if (row.kind !== 'gate') return;
-      var cut = made > 0 && prev !== 'cut' && (run.world === 3 ? made % 2 === 1 : r() < share);
-      row.plan = prev = cut ? 'cut' : 'grow';
-      made++;
-    });
-    // Obstacle stretches: none in a world's first level, never before the first two rows.
-    var nObs = run.n === 0 ? 0 : Math.min(R - 1, 1 + Math.floor(run.n / 2) + knob(T, 'rocks'));
-    var rocky = shuffle(r, range(2, R)).slice(0, nObs), id = 1;
-    for (i = 0; i <= R; i++) {
-      var a = i ? run.rows[i - 1].d : 0, b = i < R ? run.rows[i].d : run.battleD, seg = { i: i, a: a, b: b, obs: 0 }, here = [];
-      run.segs.push(seg);
-      if (rocky.indexOf(i) >= 0) {
-        var two = r() < knob(T, 'double') && b - a >= 30, first = a + 14 + r() * 2;
-        var spots = two ? [first, Math.min(b - 10, first + 8 + r() * 3)] : [a + 14 + r() * Math.max(0, b - a - 25)];
-        spots.forEach(function (d) {
-          var roller = r() < (T <= 2 ? 0.35 : 0.6), lanes;
-          if (roller) lanes = r() < 0.5 ? [0, 1] : [1, 2];
-          else lanes = [rint(r, 0, 2)];
-          var o = { id: id++, d: d, kind: roller ? 'roller' : 'pillar', lanes: lanes, seg: i, hit: false, passed: false };
-          run.obs.push(o); here.push(o);
-          seg.obs++;
-        });
-      }
-      // A line of five coins near the start of every stretch (two in the last one),
-      // never in an obstacle's lane beside it.
-      var lines = i === R ? 2 : 1;
-      for (var l = 0; l < lines; l++) {
-        var lane = rint(r, 0, 2), d0 = a + (i ? 4 : 8) + l * 13;
-        var blocked = function (ln) { return here.some(function (o) { return o.lanes.indexOf(ln) >= 0 && o.d > d0 - 2.5 && o.d < d0 + 9.7; }); };
-        for (var tries = 0; tries < 3 && blocked(lane); tries++) lane = (lane + 1) % 3;
-        if (blocked(lane)) continue;
-        for (var k = 0; k < 5; k++) run.coins.push({ id: id++, d: d0 + k * 1.8, lane: lane, got: false });
-      }
-    }
-    run.obs.sort(function (x, y) { return x.d - y.d; });
-  }
-  // Makes row i for the crowd's number now.
-  function makeRow(run, i) {
-    var row = run.rows[i], r = run.rand, c = run.count;
-    if (row.shown) return row;
-    // The best lane: anywhere, but not the same lane three rows running.
-    var lanes = [0, 1, 2], L = run.lastLanes, best = rint(r, 0, 2);
-    if (L.length >= 2 && L[L.length - 1] === L[L.length - 2] && best === L[L.length - 1]) best = (best + 1 + rint(r, 0, 1)) % 3;
-    if (row.kind === 'quiz') {
-      row.q = makeQuestion(run);
-      var others = lanes.filter(function (l) { return l !== best; });
-      if (r() < 0.5) others.reverse();
-      row.answers = [0, 0, 0];
-      row.answers[best] = row.q.ans; row.answers[others[0]] = row.q.wrong[0]; row.answers[others[1]] = row.q.wrong[1];
-    } else {
-      var A = arrivals(run, c, run.segs[i].obs), style = rowStyle(run, row, c);
-      var g = pickGates(run, A, style) || (style === 'cut' ? fallback(run, A, 'cut') || pickGates(run, A, 'grow') : null) || fallback(run, A, 'grow');
-      var rest = lanes.filter(function (l) { return l !== best; });
-      if (r() < 0.5) rest.reverse();
-      row.gates = [null, null, null];
-      row.gates[best] = { op: g[0].op, n: g[0].n, op2: g[0].op2 || '', n2: g[0].n2 || 0 };
-      row.gates[rest[0]] = { op: g[1].op, n: g[1].n, op2: g[1].op2 || '', n2: g[1].n2 || 0 };
-      row.gates[rest[1]] = { op: g[2].op, n: g[2].n, op2: g[2].op2 || '', n2: g[2].n2 || 0 };
-      row.style = style;
-      run.lastOp = g[0].op;
-      run.made++;
-    }
-    row.best = best; row.made = c; row.shown = true;
-    L.push(best);
-    run.ev.push({ t: 'reveal', row: i });
-    return row;
-  }
-  // The best lane of a gate row for a crowd of c (strictly the biggest result), or -1.
-  MG.bestLane = function (row, c) {
-    if (row.kind === 'quiz') return row.answers ? row.answers.indexOf(row.q.ans) : -1;
-    var best = -1, top = -Infinity, tie = false;
-    for (var l = 0; l < 3; l++) {
-      var v = MG.pass(row.gates[l], c);
-      if (v > top) { top = v; best = l; tie = false; } else if (v === top) tie = true;
-    }
-    return tie ? -1 : best;
-  };
-  // A ghost of the same level and seed that picks the best gate every time, dodges every
-  // obstacle and answers every question: its number at the finish is the par.
-  function ghostPar(o) {
-    var g = base(o);
-    layout(g);
-    makeRow(g, 0);
-    for (var i = 0; i < g.R; i++) {
-      var row = g.rows[i];
-      g.count = row.kind === 'quiz' ? g.count + MG.quizBonus(g.count) : MG.pass(row.gates[row.best], g.count);
-      if (i + 1 < g.R) makeRow(g, i + 1);
-    }
-    return g.count;
-  }
-  // o: { level 0..29, tier 1..5, seed }
-  MG.create = function (o) {
-    o = o || {};
-    var run = base(o);
-    run.par = ghostPar(o);
-    run.rival = Math.max(1, Math.min(run.par - 1, Math.floor(run.par * knob(run.tier, 'rival') * MG.RIVAL_WORLD[run.world])));
-    run.startCount = run.count;
-    layout(run);
-    makeRow(run, 0);
+
+    appendRows(run, st.rows, cfg.firstRowD);
+    run.par = estimateWavePar(run, 0, run.R, run.count);
+    var ratio = clamp(cfg.shieldRatio + (ddaLevel - 0.35) * 0.1, 0.46, 0.82);
+    run.bossMax = Math.max(7, Math.min(run.par - (st.endless ? 3 : 4), Math.floor(run.par * ratio)));
+    run.bossHp = run.bossMax; run.rival = run.bossMax;
+    populateRow(run, 0, run.count);
     run.ev.length = 0;
     return run;
-  };
+  }
 
-  /* ------------------------------------------------------------- steps */
-  function setLane(run, lane) {
-    lane = clamp(lane | 0, 0, 2);
-    if (lane === run.lane) return;
-    run.ev.push({ t: 'lane', from: run.lane, to: lane });
-    run.lane = lane;
-  }
-  function passRow(run, row) {
-    var before = run.count, lane = run.lane, after;
-    row.passed = true; row.pick = lane; row.before = before;
-    if (row.kind === 'quiz') {
-      var right = row.answers[lane] === row.q.ans;
-      run.asked++;
-      if (right) { run.right++; after = before + MG.quizBonus(before); }
-      else after = Math.max(MG.FLOOR, before - MG.quizLoss(before));
-      run.count = after; row.after = after;
-      run.ev.push({ t: 'quiz', row: row.i, lane: lane, right: right, ans: row.q.ans, picked: row.answers[lane], best: row.best, before: before, after: after });
-    } else {
-      var g = row.gates[lane], bestNow = MG.bestLane(row, before);
-      if (!MG.exact(g, before)) run.ev.push({ t: 'rounded', row: row.i, lane: lane });
-      after = MG.pass(g, before);
-      run.count = after; row.after = after;
-      run.picks++;
-      if (lane === bestNow) run.bestPicks++;
-      run.ev.push({ t: 'gate', row: row.i, lane: lane, gate: g, before: before, after: after, best: lane === bestNow, bestLane: bestNow });
-    }
-    if (row.i + 1 < run.R) makeRow(run, row.i + 1);
-  }
-  function startBattle(run) {
-    run.phase = 'battle';
-    run.battle = { t: 0, ours: run.count, theirs: run.rival, acc: 0, rate: Math.max(8, run.rival / 1.4), done: false, won: false };
-    run.finishCount = run.count;
-    run.ev.push({ t: 'finish', count: run.count, rival: run.rival });
-  }
-  function stepBattle(run, dt) {
-    var B = run.battle;
-    B.t += dt;
-    // The crowd slows to a stop just before the rival crowd.
-    var stop = run.battleD + 2.5, v = Math.max(0, Math.min(run.speed, (stop - run.d) * 3));
-    run.d = Math.min(stop, run.d + v * dt);
-    run.x += (MG.laneX(1) - run.x) * Math.min(1, dt * 4);
-    if (B.done) {
-      if (B.t >= B.end) {
-        if (B.won) startStairs(run);
-        else finish(run);
-      }
-      return;
-    }
-    if (B.t < 0.8) return;
-    B.acc += B.rate * dt;
-    var n = Math.min(B.ours, B.theirs, Math.floor(B.acc));
-    if (n > 0) {
-      B.acc -= n; B.ours -= n; B.theirs -= n;
-      run.count = B.ours;
-      run.ev.push({ t: 'clash', n: n, ours: B.ours, theirs: B.theirs });
-    }
-    if (!B.ours || !B.theirs) {
-      B.done = true; B.won = B.ours > 0; B.end = B.t + (B.won ? 0.7 : 1.4);
-      run.ev.push({ t: B.won ? 'won' : 'lost', left: B.ours, theirs: B.theirs });
-    }
-  }
-  // The crowd that is left climbs the steps: what a perfect run has left reaches ×10,
-  // half of it ×5. Each step keeps a share of the runners.
-  MG.stepCost = function (par, rival) { return Math.max(1, par - rival) / MG.STEPS; };
-  MG.stepsFor = function (left, par, rival) { return left > 0 ? Math.min(MG.STEPS, Math.max(1, Math.ceil(left / MG.stepCost(par, rival) - 1e-9))) : 0; };
-  function startStairs(run) {
-    run.phase = 'stairs';
-    var left = run.battle.ours;
-    run.stairs = { t: 0, left: left, cost: MG.stepCost(run.par, run.rival), goal: MG.stepsFor(left, run.par, run.rival), k: 0 };
-  }
-  MG.STEP_S = 0.3;
-  function stepStairs(run, dt) {
-    var S = run.stairs;
-    S.t += dt;
-    while (S.k < S.goal && S.t >= (S.k + 1) * MG.STEP_S) { S.k++; run.ev.push({ t: 'step', k: S.k, goal: S.goal }); }
-    if (S.t >= S.goal * MG.STEP_S + 1.1) finish(run);
-  }
-  function finish(run) {
-    run.phase = 'done';
-    run.result = MG.result(run);
-    run.ev.push({ t: 'done', won: run.result.won, stars: run.result.stars });
-  }
-  // One fixed step. input: { move: -1 | 0 | 1 (a lane to the left or right), lane: 0..2 (a lane picked with the mouse) }
-  MG.step = function (run, dt, input) {
-    if (run.phase === 'done') return run;
-    input = input || {};
+  /* -------------------------------------------------------- Simulation Step */
+  function step(run, dt, inp) {
+    if (!run || run.phase === 'done' || !(dt > 0)) return;
+    inp = inp || {};
+    dt = Math.min(dt, 0.05);
     run.t += dt;
-    if (run.phase === 'battle') { stepBattle(run, dt); return run; }
-    if (run.phase === 'stairs') { stepStairs(run, dt); return run; }
-    if (input.lane != null && input.lane >= 0) setLane(run, input.lane);
-    else if (input.move) setLane(run, run.lane + (input.move > 0 ? 1 : -1));
-    var v = run.speed * Math.min(1, 0.35 + run.t / 0.9), d0 = run.d, d1 = d0 + v * dt;
-    run.d = d1;
-    run.x += (MG.laneX(run.lane) - run.x) * Math.min(1, dt * 14);
-    var i;
-    for (i = 0; i < run.coins.length; i++) {
-      var k = run.coins[i];
-      if (k.got || k.d <= d0 || k.d > d1) continue;
-      if (k.lane === run.lane) { k.got = true; run.runCoins++; run.ev.push({ t: 'coin', id: k.id, lane: k.lane, n: run.runCoins }); }
-    }
-    for (i = 0; i < run.obs.length; i++) {
-      var o = run.obs[i];
-      if (o.passed || o.d > d1) continue;
-      o.passed = true;
-      if (o.lanes.indexOf(run.lane) >= 0) {
-        var lost = run.count - Math.max(MG.FLOOR, run.count - MG.loss(run.tier, run.count));
-        o.hit = true; run.hits++; run.count -= lost;
-        run.ev.push({ t: 'hit', id: o.id, kind: o.kind, lost: lost, count: run.count });
-      } else run.ev.push({ t: 'dodge', id: o.id });
-    }
-    while (run.next < run.R && run.rows[run.next].d <= d1) passRow(run, run.rows[run.next++]);
-    if (run.d >= run.battleD) startBattle(run);
-    return run;
-  };
-  // How far along the level the crowd is, 0..1.
-  MG.progress = function (run) { return clamp(run.d / run.battleD, 0, 1); };
+    if (run.jumpT > 0) run.jumpT = Math.max(0, run.jumpT - dt);
+    if (run.jumpCd > 0) run.jumpCd = Math.max(0, run.jumpCd - dt);
+    if (run.turboT > 0) run.turboT = Math.max(0, run.turboT - dt);
+    if (run.blasterBoost > 0) run.blasterBoost = Math.max(0, run.blasterBoost - dt);
+    if (run.phase === 'run') stepRun(run, dt, inp);
+    else if (run.phase === 'clash') stepClash(run, dt);
+  }
 
-  /* ----------------------------------------------------------- results */
-  MG.result = function (run) {
-    var B = run.battle, won = !!(B && B.won), count = run.finishCount || run.count;
-    var big = count >= Math.ceil(run.par * MG.BIG), all = run.right === run.asked;
-    var mult = won ? Math.max(1, run.stairs ? run.stairs.goal : 1) : 0;
-    return {
-      level: run.level, won: won, count: count, left: B ? B.ours : 0, rival: run.rival, par: run.par,
-      big: won && big, allRight: all, stars: won ? 1 + (big ? 1 : 0) + (all ? 1 : 0) : 0,
-      mult: mult, runCoins: run.runCoins, coins: won ? (run.runCoins + MG.FINISH_COINS) * mult : run.runCoins,
-      asked: run.asked, right: run.right, picks: run.picks, bestPicks: run.bestPicks, hits: run.hits
-    };
-  };
-  // 0..1 for Kit.dda: three stars 1, two 0.8, one 0.6; a lost battle at most 0.25.
-  MG.outcome = function (res) {
-    if (!res) return 0;
-    if (res.won) return [0.6, 0.6, 0.8, 1][res.stars];
-    return Math.round(clamp(0.25 * res.count / Math.max(1, res.rival), 0, 0.25) * 1000) / 1000;
-  };
+  function stepRun(run, dt, inp) {
+    var oldLane = run.lane;
+    if (typeof inp.lane === 'number' && inp.lane >= 0 && inp.lane <= 2) run.lane = clamp(Math.round(inp.lane), 0, 2);
+    else if (inp.move) run.lane = clamp(run.lane + (inp.move > 0 ? 1 : -1), 0, 2);
+    if (run.lane !== oldLane) run.ev.push({ t: 'lane', from: oldLane, to: run.lane });
 
-  /* ------------------------------------------------------- crowd looks */
-  // Unlocked by all the coins ever earned (nothing is spent).
-  MG.COLORS = [
-    { id: 'pink', c: 0xff6fae, need: 0 }, { id: 'sky', c: 0x4fb8ff, need: 0 }, { id: 'lemon', c: 0xffd23f, need: 60 },
-    { id: 'mint', c: 0x3fd89a, need: 150 }, { id: 'grape', c: 0xa77bff, need: 300 }, { id: 'orange', c: 0xff8a3c, need: 500 },
-    { id: 'rainbow', c: -1, need: 800 }, { id: 'gold', c: 0xffc21a, need: 1200 }
-  ];
-  MG.HATS = [
-    { id: 'none', need: 0 }, { id: 'party', need: 40 }, { id: 'bow', need: 120 }, { id: 'cap', need: 220 },
-    { id: 'crown', need: 400 }, { id: 'flower', need: 650 }, { id: 'wizard', need: 1000 }, { id: 'propeller', need: 1500 }
-  ];
-  MG.unlocks = function (before, after) {
-    var out = [];
-    MG.COLORS.forEach(function (c, i) { if (c.need > before && c.need <= after) out.push({ type: 'color', i: i }); });
-    MG.HATS.forEach(function (h, i) { if (h.need > before && h.need <= after) out.push({ type: 'hat', i: i }); });
-    return out;
-  };
+    if (inp.jump && run.jumpCd <= 0) {
+      run.jumpT = run.jumpDur; run.jumpCd = 0.85;
+      run.ev.push({ t: 'jump', lane: run.lane, d: run.d });
+    }
 
-  /* -------------------------------------------------------------- saves */
-  // { v: 1, coins (all ever earned), stars: [30 × 0..3], best: [30 × the biggest crowd
-  //   at a won finish], color, hat, seen (coins when the wardrobe was last opened),
-  //   coach (the first level was won) }
-  MG.freshSave = function () {
-    var z = [];
-    for (var i = 0; i < MG.LEVELS_N; i++) z.push(0);
-    return { v: 1, coins: 0, stars: z.slice(), best: z.slice(), color: 0, hat: 0, seen: 0, coach: false };
-  };
-  function int(v, lo, hi) { return typeof v === 'number' && Math.floor(v) === v && v >= lo && v <= hi; }
-  // Every field is checked: an old, damaged or hand-edited save loads as a playable save.
-  MG.loadSave = function (raw) {
-    var s = MG.freshSave(), r = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : null;
-    if (!r || r.v !== 1) return s;
-    s.coins = int(r.coins, 0, 9999999) ? r.coins : 0;
-    var st = Array.isArray(r.stars) ? r.stars : [], be = Array.isArray(r.best) ? r.best : [];
-    for (var i = 0; i < MG.LEVELS_N; i++) {
-      s.stars[i] = int(st[i], 0, 3) ? st[i] : 0;
-      s.best[i] = int(be[i], 0, 9999999) ? be[i] : 0;
+    var targetX = laneX(run.lane);
+    run.x += (targetX - run.x) * (1 - Math.exp(-18 * dt));
+    if (Math.abs(targetX - run.x) < 0.01) run.x = targetX;
+    run.d += run.speed * (run.turboT > 0 ? 1.28 : 1) * dt;
+
+    for (var ri = run.next; ri < run.R; ri++) {
+      var rRow = run.rows[ri], dist = rRow.d - run.d;
+      rRow.moveOffset = (rRow.moving && dist > 8.5) ? Math.sin(run.t * 2.6 + rRow.movePhase) * 0.42 * clamp((dist - 8.5) / 6, 0, 1) : 0;
+      if (rRow.shown && dist < 12) {
+        for (var mg = 0; mg < 3; mg++) {
+          if (rRow.gates[mg].mystery && !rRow.gates[mg].revealed) {
+            rRow.gates[mg].revealed = true;
+            run.ev.push({ t: 'shieldBreak', row: ri, lane: mg });
+          }
+        }
+      }
+      if (ri === run.next && rRow.shown && !rRow.cued && dist <= 29) {
+        rRow.cued = true; run.ev.push({ t: 'cue', row: ri });
+      }
     }
-    s.color = int(r.color, 0, MG.COLORS.length - 1) && MG.COLORS[r.color].need <= s.coins ? r.color : 0;
-    s.hat = int(r.hat, 0, MG.HATS.length - 1) && MG.HATS[r.hat].need <= s.coins ? r.hat : 0;
-    s.seen = int(r.seen, 0, s.coins) ? r.seen : s.coins;
-    s.coach = r.coach === true;
-    return s;
-  };
-  MG.totalStars = function (s) { var n = 0; for (var i = 0; i < MG.LEVELS_N; i++) n += s.stars[i]; return n; };
-  // A world opens when the third level of the world before it is won; inside a world
-  // each level opens when the one before it is won.
-  MG.worldOpen = function (s, w) { return w === 0 || (w > 0 && w < MG.WORLDS_N && s.stars[(w - 1) * MG.PER_WORLD + 2] > 0); };
-  MG.isOpen = function (s, i) {
-    if (!(i >= 0 && i < MG.LEVELS_N)) return false;
-    var w = Math.floor(i / MG.PER_WORLD), n = i % MG.PER_WORLD;
-    return MG.worldOpen(s, w) && (n === 0 || s.stars[i - 1] > 0);
-  };
-  // The level to play next: the first open level not yet won, else the last open one.
-  MG.nextLevel = function (s) {
-    var last = 0;
-    for (var i = 0; i < MG.LEVELS_N; i++) {
-      if (!MG.isOpen(s, i)) continue;
-      if (!s.stars[i]) return i;
-      last = i;
+
+    var fireRate = Math.min(18, (3.6 + Math.sqrt(run.count) * 1.55) * (run.blasterBoost > 0 ? 1.85 : 1));
+    run.fireAcc += dt * fireRate;
+    while (run.fireAcc >= 1) {
+      run.fireAcc -= 1;
+      if (run.bolts.length < 28) {
+        run.bolts.push({ x: run.x + (((run._seq++) % 3) - 1) * 0.28, lane: run.lane, d: run.d + 1.4, life: 0.52, dmg: run.blasterBoost > 0 ? 2 : 1 });
+      }
     }
-    return last;
-  };
-  // Records one finished run. Returns what changed, for the celebration.
-  MG.applyResult = function (s, level, res) {
-    var out = { best: false, more: 0, unlocked: [], opened: [] }, before = s.coins, open = [];
-    for (var i = 0; i < MG.LEVELS_N; i++) open.push(MG.isOpen(s, i));
-    s.coins = Math.min(9999999, s.coins + res.coins);
-    out.unlocked = MG.unlocks(before, s.coins);
-    if (res.won) {
-      if (s.best[level] > 0 && res.count > s.best[level]) out.best = true;
-      if (res.count > s.best[level]) s.best[level] = Math.min(9999999, res.count);
-      if (res.stars > s.stars[level]) { out.more = res.stars - s.stars[level]; s.stars[level] = res.stars; }
-      if (!s.coach) s.coach = true;
+
+    for (var bi = run.bolts.length - 1; bi >= 0; bi--) {
+      var b = run.bolts[bi], hitSomething = false;
+      b.d += 64 * dt; b.life -= dt;
+      for (var mi = 0; mi < run.meteors.length; mi++) {
+        var met = run.meteors[mi];
+        if (met.shattered || met.passed) continue;
+        if (Math.abs(b.d - met.d) < 1.35 && Math.abs(b.x - laneX(met.lane)) < 1.45) {
+          met.hp = Math.max(0, met.hp - b.dmg); hitSomething = true;
+          run.ev.push({ t: 'boltHit', id: met.id, lane: met.lane, d: met.d, hp: met.hp });
+          if (met.hp <= 0) {
+            met.shattered = true; run.shatteredCount++;
+            if (met.kind === 'mech') run.count = clamp(run.count + met.val, FLOOR, CAP_SQUAD);
+            else if (met.kind === 'coin') run.runCoins += met.val;
+            else { run.blasterBoost = 5.0; run.runCoins += 2; }
+            run.ev.push({ t: 'meteorBreak', id: met.id, kind: met.kind, val: met.val, lane: met.lane, d: met.d });
+          }
+          break;
+        }
+      }
+      if (!hitSomething && run.next < run.R) {
+        var curRow = run.rows[run.next];
+        if (curRow && curRow.shown && Math.abs(b.d - curRow.d) < 1.4) {
+          var gLane = clamp(Math.round(b.x / LANE_W + 1), 0, 2), g = curRow.gates[gLane];
+          if (g && g.mystery && !g.revealed) {
+            g.shieldHp = (g.shieldHp || 3) - 1; hitSomething = true;
+            if (g.shieldHp <= 0) { g.revealed = true; run.ev.push({ t: 'shieldBreak', row: curRow.i, lane: gLane }); }
+          }
+        }
+      }
+      if (hitSomething || b.life <= 0) run.bolts.splice(bi, 1);
     }
-    for (i = 0; i < MG.LEVELS_N; i++) if (!open[i] && MG.isOpen(s, i)) out.opened.push(i);
-    return out;
+
+    for (var ci = 0; ci < run.coins.length; ci++) {
+      var coin = run.coins[ci];
+      if (!coin.got && run.d >= coin.d - 0.8 && run.d <= coin.d + 1.2 && Math.abs(run.x - laneX(coin.lane)) < 1.5) {
+        coin.got = true; run.runCoins++;
+        run.ev.push({ t: 'coin', id: coin.id, lane: coin.lane, d: coin.d, total: run.runCoins });
+      }
+    }
+    for (var pi = 0; pi < run.pads.length; pi++) {
+      var pad = run.pads[pi];
+      if (!pad.used && run.d >= pad.d - 0.8 && run.d <= pad.d + 1.2 && Math.abs(run.x - laneX(pad.lane)) < 1.5) {
+        pad.used = true; run.turboT = 1.45; run.count = clamp(run.count + 2, FLOOR, CAP_SQUAD);
+        run.ev.push({ t: 'turbo', lane: pad.lane, d: pad.d });
+      }
+    }
+    for (var hi = 0; hi < run.hazards.length; hi++) {
+      var haz = run.hazards[hi];
+      if (!haz.passed && run.d >= haz.d) {
+        haz.passed = true;
+        if (haz.lanes.indexOf(run.lane) !== -1) {
+          if (run.jumpT > 0.04 || run.turboT > 0) {
+            run.runCoins += 2; run.ev.push({ t: 'leap', id: haz.id, lane: run.lane, d: haz.d });
+          } else {
+            haz.hit = true; run.hits++;
+            var prevC = run.count;
+            run.count = Math.max(FLOOR, run.count - Math.max(1, Math.min(4, Math.floor(run.count * 0.14))));
+            run.ev.push({ t: 'hit', kind: 'laser', id: haz.id, lost: prevC - run.count, count: run.count });
+          }
+        }
+      }
+    }
+    for (var mci = 0; mci < run.meteors.length; mci++) {
+      var mc = run.meteors[mci];
+      if (!mc.shattered && !mc.passed && run.d >= mc.d) {
+        mc.passed = true;
+        if (mc.lane === run.lane && run.jumpT <= 0.04 && run.turboT <= 0) {
+          mc.shattered = true; run.hits++;
+          var beforeM = run.count;
+          run.count = Math.max(FLOOR, run.count - Math.max(1, Math.min(mc.hp, Math.floor(run.count * 0.15))));
+          run.ev.push({ t: 'hit', kind: 'meteor', id: mc.id, lost: beforeM - run.count, count: run.count });
+        }
+      }
+    }
+
+    while (run.next < run.R && run.d >= run.rows[run.next].d) {
+      var row = run.rows[run.next];
+      if (!row.shown) populateRow(run, run.next, run.count);
+      var chosenLane = run.lane, gate = row.gates[chosenLane];
+      var actualBest = bestLaneOf(row.gates, run.count);
+      if (actualBest < 0) actualBest = row.best;
+      var before = run.count, after = applyGate(gate, before);
+      row.passed = true; row.pick = chosenLane;
+      run.count = after; run.picks++;
+      var isBest = (chosenLane === actualBest) || (after >= applyGate(row.gates[actualBest], before));
+      if (isBest) run.bestPicks++;
+      else { run.misses++; if (run.diff === 'easy') run.ddaHint = true; }
+      run.ev.push({ t: 'gate', row: row.i, lane: chosenLane, before: before, after: after, best: isBest, bestLane: actualBest, label: gate.label });
+      run.next++;
+      if (run.next < run.R) populateRow(run, run.next, run.count);
+    }
+
+    if (run.next >= run.R && run.d >= run.bossD) {
+      if (run.endless && run.count >= run.bossMax) {
+        run.count = clamp(Math.max(5, run.count - Math.floor(run.bossMax * 0.48)), 5, 180);
+        run.runCoins += 10 + run.wave * 3;
+        run.ev.push({ t: 'waveClear', wave: run.wave, bossMax: run.bossMax, count: run.count });
+        run.wave++;
+        run.world = (run.wave - 1) % WORLDS.length;
+        run.speed = Math.min(35, run.speed + 0.9);
+        var fromIdx = run.rows.length;
+        appendRows(run, 6, run.rows[run.rows.length - 1].d + 22);
+        populateRow(run, fromIdx, run.count);
+        var wavePar = estimateWavePar(run, fromIdx, run.R, run.count);
+        var wRatio = clamp(DIFFS[run.diff].shieldRatio + Math.min(0.14, run.wave * 0.025), 0.5, 0.86);
+        run.bossMax = Math.max(12, Math.min(wavePar - 2, Math.floor(wavePar * wRatio)));
+        run.bossHp = run.bossMax; run.rival = run.bossMax;
+      } else {
+        run.d = run.bossD; run.phase = 'clash'; run.finishCount = run.count; run.clashT = 0; run.bolts.length = 0;
+        run.ev.push({ t: 'bossStart', count: run.count, bossMax: run.bossMax });
+      }
+    }
+  }
+
+  function stepClash(run, dt) {
+    run.clashT += dt;
+    var u = clamp(run.clashT / 1.25, 0, 1);
+    var drained = Math.round(Math.min(run.finishCount, run.bossMax) * u);
+    var prevBoss = run.bossHp;
+    run.bossHp = Math.max(0, run.bossMax - drained);
+    run.count = Math.max(0, run.finishCount - drained);
+    if (run.bossHp !== prevBoss) run.ev.push({ t: 'clash', ours: run.count, theirs: run.bossHp });
+
+    if (u >= 1) {
+      var won = run.endless ? (run.wave > 1) : (run.finishCount >= run.bossMax);
+      if (run.finishCount >= run.bossMax) { run.bossHp = 0; run.count = Math.max(1, run.finishCount - run.bossMax + 1); }
+      else { run.bossHp = run.bossMax - run.finishCount; run.count = 0; }
+      var stars = 0;
+      if (run.endless) stars = run.wave >= 4 ? 3 : run.wave >= 3 ? 2 : run.wave >= 2 ? 1 : 0;
+      else if (won) {
+        stars = 1;
+        if (run.finishCount >= Math.floor(run.par * 0.8)) stars++;
+        if (run.bestPicks >= Math.max(1, run.R - 1)) stars++;
+      }
+      var totalEarned = run.runCoins + (won ? (12 + stars * 6 + run.world * 4) : 3);
+      var score = run.endless ? ((run.wave - 1) * 100 + run.finishCount) : run.finishCount;
+      run.result = {
+        won: won, stars: stars, count: run.finishCount, left: run.count, bossMax: run.bossMax,
+        par: run.par, wave: run.wave, endless: run.endless, bestPicks: run.bestPicks,
+        picks: run.picks, shattered: run.shatteredCount, runCoins: run.runCoins, coins: totalEarned, score: score
+      };
+      run.phase = 'done';
+      run.ev.push({ t: won ? 'won' : 'lost', stars: stars, count: run.finishCount, bossMax: run.bossMax });
+      run.ev.push({ t: 'done', result: run.result });
+    }
+  }
+
+  function progress(run) {
+    if (!run || !run.bossD) return 0;
+    if (run.endless) {
+      var waveStart = run.rows.length >= 6 ? run.rows[run.rows.length - 6].d - 24 : 0;
+      return clamp((run.d - waveStart) / Math.max(1, run.bossD - waveStart), 0, 1);
+    }
+    return clamp(run.d / run.bossD, 0, 1);
+  }
+
+  function outcome(res) {
+    if (!res) return 0.5;
+    if (!res.won) return clamp((res.count / Math.max(1, res.bossMax)) * 0.35, 0, 0.35);
+    return res.stars >= 3 ? 1 : res.stars === 2 ? 0.82 : 0.65;
+  }
+
+  /* --------------------------------------------------- Save & Hangar Shop */
+  function freshSave() {
+    var stars = [], best = [];
+    for (var i = 0; i < STAGES_N; i++) { stars.push(0); best.push(0); }
+    return { v: 2, coins: 0, stars: stars, best: best, bestEndless: 0, bestWave: 0, diff: 'easy', skin: 0, unlockedSkins: [true, false, false, false] };
+  }
+
+  function loadSave(raw) {
+    var base = freshSave();
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw) || raw.v !== 2) return base;
+    if (Number.isInteger(raw.coins) && raw.coins >= 0 && raw.coins <= 999999) base.coins = raw.coins;
+    if (Array.isArray(raw.stars)) for (var i = 0; i < STAGES_N; i++) if (Number.isInteger(raw.stars[i]) && raw.stars[i] >= 0 && raw.stars[i] <= 3) base.stars[i] = raw.stars[i];
+    if (Array.isArray(raw.best)) for (var j = 0; j < STAGES_N; j++) if (Number.isInteger(raw.best[j]) && raw.best[j] >= 0 && raw.best[j] <= 99999) base.best[j] = raw.best[j];
+    if (Number.isInteger(raw.bestEndless) && raw.bestEndless >= 0) base.bestEndless = Math.min(999999, raw.bestEndless);
+    if (Number.isInteger(raw.bestWave) && raw.bestWave >= 0) base.bestWave = Math.min(999, raw.bestWave);
+    if (DIFFS[raw.diff]) base.diff = raw.diff;
+    if (Array.isArray(raw.unlockedSkins)) for (var k = 1; k < SKINS.length; k++) base.unlockedSkins[k] = !!raw.unlockedSkins[k];
+    if (Number.isInteger(raw.skin) && raw.skin >= 0 && raw.skin < SKINS.length && base.unlockedSkins[raw.skin]) base.skin = raw.skin;
+    return base;
+  }
+
+  function isOpen(save, stageIdx) { return Number.isInteger(stageIdx) && stageIdx >= 0 && stageIdx <= ENDLESS_INDEX; }
+  function totalStars(save) {
+    if (!save || !Array.isArray(save.stars)) return 0;
+    var sum = 0;
+    for (var i = 0; i < STAGES_N; i++) sum += save.stars[i] || 0;
+    return sum;
+  }
+
+  function applyResult(save, stageIdx, res) {
+    if (!save || !res) return { newBest: false };
+    save.coins = Math.min(999999, (save.coins || 0) + Math.max(0, res.coins | 0));
+    var newBest = false;
+    if (stageIdx === ENDLESS_INDEX || res.endless) {
+      if (res.score > save.bestEndless) { save.bestEndless = res.score; newBest = true; }
+      if (res.wave > save.bestWave) save.bestWave = res.wave;
+    } else if (stageIdx >= 0 && stageIdx < STAGES_N) {
+      if (res.stars > save.stars[stageIdx]) save.stars[stageIdx] = res.stars;
+      if (res.won && res.count > save.best[stageIdx]) { newBest = save.best[stageIdx] > 0; save.best[stageIdx] = res.count; }
+    }
+    return { newBest: newBest };
+  }
+
+  function buyOrEquipSkin(save, skinIdx) {
+    if (!save || !Number.isInteger(skinIdx) || skinIdx < 0 || skinIdx >= SKINS.length) return { ok: false, bought: false };
+    if (save.unlockedSkins[skinIdx]) { save.skin = skinIdx; return { ok: true, bought: false }; }
+    if (save.coins < SKINS[skinIdx].cost) return { ok: false, bought: false };
+    save.coins -= SKINS[skinIdx].cost;
+    save.unlockedSkins[skinIdx] = true; save.skin = skinIdx;
+    return { ok: true, bought: true };
+  }
+
+  function canAffordAnySkin(save) {
+    if (!save) return false;
+    for (var i = 1; i < SKINS.length; i++) if (!save.unlockedSkins[i] && save.coins >= SKINS[i].cost) return true;
+    return false;
+  }
+
+  return {
+    MINUS: MINUS, FLOOR: FLOOR, CAP_SQUAD: CAP_SQUAD, LANE_W: LANE_W,
+    WORLDS: WORLDS, PER_WORLD: PER_WORLD, STAGES_N: STAGES_N, ENDLESS_INDEX: ENDLESS_INDEX,
+    STAGES: STAGES, DIFFS: DIFFS, DIFF_KEYS: DIFF_KEYS, SKINS: SKINS,
+    clamp: clamp, laneX: laneX, validDiff: validDiff, rng: rng,
+    applyGate: applyGate, isExactGate: isExactGate, bestLaneOf: bestLaneOf,
+    makeOpGate: makeOpGate, makeExprGate: makeExprGate,
+    create: create, step: step, progress: progress, outcome: outcome,
+    freshSave: freshSave, loadSave: loadSave, isOpen: isOpen, totalStars: totalStars,
+    applyResult: applyResult, buyOrEquipSkin: buyOrEquipSkin, canAffordAnySkin: canAffordAnySkin
   };
-})();
+});

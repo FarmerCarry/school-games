@@ -1,7 +1,7 @@
-// Toy Castle Clash engine (games/toy-castle/engine.js) unit & balance suite:
-// UMD + purity, energy & Wind-Up Key upgrades, sky star-bubbles, all 5 unit types,
-// ground vs air targeting, bouncy drum pad, castle confetti cannon, 2P versus,
-// DDA scaling, shop & saves, and simulated strategy winning all 12 campaign levels.
+// Toy Castle: Mega-Mech & Lego-Knight Siege (games/toy-castle/engine.js) unit & balance suite:
+// UMD + purity, 4 worlds x 3 unlocked stages, fast energy & generator upgrades, sky crates,
+// 4 toy units + tactical counters + air vs ground targeting, controllable roof cannon + super meteor,
+// 2P versus symmetry, 3 difficulty tiers + DDA monotonicity, Armory saves, and all 12 stages winnable.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
@@ -25,87 +25,91 @@ function runSteps(w, seconds) {
   for (let i = 0; i < frames && !w.done; i++) TC.step(w, DT);
 }
 
-// Smart child strategy bot for campaign verification across all 12 levels & DDA tiers.
-function playCampaignBot(levelIdx, ddaLevel, maxSeconds = 130) {
-  const w = TC.create(levelIdx, TC.params(ddaLevel), { seed: 700 + levelIdx * 19 });
+// Active commander bot simulating a 7-11yo player aiming the Roof Cannon, popping Crates,
+// unleashing Super Meteor Barrage, upgrading the Generator, and summoning counter squads.
+function playCommanderBot(levelIdx, ddaLevel, diffId = 'normal', maxSeconds = 135) {
+  const w = TC.create(levelIdx, TC.params(ddaLevel, diffId), { diff: diffId, seed: 900 + levelIdx * 23 });
   const frames = Math.round(maxSeconds / DT);
   for (let f = 0; f < frames && !w.done; f++) {
     w.ev.length = 0;
     TC.step(w, DT);
 
-    // Pop any sky star-bubble as soon as it floats in!
-    if (w.bubbles.length) {
-      const b = w.bubbles[0];
-      TC.popBubble(w, b.x, b.y, 0);
+    const s0 = w.sides[0];
+
+    // 1. Fire Super Meteor Barrage as soon as battle-charge hits 100%!
+    if (s0.superCharge >= 100) {
+      TC.fireSuper(w, 0);
     }
 
-    const s0 = w.sides[0];
-    let enemyAir = 0, enemyNearDoor = 0, myTanks = 0, myFrogs = 0;
+    // 2. Actively fire Roof Cannon at Sky Crates, Enemy Balloons, or advancing foes!
+    if (s0.cannonCd <= 0) {
+      if (w.crates.length > 0) {
+        TC.fireCannon(w, 0, { tx: w.crates[0].x, ty: w.crates[0].y });
+      } else {
+        const foeInRange = w.units.some(u => u.side === 1 && u.x < TC.CANNON_LX + 780);
+        if (foeInRange) TC.fireCannon(w, 0, { fullAuto: true });
+      }
+    }
+
+    let enemyAir = 0, enemyNear = 0, myTanks = 0, myRockets = 0;
     for (const u of w.units) {
       if (u.side === 1) {
         if (u.flying) enemyAir++;
-        if (u.x < TC.GATE_L + 360) enemyNearDoor++;
+        if (u.x < TC.GATE_L + 360) enemyNear++;
       } else {
-        if (u.type === 'bear' || u.type === 'train') myTanks++;
-        if (u.type === 'frog') myFrogs++;
+        if (u.type === 'dino' || u.type === 'mech') myTanks++;
+        if (u.type === 'rocket') myRockets++;
       }
     }
 
-    // Fire Castle Confetti Cannon when enemies approach doorstep or cluster up
-    if (s0.cannonCd <= 0 && (enemyNearDoor >= 2 || (enemyAir >= 1 && enemyNearDoor >= 1))) {
-      TC.fireCannon(w, 0);
-    }
-
-    // Upgrade Wind-Up Key early when safe for snowballing energy!
-    if (s0.keyLv === 0 && w.t > 2.5 && enemyNearDoor === 0 && s0.energy >= TC.KEY_LEVELS[1].cost) {
-      TC.upgradeKey(w, 0);
+    // 3. Upgrade Turbo Generator early when safe
+    if (s0.genLv === 0 && w.t > 2.2 && enemyNear === 0 && s0.energy >= TC.GEN_LEVELS[1].cost) {
+      TC.upgradeGen(w, 0);
       continue;
     }
-    if (s0.keyLv === 1 && levelIdx >= 5 && enemyNearDoor === 0 && myTanks >= 1 && s0.energy >= TC.KEY_LEVELS[2].cost) {
-      TC.upgradeKey(w, 0);
+    if (s0.genLv === 1 && levelIdx >= 4 && enemyNear === 0 && myTanks >= 1 && s0.energy >= TC.GEN_LEVELS[2].cost) {
+      TC.upgradeGen(w, 0);
       continue;
     }
 
-    // Counter flying paper gliders with Paint Frogs
-    if (enemyAir > myFrogs && s0.energy >= TC.UNITS.frog.cost && s0.cds.frog <= 0) {
-      TC.summon(w, 0, 'frog');
+    // 4. Counter aerial bomb-balloons with Rocket Troopers
+    if (enemyAir > myRockets && s0.energy >= TC.UNITS.rocket.cost && s0.cds.rocket <= 0) {
+      TC.summon(w, 0, 'rocket');
       continue;
     }
 
-    // Emergency defense at doorstep
-    if (enemyNearDoor > 0 && myTanks === 0) {
-      if (s0.energy >= TC.UNITS.bear.cost && s0.cds.bear <= 0) TC.summon(w, 0, 'bear');
-      else if (s0.energy >= TC.UNITS.duck.cost && s0.cds.duck <= 0) TC.summon(w, 0, 'duck');
+    // 5. Doorstep defense
+    if (enemyNear > 0 && myTanks === 0) {
+      if (s0.energy >= TC.UNITS.dino.cost && s0.cds.dino <= 0) TC.summon(w, 0, 'dino');
+      else if (s0.energy >= TC.UNITS.sword.cost && s0.cds.sword <= 0) TC.summon(w, 0, 'sword');
       continue;
     }
 
-    // Build balanced push: Bear shield -> Frogs & Gliders -> Block Train!
+    // 6. Build combined-arms push: Dino/Mech frontline + Rocket backline + Sword flankers
     if (myTanks === 0) {
-      if (levelIdx >= 6 && s0.keyLv >= 1 && s0.cds.train <= 0) {
-        if (s0.energy >= TC.UNITS.train.cost) TC.summon(w, 0, 'train');
-      } else if (s0.energy >= TC.UNITS.bear.cost && s0.cds.bear <= 0) {
-        TC.summon(w, 0, 'bear');
-      } else if (levelIdx === 0 && s0.energy >= TC.UNITS.duck.cost && s0.cds.duck <= 0) {
-        TC.summon(w, 0, 'duck');
+      if (levelIdx >= 5 && s0.genLv >= 1 && s0.cds.mech <= 0) {
+        if (s0.energy >= TC.UNITS.mech.cost) TC.summon(w, 0, 'mech');
+      } else if (s0.energy >= TC.UNITS.dino.cost && s0.cds.dino <= 0) {
+        TC.summon(w, 0, 'dino');
+      } else if (levelIdx === 0 && s0.energy >= TC.UNITS.sword.cost && s0.cds.sword <= 0) {
+        TC.summon(w, 0, 'sword');
       }
-    } else if (myFrogs < 2 && s0.energy >= TC.UNITS.frog.cost && s0.cds.frog <= 0) {
-      TC.summon(w, 0, 'frog');
-    } else if (s0.energy >= TC.UNITS.train.cost && s0.cds.train <= 0) {
-      TC.summon(w, 0, 'train');
-    } else if (levelIdx >= 3 && s0.energy >= TC.UNITS.plane.cost + 15 && s0.cds.plane <= 0) {
-      TC.summon(w, 0, 'plane');
-    } else if (s0.energy >= 65 && s0.cds.duck <= 0) {
-      TC.summon(w, 0, 'duck');
+    } else if (myRockets < 2 && s0.energy >= TC.UNITS.rocket.cost && s0.cds.rocket <= 0) {
+      TC.summon(w, 0, 'rocket');
+    } else if (s0.energy >= TC.UNITS.mech.cost && s0.cds.mech <= 0) {
+      TC.summon(w, 0, 'mech');
+    } else if (s0.energy >= 55 && s0.cds.sword <= 0) {
+      TC.summon(w, 0, 'sword');
     }
   }
   return w;
 }
 
-test('engine is pure UMD: exports window.TC and module.exports with zero forbidden globals', () => {
-  assert.ok(TC && TC.create && TC.step && TC.summon, 'CommonJS module.exports works');
+test('engine is pure UMD: exports window.TCEngine and module.exports with zero forbidden globals', () => {
+  assert.ok(TC && TC.create && TC.step && TC.summon && TC.fireCannon, 'CommonJS module.exports works');
   const sandbox = { window: {} };
   vm.runInNewContext(engineSource, sandbox);
-  assert.ok(sandbox.window.TC && sandbox.window.TC.LEVELS.length === 12, 'window.TC works in browser context');
+  assert.ok(sandbox.window.TCEngine && sandbox.window.TCEngine.LEVELS.length === 12, 'window.TCEngine works in browser');
 
   const stripped = engineSource.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
   assert.doesNotMatch(
@@ -114,244 +118,231 @@ test('engine is pure UMD: exports window.TC and module.exports with zero forbidd
   );
 });
 
-test('4 playroom worlds x 3 levels = 12 levels, 5 toy units, 6 themes and 5 rooftop toppers', () => {
+test('4 epic worlds x 3 stages = 12 stages ALL unlocked from start, 4 player units, 5 armors & 5 cannons', () => {
   assert.equal(TC.WORLDS.length, 4);
   assert.equal(TC.LEVELS.length, 12);
-  assert.deepEqual(TC.UNIT_ORDER, ['duck', 'frog', 'bear', 'plane', 'train']);
-  assert.equal(TC.THEMES.length, 6);
-  assert.equal(TC.TOPPERS.length, 5);
-  assert.deepEqual(TC.TOPPERS.map(t => t.id), ['crown', 'dragon', 'rocket', 'windmill', 'duck']);
+  assert.deepEqual(TC.UNIT_ORDER, ['sword', 'rocket', 'dino', 'mech']);
+  assert.equal(TC.ARMORS.length, 5);
+  assert.equal(TC.CANNONS.length, 5);
+  assert.deepEqual(TC.DIFF_ORDER, ['easy', 'normal', 'hero']);
 
-  for (const wd of TC.WORLDS) assert.match(wd.name, ARABIC, wd.name);
-  for (const uk of [...TC.UNIT_ORDER, 'boss']) assert.match(TC.UNITS[uk].name, ARABIC, uk);
-  TC.LEVELS.forEach((L, i) => {
-    assert.equal(L.id, `${Math.floor(i / 3) + 1}-${(i % 3) + 1}`);
-    assert.equal(L.world, Math.floor(i / 3));
-    assert.match(L.name, ARABIC, L.id);
-    assert.ok(L.hpR >= 350 && L.par >= 40);
-  });
-  // World mechanics progression
-  assert.ok(TC.LEVELS.slice(3, 6).every(L => L.drum === true), 'World 2 introduces bouncy drum pad');
-  assert.ok(TC.LEVELS.slice(6, 9).every(L => L.armoredBears === true), 'World 3 has armored rival bears');
-  assert.equal(TC.LEVELS[11].bossWave, true, 'Level 4-3 has Toy King boss wave');
+  const fresh = TC.freshSave();
+  for (let i = 0; i < TC.LEVELS.length; i++) {
+    assert.equal(TC.isOpen(fresh, i), true, `Stage ${TC.LEVELS[i].id} unlocked from the start`);
+    assert.equal(TC.LEVELS[i].id, `${Math.floor(i / 3) + 1}-${(i % 3) + 1}`);
+    assert.match(TC.LEVELS[i].name, ARABIC, TC.LEVELS[i].id);
+  }
+  for (const wd of TC.WORLDS) {
+    assert.match(wd.name, ARABIC, wd.name);
+    assert.match(wd.bossName, ARABIC, wd.bossName);
+  }
+  for (const uk of [...TC.UNIT_ORDER, 'balloon', 'boss']) assert.match(TC.UNITS[uk].name, ARABIC, uk);
+  for (const a of TC.ARMORS) assert.match(a.name, ARABIC, a.id);
+  for (const c of TC.CANNONS) assert.match(c.name, ARABIC, c.id);
 });
 
-test('starting energy >= 25 spawns duck immediately; P1 never auto-summons; key upgrades & sky bubbles boost energy', () => {
-  const w = TC.create(0, TC.params(0.3));
-  assert.ok(w.sides[0].energy >= 25, 'starting energy >= 25');
+test('starting energy >= 30 summons [1] or [2] at t=0; P1 never auto-spawns; generator & crates boost energy', () => {
+  const w = TC.create(0, TC.params(0.35, 'normal'));
+  assert.ok(w.sides[0].energy >= 30, 'starting energy >= 30');
   assert.equal(w.spawned[0], 0);
 
-  // Idle for 15 seconds: P1 never auto-summons!
-  runSteps(w, 15);
-  assert.equal(w.spawned[0], 0, 'P1 never auto-summons units');
+  // Negative check: idle for 14 seconds -> P1 NEVER auto-spawns and battle stays alive on 1-1!
+  runSteps(w, 14);
+  assert.equal(w.spawned[0], 0, 'P1 never auto-spawns units');
+  assert.equal(w.done, false, 'friendly castle survives opening waves during idle check');
   assert.ok(w.sides[0].energy > TC.START_ENERGY, 'energy charges automatically');
 
-  // Fresh match: frame 1 summon duck works immediately
-  const w2 = TC.create(0, TC.params(0.3));
-  const duck = TC.summon(w2, 0, 'duck');
-  assert.ok(duck && duck.type === 'duck');
+  // Frame 0 summon [1] محارب السيف works immediately
+  const w2 = TC.create(0, TC.params(0.35, 'normal'));
+  const knight = TC.summon(w2, 0, 'sword');
+  assert.ok(knight && knight.type === 'sword');
   assert.equal(w2.spawned[0], 1);
-  assert.equal(w2.sides[0].energy, TC.START_ENERGY - TC.UNITS.duck.cost);
+  assert.equal(w2.sides[0].energy, TC.START_ENERGY - TC.UNITS.sword.cost);
 
-  // Unaffordable summon emits deny and does not spawn
-  const denied = TC.summon(w2, 0, 'train');
-  assert.equal(denied, false);
-  assert.ok(w2.ev.some(e => e.t === 'deny' && e.unit === 'train'));
+  // Frame 0 summon [2] رامي الصواريخ also affordable at t=0 (35 >= 25)
+  const w3 = TC.create(0, TC.params(0.35, 'normal'));
+  assert.ok(TC.summon(w3, 0, 'rocket'));
+  assert.equal(w3.spawned[0], 1);
+
+  // Unaffordable Mega-Mech at t=0 emits deny without spawning
+  assert.equal(TC.summon(w2, 0, 'mech'), false);
+  assert.ok(w2.ev.some(e => e.t === 'deny' && e.unit === 'mech'));
   assert.equal(w2.spawned[0], 1);
 
-  // Key upgrade increases regen rate up to Lv 3 (index 2)
-  const wUp = TC.create(0, TC.params(0.5), { passiveAi: true, startEnergy: 100 });
-  const e0 = wUp.sides[0].energy = 20;
-  TC.step(wUp, 1);
-  const gainLv1 = wUp.sides[0].energy - e0;
+  // Turbo Generator upgrades scale regen rate Lv 1 < Lv 2 < Lv 3
+  const wGen = TC.create(0, TC.params(0.5, 'normal'), { passiveAi: true, startEnergy: 120 });
+  wGen.sides[0].energy = 20;
+  TC.step(wGen, 1);
+  const g1 = wGen.sides[0].energy - 20;
 
-  wUp.sides[0].energy = 100;
-  assert.equal(TC.upgradeKey(wUp, 0), true);
-  assert.equal(wUp.sides[0].keyLv, 1);
-  const e1 = wUp.sides[0].energy = 20;
-  TC.step(wUp, 1);
-  const gainLv2 = wUp.sides[0].energy - e1;
+  wGen.sides[0].energy = 120;
+  assert.equal(TC.upgradeGen(wGen, 0), true);
+  assert.equal(wGen.sides[0].genLv, 1);
+  wGen.sides[0].energy = 20;
+  TC.step(wGen, 1);
+  const g2 = wGen.sides[0].energy - 20;
 
-  wUp.sides[0].energy = 100;
-  assert.equal(TC.upgradeKey(wUp, 0), true);
-  assert.equal(wUp.sides[0].keyLv, 2);
-  assert.equal(TC.upgradeKey(wUp, 0), false, 'cannot upgrade past Lv 3');
-  const e2 = wUp.sides[0].energy = 20;
-  TC.step(wUp, 1);
-  const gainLv3 = wUp.sides[0].energy - e2;
+  wGen.sides[0].energy = 140;
+  assert.equal(TC.upgradeGen(wGen, 0), true);
+  assert.equal(wGen.sides[0].genLv, 2);
+  assert.equal(TC.upgradeGen(wGen, 0), false, 'max generator level is 3');
+  wGen.sides[0].energy = 20;
+  TC.step(wGen, 1);
+  const g3 = wGen.sides[0].energy - 20;
+  assert.ok(g3 > g2 && g2 > g1, `generator scales: ${g1} < ${g2} < ${g3}`);
 
-  assert.ok(gainLv3 > gainLv2 && gainLv2 > gainLv1, `regen scales: ${gainLv1} < ${gainLv2} < ${gainLv3}`);
-
-  // Clicking a floating sky star-bubble grants bonus energy
-  const b = TC.spawnBubble(wUp, 500, 190);
-  const beforePop = wUp.sides[0].energy;
-  assert.equal(TC.popBubble(wUp, b.x + 10, b.y - 8, 0), true);
-  assert.ok(wUp.sides[0].energy > beforePop);
-  assert.equal(wUp.bubblesPopped, 1);
+  // Popping a Sky Crate grants +18 energy and +22 Super charge
+  const cr = TC.spawnCrate(wGen, 520, 210);
+  const beforeE = wGen.sides[0].energy;
+  const beforeS = wGen.sides[0].superCharge;
+  assert.equal(TC.popCrate(wGen, cr.x + 8, cr.y - 6, 0), true);
+  assert.ok(wGen.sides[0].energy > beforeE);
+  assert.ok(wGen.sides[0].superCharge >= beforeS + 20);
+  assert.equal(wGen.cratesPopped, 1);
 });
 
-test('all 5 unit types: ground vs air targeting, bear tanking, train charge knockback, and drum bounce', () => {
-  // 1. Ground melee units (duck, bear, train) CANNOT target flying paper gliders
-  const wAir = TC.create(0, TC.params(0.5), { passiveAi: true, startEnergy: 180 });
-  wAir.sides[0].energyMax = 200;
-  wAir.sides[0].energy = 200;
-  const enemyPlane = TC.summon(wAir, 1, 'plane', { free: true });
-  enemyPlane.x = 560;
-  enemyPlane.speed = 0; // hold plane steady in air to verify ground units march right under it!
-  const duck = TC.summon(wAir, 0, 'duck');
-  duck.x = 480;
-  runSteps(wAir, 1.5);
-  assert.equal(enemyPlane.hp, enemyPlane.hpMax, 'duck cannot hit flying paper plane');
-  assert.ok(duck.x > 600, 'duck marched right underneath the flying plane');
+test('unit combat: ground vs air targeting, tactical counters, dino knockback, mech AoE, and bridge pads', () => {
+  // 1. Ground melee (sword, dino) walk beneath flying balloon without hitting it
+  const wAir = TC.create(0, TC.params(0.5), { passiveAi: true, startEnergy: 100 });
+  const bal = TC.summon(wAir, 1, 'balloon', { free: true });
+  bal.x = 540; bal.speed = 0; bal.dmg = 0;
+  const sw = TC.summon(wAir, 0, 'sword');
+  sw.x = 470;
+  runSteps(wAir, 1.4);
+  assert.equal(bal.hp, bal.hpMax, 'sword cannot hit flying balloon');
+  assert.ok(sw.x > 580, 'sword marched underneath flying balloon');
 
-  // 2. Paint Frog (hitsAir: true) targets and defeats flying paper glider!
-  const wFrog = TC.create(0, TC.params(0.5), { passiveAi: true, startEnergy: 100 });
-  const plane2 = TC.summon(wFrog, 1, 'plane', { free: true });
-  plane2.x = 560;
-  plane2.speed = 0;
-  const frog = TC.summon(wFrog, 0, 'frog');
-  frog.x = 400;
-  runSteps(wFrog, 5.5);
-  assert.ok(!wFrog.units.includes(plane2), 'Paint Frog shot down the flying paper glider!');
+  // 2. Rocket Trooper shoots down flying balloon!
+  const wRk = TC.create(0, TC.params(0.5), { passiveAi: true, startEnergy: 100 });
+  const bal2 = TC.summon(wRk, 1, 'balloon', { free: true });
+  bal2.x = 560; bal2.speed = 0;
+  const rk = TC.summon(wRk, 0, 'rocket');
+  rk.x = 400;
+  runSteps(wRk, 3.5);
+  assert.ok(!wRk.units.includes(bal2), 'Rocket Trooper blasted the enemy balloon out of the sky');
 
-  // 3. Paper Glider bombs ground toys from the sky safely!
-  const wGlider = TC.create(0, TC.params(0.5), { passiveAi: true, startEnergy: 100 });
-  const rivalBear = TC.summon(wGlider, 1, 'bear', { free: true });
-  rivalBear.x = 600;
-  rivalBear.speed = 0;
-  const myPlane = TC.summon(wGlider, 0, 'plane');
-  myPlane.x = 470;
-  runSteps(wGlider, 4.0);
-  assert.ok(rivalBear.hp < rivalBear.hpMax, 'Paper Glider bombed ground bear from overhead');
-  assert.equal(myPlane.hp, myPlane.hpMax, 'Ground bear could not hit the flying glider back');
+  // 3. Dino-Tank tanks two rival sword knights and knocks them back!
+  const wDino = TC.create(0, TC.params(0.5), { passiveAi: true, startEnergy: 100 });
+  const dino = TC.summon(wDino, 0, 'dino');
+  dino.x = 500;
+  const k1 = TC.summon(wDino, 1, 'sword', { free: true });
+  const k2 = TC.summon(wDino, 1, 'sword', { free: true });
+  k1.x = 545; k2.x = 560;
+  runSteps(wDino, 6.0);
+  assert.ok(dino.hp > 0, 'Dino-Tank survived two sword knights');
+  assert.equal(wDino.units.filter(u => u.side === 1).length, 0, 'Both rival knights defeated');
 
-  // 4. Pillow Bear tanks two rival ducks and wins!
-  const wBear = TC.create(0, TC.params(0.5), { passiveAi: true, startEnergy: 100 });
-  const myBear = TC.summon(wBear, 0, 'bear');
-  myBear.x = 500;
-  const d1 = TC.summon(wBear, 1, 'duck', { free: true });
-  const d2 = TC.summon(wBear, 1, 'duck', { free: true });
-  d1.x = 560; d2.x = 575;
-  runSteps(wBear, 8.0);
-  assert.ok(myBear.hp > 0, 'Pillow Bear survived two ducks');
-  assert.equal(wBear.units.filter(u => u.side === 1).length, 0, 'Both rival ducks defeated');
+  // 4. Mega-Mech slams ground clusters AND blasts air targets
+  const wMech = TC.create(0, TC.params(0.5), { passiveAi: true, startEnergy: 100 });
+  const mech = TC.summon(wMech, 0, 'mech');
+  mech.x = 480;
+  const c1 = TC.summon(wMech, 1, 'sword', { free: true });
+  const c2 = TC.summon(wMech, 1, 'sword', { free: true });
+  c1.x = 545; c2.x = 565; c1.speed = c2.speed = 0;
+  runSteps(wMech, 1.5);
+  assert.ok(c1.hp < c1.hpMax && c2.hp < c2.hpMax, 'Mega-Mech AoE slam hit entire rival cluster');
 
-  // 5. Block Train charges and delivers multi-bonk splash + knockback!
-  const wTrain = TC.create(0, TC.params(0.5), { passiveAi: true, startEnergy: 100 });
-  const train = TC.summon(wTrain, 0, 'train');
-  train.x = 300;
-  const cluster = [0, 1, 2].map(k => {
-    const e = TC.summon(wTrain, 1, 'duck', { free: true });
-    e.x = 540 + k * 18;
-    e.speed = 0;
-    return e;
-  });
-  let sawCharge = false;
-  for (let i = 0; i < 180; i++) {
-    wTrain.ev.length = 0;
-    TC.step(wTrain, DT);
-    if (wTrain.ev.some(e => e.t === 'chargeHit')) { sawCharge = true; break; }
+  // 5. World 2 Turbo Pad & World 4 Jump Pad boost crossing units
+  const wTurbo = TC.create(3, TC.params(0.5), { passiveAi: true, startEnergy: 100 });
+  const runner = TC.summon(wTurbo, 0, 'sword');
+  runner.x = TC.PAD_X - 30;
+  runSteps(wTurbo, 0.5);
+  assert.ok(runner.boostT > 0, 'World 2 Turbo Pad boosted crossing knight');
+
+  const wJump = TC.create(9, TC.params(0.5), { passiveAi: true, startEnergy: 100 });
+  const jumper = TC.summon(wJump, 0, 'sword');
+  jumper.x = TC.PAD_X - 30;
+  let hopped = false;
+  for (let i = 0; i < 40; i++) {
+    TC.step(wJump, DT);
+    if (jumper.y < TC.GROUND_Y - 5) { hopped = true; break; }
   }
-  assert.equal(sawCharge, true, 'Block Train triggered charge slam');
-  assert.ok(cluster.every(e => e.hp < e.hpMax && e.x > 555), 'Multi-bonk damaged and knocked back the whole cluster');
-
-  // 6. Bouncy drum pad in World 2 hops ground toys upward with speed boost
-  const wDrum = TC.create(3, TC.params(0.5), { passiveAi: true, startEnergy: 100 });
-  assert.equal(wDrum.drum.on, true);
-  const hopper = TC.summon(wDrum, 0, 'duck');
-  hopper.x = TC.DRUM_X - 40;
-  let bounced = false;
-  for (let i = 0; i < 60; i++) {
-    wDrum.ev.length = 0;
-    TC.step(wDrum, DT);
-    if (wDrum.ev.some(e => e.t === 'drum')) { bounced = true; break; }
-  }
-  assert.equal(bounced, true, 'Drum pad bounced marching duck');
-  assert.ok(hopper.vy < 0 && hopper.boostT > 0);
+  assert.equal(hopped, true, 'World 4 Jump Pad launched unit into low-gravity arc');
 });
 
-test('castle confetti cannon clears doorstep ground and air swarms and respects cooldown', () => {
-  const w = TC.create(0, TC.params(0.5), { passiveAi: true });
-  const g1 = TC.summon(w, 1, 'duck', { free: true });
-  const g2 = TC.summon(w, 1, 'frog', { free: true });
-  const air = TC.summon(w, 1, 'plane', { free: true });
-  g1.x = TC.GATE_L + 110;
-  g2.x = TC.GATE_L + 230;
-  air.x = TC.GATE_L + 300;
-  g1.speed = g2.speed = air.speed = 0;
-
-  assert.equal(TC.fireCannon(w, 0), true);
-  assert.equal(TC.fireCannon(w, 0), false, 'immediately on cooldown');
+test('Controllable Roof Cannon snipes sky crates & balloons, knocks back chargers, and Super Meteor clears bridge', () => {
+  const w = TC.create(0, TC.params(0.35, 'normal'), { passiveAi: true });
+  const crate = TC.spawnCrate(w, 460, 220);
+  assert.equal(TC.fireCannon(w, 0, { tx: crate.x, ty: crate.y }), true);
+  assert.equal(TC.fireCannon(w, 0), false, 'cannon respects reload cooldown');
   runSteps(w, 0.8);
-  assert.ok(g1.hp <= 0 || g1.hp < g1.hpMax, 'ground duck hit by confetti volley');
-  assert.ok(air.hp <= 0 || air.hp < air.hpMax, 'flying plane also hit by confetti volley');
+  assert.equal(w.cratesPopped, 1, 'Roof Cannon shot popped the sky Energy Crate!');
+
+  // Snipe enemy balloon + knock back charger
+  w.sides[0].cannonCd = 0;
+  const foe = TC.summon(w, 1, 'sword', { free: true });
+  foe.x = 420; foe.speed = 0;
+  assert.equal(TC.fireCannon(w, 0, { tx: foe.x, ty: foe.y - 12 }), true);
+  runSteps(w, 0.7);
+  assert.ok(foe.hp < foe.hpMax && foe.x > 425, 'Roof Cannon damaged and knocked back rival charger');
+
+  // Super Meteor Barrage requires 100% charge, then blasts enemies & rival gate
+  assert.equal(TC.fireSuper(w, 0), false, 'cannot fire Super below 100%');
+  w.sides[0].superCharge = 100;
+  const hpBefore = w.sides[1].hp;
+  assert.equal(TC.fireSuper(w, 0), true);
+  assert.equal(w.sides[0].superCharge, 0);
+  runSteps(w, 1.2);
+  assert.ok(w.sides[1].hp < hpBefore, 'Super Meteor Barrage damaged rival fortress');
 });
 
-test('2P versus is completely symmetrical and allows full controls for both castles', () => {
+test('2P versus is completely symmetrical and never auto-spawns on either side', () => {
   const w = TC.createVersus();
   assert.equal(w.humans, 2);
   assert.equal(w.sides[0].hpMax, w.sides[1].hpMax);
   assert.equal(w.sides[0].energy, w.sides[1].energy);
-  runSteps(w, 5);
-  assert.deepEqual(w.spawned, [0, 0], 'neither side auto-spawns in 2P versus');
+  runSteps(w, 6);
+  assert.deepEqual(w.spawned, [0, 0], 'neither side auto-spawns in 2P');
   assert.equal(w.sides[0].energy, w.sides[1].energy, 'identical energy regeneration');
 
-  assert.ok(TC.summon(w, 0, 'bear'));
-  assert.ok(TC.summon(w, 1, 'bear'));
+  assert.ok(TC.summon(w, 0, 'dino'));
+  assert.ok(TC.summon(w, 1, 'dino'));
   assert.deepEqual(w.spawned, [1, 1]);
   assert.equal(TC.fireCannon(w, 0), true);
   assert.equal(TC.fireCannon(w, 1), true);
 });
 
-test('DDA scaling is monotonic and simulated strategy wins all 12 campaign levels across difficulties', () => {
-  const easy = TC.params(0), mid = TC.params(0.5), hard = TC.params(1);
-  assert.ok(easy.aiHp < mid.aiHp && mid.aiHp < hard.aiHp);
-  assert.ok(easy.aiEnergy < mid.aiEnergy && mid.aiEnergy < hard.aiEnergy);
-  assert.ok(easy.aiThink > mid.aiThink && mid.aiThink > hard.aiThink);
-  assert.ok(easy.p1Energy >= mid.p1Energy && mid.p1Energy >= hard.p1Energy);
+test('Difficulty tiers & DDA scale monotonically, and every stage 1-1..4-3 is winnable across difficulties', () => {
+  for (const diff of TC.DIFF_ORDER) {
+    const easyDda = TC.params(0, diff), midDda = TC.params(0.5, diff), hardDda = TC.params(1, diff);
+    assert.ok(easyDda.aiHp < midDda.aiHp && midDda.aiHp < hardDda.aiHp, `${diff}: aiHp scales`);
+    assert.ok(easyDda.aiEnergy < midDda.aiEnergy && midDda.aiEnergy < hardDda.aiEnergy, `${diff}: aiEnergy scales`);
+    assert.ok(easyDda.aiThink > midDda.aiThink && midDda.aiThink > hardDda.aiThink, `${diff}: aiThink scales`);
+  }
+  assert.ok(TC.params(0.35, 'easy').p1Energy > TC.params(0.35, 'normal').p1Energy);
+  assert.ok(TC.params(0.35, 'normal').aiHp < TC.params(0.35, 'hero').aiHp);
 
   for (let i = 0; i < TC.LEVELS.length; i++) {
-    for (const k of [0, 0.5, 1]) {
-      const w = playCampaignBot(i, k);
-      assert.equal(w.done, true, `Level ${TC.LEVELS[i].id} finished at DDA ${k} (t=${w.t.toFixed(1)}, hpR=${w.sides[1].hp})`);
-      assert.equal(w.winner, 1, `Level ${TC.LEVELS[i].id} won by player at DDA ${k} (hpL=${w.sides[0].hp}, hpR=${w.sides[1].hp})`);
-      if (i === 11) assert.equal(w.bossSpawned, true, 'Level 4-3 spawned and defeated Toy King boss');
+    for (const [diff, dda] of [['easy', 0.2], ['normal', 0.5], ['hero', 0.85]]) {
+      const w = playCommanderBot(i, dda, diff);
+      assert.equal(w.done, true, `Stage ${TC.LEVELS[i].id} (${diff}) finished (t=${w.t.toFixed(1)}, hpR=${w.sides[1].hp})`);
+      assert.equal(w.winner, 1, `Stage ${TC.LEVELS[i].id} (${diff}) won by player (hpL=${w.sides[0].hp}, hpR=${w.sides[1].hp})`);
+      if (TC.LEVELS[i].boss) assert.equal(w.bossSpawned, true, `Stage ${TC.LEVELS[i].id} spawned world boss`);
     }
-    const wMid = playCampaignBot(i, 0.35);
-    assert.ok(TC.stars(wMid) >= 2, `Level ${TC.LEVELS[i].id} achieves high star rating (${TC.stars(wMid)})`);
+    const wStar = playCommanderBot(i, 0.35, 'normal');
+    assert.ok(TC.stars(wStar) >= 2, `Stage ${TC.LEVELS[i].id} earns >= 2 stars`);
   }
 });
 
-test('saves, progression and shop validate corrupted data and unlock themes & rooftop toppers', () => {
+test('Armory & save system recover from malformed JSON and unlock castle armors & cannons', () => {
   const fresh = plain(TC.freshSave());
-  assert.equal(fresh.lv.length, 12);
-  for (const bad of [null, undefined, 'bad', 42, [], {}, { v: 2 }, { v: 1, lv: 'nope', coins: -9, theme: 99, topper: 99 }]) {
+  for (const bad of [null, undefined, 'bad', 42, [], {}, { v: 1 }, { v: 2, lv: 'nope', coins: -9, armor: 99, cannon: 99 }]) {
     assert.deepEqual(plain(TC.loadSave(bad)), fresh);
   }
 
   const s = TC.freshSave();
-  assert.equal(TC.isOpen(s, 0), true);
-  assert.equal(TC.isOpen(s, 1), false);
-  const r0 = TC.applyResult(s, 0, 3, 32.4, 4);
-  assert.equal(r0.first, true);
-  assert.equal(r0.opened, 1);
+  const r0 = TC.applyResult(s, 0, 3, 29.5, 'hero');
+  assert.equal(r0.best, true);
   assert.equal(s.lv[0].s, 3);
-  assert.ok(s.coins >= 40);
-  assert.equal(TC.isOpen(s, 1), true);
-  assert.equal(TC.nextLevel(s), 1);
+  assert.ok(s.coins >= 45);
+  assert.equal(TC.totalStars(s), 3);
 
-  // Completing World 1 opens World 2
-  TC.applyResult(s, 1, 3, 38.0, 2);
-  const r2 = TC.applyResult(s, 2, 3, 41.0, 2);
-  assert.equal(r2.world, 1);
-
-  // Shop purchases & equipping
-  s.coins = 500;
-  for (let k = 1; k < TC.THEMES.length; k++) assert.equal(TC.buy(s, 'theme', k), 'bought');
-  for (let k = 1; k < TC.TOPPERS.length; k++) assert.equal(TC.buy(s, 'topper', k), 'bought');
-  assert.equal(TC.buy(s, 'theme', 0), 'wear');
-  assert.equal(s.theme, 0);
-  assert.equal(TC.buy(s, 'topper', 2), 'wear');
-  assert.equal(s.topper, 2);
-  assert.equal(TC.buy(s, 'topper', 99), '');
+  s.coins = 600;
+  for (let k = 1; k < TC.ARMORS.length; k++) assert.equal(TC.buy(s, 'armor', k), 'bought');
+  for (let k = 1; k < TC.CANNONS.length; k++) assert.equal(TC.buy(s, 'cannon', k), 'bought');
+  assert.equal(TC.buy(s, 'armor', 4), 'wear');
+  assert.equal(s.armor, 4);
+  assert.equal(TC.buy(s, 'cannon', 2), 'wear');
+  assert.equal(s.cannon, 2);
+  assert.equal(TC.buy(s, 'cannon', 99), '');
 });

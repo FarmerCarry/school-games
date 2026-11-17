@@ -1,20 +1,114 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">
-<rect width="400" height="400" rx="45" fill="#10142b"/>
-<circle cx="48" cy="55" r="43" fill="#1d284b"/><circle cx="367" cy="344" r="72" fill="#1d284b"/>
-<g transform="translate(37 53) rotate(-5 163 145)">
-<rect x="-4" y="24" width="334" height="287" rx="24" fill="#0a0e22"/>
-<rect x="0" y="0" width="326" height="283" rx="23" fill="#14449b"/>
-<rect x="0" y="0" width="326" height="271" rx="23" fill="#2875ed" stroke="#5c9cff" stroke-width="4"/>
-<g fill="#101b3b">
-<circle cx="31" cy="30" r="17"/><circle cx="75" cy="30" r="17"/><circle cx="119" cy="30" r="17"/><circle cx="163" cy="30" r="17"/><circle cx="207" cy="30" r="17"/><circle cx="251" cy="30" r="17"/><circle cx="295" cy="30" r="17"/>
-<circle cx="31" cy="72" r="17"/><circle cx="75" cy="72" r="17"/><circle cx="119" cy="72" r="17"/><circle cx="163" cy="72" r="17"/><circle cx="207" cy="72" r="17"/><circle cx="251" cy="72" r="17"/><circle cx="295" cy="72" r="17"/>
-<circle cx="31" cy="114" r="17"/><circle cx="75" cy="114" r="17"/><circle cx="119" cy="114" r="17"/><circle cx="163" cy="114" r="17"/><circle cx="207" cy="114" r="17"/><circle cx="251" cy="114" r="17"/><circle cx="295" cy="114" r="17"/>
-<circle cx="31" cy="156" r="17"/><circle cx="75" cy="156" r="17"/><circle cx="119" cy="156" r="17"/><circle cx="163" cy="156" r="17"/><circle cx="207" cy="156" r="17"/><circle cx="251" cy="156" r="17"/><circle cx="295" cy="156" r="17"/>
-<circle cx="31" cy="198" r="17"/><circle cx="75" cy="198" r="17"/><circle cx="119" cy="198" r="17"/><circle cx="163" cy="198" r="17"/><circle cx="207" cy="198" r="17"/><circle cx="251" cy="198" r="17"/><circle cx="295" cy="198" r="17"/>
-<circle cx="31" cy="240" r="17"/><circle cx="75" cy="240" r="17"/><circle cx="119" cy="240" r="17"/><circle cx="163" cy="240" r="17"/><circle cx="207" cy="240" r="17"/><circle cx="251" cy="240" r="17"/><circle cx="295" cy="240" r="17"/>
+<defs>
+  <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="#192968"/>
+    <stop offset="100%" stop-color="#0b1130"/>
+  </linearGradient>
+  <radialGradient id="glow" cx="55%" cy="48%" r="58%">
+    <stop offset="0%" stop-color="#3b82f6" stop-opacity=".48"/>
+    <stop offset="100%" stop-color="#3b82f6" stop-opacity="0"/>
+  </radialGradient>
+  <linearGradient id="frame" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="#57a1ff"/>
+    <stop offset="55%" stop-color="#2568eb"/>
+    <stop offset="100%" stop-color="#1849b5"/>
+  </linearGradient>
+  <radialGradient id="gold" cx="35%" cy="30%" r="68%">
+    <stop offset="0%" stop-color="#fff8c4"/>
+    <stop offset="45%" stop-color="#ffc93c"/>
+    <stop offset="100%" stop-color="#d47a08"/>
+  </radialGradient>
+  <radialGradient id="ruby" cx="35%" cy="30%" r="68%">
+    <stop offset="0%" stop-color="#ffd6dc"/>
+    <stop offset="45%" stop-color="#ff5970"/>
+    <stop offset="100%" stop-color="#b81434"/>
+  </radialGradient>
+</defs>
+<rect width="400" height="400" rx="46" fill="url(#bg)"/>
+<rect width="400" height="400" rx="46" fill="url(#glow)"/>
+<circle cx="52" cy="58" r="46" fill="#ffffff0c"/>
+<circle cx="358" cy="346" r="68" fill="#ffc93c14"/>
+
+<!-- Falling Zap Power Disc at top-left -->
+<g transform="translate(88 44) rotate(-12)">
+  <path d="M0-32v16M-12-26v12M12-26v12" stroke="#38bdf8" stroke-width="4" stroke-linecap="round" opacity=".85"/>
+  <circle r="21" fill="url(#gold)" stroke="#9c5700" stroke-width="3"/>
+  <circle r="21" fill="none" stroke="#38bdf8" stroke-width="3" stroke-dasharray="6 4"/>
+  <path d="M2-11L-8 2h6l-2 10L8-2H2Z" fill="#0ea5e9"/>
 </g>
-<g fill="#ff6474" stroke="#ff9fab" stroke-width="3"><circle cx="75" cy="240" r="16"/><circle cx="119" cy="240" r="16"/><circle cx="163" cy="240" r="16"/><circle cx="207" cy="198" r="16"/><circle cx="251" cy="240" r="16"/><circle cx="207" cy="240" r="16"/></g>
-<g fill="#ffca45" stroke="#ffe99d" stroke-width="3"><circle cx="31" cy="240" r="16"/><circle cx="75" cy="198" r="16"/><circle cx="119" cy="156" r="16"/><circle cx="163" cy="114" r="16"/><circle cx="119" cy="198" r="16"/><circle cx="163" cy="198" r="16"/><circle cx="163" cy="156" r="16"/></g>
-<path d="M31 240 163 114" stroke="white" stroke-width="8" stroke-linecap="round" opacity=".85"/>
-</g><path d="m348 36 4 12 12 4-12 4-4 12-4-12-12-4 12-4Z" fill="#ffca45"/>
+
+<!-- Tilted 3D Molded Connect 4 Toy Stand -->
+<g transform="translate(36 86) rotate(-4 164 136)">
+  <!-- Stand Feet -->
+  <rect x="8" y="252" width="56" height="24" rx="10" fill="#0f317a" stroke="#5da0ff" stroke-width="3"/>
+  <rect x="254" y="252" width="56" height="24" rx="10" fill="#0f317a" stroke="#5da0ff" stroke-width="3"/>
+  <!-- Deep Shadow & Extruded Lip -->
+  <rect x="-4" y="18" width="326" height="252" rx="26" fill="#070c22" opacity=".75"/>
+  <rect x="0" y="10" width="318" height="248" rx="24" fill="#10388a"/>
+  <rect x="0" y="0" width="318" height="246" rx="24" fill="url(#frame)" stroke="#8ac4ff" stroke-width="4"/>
+  <path d="M22 8h274" stroke="#ffffff66" stroke-width="4" stroke-linecap="round"/>
+
+  <!-- 7x5 Visible Toy Slots -->
+  <g fill="#0d1738" stroke="#153e96" stroke-width="2.5">
+    <circle cx="33" cy="31" r="16"/><circle cx="75" cy="31" r="16"/><circle cx="117" cy="31" r="16"/><circle cx="159" cy="31" r="16"/><circle cx="201" cy="31" r="16"/><circle cx="243" cy="31" r="16"/><circle cx="285" cy="31" r="16"/>
+    <circle cx="33" cy="73" r="16"/><circle cx="75" cy="73" r="16"/><circle cx="117" cy="73" r="16"/><circle cx="159" cy="73" r="16"/><circle cx="201" cy="73" r="16"/><circle cx="243" cy="73" r="16"/><circle cx="285" cy="73" r="16"/>
+    <circle cx="33" cy="115" r="16"/><circle cx="75" cy="115" r="16"/><circle cx="117" cy="115" r="16"/><circle cx="159" cy="115" r="16"/><circle cx="201" cy="115" r="16"/><circle cx="243" cy="115" r="16"/><circle cx="285" cy="115" r="16"/>
+    <circle cx="33" cy="157" r="16"/><circle cx="75" cy="157" r="16"/><circle cx="117" cy="157" r="16"/><circle cx="159" cy="157" r="16"/><circle cx="201" cy="157" r="16"/><circle cx="243" cy="157" r="16"/><circle cx="285" cy="157" r="16"/>
+    <circle cx="33" cy="199" r="16"/><circle cx="75" cy="199" r="16"/><circle cx="117" cy="199" r="16"/><circle cx="159" cy="199" r="16"/><circle cx="201" cy="199" r="16"/><circle cx="243" cy="199" r="16"/><circle cx="285" cy="199" r="16"/>
+  </g>
+
+  <!-- Ruby Bolt Discs -->
+  <g fill="url(#ruby)" stroke="#ff9eab" stroke-width="2.2">
+    <circle cx="75" cy="199" r="15.5"/>
+    <circle cx="117" cy="199" r="15.5"/>
+    <circle cx="159" cy="199" r="15.5"/>
+    <circle cx="201" cy="157" r="15.5"/>
+    <circle cx="243" cy="199" r="15.5"/>
+    <circle cx="201" cy="199" r="15.5"/>
+  </g>
+  <g fill="#ffe4e8" opacity=".85">
+    <path d="M77 191l-6 8h4l-1.5 7 7.5-9h-4Z"/>
+    <path d="M119 191l-6 8h4l-1.5 7 7.5-9h-4Z"/>
+    <path d="M161 191l-6 8h4l-1.5 7 7.5-9h-4Z"/>
+    <path d="M203 149l-6 8h4l-1.5 7 7.5-9h-4Z"/>
+    <path d="M245 191l-6 8h4l-1.5 7 7.5-9h-4Z"/>
+  </g>
+
+  <!-- Gold Star Discs (Winning 4-in-a-row!) -->
+  <g fill="url(#gold)" stroke="#fff1a8" stroke-width="2.4">
+    <circle cx="33" cy="199" r="15.5"/>
+    <circle cx="75" cy="157" r="15.5"/>
+    <circle cx="117" cy="115" r="15.5"/>
+    <circle cx="159" cy="73" r="15.5"/>
+    <circle cx="117" cy="157" r="15.5"/>
+    <circle cx="159" cy="157" r="15.5"/>
+    <circle cx="159" cy="115" r="15.5"/>
+  </g>
+  <!-- Winning Disc Glow Rings -->
+  <g fill="none" stroke="#fff" stroke-width="2.8">
+    <circle cx="33" cy="199" r="16.5"/>
+    <circle cx="75" cy="157" r="16.5"/>
+    <circle cx="117" cy="115" r="16.5"/>
+    <circle cx="159" cy="73" r="16.5"/>
+  </g>
+  <!-- Electric Win Laser -->
+  <path d="M33 199L159 73" stroke="#fde047" stroke-width="12" stroke-linecap="round" opacity=".55"/>
+  <path d="M33 199L159 73" stroke="#fff" stroke-width="6" stroke-linecap="round"/>
+</g>
+
+<!-- Expressive Cheeky Robot Rival Badge in Top-Right -->
+<g transform="translate(284 22) rotate(7 46 46)">
+  <circle cx="46" cy="48" r="42" fill="#131c42" stroke="#5b76cc" stroke-width="4"/>
+  <path d="M46 10l-6 11h12Z" fill="#fde047" stroke="#9a3412" stroke-width="2.5" stroke-linejoin="round"/>
+  <path d="M8 38l8 5-6 7M84 38l-8 5 6 7" fill="none" stroke="#fde047" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="18" y="21" width="56" height="52" rx="16" fill="#fb923c" stroke="#9a3412" stroke-width="4"/>
+  <rect x="25" y="33" width="42" height="32" rx="10" fill="#1b1433"/>
+  <polygon points="29,41 42,45 31,49" fill="#38bdf8"/>
+  <polygon points="63,41 50,45 61,49" fill="#38bdf8"/>
+  <path d="M34 57l6 3.5 6-3.5 6 3.5 6-3.5" fill="none" stroke="#fde047" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+
+<!-- Sparkle Accents -->
+<path d="m42 46 4 11 11 4-11 4-4 11-4-11-11-4 11-4Z" fill="#ffc93c"/>
+<path d="m352 138 3 8 8 3-8 3-3 8-3-8-8-3 8-3Z" fill="#38bdf8"/>
 </svg>

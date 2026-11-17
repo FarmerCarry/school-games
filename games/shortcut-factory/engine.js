@@ -1,843 +1,632 @@
-/* Shortcut Factory (مصنع الاختصارات) engine: the toys, the five worlds and their levels,
- * the factory floor (conveyor belts and shipping boxes), the selection, the copy machine
- * (the clipboard), the undo/redo history, orders, the cheeky gremlin robot «بُرغي», the
- * hint planner, stars, coins and saves.
- * Pure: no DOM, no Kit, no timers and no Math.random (a world takes a seed), so
- * tools/tests/shortcut-factory-engine.test.mjs loads it with { window: {} } and plays
- * every level with the shortcuts it teaches. game.js reads the DDA, turns the child's
- * clicks and real key presses into actions and the events into pictures and sound. */
+/* Shortcut Factory (مصنع الاختصارات) — Pure Cyber-Bot Cloner & Blaster Engine.
+ * Zero DOM, zero timers, zero Math.random, zero Kit calls.
+ * Dual exports: Node `module.exports` and browser `window.SFEngine`. */
 (function () {
   'use strict';
-  const SF = window.SF = window.SF || {};
-  const W = 1280, H = 720;
-  SF.W = W; SF.H = H;
-  SF.TIERS = 5;
 
-  /* ---------------------------------------------------------------- toys */
-  SF.KINDS = ['duck', 'ball', 'car', 'robot', 'teddy', 'rocket'];
-  // One, two (the Arabic dual) and several.
-  SF.NAMES = {
-    duck: ['بطة', 'بطتان', 'بطات'],
-    ball: ['كرة', 'كرتان', 'كرات'],
-    car: ['سيارة', 'سيارتان', 'سيارات'],
-    robot: ['روبوت', 'روبوتان', 'روبوتات'],
-    teddy: ['دبدوب', 'دبدوبان', 'دباديب'],
-    rocket: ['صاروخ', 'صاروخان', 'صواريخ']
-  };
-  SF.say = function (kind, n) { const w = SF.NAMES[kind]; return n === 1 ? w[0] : n === 2 ? w[1] : n + ' ' + w[2]; };
-  // «3 بطات وسيارة»
-  SF.orderText = function (order) {
-    return SF.KINDS.filter(k => order[k] > 0).map(k => SF.say(k, order[k])).join(' و');
+  const W = 1280, H = 720, POD_Y = 156;
+  const BELT_EXIT_X = 195, BELT_SPAWN_X = 985, VIS_MIN_X = 225, VIS_MAX_X = 955;
+  const CLONER = { x: 1138, y: 390 }, TURRET = { x: 104, y: 390 }, MAX_UNDO = 24;
+
+  const BOT_KINDS = ['laser', 'drone', 'tank', 'shark'];
+  const BOTS = {
+    laser: { id: 'laser', name: 'آلي الليزر', dual: 'آليا ليزر', plural: 'آليي ليزر', color: '#00e5ff', virus: false },
+    drone: { id: 'drone', name: 'درون الصواريخ', dual: 'درونا صواريخ', plural: 'درونات صواريخ', color: '#ff9100', virus: false },
+    tank: { id: 'tank', name: 'مدرعة البرق', dual: 'مدرعتا برق', plural: 'مدرعات برق', color: '#00e676', virus: false },
+    shark: { id: 'shark', name: 'قرش التيربو', dual: 'قرشا تيربو', plural: 'قروش تيربو', color: '#d500f9', virus: false },
+    virus: { id: 'virus', name: 'قنبلة الفيروس', dual: 'قنبلتا فيروس', plural: 'قنابل فيروس', color: '#ff1744', virus: true }
   };
 
-  /* ----------------------------------------------------------- shortcuts */
-  // Every action the factory knows, with the keycaps the game shows for it and the
-  // KeyboardEvent.code of each key (the physical key, so Ctrl+C is KeyC even while
-  // Windows types Arabic and event.key is «ؤ»).
-  SF.ACTS = {
-    select: { keys: ['انقر'], codes: [], name: 'اختر لعبة' },
-    copy: { keys: ['Ctrl', 'C'], codes: ['ControlLeft', 'KeyC'], name: 'نسخ' },
-    paste: { keys: ['Ctrl', 'V'], codes: ['ControlLeft', 'KeyV'], name: 'لصق' },
-    ship: { keys: ['Enter'], codes: ['Enter'], name: 'اشحن' },
-    place: { keys: ['انقر'], codes: [], name: 'اختر الصندوق' },
-    save: { keys: ['Ctrl', 'S'], codes: ['ControlLeft', 'KeyS'], name: 'احفظ واختم', short: 'احفظ' },
-    cut: { keys: ['Ctrl', 'X'], codes: ['ControlLeft', 'KeyX'], name: 'قص' },
-    tab: { keys: ['Tab'], codes: ['Tab'], name: 'التالي' },
-    del: { keys: ['Delete'], codes: ['Delete'], name: 'احذف' },
-    undo: { keys: ['Ctrl', 'Z'], codes: ['ControlLeft', 'KeyZ'], name: 'تراجع' },
-    gremlin: { keys: ['Ctrl', 'Z'], codes: ['ControlLeft', 'KeyZ'], name: 'أصلح الفوضى' },
-    redo: { keys: ['Ctrl', 'Y'], codes: ['ControlLeft', 'KeyY'], name: 'إعادة' },
-    multi: { keys: ['Shift', 'انقر'], codes: ['ShiftLeft'], name: 'اختر أكثر' },
-    all: { keys: ['Ctrl', 'A'], codes: ['ControlLeft', 'KeyA'], name: 'تحديد الكل', short: 'حدّد الكل' }
+  const SHORTCUTS = {
+    select: { id: 'select', keys: ['Space'], codes: ['Space'], name: 'تحديد الآلي', badge: 'تحديد' },
+    copy: { id: 'copy', keys: ['Ctrl', 'C'], codes: ['ControlLeft', 'KeyC'], name: 'شعاع الاستنساخ', badge: 'استنساخ' },
+    paste: { id: 'paste', keys: ['Ctrl', 'V'], codes: ['ControlLeft', 'KeyV'], name: 'إطلاق للسفينة', badge: 'إطلاق' },
+    cut: { id: 'cut', keys: ['Ctrl', 'X'], codes: ['ControlLeft', 'KeyX'], name: 'نقل نفاث', badge: 'نقل نفاث' },
+    delete: { id: 'delete', keys: ['Delete'], codes: ['Delete'], name: 'ليزر التحطيم', badge: 'تحطيم الفيروس' },
+    undo: { id: 'undo', keys: ['Ctrl', 'Z'], codes: ['ControlLeft', 'KeyZ'], name: 'إرجاع الزمن', badge: 'إرجاع الزمن' },
+    redo: { id: 'redo', keys: ['Ctrl', 'Y'], codes: ['ControlLeft', 'KeyY'], name: 'تقديم الزمن', badge: 'تقديم الزمن' },
+    selectAll: { id: 'selectAll', keys: ['Ctrl', 'A'], codes: ['ControlLeft', 'KeyA'], name: 'الموجة الشاملة', badge: 'تحديد الكل' },
+    saveShip: { id: 'saveShip', keys: ['Ctrl', 'S'], codes: ['ControlLeft', 'KeyS'], name: 'الإقلاع الكبير', badge: 'إقلاع شامل' }
   };
-  // The factory's actions card: a click, then the shortcuts in the order they are taught.
-  SF.CARD = ['select', 'copy', 'paste', 'ship', 'save', 'cut', 'tab', 'del', 'undo', 'redo', 'multi', 'all'];
 
-  /* -------------------------------------------------------------- worlds */
-  SF.WORLDS = [
-    { id: 'copy', name: 'ورشة النسخ', color: '#ffd23f', acts: ['copy', 'paste'] },
-    { id: 'cut', name: 'قسم القص', color: '#4fd1ff', acts: ['cut', 'tab'] },
-    { id: 'bin', name: 'ركن التدوير', color: '#5be38f', acts: ['del', 'undo'] },
-    { id: 'gremlin', name: 'بُرغي المشاغب', color: '#c79bff', acts: ['undo', 'redo'] },
-    { id: 'big', name: 'المصنع الكبير', color: '#ff9a4d', acts: ['multi', 'all'] }
-  ];
-  SF.PER_WORLD = 6;
-
-  // Levels. belts: one string per belt (the first toy is the rightmost: the belts carry
-  // the toys from the toy maker on the right to the tunnel on the left); boxes: [order,
-  // what is already inside]; queue: the orders whose boxes come after; time: a level
-  // clock in seconds (0: none); par: seconds for the third star; gremlin: seconds before
-  // «بُرغي» first comes to mess a box (0: he stays away); mess: changes he made just
-  // before the level starts (each one Ctrl+Z); redo: changes that were undone just
-  // before it starts (each one Ctrl+Y; g: it was the gremlin's).
-  // "!duck" is a broken duck, "duck*3" three ducks.
-  // The first two worlds are for children of 5 to 7 who cannot read yet: the belts stand
-  // still, there is no clock and a slow day costs no star (calm). In the copy workshop an
-  // order asks for one kind of toy and at most three, one box stands on the floor until
-  // clicking a box is taught, and the same few steps come again and again before anything
-  // new; Ctrl+S waits for the workshop's last day.
-  const RAW = [
-    // 1 — the copy workshop: click a toy, Ctrl+C, Ctrl+V, Enter; Ctrl+S at the end
-    { teach: ['copy', 'paste'], belts: ['duck'], boxes: [['duck', '']], queue: ['duck*2'], par: 60 },
-    { belts: ['ball car'], boxes: [['ball*2', '']], queue: ['car*2'], par: 80 },
-    { belts: ['teddy duck'], boxes: [['teddy*2', '']], queue: ['duck*3', 'teddy'], par: 90 },
-    { teach: ['place'], belts: ['car ball'], boxes: [['car*2', ''], ['ball*2', '']], par: 80 },
-    { belts: ['robot duck'], boxes: [['robot*2', ''], ['duck*2', '']], queue: ['duck'], par: 100 },
-    { teach: ['save'], belts: ['rocket teddy'], boxes: [['rocket*2', ''], ['teddy*2', '']], par: 90 },
-    // 2 — the cutting room: Ctrl+X moves a toy, Tab and the arrows move the selection
-    { teach: ['cut'], belts: ['robot'], boxes: [['car*2', 'car'], ['ball', 'ball car']], par: 80 },
-    { teach: ['tab'], belts: ['rocket duck car ball'], boxes: [['duck', '']], queue: ['ball*2'], par: 80 },
-    { belts: ['teddy ball'], boxes: [['teddy*2', 'teddy duck'], ['duck', '']], par: 90 },
-    { belts: ['car rocket'], boxes: [['rocket', 'rocket car'], ['car*2', '']], queue: ['rocket*2'], par: 100 },
-    { belts: ['ball robot duck'], boxes: [['robot*2', 'ball robot'], ['ball*2', '']], queue: ['duck ball'], par: 110 },
-    { belts: ['duck car ball'], boxes: [['car*2', 'car duck'], ['duck ball', 'ball']], queue: ['ball*2', 'duck*2'], par: 130 },
-    // 3 — the recycling corner: Delete recycles a broken toy, Ctrl+Z undoes a change
-    { teach: ['del'], belts: ['!teddy duck !car'], boxes: [['duck*3', 'duck !duck duck !duck']], par: 60 },
-    { teach: ['undo'], belts: ['ball'], boxes: [['ball*2 car', 'ball ball car'], ['teddy*2', 'teddy teddy']], mess: [{ b0: 'ball !car robot', b1: 'teddy' }], par: 40 },
-    { belts: ['!duck rocket duck ball'], boxes: [['rocket*2', '!rocket rocket !ball'], ['ball duck', 'ball']], queue: ['rocket ball'], par: 90 },
-    { belts: ['car teddy !car'], boxes: [['car teddy', 'car car !teddy'], ['teddy*2', 'car']], mess: [{ b1: 'car !car' }], par: 90 },
-    { belts: ['robot duck'], boxes: [['robot*2 duck', 'robot robot duck'], ['duck*2', 'duck duck']], mess: [{ b0: 'robot duck', b1: 'duck duck robot' }, { b0: 'robot !duck', b1: '!robot duck duck robot' }], par: 50 },
-    { belts: ['!ball teddy ball', '!car rocket car'], boxes: [['ball*2', '!ball ball'], ['car rocket', 'car !rocket'], ['teddy*2 ball', 'teddy']], queue: ['rocket*2 car', 'ball teddy'], time: 150 },
-    // 4 — the gremlin: Ctrl+Z undoes his mess, Ctrl+Y redoes what was undone
-    { teach: ['gremlin'], belts: ['duck teddy'], boxes: [['duck*2', ''], ['teddy duck', '']], queue: ['teddy*3'], gremlin: 8, par: 100 },
-    { teach: ['redo'], belts: ['ball car'], boxes: [['robot*3', '']], redo: [{ b0: 'robot' }, { b0: 'robot robot' }, { b0: 'robot robot robot' }], queue: ['ball car'], par: 50 },
-    { belts: ['rocket ball', 'car'], boxes: [['rocket ball', ''], ['car*2', '']], queue: ['ball*2 rocket', 'car rocket'], gremlin: 9, par: 110 },
-    { belts: ['teddy'], boxes: [['duck*2 teddy', 'teddy']], redo: [{ b0: 'teddy duck' }, { b0: 'teddy duck duck' }, { b0: '!teddy duck', g: true }], queue: ['teddy*2'], par: 50 },
-    { belts: ['!robot robot duck', 'ball'], boxes: [['robot ball', '!robot'], ['duck*2', 'duck ball'], ['ball*2', '']], queue: ['robot*2 duck'], gremlin: 7, par: 120 },
-    { belts: ['car teddy rocket', 'duck ball'], boxes: [['car teddy', ''], ['rocket*2', 'rocket !rocket'], ['duck ball', '']], queue: ['teddy*2 car', 'ball*2 duck', 'rocket car'], gremlin: 7, time: 180 },
-    // 5 — the big factory: Shift+click and Ctrl+A pick many toys at once; everything mixed
-    { teach: ['multi'], belts: ['car ball duck'], boxes: [['car ball', ''], ['car ball', ''], ['car ball', '']], par: 70 },
-    { teach: ['all'], belts: ['rocket teddy duck'], boxes: [['rocket teddy duck', ''], ['rocket teddy duck', ''], ['rocket teddy duck', '']], par: 70 },
-    { belts: ['car ball', '!duck !duck !teddy !car'], boxes: [['car*2 ball', '!car !car !ball'], ['ball car', '']], queue: ['car*2 ball'], par: 90 },
-    { belts: ['duck teddy', 'robot rocket'], boxes: [['duck teddy', ''], ['duck teddy', ''], ['robot rocket', '']], queue: ['robot rocket', 'duck teddy robot'], time: 150 },
-    { belts: ['ball car rocket'], boxes: [['ball car rocket', ''], ['ball car rocket', '!ball'], ['rocket*2', 'car']], queue: ['ball car rocket'], gremlin: 8, par: 130 },
-    { belts: ['duck car teddy', 'ball robot rocket'], boxes: [['duck car', ''], ['teddy ball', '!teddy'], ['robot rocket', 'rocket rocket']], queue: ['duck car', 'teddy ball robot', 'rocket*2 duck', 'car ball'], gremlin: 9, time: 210 }
+  const TIERS = [
+    { id: 'easy', index: 0, name: 'سهل', badge: 'مبتدئ', color: '#00e676', missions: [0, 1, 2, 3] },
+    { id: 'med', index: 1, name: 'متوسط', badge: 'ماهر', color: '#00e5ff', missions: [4, 5, 6, 7] },
+    { id: 'hero', index: 2, name: 'بطل', badge: 'محترف', color: '#ff9100', missions: [8, 9, 10, 11] }
   ];
 
-  // "duck*2 car" -> { duck: 2, car: 1 }
-  function bag(s) {
-    const o = {};
-    String(s || '').split(/\s+/).forEach(word => {
-      const m = /^(\w+)(?:\*(\d))?$/.exec(word);
-      if (m) o[m[1]] = (o[m[1]] || 0) + (m[2] ? +m[2] : 1);
-    });
-    return o;
-  }
-  // "duck !duck" -> [{ k: 'duck', b: false }, { k: 'duck', b: true }]
-  function list(s) {
-    const out = [];
-    String(s || '').split(/\s+/).forEach(word => {
-      const m = /^(!?)(\w+)(?:\*(\d))?$/.exec(word);
-      if (m) for (let i = 0; i < (m[3] ? +m[3] : 1); i++) out.push({ k: m[2], b: !!m[1] });
-    });
-    return out;
-  }
-  SF.bag = bag; SF.list = list;
+  const THEMES = [
+    { id: 'cyan', name: 'نيون سماوي', price: 0, bg1: '#0b1330', bg2: '#132254', glow: '#00e5ff', accent: '#3d5afe', belt: '#182b63' },
+    { id: 'plasma', name: 'بلازما أرجواني', price: 25, bg1: '#1a0b2e', bg2: '#2f1454', glow: '#ff4081', accent: '#aa00ff', belt: '#2d1654' },
+    { id: 'solar', name: 'لهب شمسي', price: 40, bg1: '#211008', bg2: '#3b1d0e', glow: '#ffab00', accent: '#ff3d00', belt: '#381e10' },
+    { id: 'emerald', name: 'زمرد الطاقة', price: 60, bg1: '#071f1a', bg2: '#0f382f', glow: '#00e676', accent: '#00bfa5', belt: '#113b32' }
+  ];
 
-  const taught = {};
-  SF.LEVELS = RAW.map((r, i) => {
-    const world = Math.floor(i / SF.PER_WORLD);
-    (r.teach || []).forEach(a => { taught[a] = true; });
-    // Shipping and clicking are there from the first level.
-    const tools = Object.assign({ select: true, ship: true }, taught);
-    if (tools.gremlin) tools.undo = true;
+  const ARMORS = [
+    { id: 'std', name: 'درع التيتانيوم', price: 0, trim: '#e0f7fa', visor: '#00e5ff', crest: '' },
+    { id: 'gold', name: 'درع الذهب الخارق', price: 30, trim: '#ffd740', visor: '#ffff00', crest: 'crown' },
+    { id: 'stealth', name: 'درع الشبح الليلي', price: 50, trim: '#546e7a', visor: '#ff1744', crest: 'horns' },
+    { id: 'nova', name: 'درع النجم المتوهج', price: 75, trim: '#f8bbd0', visor: '#7c4dff', crest: 'halo' }
+  ];
+
+  const MISSIONS = [
+    { index: 0, id: 'sf_m1', tier: 0, title: 'استنساخ آلي الليزر', dock: ['select', 'copy', 'paste'], intro: ['copy', 'paste'], belts: [['laser', 'laser', 'laser']], speed: 28, virusRate: 0, pods: [{ kind: 'laser', target: 3, init: [] }], queue: [], timeLimit: 0 },
+    { index: 1, id: 'sf_m2', tier: 0, title: 'سرب الدرون والليزر', dock: ['select', 'copy', 'paste'], intro: ['select'], belts: [['laser', 'drone', 'laser', 'drone']], speed: 32, virusRate: 0, pods: [{ kind: 'laser', target: 2, init: [] }, { kind: 'drone', target: 2, init: [] }], queue: [], timeLimit: 0 },
+    { index: 2, id: 'sf_m3', tier: 0, title: 'مدفع الفيروسات', dock: ['delete', 'copy', 'paste'], intro: ['delete'], belts: [['tank', 'virus', 'tank', 'virus']], speed: 34, virusRate: 0.28, pods: [{ kind: 'tank', target: 3, init: [] }], queue: [{ kind: 'tank', target: 2, init: [] }], timeLimit: 0 },
+    { index: 3, id: 'sf_m4', tier: 0, title: 'أسطول القرش التيربو', dock: ['copy', 'paste', 'delete'], intro: [], belts: [['shark', 'drone', 'virus', 'shark']], speed: 36, virusRate: 0.22, pods: [{ kind: 'shark', target: 2, init: [] }, { kind: 'drone', target: 2, init: [] }], queue: [{ kind: 'laser', target: 2, init: [] }], timeLimit: 0 },
+    { index: 4, id: 'sf_m5', tier: 1, title: 'النقل النفاث', dock: ['cut', 'copy', 'paste'], intro: ['cut'], belts: [['laser', 'shark', 'laser'], ['shark', 'laser', 'shark']], speed: 44, virusRate: 0, pods: [{ kind: 'laser', target: 2, init: ['laser', 'shark'] }, { kind: 'shark', target: 2, init: ['shark'] }], queue: [{ kind: 'laser', target: 2, init: [] }], timeLimit: 0 },
+    { index: 5, id: 'sf_m6', tier: 1, title: 'خط الإنتاج المزدوج', dock: ['cut', 'copy', 'paste', 'delete'], intro: [], belts: [['tank', 'virus', 'drone'], ['drone', 'tank', 'virus']], speed: 48, virusRate: 0.22, pods: [{ kind: 'tank', target: 2, init: ['drone'] }, { kind: 'drone', target: 3, init: ['drone'] }], queue: [{ kind: 'tank', target: 2, init: [] }], timeLimit: 0 },
+    { index: 6, id: 'sf_m7', tier: 1, title: 'درع إرجاع الزمن', dock: ['undo', 'copy', 'paste', 'delete'], intro: ['undo'], belts: [['shark', 'laser', 'virus'], ['laser', 'shark', 'tank']], speed: 48, virusRate: 0.18, pods: [{ kind: 'shark', target: 2, init: ['shark'] }, { kind: 'laser', target: 2, init: ['laser'] }], queue: [{ kind: 'tank', target: 2, init: [] }], saboteurEvery: 11, preSabotage: true, timeLimit: 0 },
+    { index: 7, id: 'sf_m8', tier: 1, title: 'صدى المستقبل', dock: ['redo', 'undo', 'copy', 'paste'], intro: ['redo'], belts: [['drone', 'tank', 'drone'], ['tank', 'virus', 'shark']], speed: 50, virusRate: 0.18, pods: [{ kind: 'drone', target: 3, init: ['drone'] }, { kind: 'tank', target: 2, init: [] }], queue: [{ kind: 'shark', target: 2, init: [] }], preRedo: 2, saboteurEvery: 14, timeLimit: 115 },
+    { index: 8, id: 'sf_m9', tier: 2, title: 'الموجة الشاملة', dock: ['selectAll', 'copy', 'paste'], intro: ['selectAll'], belts: [['laser', 'drone', 'tank'], ['shark', 'laser', 'drone']], speed: 56, virusRate: 0, pods: [{ kind: 'laser', target: 2, init: [] }, { kind: 'drone', target: 2, init: [] }, { kind: 'tank', target: 2, init: [] }], queue: [{ kind: 'shark', target: 2, init: [] }], timeLimit: 105 },
+    { index: 9, id: 'sf_m10', tier: 2, title: 'عاصفة الفيروسات', dock: ['selectAll', 'cut', 'paste', 'delete'], intro: [], belts: [['shark', 'virus', 'laser', 'tank'], ['virus', 'drone', 'shark', 'laser']], speed: 62, virusRate: 0.28, pods: [{ kind: 'shark', target: 3, init: ['laser'] }, { kind: 'laser', target: 3, init: ['shark'] }, { kind: 'drone', target: 2, init: [] }], queue: [{ kind: 'tank', target: 2, init: [] }], saboteurEvery: 13, timeLimit: 115 },
+    { index: 10, id: 'sf_m11', tier: 2, title: 'الإقلاع الكبير', dock: ['selectAll', 'copy', 'paste', 'saveShip'], intro: ['saveShip'], belts: [['laser', 'drone', 'virus', 'tank'], ['tank', 'laser', 'drone', 'virus']], speed: 64, virusRate: 0.22, pods: [{ kind: 'laser', target: 2, init: [] }, { kind: 'drone', target: 2, init: [] }, { kind: 'tank', target: 2, init: [] }], queue: [], megaSave: true, saboteurEvery: 12, timeLimit: 110 },
+    { index: 11, id: 'sf_m12', tier: 2, title: 'معركة المصنع الكبرى', dock: ['selectAll', 'copy', 'paste', 'saveShip'], intro: [], belts: [['shark', 'laser', 'virus', 'drone'], ['tank', 'virus', 'shark', 'laser']], speed: 68, virusRate: 0.25, pods: [{ kind: 'shark', target: 2, init: ['drone'] }, { kind: 'drone', target: 2, init: ['shark'] }, { kind: 'laser', target: 3, init: [] }], queue: [{ kind: 'tank', target: 2, init: [] }], megaSave: true, saboteurEvery: 10, timeLimit: 130 },
+    { index: 12, id: 'sf_rush', tier: 2, title: 'التحدي اللانهائي', endless: true, dock: ['selectAll', 'copy', 'paste', 'delete'], intro: [], belts: [['laser', 'drone', 'virus', 'tank'], ['shark', 'tank', 'laser', 'drone']], speed: 64, virusRate: 0.24, pods: [{ kind: 'laser', target: 2, init: [] }, { kind: 'drone', target: 2, init: [] }, { kind: 'shark', target: 2, init: [] }], queue: [], saboteurEvery: 13, timeLimit: 65 }
+  ];
+
+  const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
+  const isVisible = x => x >= VIS_MIN_X && x <= VIS_MAX_X;
+  const cloneData = v => JSON.parse(JSON.stringify(v));
+  const nextId = w => (++w.seq);
+
+  function makeRng(seed) {
+    let s = ((seed | 0) || 123456789) >>> 0;
+    return () => {
+      s = (s ^ (s << 13)) >>> 0;
+      s = (s ^ (s >>> 17)) >>> 0;
+      s = (s ^ (s << 5)) >>> 0;
+      return (s >>> 0) / 4294967296;
+    };
+  }
+
+  function sayBot(kind, n) {
+    const b = BOTS[kind] || BOTS.laser;
+    return n === 1 ? b.name : n === 2 ? b.dual : n + ' ' + b.plural;
+  }
+
+  function podX(index, count) {
+    if (count <= 1) return 580;
+    return count === 2 ? (index === 0 ? 410 : 750) : 300 + index * 280;
+  }
+
+  function podSlot(bx, slotIdx, capOverride) {
+    const cap = Math.max(1, capOverride || Math.max(bx.target, bx.items.length));
+    const span = Math.min(152, (cap - 1) * 58);
+    const step = cap > 1 ? span / (cap - 1) : 0;
+    return { x: bx.x - span / 2 + slotIdx * step, y: bx.y + 18 };
+  }
+
+  function layoutPodItems(bx) {
+    for (let i = 0; i < bx.items.length; i++) {
+      const p = podSlot(bx, i);
+      bx.items[i].x = p.x; bx.items[i].y = p.y;
+    }
+  }
+
+  function isPodReady(bx) {
+    return !bx.launched && bx.items.length === bx.target &&
+      bx.items.every(it => it.kind === bx.kind && !it.virus && !it.glitched);
+  }
+
+  function snapshotState(w, reason) {
     return {
-      i: i, id: (world + 1) + '-' + (i % SF.PER_WORLD + 1), world: world, n: i % SF.PER_WORLD,
-      teach: r.teach || [], tools: tools, belts: r.belts || [], boxes: r.boxes, queue: r.queue || [],
-      time: r.time || 0, par: r.par || Math.round((r.time || 120) * 0.6), gremlin: r.gremlin || 0,
-      mess: r.mess || null, redo: r.redo || null,
-      calm: world < 2,
-      // From the level that teaches Ctrl+S on, every day's work ends with its stamp.
-      stamp: i >= 5
+      reason: reason || 'act', belts: cloneData(w.belts), boxes: cloneData(w.boxes),
+      podQueue: cloneData(w.podQueue), clip: cloneData(w.clip), sel: w.sel.slice(),
+      activeBox: w.activeBox, megaReady: w.megaReady
     };
-  });
-  SF.COUNT = SF.LEVELS.length;
-  SF.levelOf = function (world, n) { return world * SF.PER_WORLD + n; };
-
-  /* ---------------------------------------------------------- the floor */
-  // Belts carry their toys right to left and loop: a toy goes into the tunnel on the
-  // left and comes out of the toy maker on the right. Each belt has cap slots.
-  const BELT = SF.BELT = { x0: 150, x1: 1130, xr: 1170, sp: 130, cap: 8, L: 1040, vis0: 190, vis1: 1100 };
-  SF.BELT_Y = [[188], [132, 238]];
-  const BOX = SF.BOX = { w: 270, h: 200, y: 296, cap: 6 };
-  SF.BOX_X = [[630], [790, 470], [945, 630, 315]];
-  // The seven slots in sight when a level starts, from the right (the eighth one is in
-  // the tunnel): a list's toys are spread out evenly over them.
-  const RIGHT_TO_LEFT = [7, 0, 1, 2, 3, 4, 5];
-  function mod(a, b) { return ((a % b) + b) % b; }
-  SF.beltX = function (w, slot) { return BELT.xr - mod(slot * BELT.sp + w.offset, BELT.L); };
-  SF.visible = function (x) { return x >= BELT.vis0 && x <= BELT.vis1; };
-  // A box's toys stand in two rows of three, read right to left.
-  SF.boxSpot = function (con, idx) {
-    const col = idx % 3, row = Math.floor(idx / 3);
-    return { x: con.x + (1 - col) * 80, y: BOX.y + (row ? 104 : 58) };
-  };
-  function live(c) { return !!c && (c.type === 'belt' || (!c.gone && c.ship <= 0)); }
-  SF.live = live;
-  SF.boxes = function (w) { return w.cons.filter(c => c.type === 'box' && live(c)); };
-
-  // Where a toy is: its container, index and centre.
-  SF.find = function (w, id) {
-    for (const c of w.cons) {
-      const i = c.items.indexOf(id);
-      if (i >= 0) {
-        const p = c.type === 'belt' ? { x: SF.beltX(w, i), y: c.y } : SF.boxSpot(c, i);
-        return { con: c.i, idx: i, x: p.x, y: p.y };
-      }
-    }
-    return null;
-  };
-  // Toys of a container in reading order: right to left (a belt's hidden toys last).
-  function ordered(w, c) {
-    if (c.type === 'box') return c.items.slice();
-    const ids = [];
-    c.items.forEach((id, s) => { if (id) ids.push({ id: id, x: SF.beltX(w, s) }); });
-    ids.sort((a, b) => (SF.visible(b.x) - SF.visible(a.x)) || b.x - a.x);
-    return ids.map(o => o.id);
-  }
-  SF.ordered = ordered;
-  function reading(w, visibleOnly) {
-    const out = [];
-    w.cons.forEach(c => {
-      if (!live(c)) return;
-      ordered(w, c).forEach(id => { if (!visibleOnly || c.type === 'box' || SF.visible(SF.find(w, id).x)) out.push(id); });
-    });
-    return out;
   }
 
-  // What is under a point: { con, toy } (toy 0 for the container itself) or null.
-  SF.hit = function (w, x, y) {
-    for (const c of w.cons) {
-      if (c.type !== 'box' || !live(c)) continue;
-      if (x < c.x - BOX.w / 2 || x > c.x + BOX.w / 2 || y < BOX.y - 30 || y > BOX.y + BOX.h) continue;
-      for (let i = c.items.length - 1; i >= 0; i--) {
-        const p = SF.boxSpot(c, i);
-        if (Math.abs(x - p.x) < 40 && Math.abs(y - p.y) < 40) return { con: c.i, toy: c.items[i] };
-      }
-      return { con: c.i, toy: 0 };
-    }
-    for (const c of w.cons) {
-      if (c.type !== 'belt' || y < c.y - 52 || y > c.y + 50 || x < BELT.x0 || x > BELT.x1) continue;
-      let best = 0, bd = 47;
-      c.items.forEach((id, s) => {
-        if (!id) return;
-        const tx = SF.beltX(w, s), d = Math.abs(x - tx);
-        if (SF.visible(tx) && d < bd) { bd = d; best = id; }
-      });
-      return { con: c.i, toy: best };
-    }
-    return null;
-  };
-
-  /* ----------------------------------------------------------- random */
-  // Seeded random numbers (mulberry32), so a level replays exactly in tests.
-  SF.rng = function (seed) {
-    let a = (seed >>> 0) || 1;
-    return function () {
-      a = (a + 0x6D2B79F5) | 0;
-      let t = Math.imul(a ^ (a >>> 15), 1 | a);
-      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-    };
-  };
-  function num(v, d) { return typeof v === 'number' && isFinite(v) ? v : d; }
-
-  /* ------------------------------------------------------------ worlds */
-  function make(w, t) { const id = w.nextId++; w.toys[id] = { id: id, k: t.k, b: !!t.b }; return id; }
-  function fillBelt(w, c, items) {
-    c.items = new Array(BELT.cap).fill(null);
-    const m = Math.min(items.length, RIGHT_TO_LEFT.length);
-    for (let j = 0; j < m; j++) c.items[RIGHT_TO_LEFT[Math.round((j + 0.5) * RIGHT_TO_LEFT.length / m - 0.5)]] = make(w, items[j]);
-  }
-  // A box's new contents; toys that stay keep their ids (the same toy is still there).
-  function setItems(w, c, s) {
-    const items = list(s);
-    if (c.type === 'belt') { fillBelt(w, c, items); return; }
-    const old = c.items.slice();
-    c.items = items.slice(0, BOX.cap).map(t => {
-      const i = old.findIndex(id => id && w.toys[id] && w.toys[id].k === t.k && w.toys[id].b === t.b);
-      if (i < 0) return make(w, t);
-      const id = old[i];
-      old[i] = 0;
-      return id;
-    });
-    old.forEach(id => { if (id) delete w.toys[id]; });
-  }
-  function conRef(w, key) {
-    const m = /^([bL])(\d)$/.exec(key);
-    if (!m) return null;
-    const type = m[1] === 'b' ? 'box' : 'belt', n = +m[2];
-    return w.cons.filter(c => c.type === type)[n] || null;
+  function restoreSnapshot(w, snap) {
+    w.belts = cloneData(snap.belts); w.boxes = cloneData(snap.boxes);
+    w.podQueue = cloneData(snap.podQueue); w.clip = cloneData(snap.clip);
+    w.sel = snap.sel.slice(); w.activeBox = snap.activeBox; w.megaReady = !!snap.megaReady;
   }
 
-  // o: { speed (px/s), timeScale, parScale, gremlinEvery (s), seed }
-  SF.create = function (li, o) {
-    o = o || {};
-    const def = SF.LEVELS[li] || SF.LEVELS[0];
-    const w = {
-      li: def.i, def: def, t: 0, phase: 'play', ev: [],
-      speed: def.calm ? 0 : Math.max(0, num(o.speed, 24)), offset: 270,
-      limit: def.time ? Math.round(def.time * Math.max(0.5, num(o.timeScale, 1))) : 0,
-      par: Math.round(def.par * Math.max(0.5, num(o.parScale, 1))),
-      toys: {}, nextId: 1, cons: [], queue: def.queue.map(bag), done: 0,
-      sel: [], cur: -1, curToy: 0, place: -1, clip: null, undo: [], redo: [],
-      mistakes: 0, bonus: 0, combo: 0, lastShip: -99, bonks: 0, actions: 0,
-      rng: SF.rng(o.seed || 1)
-    };
-    w.left = w.limit;
-    const ys = SF.BELT_Y[Math.max(0, Math.min(1, def.belts.length - 1))];
-    def.belts.forEach((s, i) => {
-      const c = { i: w.cons.length, type: 'belt', cap: BELT.cap, items: [], y: ys[i], x: (BELT.x0 + BELT.x1) / 2 };
-      w.cons.push(c);
-      fillBelt(w, c, list(s));
-    });
-    const xs = SF.BOX_X[def.boxes.length - 1];
-    def.boxes.forEach((b, i) => {
-      const c = { i: w.cons.length, type: 'box', cap: BOX.cap, items: [], order: bag(b[0]), x: xs[i], y: BOX.y, ship: 0, arrive: 0, gone: false, oid: i + 1, n: i };
-      w.cons.push(c);
-      setItems(w, c, b[1]);
-    });
-    w.total = def.boxes.length + w.queue.length;
-    w.nextOrder = def.boxes.length + 1;
-    const first = w.cons.find(c => c.type === 'box');
-    w.place = w.cur = first.i;
-    // «بُرغي» the gremlin: away, coming to a box, messing it up, leaving (or fleeing).
-    w.g = { on: def.gremlin > 0, every: Math.max(4, num(o.gremlinEvery, 20)), next: def.gremlin, phase: 'away', t: 0, x: 1380, x0: 1380, tx: 0, box: -1, entry: null };
-    // Changes made just before the level: the gremlin's mess is on the undo history...
-    if (def.mess) {
-      def.mess.forEach(m => {
-        const before = snap(w);
-        for (const k in m) { const c = conRef(w, k); if (c) setItems(w, c, m[k]); }
-        commit(w, 'gremlin', before);
-      });
-      const g = w.g, c = conRef(w, Object.keys(def.mess[def.mess.length - 1])[0]);
-      g.phase = 'mess'; g.t = -0.4; g.box = c.i; g.x = c.x + 70; g.entry = w.undo[w.undo.length - 1];
-    }
-    // ...and changes that were undone wait on the redo history.
-    if (def.redo) {
-      const start = snap(w), entries = [];
-      def.redo.forEach(m => {
-        const before = snap(w);
-        for (const k in m) if (k !== 'g') { const c = conRef(w, k); if (c) setItems(w, c, m[k]); }
-        entries.push({ label: m.g ? 'gremlin' : 'player', before: before, after: snap(w) });
-      });
-      restore(w, start);
-      w.redo = entries.reverse();
-    }
-    return w;
-  };
-
-  /* ------------------------------------------------------------ history */
-  function snap(w) { return { items: w.cons.map(c => c.items.slice()), toys: Object.assign({}, w.toys) }; }
-  function restore(w, s) {
-    w.cons.forEach((c, i) => { c.items = s.items[i].slice(); });
-    w.toys = Object.assign({}, s.toys);
-    tidy(w);
-  }
-  function commit(w, label, before) {
-    const entry = { label: label, before: before, after: snap(w) };
-    w.undo.push(entry);
-    if (w.undo.length > 60) w.undo.shift();
+  function pushUndo(w, reason) {
+    w.undo.push(snapshotState(w, reason));
+    if (w.undo.length > MAX_UNDO) w.undo.shift();
     w.redo.length = 0;
-    return entry;
-  }
-  // Drops toys that no longer exist from the selection and the cursor.
-  function tidy(w) {
-    w.sel = w.sel.filter(id => w.toys[id] && SF.find(w, id) && live(w.cons[SF.find(w, id).con]));
-    if (w.curToy && !(w.toys[w.curToy] && SF.find(w, w.curToy))) w.curToy = 0;
-    if (!live(w.cons[w.place])) {
-      const b = SF.boxes(w)[0];
-      if (b) w.place = b.i;
-    }
-    if (!live(w.cons[w.cur])) w.cur = live(w.cons[w.place]) ? w.place : 0;
   }
 
-  /* ------------------------------------------------------------- orders */
-  // What a box still needs: { ok, missing: { kind: n }, extra: [toy ids] } (a broken toy,
-  // or one more than the order asks for, is extra).
-  SF.need = function (w, c) {
-    const missing = Object.assign({}, c.order), extra = [];
-    c.items.forEach(id => {
-      const t = w.toys[id];
-      if (!t || t.b || !missing[t.k]) extra.push(id); else missing[t.k]--;
-    });
-    for (const k in missing) if (!missing[k]) delete missing[k];
-    return { ok: !extra.length && !Object.keys(missing).length, missing: missing, extra: extra };
-  };
-  SF.ready = function (w, c) { return !!c && c.type === 'box' && live(c) && SF.need(w, c).ok; };
-
-  /* ------------------------------------------------------------ actions */
-  function ev(w, e) { w.ev.push(e); if (w.ev.length > 40) w.ev.shift(); }
-  function sorted(w, ids) {
-    const order = reading(w, false);
-    return ids.slice().sort((a, b) => order.indexOf(a) - order.indexOf(b));
-  }
-  function removeToys(w, ids) {
-    const gone = [];
-    ids.forEach(id => {
-      const f = SF.find(w, id);
-      if (!f) return;
-      const c = w.cons[f.con];
-      gone.push({ id: id, k: w.toys[id].k, b: w.toys[id].b, x: f.x, y: f.y, con: f.con });
-      if (c.type === 'belt') c.items[f.idx] = null; else c.items.splice(f.idx, 1);
-      delete w.toys[id];
-    });
-    return gone;
-  }
-  function room(c) { return c.type === 'belt' ? c.items.filter(x => !x).length : c.cap - c.items.length; }
-  function addToy(w, c, t) {
-    const id = make(w, t);
-    if (c.type === 'box') c.items.push(id);
-    else {
-      // The free slot nearest the toy maker on the right that is in sight.
-      let best = -1, bx = -1;
-      c.items.forEach((x, s) => { if (!x) { const px = SF.beltX(w, s), score = (SF.visible(px) ? 2000 : 0) + px; if (score > bx) { bx = score; best = s; } } });
-      c.items[best] = id;
+  function neededKinds(w) {
+    const need = [];
+    for (const bx of w.boxes) {
+      if (bx.launched) continue;
+      const valid = bx.items.filter(it => it.kind === bx.kind && !it.virus && !it.glitched).length;
+      if (valid < bx.target && need.indexOf(bx.kind) < 0) need.push(bx.kind);
     }
-    return id;
-  }
-  function select(w, con, toy, add) {
-    const c = w.cons[con];
-    if (!c || !live(c)) return;
-    if (toy) {
-      if (add) {
-        const i = w.sel.indexOf(toy);
-        if (i >= 0) w.sel.splice(i, 1); else w.sel.push(toy);
-      } else w.sel = [toy];
-      w.cur = con; w.curToy = toy;
-      if (c.type === 'box') w.place = con;
-    } else {
-      // Only a box is a place to paste in: a click that misses a moving toy on a belt
-      // must not send the next Ctrl+V onto the belt.
-      if (!add) w.sel = [];
-      w.cur = con; w.curToy = 0;
-      if (c.type === 'box') w.place = con;
-    }
-  }
-  function shipBox(w, c) {
-    c.ship = 0.9;
-    w.done++;
-    w.combo = w.t - w.lastShip < 12 ? w.combo + 1 : 1;
-    w.lastShip = w.t;
-    if (w.combo > 1) w.bonus += w.combo;
-    w.undo.length = 0; w.redo.length = 0; w.g.entry = null;
-    w.sel = w.sel.filter(id => c.items.indexOf(id) < 0);
-    if (w.curToy && c.items.indexOf(w.curToy) >= 0) w.curToy = 0;
-    ev(w, { t: 'ship', con: c.i, combo: w.combo, left: w.total - w.done });
+    return need.length ? need : BOT_KINDS;
   }
 
-  // One action. a.t: 'pick' (con, toy: 0 for the container itself, add: Shift/Ctrl
-  // held), 'click' (x, y, add), 'copy', 'paste', 'cut', 'del', 'undo', 'redo', 'all',
-  // 'ship' (con: a box's own Enter button, or none for the Enter key), 'save', 'tab',
-  // 'move' (dir: 'left' | 'right' | 'up' | 'down', add). Returns what happened: 'ok' or why not.
-  SF.act = function (w, a) {
-    if (!a || (w.phase !== 'play' && w.phase !== 'stamp')) return 'over';
-    const t = a.t;
-    w.actions++;
-    if (t === 'click') {
-      const h = SF.hit(w, a.x, a.y);
-      if (!h) { if (!a.add && w.sel.length) { w.sel = []; ev(w, { t: 'select', ids: [] }); } return 'none'; }
-      return SF.act(w, { t: 'pick', con: h.con, toy: h.toy, add: a.add });
-    }
-    if (t === 'pick') {
-      select(w, a.con, a.toy || 0, !!a.add);
-      ev(w, { t: 'select', ids: w.sel.slice(), con: a.con, toy: a.toy || 0 });
-      return 'ok';
-    }
-    if (t === 'copy' || t === 'cut' || t === 'del') {
-      tidy(w);
-      if (!w.sel.length) { ev(w, { t: 'nothing', a: t }); return 'nothing'; }
-      const ids = sorted(w, w.sel);
-      if (t === 'copy') {
-        w.clip = { cut: false, items: ids.map(id => ({ k: w.toys[id].k, b: w.toys[id].b })) };
-        ev(w, { t: 'copy', ids: ids, n: ids.length });
-        return 'ok';
+  function pickSpawnKind(w, rng) {
+    if (w.virusRate > 0 && rng() < w.virusRate) {
+      let recent = 0;
+      for (const b of w.belts) {
+        const last = b.items[b.items.length - 1];
+        if (last && last.virus) recent++;
       }
-      const before = snap(w), gone = removeToys(w, ids);
-      if (t === 'cut') w.clip = { cut: true, items: gone.map(g => ({ k: g.k, b: g.b })) };
-      w.sel = []; w.curToy = 0;
-      commit(w, t, before);
-      ev(w, { t: t, toys: gone, n: gone.length });
-      return 'ok';
+      if (recent < w.belts.length) return 'virus';
     }
-    if (t === 'paste') {
-      tidy(w);
-      if (!w.clip || !w.clip.items.length) { ev(w, { t: 'nothing', a: t }); return 'empty'; }
-      const c = w.cons[w.place];
-      if (!c || !live(c)) { ev(w, { t: 'nothing', a: 'place' }); return 'nothing'; }
-      if (room(c) < w.clip.items.length) { ev(w, { t: 'full', con: c.i }); return 'full'; }
-      const before = snap(w), ids = w.clip.items.map(it => addToy(w, c, it));
-      w.sel = ids.slice(); w.cur = c.i; w.curToy = ids[ids.length - 1];
-      commit(w, 'paste', before);
-      ev(w, { t: 'paste', ids: ids, con: c.i, n: ids.length });
-      return 'ok';
-    }
-    if (t === 'undo' || t === 'redo') {
-      const from = t === 'undo' ? w.undo : w.redo, to = t === 'undo' ? w.redo : w.undo;
-      if (!from.length) { ev(w, { t: 'nothing', a: t }); return 'nothing'; }
-      const entry = from.pop(), had = Object.keys(w.toys);
-      restore(w, t === 'undo' ? entry.before : entry.after);
-      to.push(entry);
-      const back = Object.keys(w.toys).filter(id => had.indexOf(id) < 0).map(Number);
-      w.sel = back.filter(id => SF.find(w, id));
-      if (w.sel.length) { const f = SF.find(w, w.sel[0]); w.cur = f.con; w.curToy = w.sel[0]; }
-      const g = w.g;
-      let bonk = false;
-      if (t === 'undo' && entry === g.entry) {
-        g.entry = null;
-        if (g.phase === 'mess' || g.phase === 'leave' || g.phase === 'come') { g.phase = 'flee'; g.t = 0; bonk = true; w.bonks++; w.bonus += 2; }
-      }
-      ev(w, { t: t, label: entry.label, ids: w.sel.slice(), bonk: bonk });
-      return 'ok';
-    }
-    if (t === 'all') {
-      const c = live(w.cons[w.cur]) ? w.cons[w.cur] : w.cons[w.place];
-      const ids = c ? ordered(w, c) : [];
-      if (!ids.length) { ev(w, { t: 'nothing', a: t }); return 'nothing'; }
-      w.sel = ids; w.curToy = ids[0]; w.cur = c.i;
-      if (c.type === 'box') w.place = c.i;
-      ev(w, { t: 'all', ids: ids.slice(), con: c.i });
-      return 'ok';
-    }
-    if (t === 'ship') {
-      if (w.phase !== 'play') return 'nothing';
-      const boxes = SF.boxes(w);
-      let c = a.con != null ? w.cons[a.con] : null;
-      if (c && (c.type !== 'box' || !live(c))) c = null;
-      if (!c && SF.ready(w, w.cons[w.place])) c = w.cons[w.place];
-      if (!c) c = boxes.find(b => SF.ready(w, b)) || null;
-      if (!c) c = live(w.cons[w.place]) && w.cons[w.place].type === 'box' ? w.cons[w.place] : boxes[0];
-      if (!c) return 'nothing';
-      if (!SF.ready(w, c)) {
-        // An empty box only shakes; sending one with the wrong toys is a mistake.
-        if (c.items.length) w.mistakes++;
-        ev(w, { t: 'wrong', con: c.i, need: SF.need(w, c), empty: !c.items.length });
-        return 'wrong';
-      }
-      shipBox(w, c);
-      return 'ok';
-    }
-    if (t === 'save') {
-      if (w.phase === 'stamp') { w.phase = 'done'; ev(w, { t: 'stamp' }); return 'ok'; }
-      ev(w, { t: 'saved' });
-      return 'early';
-    }
-    if (t === 'tab') {
-      const order = reading(w, true);
-      if (!order.length) { ev(w, { t: 'nothing', a: t }); return 'nothing'; }
-      const i = order.indexOf(w.curToy), id = order[(i + 1) % order.length];
-      select(w, SF.find(w, id).con, id, false);
-      ev(w, { t: 'select', ids: w.sel.slice(), key: true });
-      return 'ok';
-    }
-    if (t === 'move') {
-      const target = moveTarget(w, a.dir);
-      if (!target) { ev(w, { t: 'nothing', a: t }); return 'nothing'; }
-      if (a.add && target.toy) {
-        // Shift+arrow grows the selection.
-        if (w.sel.indexOf(target.toy) < 0) w.sel.push(target.toy);
-        w.cur = target.con; w.curToy = target.toy;
-        if (w.cons[target.con].type === 'box') w.place = target.con;
-      } else select(w, target.con, target.toy, false);
-      ev(w, { t: 'select', ids: w.sel.slice(), key: true });
-      return 'ok';
-    }
-    w.actions--;
-    return 'unknown';
-  };
-
-  // The arrow keys: the nearest toy (or empty box) in that direction.
-  function rowOf(w, c) { return c.type === 'belt' ? w.cons.indexOf(c) : w.def.belts.length; }
-  function moveTarget(w, dir) {
-    const cur = live(w.cons[w.cur]) ? w.cons[w.cur] : w.cons[w.place];
-    if (!cur) return null;
-    const f = w.curToy ? SF.find(w, w.curToy) : null;
-    const fx = f ? f.x : cur.x, fy = f ? f.y : (cur.type === 'box' ? BOX.y + 80 : cur.y);
-    const row = rowOf(w, cur), rows = w.def.belts.length + 1;
-    const spots = [];
-    w.cons.forEach(c => {
-      if (!live(c)) return;
-      const ids = ordered(w, c);
-      ids.forEach(id => { const p = SF.find(w, id); if (c.type === 'box' || SF.visible(p.x)) spots.push({ con: c.i, toy: id, x: p.x, y: p.y, row: rowOf(w, c) }); });
-      if (c.type === 'box' && !ids.length) spots.push({ con: c.i, toy: 0, x: c.x, y: BOX.y + 80, row: rowOf(w, c) });
-    });
-    let best = null, bd = Infinity;
-    for (const s of spots) {
-      if (s.con === cur.i && s.toy === w.curToy) continue;
-      let d;
-      if (dir === 'left' || dir === 'right') {
-        if (s.row !== row) continue;
-        const dx = dir === 'left' ? fx - s.x : s.x - fx;
-        if (dx < 6) continue;
-        d = dx + Math.abs(s.y - fy) * 0.6;
-      } else {
-        const want = dir === 'up' ? row - 1 : row + 1;
-        if (want < 0 || want >= rows) return null;
-        if (s.row !== want) continue;
-        d = Math.abs(s.x - fx);
-      }
-      if (d < bd) { bd = d; best = s; }
-    }
-    return best;
+    const need = neededKinds(w);
+    return rng() < 0.72 ? need[Math.floor(rng() * need.length)] : BOT_KINDS[Math.floor(rng() * BOT_KINDS.length)];
   }
 
-  /* -------------------------------------------------------------- time */
-  SF.step = function (w, dt) {
-    if (w.phase === 'done' || w.phase === 'fail') return w;
-    w.t += dt;
-    w.offset += w.speed * dt;
-    // Boxes leave on the truck, and the next order's box slides in.
-    w.cons.forEach(c => {
-      if (c.type !== 'box') return;
-      if (c.arrive > 0) c.arrive = Math.max(0, c.arrive - dt);
-      if (c.ship > 0) {
-        c.ship -= dt;
-        if (c.ship <= 0) {
-          c.ship = 0;
-          c.items.forEach(id => { delete w.toys[id]; });
-          c.items = [];
-          if (w.queue.length) { c.order = w.queue.shift(); c.oid = w.nextOrder++; c.arrive = 0.7; ev(w, { t: 'arrive', con: c.i }); }
-          else c.gone = true;
-          tidy(w);
-        }
+  function create(missionIndex, opts) {
+    opts = opts || {};
+    const idx = clamp(missionIndex | 0, 0, MISSIONS.length - 1);
+    const def = MISSIONS[idx];
+    const rng = makeRng(opts.seed || (idx * 9973 + 17));
+    const speedScale = clamp(opts.speedScale == null ? 1 : opts.speedScale, 0.5, 1.65);
+    const timeScale = clamp(opts.timeScale == null ? 1 : opts.timeScale, 0.65, 1.6);
+    const virusScale = opts.virusScale == null ? 1 : clamp(opts.virusScale, 0, 1.8);
+    const sabInterval = clamp(opts.saboteurEvery || def.saboteurEvery || 0, 0, 40);
+
+    const w = {
+      index: idx, id: def.id, def: def, phase: 'play', time: 0, offset: 0,
+      speed: Math.round(def.speed * speedScale),
+      virusRate: def.virusRate > 0 ? clamp(def.virusRate * virusScale, 0.08, 0.42) : 0,
+      timeLimit: def.timeLimit ? Math.round(def.timeLimit * timeScale) : 0,
+      timeLeft: def.timeLimit ? Math.round(def.timeLimit * timeScale) : 0,
+      seq: 0, score: 0, combo: 0, mistakes: 0, zapped: 0, bonks: 0, launchedCount: 0,
+      totalPods: def.endless ? 999 : def.pods.length + def.queue.length,
+      activeBox: 0, sel: [], clip: null, megaReady: false, saveBoostUsed: false,
+      belts: [], boxes: [], podQueue: cloneData(def.queue), undo: [], redo: [],
+      saboteur: { enabled: sabInterval > 0, every: sabInterval || 14, timer: sabInterval ? Math.max(5, sabInterval * 0.65) : 999, state: 'away', x: 1180, y: 120, targetBox: -1 },
+      events: [], _rng: rng
+    };
+
+    const beltYs = def.belts.length === 1 ? [392] : [336, 456];
+    for (let bi = 0; bi < def.belts.length; bi++) {
+      const row = def.belts[bi], spacing = row.length >= 4 ? 195 : 230, items = [];
+      for (let j = 0; j < row.length; j++) {
+        const kind = row[j], x = 355 + j * spacing;
+        const item = { id: nextId(w), kind: kind, virus: kind === 'virus', glitched: false, x: x, y: beltYs[bi], cued: isVisible(x) };
+        items.push(item);
+        if (item.cued && !item.virus) w.events.push({ type: 'cue', id: item.id, kind: item.kind });
       }
-    });
-    if (w.phase === 'play') {
-      if (w.done >= w.total && !w.cons.some(c => c.type === 'box' && c.ship > 0)) {
-        w.phase = w.def.stamp ? 'stamp' : 'done';
-        ev(w, { t: 'allShipped' });
-      } else if (w.limit) {
-        w.left = Math.max(0, w.left - dt);
-        if (w.left <= 0) { w.phase = 'fail'; ev(w, { t: 'timeup' }); }
-      }
+      w.belts.push({ i: bi, y: beltYs[bi], spacing: spacing, items: items });
     }
-    gremlin(w, dt);
+
+    for (let pi = 0; pi < def.pods.length; pi++) {
+      const pd = def.pods[pi];
+      const bx = { i: pi, x: podX(pi, def.pods.length), y: POD_Y, kind: pd.kind, target: pd.target, items: [], launched: false, launchT: 0 };
+      for (const k of (pd.init || [])) bx.items.push({ id: nextId(w), kind: k, virus: k === 'virus', glitched: false, x: bx.x, y: bx.y });
+      layoutPodItems(bx);
+      w.boxes.push(bx);
+    }
+
+    if (def.preSabotage && w.boxes[0] && w.boxes[0].items[0]) {
+      pushUndo(w, 'saboteur');
+      w.boxes[0].items[0].glitched = true;
+      Object.assign(w.saboteur, { state: 'laugh', targetBox: 0, x: w.boxes[0].x + 70, y: w.boxes[0].y - 36, timer: 7 });
+    }
+    if (def.preRedo && w.boxes[0]) {
+      const snaps = [], baseSnap = snapshotState(w, 'echo');
+      for (let r = 1; r <= def.preRedo; r++) {
+        w.boxes[0].items.push({ id: nextId(w), kind: w.boxes[0].kind, virus: false, glitched: false, x: w.boxes[0].x, y: w.boxes[0].y });
+        layoutPodItems(w.boxes[0]);
+        snaps.push(snapshotState(w, 'echo'));
+      }
+      restoreSnapshot(w, baseSnap);
+      for (let r = snaps.length - 1; r >= 0; r--) w.redo.push(snaps[r]);
+    }
     return w;
-  };
+  }
 
-  /* ----------------------------------------------------------- gremlin */
-  const ease = k => k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
-  function gremlin(w, dt) {
-    const g = w.g;
-    if (g.phase === 'away') {
-      if (!g.on || w.phase !== 'play') return;
-      g.next -= dt;
-      if (g.next > 0) return;
-      const target = messTarget(w);
-      if (!target) { g.next = 3; return; }
-      g.phase = 'come'; g.t = 0; g.box = target.i; g.x0 = 1380; g.tx = target.x + 70;
-      ev(w, { t: 'gremlin', con: target.i });
+  function findItem(w, id) {
+    for (let bi = 0; bi < w.belts.length; bi++) {
+      const b = w.belts[bi];
+      for (let idx = 0; idx < b.items.length; idx++) {
+        const it = b.items[idx];
+        if (it.id === id) return { where: 'belt', beltIndex: bi, itemIndex: idx, item: it, x: it.x, y: b.y };
+      }
+    }
+    for (let pi = 0; pi < w.boxes.length; pi++) {
+      const bx = w.boxes[pi];
+      for (let idx = 0; idx < bx.items.length; idx++) {
+        const it = bx.items[idx];
+        if (it.id === id) return { where: 'box', boxIndex: pi, itemIndex: idx, item: it, x: it.x, y: it.y };
+      }
+    }
+    return null;
+  }
+
+  function pruneSelection(w) {
+    w.sel = w.sel.filter(id => { const f = findItem(w, id); return f && (f.where === 'box' || isVisible(f.x)); });
+  }
+
+  function launchPod(w, bx) {
+    if (bx.launched) return;
+    bx.launched = true; bx.launchT = 0.85;
+    w.launchedCount += 1; w.combo += 1; w.score += 100 + w.combo * 20;
+    if (w.def.endless && w.timeLimit > 0) w.timeLeft = Math.min(99, w.timeLeft + 10);
+    w.events.push({ type: 'pod_launch', boxIndex: bx.i, kind: bx.kind, combo: w.combo });
+  }
+
+  function checkPodProgress(w) {
+    let allReady = w.boxes.length > 0;
+    for (const bx of w.boxes) {
+      if (bx.launched) continue;
+      if (isPodReady(bx)) {
+        if (!w.def.megaSave || w.podQueue.length > 0) launchPod(w, bx);
+      } else allReady = false;
+    }
+    if (w.def.megaSave) {
+      const readyNow = allReady && w.podQueue.length === 0 && w.boxes.every(bx => bx.launched || isPodReady(bx));
+      if (readyNow && !w.megaReady) { w.megaReady = true; w.events.push({ type: 'mega_ready' }); }
+      else if (!readyNow) w.megaReady = false;
+    }
+  }
+
+  function finishPodLaunch(w, bx) {
+    if (w.def.endless) {
+      bx.kind = BOT_KINDS[Math.floor(w._rng() * BOT_KINDS.length)];
+      bx.target = 2 + (w.launchedCount >= 4 && w._rng() < 0.45 ? 1 : 0);
+      bx.items = []; bx.launched = false; bx.launchT = 0;
+      w.events.push({ type: 'pod_arrive', boxIndex: bx.i, kind: bx.kind });
       return;
     }
-    g.t += dt;
-    if (g.phase === 'come') {
-      const k = Math.min(1, g.t / 1.6);
-      g.x = g.x0 + (g.tx - g.x0) * ease(k);
-      if (w.phase !== 'play' || !live(w.cons[g.box])) { leave(g); return; }
-      if (k >= 1) { mess(w); g.phase = 'mess'; g.t = 0; }
-    } else if (g.phase === 'mess') {
-      if (g.t >= 1.1) leave(g);
-    } else if (g.phase === 'leave') {
-      const k = Math.min(1, g.t / 1.4);
-      g.x = g.x0 + (1380 - g.x0) * ease(k);
-      if (k >= 1) away(w);
-    } else if (g.phase === 'flee') {
-      g.x += dt * 1100;
-      if (g.x > 1400) away(w);
+    if (w.podQueue.length > 0) {
+      const nd = w.podQueue.shift();
+      bx.kind = nd.kind; bx.target = nd.target;
+      bx.items = (nd.init || []).map(k => ({ id: nextId(w), kind: k, virus: k === 'virus', glitched: false, x: bx.x, y: bx.y }));
+      bx.launched = false; bx.launchT = 0;
+      layoutPodItems(bx);
+      w.events.push({ type: 'pod_arrive', boxIndex: bx.i, kind: bx.kind });
+      return;
     }
-  }
-  function leave(g) { g.phase = 'leave'; g.t = 0; g.x0 = g.x; }
-  function away(w) { const g = w.g; g.phase = 'away'; g.t = 0; g.x = 1380; g.next = g.every * (0.8 + 0.4 * w.rng()); }
-  // He goes for the box with the most toys in it (the one nearest to done).
-  function messTarget(w) {
-    const boxes = SF.boxes(w).filter(c => c.arrive <= 0);
-    if (!boxes.length) return null;
-    boxes.sort((a, b) => b.items.length - a.items.length || a.i - b.i);
-    return boxes[0];
-  }
-  function pick(w, arr) { return arr[Math.floor(w.rng() * arr.length) % arr.length]; }
-  function mess(w) {
-    const g = w.g, c = w.cons[g.box];
-    if (!live(c)) return;
-    const others = SF.boxes(w).filter(b => b !== c && b.items.length);
-    const belts = w.cons.filter(b => b.type === 'belt' && room(b) > 0);
-    const kinds = [];
-    if (c.items.length < c.cap) kinds.push('junk');
-    if (c.items.length) {
-      if (others.some(o => o.items.some(id => c.items.some(m => w.toys[m].k !== w.toys[id].k)))) kinds.push('swap', 'swap');
-      if (belts.length) kinds.push('steal');
-      kinds.push('switch');
+    if (w.boxes.every(b => b.launched)) {
+      w.phase = 'win';
+      w.score += 150 + Math.max(0, 3 - w.mistakes) * 50;
+      w.events.push({ type: 'win', score: w.score });
     }
-    if (!kinds.length) return;
-    const kind = pick(w, kinds), before = snap(w);
-    if (kind === 'junk') addToy(w, c, { k: pick(w, SF.KINDS), b: true });
-    else if (kind === 'steal') {
-      const id = pick(w, c.items), toy = w.toys[id];
-      removeToys(w, [id]);
-      addToy(w, pick(w, belts), { k: toy.k, b: toy.b });
-    } else if (kind === 'switch') {
-      const i = Math.floor(w.rng() * c.items.length) % c.items.length, old = w.toys[c.items[i]];
-      const k = pick(w, SF.KINDS.filter(k => k !== old.k));
-      delete w.toys[c.items[i]];
-      c.items[i] = make(w, { k: k, b: old.b });
-    } else {
-      const o = pick(w, others.filter(o => o.items.some(id => c.items.some(m => w.toys[m].k !== w.toys[id].k))));
-      const pairs = [];
-      c.items.forEach((a, i) => o.items.forEach((b, j) => { if (w.toys[a].k !== w.toys[b].k) pairs.push([i, j]); }));
-      const p = pick(w, pairs), a = c.items[p[0]];
-      c.items[p[0]] = o.items[p[1]]; o.items[p[1]] = a;
-    }
-    tidy(w);
-    g.entry = commit(w, 'gremlin', before);
-    ev(w, { t: 'mess', kind: kind, con: c.i });
   }
 
-  /* ------------------------------------------------------------- hints */
-  function onlySel(w, id) { return w.sel.length === 1 && w.sel[0] === id; }
-  function fits(items, missing) {
-    const m = Object.assign({}, missing);
-    for (const t of items) { if (t.b || !m[t.k]) return false; m[t.k]--; }
-    return true;
+  function cycleSelect(w, dir, add) {
+    const candidates = [];
+    for (const bx of w.boxes) if (!bx.launched) for (const it of bx.items) if (it.kind !== bx.kind || it.glitched || it.virus) candidates.push(it);
+    for (const b of w.belts) for (const it of b.items) if (isVisible(it.x)) candidates.push(it);
+    if (!candidates.length) return 'empty';
+    candidates.sort((a, b) => b.x - a.x);
+    const cur = w.sel.length ? candidates.findIndex(c => c.id === w.sel[w.sel.length - 1]) : -1;
+    const nextIdx = cur < 0 ? 0 : (cur + (dir < 0 ? -1 : 1) + candidates.length) % candidates.length;
+    const nextId = candidates[nextIdx].id;
+    w.sel = add && w.sel.length ? (w.sel.indexOf(nextId) >= 0 ? w.sel.slice() : w.sel.concat(nextId)) : [nextId];
+    w.events.push({ type: 'select', ids: w.sel.slice() });
+    return 'ok';
   }
-  // The next useful step, with only the tools this level has taught so far:
-  // { act, con, toy }, act one of SF.ACTS ('select' and 'place' are clicks).
-  SF.hint = function (w) {
-    if (w.phase === 'stamp') return { act: 'save' };
-    if (w.phase !== 'play') return null;
-    const T = w.def.tools, top = w.undo[w.undo.length - 1], rtop = w.redo[w.redo.length - 1];
-    if (T.undo && top && top.label === 'gremlin') return { act: T.gremlin ? 'gremlin' : 'undo' };
-    if (T.redo && w.def.redo && rtop && rtop.label !== 'gremlin') return { act: 'redo' };
-    const boxes = SF.boxes(w);
-    if (!boxes.length) return null;
-    const ready = boxes.find(b => SF.ready(w, b));
-    if (ready) return { act: 'ship', con: ready.i };
-    // The copy machine holds what a box needs: paste it there.
-    if (w.clip && w.clip.items.length) {
-      const ok = boxes.filter(b => b.cap - b.items.length >= w.clip.items.length && fits(w.clip.items, SF.need(w, b).missing));
-      if (ok.length) {
-        const b = ok.find(b => b.i === w.place) || ok[0];
-        return b.i === w.place ? { act: 'paste', con: b.i } : { act: 'place', con: b.i };
+
+  function handleClick(w, x, y, add) {
+    for (const bx of w.boxes) {
+      if (bx.launched) continue;
+      for (let i = bx.items.length - 1; i >= 0; i--) {
+        const it = bx.items[i];
+        if (Math.hypot(x - it.x, y - it.y) <= 34) {
+          w.activeBox = bx.i;
+          w.sel = add && w.sel.indexOf(it.id) < 0 ? w.sel.concat(it.id) : [it.id];
+          w.events.push({ type: 'select', ids: w.sel.slice() });
+          return 'ok';
+        }
+      }
+      if (Math.abs(x - bx.x) <= 126 && Math.abs(y - bx.y) <= 82) {
+        w.activeBox = bx.i; w.events.push({ type: 'focus_pod', boxIndex: bx.i }); return 'ok';
       }
     }
-    const B = boxes.find(b => b.i === w.place) || boxes[0], n = SF.need(w, B);
-    // A broken toy or one too many goes first.
-    if (n.extra.length) {
-      const id = n.extra[n.extra.length - 1];
-      if (onlySel(w, id)) return { act: T.del ? 'del' : 'cut', toy: id, con: B.i };
-      return { act: 'select', con: B.i, toy: id };
+    let best = null, bestDist = 60;
+    for (const b of w.belts) {
+      for (const it of b.items) {
+        if (!isVisible(it.x)) continue;
+        const d = Math.min(Math.hypot(x - it.x, y - b.y), Math.hypot(x - it.x, y - (b.y - 18)));
+        if (d <= bestDist) { bestDist = d; best = it; }
+      }
     }
-    const kind = SF.KINDS.find(k => n.missing[k] > 0);
-    if (!kind) return null;
-    // Where to take it from: one too many in another box (cut it out), a belt, any box.
-    let src = 0, how = 'copy';
-    for (const b of boxes) {
-      if (b === B) continue;
-      const id = SF.need(w, b).extra.find(id => w.toys[id].k === kind && !w.toys[id].b);
-      if (id) { src = id; if (T.cut) how = 'cut'; break; }
+    if (!best) return 'miss';
+    if (add) {
+      const idx = w.sel.indexOf(best.id);
+      if (idx >= 0) w.sel.splice(idx, 1); else w.sel.push(best.id);
+    } else w.sel = [best.id];
+    w.events.push({ type: 'select', ids: w.sel.slice() });
+    return 'ok';
+  }
+
+  function findTargetPod(w, kind) {
+    const ok = bx => !bx.launched && bx.kind === kind &&
+      bx.items.filter(it => it.kind === kind && !it.glitched && !it.virus).length < bx.target &&
+      bx.items.length < bx.target + 1;
+    if (w.boxes[w.activeBox] && ok(w.boxes[w.activeBox])) return w.boxes[w.activeBox];
+    return w.boxes.find(ok) || null;
+  }
+
+  function act(w, action) {
+    if (!w || w.phase !== 'play' || !action) return 'inactive';
+    pruneSelection(w);
+    const t = action.type || action.t;
+    if (t === 'click') return handleClick(w, action.x, action.y, !!action.add);
+    if (t === 'select' || t === 'tab') return cycleSelect(w, action.dir || 1, !!action.add);
+    if (t === 'focusPod') { if (w.boxes[action.boxIndex]) { w.activeBox = action.boxIndex; return 'ok'; } return 'invalid'; }
+
+    if (t === 'selectAll' || t === 'all') {
+      const ids = [];
+      for (const b of w.belts) for (const it of b.items) if (isVisible(it.x) && !it.virus && !it.glitched) ids.push(it.id);
+      if (!ids.length) { w.events.push({ type: 'warn', reason: 'no_bots' }); return 'empty'; }
+      w.sel = ids; w.score += 10; w.events.push({ type: 'selectAll', ids: ids.slice() });
+      return 'ok';
     }
-    if (!src) {
-      let bd = Infinity;
-      w.cons.forEach(c => {
-        if (c.type !== 'belt') return;
-        c.items.forEach((id, s) => {
-          if (!id || w.toys[id].k !== kind || w.toys[id].b) return;
-          const x = SF.beltX(w, s), d = SF.visible(x) ? Math.abs(x - 640) : 5000;
-          if (d < bd) { bd = d; src = id; }
-        });
+
+    if (t === 'copy' || t === 'cut') {
+      if (!w.sel.length) { w.events.push({ type: 'warn', reason: 'select_first' }); return 'no_selection'; }
+      const selected = w.sel.map(id => findItem(w, id)).filter(Boolean);
+      const heroes = selected.filter(f => !f.item.virus && !f.item.glitched);
+      if (!heroes.length) {
+        w.mistakes += 1; w.combo = 0;
+        w.events.push({ type: 'mistake', reason: t === 'copy' ? 'virus_copy' : 'virus_cut' });
+        return 'virus_error';
+      }
+      if (t === 'copy') {
+        w.clip = { cut: false, items: heroes.map(f => ({ kind: f.item.kind })) };
+        w.score += 15 * heroes.length;
+        w.events.push({ type: 'copy', ids: heroes.map(f => f.item.id), kinds: w.clip.items.map(i => i.kind) });
+        return 'ok';
+      }
+      pushUndo(w, 'cut');
+      const removed = heroes.map(h => ({ id: h.item.id, kind: h.item.kind, x: h.x, y: h.y }));
+      const remSet = new Set(heroes.map(h => h.item.id));
+      for (const b of w.belts) b.items = b.items.filter(it => !remSet.has(it.id));
+      for (const bx of w.boxes) { bx.items = bx.items.filter(it => !remSet.has(it.id)); layoutPodItems(bx); }
+      w.clip = { cut: true, items: heroes.map(h => ({ kind: h.item.kind })) };
+      w.sel = []; w.score += 20 * heroes.length;
+      w.events.push({ type: 'cut', items: removed });
+      checkPodProgress(w);
+      return 'ok';
+    }
+
+    if (t === 'paste') {
+      if (!w.clip || !w.clip.items.length) { w.events.push({ type: 'warn', reason: 'clip_empty' }); return 'empty_clip'; }
+      const placements = [];
+      for (const ci of w.clip.items) { const pod = findTargetPod(w, ci.kind); if (pod) placements.push({ pod: pod, kind: ci.kind }); }
+      if (!placements.length) {
+        if (w.megaReady || w.boxes.every(bx => bx.launched || isPodReady(bx))) {
+          w.events.push({ type: 'warn', reason: 'pod_full' }); return 'pod_full';
+        }
+        w.mistakes += 1; w.combo = 0; w.events.push({ type: 'mistake', reason: 'wrong_pod', boxIndex: w.activeBox });
+        return 'wrong_pod';
+      }
+      pushUndo(w, 'paste');
+      const deployed = [];
+      for (const pl of placements) {
+        const pod = pl.pod;
+        const validCount = pod.items.filter(it => it.kind === pod.kind && !it.glitched && !it.virus).length;
+        if (validCount >= pod.target) continue;
+        const bot = { id: nextId(w), kind: pl.kind, virus: false, glitched: false, x: pod.x, y: pod.y };
+        pod.items.push(bot); layoutPodItems(pod); w.activeBox = pod.i;
+        deployed.push({ id: bot.id, kind: bot.kind, boxIndex: pod.i, x: bot.x, y: bot.y });
+      }
+      if (!deployed.length) { w.undo.pop(); w.events.push({ type: 'warn', reason: 'pod_full' }); return 'pod_full'; }
+      if (w.clip.cut) w.clip = null;
+      w.score += 35 * deployed.length;
+      w.events.push({ type: 'paste', items: deployed });
+      checkPodProgress(w);
+      return 'ok';
+    }
+
+    if (t === 'delete' || t === 'del') {
+      let targets = w.sel.map(id => findItem(w, id)).filter(Boolean);
+      if (!targets.length) {
+        for (const bx of w.boxes) if (!bx.launched) {
+          const bad = bx.items.find(it => it.virus || it.glitched);
+          if (bad) { targets = [findItem(w, bad.id)]; break; }
+        }
+      }
+      if (!targets.length) {
+        let near = null;
+        for (const b of w.belts) for (const it of b.items) if (isVisible(it.x) && it.virus && (!near || it.x < near.x)) near = it;
+        if (near) targets = [findItem(w, near.id)];
+      }
+      if (!targets.length) { w.events.push({ type: 'warn', reason: 'nothing_to_zap' }); return 'no_target'; }
+      pushUndo(w, 'delete');
+      const remSet = new Set(targets.map(f => f.item.id));
+      let viruses = 0;
+      const zapped = targets.map(f => {
+        if (f.item.virus || f.item.glitched) viruses++;
+        return { id: f.item.id, kind: f.item.kind, virus: f.item.virus || f.item.glitched, x: f.x, y: f.y };
       });
+      for (const b of w.belts) b.items = b.items.filter(it => !remSet.has(it.id));
+      for (const bx of w.boxes) { bx.items = bx.items.filter(it => !remSet.has(it.id)); layoutPodItems(bx); }
+      w.sel = [];
+      if (viruses > 0) { w.zapped += viruses; w.combo += 1; w.score += 45 * viruses; }
+      w.events.push({ type: 'delete', items: zapped, viruses: viruses });
+      checkPodProgress(w);
+      return 'ok';
     }
-    if (!src) for (const b of boxes) { const id = b.items.find(id => w.toys[id].k === kind && !w.toys[id].b); if (id) { src = id; break; } }
-    if (!src) return null;
-    if (onlySel(w, src)) return { act: how, toy: src };
-    return { act: 'select', con: SF.find(w, src).con, toy: src };
+
+    if (t === 'undo' || t === 'redo') {
+      const stack = t === 'undo' ? w.undo : w.redo;
+      const other = t === 'undo' ? w.redo : w.undo;
+      if (!stack.length) { w.events.push({ type: 'warn', reason: t === 'undo' ? 'nothing_undo' : 'nothing_redo' }); return t === 'undo' ? 'empty_undo' : 'empty_redo'; }
+      other.push(snapshotState(w, t === 'undo' ? 'redo' : 'undo'));
+      const snap = stack.pop();
+      restoreSnapshot(w, snap);
+      const bonk = t === 'undo' && (snap.reason === 'saboteur' || w.saboteur.state === 'laugh');
+      if (bonk) { w.saboteur.state = 'away'; w.saboteur.timer = w.saboteur.every; w.bonks += 1; w.score += 60; }
+      else w.score += t === 'undo' ? 15 : 25;
+      w.events.push({ type: t, bonk: bonk });
+      checkPodProgress(w);
+      return 'ok';
+    }
+
+    if (t === 'saveShip' || t === 'save') {
+      if (w.megaReady) {
+        for (const bx of w.boxes) if (!bx.launched) launchPod(w, bx);
+        w.megaReady = false; w.score += 200; w.events.push({ type: 'mega_launch' });
+        return 'ok';
+      }
+      const readyPods = w.boxes.filter(bx => isPodReady(bx));
+      if (readyPods.length) { for (const bx of readyPods) launchPod(w, bx); return 'ok'; }
+      if (!w.saveBoostUsed) { w.saveBoostUsed = true; w.score += 20; w.events.push({ type: 'save_boost' }); return 'ok'; }
+      w.events.push({ type: 'warn', reason: 'fill_ships_first' });
+      return 'not_ready';
+    }
+    return 'unknown';
+  }
+
+  function stepSaboteur(w, dt) {
+    const sab = w.saboteur;
+    if (!sab.enabled || w.phase !== 'play') return;
+    sab.timer -= dt;
+    if (sab.state === 'away' && sab.timer <= 0) {
+      const cand = w.boxes.find(bx => !bx.launched && bx.items.some(it => !it.glitched && !it.virus));
+      if (!cand) { sab.timer = 4; return; }
+      Object.assign(sab, { state: 'warn', targetBox: cand.i, x: cand.x + 90, y: cand.y - 44, timer: 1.6 });
+      w.events.push({ type: 'saboteur_warn', boxIndex: cand.i });
+    } else if (sab.state === 'warn' && sab.timer <= 0) {
+      const bx = w.boxes[sab.targetBox];
+      const victim = bx && !bx.launched && bx.items.find(it => !it.glitched && !it.virus);
+      if (victim) {
+        pushUndo(w, 'saboteur'); victim.glitched = true; w.megaReady = false;
+        sab.state = 'laugh'; sab.timer = 5.0;
+        w.events.push({ type: 'saboteur_strike', boxIndex: bx.i, itemId: victim.id });
+      } else { sab.state = 'away'; sab.timer = sab.every; }
+    } else if (sab.state === 'laugh' && sab.timer <= 0) {
+      sab.state = 'away'; sab.timer = sab.every;
+    }
+  }
+
+  function step(w, dt) {
+    if (!w || w.phase !== 'play' || dt <= 0) return;
+    dt = Math.min(dt, 0.1);
+    w.time += dt; w.offset += w.speed * dt;
+    if (w.timeLimit > 0) {
+      w.timeLeft = Math.max(0, w.timeLeft - dt);
+      if (w.timeLeft <= 0) {
+        w.phase = w.def.endless && w.launchedCount > 0 ? 'win' : 'lose';
+        w.events.push(w.phase === 'win' ? { type: 'win', score: w.score, endless: true } : { type: 'timeup' });
+        return;
+      }
+    }
+    for (const b of w.belts) {
+      for (const it of b.items) {
+        const wasVis = isVisible(it.x);
+        it.x -= w.speed * dt;
+        if (!wasVis && isVisible(it.x) && !it.cued && !it.virus) {
+          it.cued = true; w.events.push({ type: 'cue', id: it.id, kind: it.kind });
+        }
+      }
+      while (b.items.length && b.items[0].x < BELT_EXIT_X) {
+        const gone = b.items.shift();
+        const si = w.sel.indexOf(gone.id);
+        if (si >= 0) w.sel.splice(si, 1);
+        if (gone.virus && w.def.tier > 0) { w.mistakes += 1; w.combo = 0; w.events.push({ type: 'virus_leak', beltIndex: b.i }); }
+      }
+      const rightmost = b.items.length ? b.items[b.items.length - 1].x : 0;
+      if (!b.items.length || rightmost <= BELT_SPAWN_X - b.spacing) {
+        const kind = pickSpawnKind(w, w._rng);
+        b.items.push({ id: nextId(w), kind: kind, virus: kind === 'virus', glitched: false, x: b.items.length ? Math.max(BELT_SPAWN_X, rightmost + b.spacing) : BELT_SPAWN_X, y: b.y, cued: false });
+      }
+    }
+    for (const bx of w.boxes) {
+      if (bx.launched && bx.launchT > 0) {
+        bx.launchT -= dt;
+        if (bx.launchT <= 0) { bx.launchT = 0; finishPodLaunch(w, bx); if (w.phase !== 'play') return; }
+      }
+    }
+    stepSaboteur(w, dt);
+  }
+
+  function hint(w) {
+    if (!w || w.phase !== 'play') return null;
+    pruneSelection(w);
+    if (w.undo.length && w.undo[w.undo.length - 1].reason === 'saboteur') return { act: 'undo' };
+    if (w.redo.length && w.def.preRedo) return { act: 'redo' };
+    if (w.megaReady) return { act: 'saveShip' };
+    for (const bx of w.boxes) if (!bx.launched) {
+      const bad = bx.items.find(it => it.glitched || it.virus);
+      if (bad) return w.undo.length ? { act: 'undo' } : { act: 'delete', targetId: bad.id };
+    }
+    for (const bx of w.boxes) if (!bx.launched) {
+      const wrong = bx.items.find(it => it.kind !== bx.kind);
+      if (wrong) return w.sel.length === 1 && w.sel[0] === wrong.id ? { act: 'cut', targetId: wrong.id } : { act: 'select', targetId: wrong.id, boxIndex: bx.i };
+    }
+    if (w.clip && w.clip.items.length) {
+      for (const ci of w.clip.items) { const pod = findTargetPod(w, ci.kind); if (pod) return { act: 'paste', boxIndex: pod.i }; }
+    }
+    if (w.def.dock.indexOf('delete') >= 0) {
+      for (const b of w.belts) { const v = b.items.find(it => isVisible(it.x) && it.virus && it.x < 560); if (v) return { act: 'delete', targetId: v.id }; }
+    }
+    if (w.sel.length) {
+      const heroes = w.sel.map(id => findItem(w, id)).filter(f => f && !f.item.virus && !f.item.glitched);
+      if (heroes.some(f => !!findTargetPod(w, f.item.kind))) return { act: 'copy' };
+    }
+    if (w.def.dock.indexOf('selectAll') >= 0) {
+      let matchVis = 0;
+      for (const b of w.belts) for (const it of b.items) if (isVisible(it.x) && !it.virus && findTargetPod(w, it.kind)) matchVis++;
+      if (matchVis >= 2) return { act: 'selectAll' };
+    }
+    for (const b of w.belts) for (const it of b.items) if (isVisible(it.x) && !it.virus && findTargetPod(w, it.kind)) return { act: 'select', targetId: it.id };
+    return null;
+  }
+
+  function defaultSave() {
+    return { coins: 0, stars: new Array(12).fill(0), bestScore: new Array(13).fill(0), theme: 'cyan', armor: 'std', themes: ['cyan'], armors: ['std'] };
+  }
+
+  function loadSave(raw) {
+    const d = defaultSave();
+    if (!raw || typeof raw !== 'object') return d;
+    if (typeof raw.coins === 'number' && raw.coins >= 0) d.coins = Math.floor(raw.coins);
+    if (Array.isArray(raw.stars)) for (let i = 0; i < 12; i++) d.stars[i] = clamp(raw.stars[i] | 0, 0, 3);
+    if (Array.isArray(raw.bestScore)) for (let i = 0; i < 13; i++) d.bestScore[i] = Math.max(0, raw.bestScore[i] | 0);
+    if (Array.isArray(raw.themes)) for (const id of raw.themes) if (THEMES.some(t => t.id === id) && d.themes.indexOf(id) < 0) d.themes.push(id);
+    if (Array.isArray(raw.armors)) for (const id of raw.armors) if (ARMORS.some(a => a.id === id) && d.armors.indexOf(id) < 0) d.armors.push(id);
+    if (d.themes.indexOf(raw.theme) >= 0) d.theme = raw.theme;
+    if (d.armors.indexOf(raw.armor) >= 0) d.armor = raw.armor;
+    return d;
+  }
+
+  const isOpen = () => true;
+  const totalStars = save => (save && Array.isArray(save.stars) ? save.stars : []).reduce((a, b) => a + (b | 0), 0);
+
+  function starsFor(w) {
+    if (!w || w.phase !== 'win') return 0;
+    if (w.def.endless) return w.launchedCount >= 6 ? 3 : w.launchedCount >= 3 ? 2 : 1;
+    return w.mistakes <= 1 ? 3 : w.mistakes <= 4 ? 2 : 1;
+  }
+
+  function outcome(w) {
+    if (!w || w.phase !== 'win') return 0.15;
+    const st = starsFor(w);
+    return st === 3 ? 1 : st === 2 ? 0.72 : 0.5;
+  }
+
+  function applyResult(save, w) {
+    const win = w.phase === 'win', stars = starsFor(w);
+    const coins = win ? 12 + w.launchedCount * 4 + stars * 5 + w.zapped * 2 : Math.min(8, w.launchedCount * 2);
+    save.coins += coins;
+    let newBest = false;
+    if (win && w.index < 12 && stars > save.stars[w.index]) save.stars[w.index] = stars;
+    if (w.score > (save.bestScore[w.index] || 0)) { save.bestScore[w.index] = w.score; newBest = win; }
+    return { win: win, stars: stars, coins: coins, best: newBest, score: w.score };
+  }
+
+  function buyItem(save, category, id) {
+    const list = category === 'armor' ? ARMORS : THEMES;
+    const owned = category === 'armor' ? save.armors : save.themes;
+    const key = category === 'armor' ? 'armor' : 'theme';
+    const item = list.find(x => x.id === id);
+    if (!item) return 'invalid';
+    if (owned.indexOf(id) >= 0) { save[key] = id; return 'equipped'; }
+    if (save.coins < item.price) return 'poor';
+    save.coins -= item.price; owned.push(id); save[key] = id;
+    return 'bought';
+  }
+
+  const SFEngine = {
+    W, H, POD_Y, CLONER, TURRET, BELT_EXIT_X, BELT_SPAWN_X,
+    BOT_KINDS, BOTS, SHORTCUTS, TIERS, THEMES, ARMORS, MISSIONS, COUNT: 12,
+    isVisible, sayBot, podSlot, isPodReady, create, findItem, act, step, hint,
+    defaultSave, loadSave, isOpen, totalStars, starsFor, outcome, applyResult, buyItem
   };
 
-  /* ------------------------------------------------------- stars, coins */
-  SF.slow = function (w) { if (w.def.calm) return false; return w.limit ? w.left < w.limit * 0.3 : w.t > w.par; };
-  // 3 stars: no box sent with the wrong toys, and quick. A wrong box or a slow day costs one
-  // (never a slow day in the calm first worlds).
-  SF.stars = function (w) {
-    if (w.phase !== 'done') return 0;
-    return Math.max(1, 3 - (w.mistakes > 0 ? 1 : 0) - (SF.slow(w) ? 1 : 0));
-  };
-  SF.coins = function (w) { return w.done * 2 + w.bonus + SF.stars(w) * 2; };
-  // 0..1 for Kit.dda, once per level played: a finished day by its stars, a day the
-  // clock ran out on a little for the boxes that went out.
-  SF.outcome = function (w) {
-    if (w.phase === 'done') return [0, 0.55, 0.8, 1][SF.stars(w)];
-    return Math.round(0.3 * (w.done / Math.max(1, w.total)) * 1000) / 1000;
-  };
-
-  /* -------------------------------------------------------------- saves */
-  SF.HATS = [
-    { id: 'none', name: 'بلا قبعة', price: 0 }, { id: 'cap', name: 'قبعة', price: 15 }, { id: 'hard', name: 'خوذة', price: 30 },
-    { id: 'chef', name: 'الطاهي', price: 45 }, { id: 'party', name: 'الحفلة', price: 60 }, { id: 'crown', name: 'تاج', price: 90 },
-    { id: 'prop', name: 'المروحة', price: 120 }
-  ];
-  SF.COLORS = [
-    { id: 'sun', name: 'شمسي', price: 0 }, { id: 'mint', name: 'نعناعي', price: 25 }, { id: 'sky', name: 'سماوي', price: 40 },
-    { id: 'candy', name: 'حلوى', price: 55 }, { id: 'night', name: 'ليلي', price: 90 }
-  ];
-  // { v: 1, stars: [0..3 per level], best: [fastest seconds per level, 0 none], coins,
-  //   hats: [owned ids], colors: [owned ids], hat, color }
-  SF.freshSave = function () {
-    return { v: 1, stars: new Array(SF.COUNT).fill(0), best: new Array(SF.COUNT).fill(0), coins: 0, hats: ['none'], colors: ['sun'], hat: 'none', color: 'sun' };
-  };
-  function int(v, lo, hi) { return typeof v === 'number' && Math.floor(v) === v && v >= lo && v <= hi; }
-  function obj(v) { return v && typeof v === 'object' && !Array.isArray(v) ? v : null; }
-  // Every field is checked: an old, a damaged or a hand-edited save always loads as a
-  // playable one, and keeps whatever is still good in it.
-  SF.loadSave = function (raw) {
-    const s = SF.freshSave(), r = obj(raw);
-    if (!r || r.v !== 1) return s;
-    const stars = Array.isArray(r.stars) ? r.stars : [], best = Array.isArray(r.best) ? r.best : [];
-    for (let i = 0; i < SF.COUNT; i++) {
-      s.stars[i] = int(stars[i], 0, 3) ? stars[i] : 0;
-      s.best[i] = int(best[i], 1, 99999) && s.stars[i] ? best[i] : 0;
-    }
-    s.coins = int(r.coins, 0, 9999999) ? r.coins : 0;
-    const owned = (key, all) => {
-      const list = Array.isArray(r[key]) ? r[key] : [];
-      return all.filter((x, i) => i === 0 || list.indexOf(x.id) >= 0).map(x => x.id);
-    };
-    s.hats = owned('hats', SF.HATS); s.colors = owned('colors', SF.COLORS);
-    s.hat = s.hats.indexOf(r.hat) >= 0 ? r.hat : 'none';
-    s.color = s.colors.indexOf(r.color) >= 0 ? r.color : 'sun';
-    return s;
-  };
-  // A level opens when the one before it has a star.
-  SF.isOpen = function (s, li) { return li === 0 || (li > 0 && li < SF.COUNT && s.stars[li - 1] > 0); };
-  SF.totalStars = function (s) { return s.stars.reduce((a, b) => a + b, 0); };
-  SF.worldStars = function (s, wi) { let n = 0; for (let i = 0; i < SF.PER_WORLD; i++) n += s.stars[wi * SF.PER_WORLD + i]; return n; };
-  // The level to play next: the first open one without a star, else the first without three.
-  SF.nextLevel = function (s) {
-    for (let i = 0; i < SF.COUNT; i++) if (SF.isOpen(s, i) && !s.stars[i]) return i;
-    for (let i = 0; i < SF.COUNT; i++) if (s.stars[i] < 3) return i;
-    return SF.COUNT - 1;
-  };
-  // Records a finished (or failed) day. Returns what changed, for the result screen.
-  SF.applyResult = function (s, w) {
-    const li = w.li, stars = SF.stars(w), before = s.stars[li], coins = w.phase === 'done' ? SF.coins(w) : w.done;
-    const wasOpen = li + 1 < SF.COUNT && SF.isOpen(s, li + 1);
-    const out = { stars: stars, before: before, coins: coins, best: false, fast: false, unlocked: -1, time: Math.max(1, Math.round(w.t)) };
-    s.coins = Math.min(9999999, s.coins + coins);
-    if (stars > before) { s.stars[li] = stars; out.best = true; }
-    if (stars && (!s.best[li] || out.time < s.best[li])) { out.fast = !!s.best[li]; s.best[li] = out.time; }
-    if (li + 1 < SF.COUNT && !wasOpen && SF.isOpen(s, li + 1)) out.unlocked = li + 1;
-    return out;
-  };
-  SF.shopItem = function (type, id) { return (type === 'hat' ? SF.HATS : SF.COLORS).find(x => x.id === id) || null; };
-  // Buys (if needed) and puts on a hat or a factory colour. Returns 'wear', 'bought' or 'poor'.
-  SF.buy = function (s, type, id) {
-    const item = SF.shopItem(type, id), owned = type === 'hat' ? s.hats : s.colors;
-    if (!item) return 'poor';
-    if (owned.indexOf(id) < 0) {
-      if (s.coins < item.price) return 'poor';
-      s.coins -= item.price; owned.push(id);
-      s[type] = id;
-      return 'bought';
-    }
-    s[type] = id;
-    return 'wear';
-  };
+  if (typeof module !== 'undefined' && module.exports) module.exports = SFEngine;
+  if (typeof window !== 'undefined') window.SFEngine = SFEngine;
 })();

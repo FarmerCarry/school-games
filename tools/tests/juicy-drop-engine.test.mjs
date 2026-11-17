@@ -1,8 +1,4 @@
-// Juicy Drop (سلّة الفواكه) pure engine unit tests:
-// UMD exports, purity, 10 fruit tiers, circle-circle physics, same-tier merging up to
-// Giant Watermelon + double-watermelon 500pt fountain, ice-cube melting, honey bubbles,
-// combo shake impulse, 1.2s/2.8s overflow grace, DDA scaling, bot solvability of all 12
-// challenge stages, endless coin guard (drops >= 5), saves, and shop.
+// سلة الفواكه (Juicy Drop: Turbo Monster-Fruit Blaster) — Pure Engine Unit Tests
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -16,364 +12,236 @@ const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const enginePath = path.join(repo, 'games/juicy-drop/engine.js');
 const engineSource = fs.readFileSync(enginePath, 'utf8');
 
-const JD = require(enginePath);
+const E = require(enginePath);
 const DT = 1 / 60;
-const EASY = JD.params(0), MID = JD.params(0.5), HARD = JD.params(1);
-const plain = v => JSON.parse(JSON.stringify(v));
 
-function step(w, n = 1, inp = {}) {
+function step(w, frames = 1, inp = {}) {
   const events = [];
-  for (let i = 0; i < n; i++) {
+  for (let i = 0; i < frames; i++) {
     w.ev.length = 0;
-    JD.step(w, DT, i === 0 ? inp : {});
+    E.step(w, DT, i === 0 ? inp : {});
     if (w.ev.length) events.push(...w.ev);
   }
   return events;
 }
 
-// Greedy bot that aims for matching unlocked fruits, honey bubbles, or adjacent ice cubes,
-// and triggers Combo Shake whenever charged.
-function playStageBot(levelIdx, P, maxDrops = 95) {
-  const w = JD.create(levelIdx, P, 4242 + levelIdx * 97);
-  for (let d = 0; d < maxDrops && !w.done; d++) {
-    if (w.shakeCharge >= 100 && w.fruits.length >= 4) {
-      step(w, 24, { shake: true });
-      if (w.done) break;
-    }
-    const cur = w.currentTier;
-    const bounds = JD.cloudBounds(w);
-    let targetX = null;
-
-    // 1. If a honey bubble goal is still needed and a bubble is floating, aim at it!
-    const needBubbles = w.goals.some(g => g.kind === 'bubbles' && !g.done);
-    if (needBubbles && w.bubbles.length) {
-      targetX = w.bubbles[0].x;
-    }
-
-    // 2. Otherwise aim directly over an accessible same-tier fruit!
-    if (targetX == null) {
-      const same = w.fruits.filter(f => f.tier === cur).sort((a, b) => a.y - b.y);
-      for (const cand of same) {
-        const blocked = w.fruits.some(o => o !== cand && o.y < cand.y - 6 && Math.abs(o.x - cand.x) < o.r + cand.r * 0.65);
-        if (!blocked) { targetX = cand.x; break; }
-      }
-    }
-
-    // 3. Otherwise aim near an ice cube or near tier+1 so future merges chain!
-    if (targetX == null && w.ices.length) {
-      const ice = w.ices[d % w.ices.length];
-      targetX = ice.x + ((d % 2 ? 1 : -1) * 18);
-    }
-    if (targetX == null) {
-      const nearNext = w.fruits.filter(f => f.tier === cur + 1).sort((a, b) => a.y - b.y)[0];
-      if (nearNext) targetX = nearNext.x + (nearNext.x > JD.CX ? -28 : 28);
-    }
-    if (targetX == null) {
-      // Spread across lanes ordered by tier from left to right so high fruits gather neatly!
-      const frac = (cur + 0.5) / 5;
-      targetX = bounds.min + (bounds.max - bounds.min) * frac + ((d % 3 - 1) * 14);
-    }
-
-    targetX = JD.clamp(targetX, bounds.min, bounds.max);
-    step(w, 1, { x: targetX, drop: true, dropKind: 'pointer' });
-    // Let fruits settle & merge for ~0.55s before next drop
-    step(w, 34);
-  }
-  return w;
-}
-
-test('UMD & purity: loads in Node and browser sandbox with zero Kit, DOM, timers, or Math.random', () => {
-  assert.ok(JD && JD.create && JD.step && JD.FRUITS.length === 10);
+test('UMD dual export & purity: Node module.exports + browser window.JDEngine, zero Kit/DOM/timers/Math.random', () => {
+  assert.ok(E && E.create && E.step && E.useGadget && E.FRUITS.length === 10);
   const sandbox = { window: {} };
   vm.runInNewContext(engineSource, sandbox);
-  assert.equal(sandbox.window.JD.FRUITS.length, 10);
+  assert.ok(sandbox.window.JDEngine);
+  assert.equal(sandbox.window.JDEngine.FRUITS.length, 10);
 
   const stripped = engineSource.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
   assert.doesNotMatch(stripped, /\bKit\b|\bdocument\b|setTimeout|setInterval|requestAnimationFrame|Math\.random|localStorage/);
 });
 
-test('10 expressive fruit tiers and 3 worlds × 4 stages have valid Arabic names and ascending radii', () => {
-  const expectedNames = ['توت', 'كرز', 'تمرة', 'تين', 'ليمونة', 'برتقالة', 'تفاحة', 'رمانة', 'شمّام', 'بطيخة عملاقة'];
-  assert.deepEqual(JD.FRUITS.map(f => f.name), expectedNames);
-  for (let i = 0; i < JD.FRUITS.length; i++) {
-    const f = JD.FRUITS[i];
+test('10 monster-fruit tiers, 3 open modes, and 3 difficulties have Arabic names and ascending radii/scores', () => {
+  for (let i = 0; i < E.FRUITS.length; i++) {
+    const f = E.FRUITS[i];
     assert.equal(f.tier, i);
+    assert.match(f.name, /[\u0600-\u06FF]/);
     assert.match(f.color, /^#[0-9a-f]{6}$/i);
     if (i > 0) {
-      assert.ok(f.r > JD.FRUITS[i - 1].r, `tier ${i} radius grows`);
-      assert.ok(f.score > JD.FRUITS[i - 1].score, `tier ${i} score grows`);
+      assert.ok(f.r > E.FRUITS[i - 1].r, `tier ${i} radius increases`);
+      assert.ok(f.score > E.FRUITS[i - 1].score, `tier ${i} score increases`);
     }
   }
-
-  assert.equal(JD.WORLDS.length, 3);
-  assert.equal(JD.LEVELS.length, 12);
-  assert.deepEqual(JD.WORLDS.map(w => w.name), ['سلّة الصباح', 'مكعبات الثلج', 'فقاعات العسل']);
-  JD.LEVELS.forEach((L, i) => {
-    assert.equal(L.id, `${Math.floor(i / 4) + 1}-${(i % 4) + 1}`);
-    assert.equal(L.world, Math.floor(i / 4));
-    assert.match(L.name, /[\u0600-\u06FF]/);
-    assert.match(L.desc, /[\u0600-\u06FF]/);
-    assert.ok(L.goals.length >= 1);
-  });
+  assert.deepEqual(Object.keys(E.MODES), ['classic', 'crates', 'rush']);
+  assert.deepEqual(Object.keys(E.DIFFS), ['easy', 'mid', 'hero']);
+  for (const m of Object.values(E.MODES)) assert.match(m.name, /[\u0600-\u06FF]/);
+  for (const d of Object.values(E.DIFFS)) assert.match(d.name, /[\u0600-\u06FF]/);
 });
 
-test('nothing moves by itself before input, and one-button Space drops spread across the jar', () => {
-  for (const mode of [0, 4, 8, 'endless']) {
-    const w = JD.create(mode);
-    assert.equal(w.drops, 0);
-    assert.equal(w.score, 0);
-    assert.equal(w.fruits.length, 0);
-    assert.equal(w.cloudX, JD.CX);
-    step(w, 180);
-    assert.equal(w.drops, 0);
-    assert.equal(w.fruits.length, 0);
-    assert.equal(w.bubbles.length, 0, 'World 3 honey bubbles wait for first drop');
-    assert.equal(w.cloudX, JD.CX, 'cloud stays stationary until player input');
-  }
+test('exact-X aiming & dropping: never teleports X randomly on Space or pointer drop', () => {
+  const w = E.create({ mode: 'classic', diff: 'mid', seed: 101 });
+  assert.equal(w.Jar, undefined);
+  assert.equal(w.jar.hw, 260, '520px wide central reactor tank');
+  assert.equal(w.cloudX, E.CX);
+  assert.equal(w.drops, 0);
 
-  // Repeated Space-only drops gently shift cloudX so fruits merge instead of towering vertically!
-  const w = JD.create('endless', EASY, 77);
-  const xs = [];
-  for (let k = 0; k < 10; k++) {
-    step(w, 1, { drop: true, dropKind: 'key' });
-    xs.push(w.fruits[w.fruits.length - 1].x);
-    step(w, 30);
-  }
-  assert.equal(w.drops, 10);
-  assert.ok(new Set(xs.map(x => Math.round(x))).size >= 4, 'Space-only drops spread horizontally');
+  // Move left via keyboard and drop
+  step(w, 10, { move: -1 });
+  const aimedLeft = w.cloudX;
+  assert.ok(aimedLeft < E.CX, 'keyboard move shifts cloudX left');
+
+  step(w, 1, { drop: true });
+  assert.equal(w.drops, 1);
+  assert.equal(w.fruits.length, 1);
+  assert.equal(w.fruits[0].x, aimedLeft, 'dropped fruit spawns at exact cloudX');
+  assert.equal(w.cloudX, aimedLeft, 'cloudX stays right where aimed after Space drop');
+
+  // Wait cooldown, aim at explicit pointer X, and drop 3 times without moving
+  step(w, 20);
+  const exactX = 712;
+  step(w, 1, { x: exactX, drop: true });
+  assert.equal(w.drops, 2);
+  assert.equal(w.fruits[w.fruits.length - 1].x, exactX);
+
+  step(w, 20);
+  step(w, 1, { drop: true });
+  assert.equal(w.drops, 3);
+  assert.equal(w.fruits[w.fruits.length - 1].x, exactX, 'repeated Space drop never randomizes X');
 });
 
-test('circle-circle elastic/damped physics keeps fruits inside jar walls and floor without overlap', () => {
-  const w = JD.create('endless', MID, 123);
-  // Drop non-matching fruits with fast sideways & downward velocity
-  JD.addFruit(w, 0, w.jar.left - 50, 200, -700, 600);
-  JD.addFruit(w, 3, w.jar.right + 50, 220, 700, 600);
-  JD.addFruit(w, 5, JD.CX, 250, 0, 400);
-  JD.addFruit(w, 2, JD.CX + 3, 180, 0, 200);
+test('circle-circle impulse collisions keep non-matching fruits inside tank walls & floor without overlap', () => {
+  const w = E.create({ mode: 'classic', diff: 'mid', seed: 202 });
+  E.spawnFruit(w, 0, w.jar.left - 40, 220, -650, 500, null);
+  E.spawnFruit(w, 2, w.jar.right + 40, 240, 650, 500, null);
+  E.spawnFruit(w, 4, E.CX, 260, 0, 420, null);
+  E.spawnFruit(w, 6, E.CX + 12, 190, -80, 300, null);
   step(w, 180);
 
   assert.equal(w.fruits.length, 4);
   for (let i = 0; i < w.fruits.length; i++) {
     const a = w.fruits[i];
-    assert.ok(a.x - a.r >= w.jar.left - 0.5 && a.x + a.r <= w.jar.right + 0.5, 'within left/right walls');
-    assert.ok(a.y + a.r <= w.jar.bottom + 0.5, 'above jar floor');
+    assert.ok(a.x - a.r >= w.jar.left - 0.5 && a.x + a.r <= w.jar.right + 0.5, 'inside walls');
+    assert.ok(a.y + a.r <= w.jar.bottom + 0.5, 'above floor');
     for (let j = i + 1; j < w.fruits.length; j++) {
       const b = w.fruits[j];
-      assert.ok(Math.hypot(a.x - b.x, a.y - b.y) >= a.r + b.r - 1.5, 'non-matching circles do not overlap');
+      assert.ok(Math.hypot(a.x - b.x, a.y - b.y) >= a.r + b.r - 1.5, 'circles resolved without overlap');
     }
   }
 });
 
-test('same-tier merging climbs all 10 tiers up to Giant Watermelon + 500pt double-watermelon celebration', () => {
-  for (let tier = 0; tier < 9; tier++) {
-    const w = JD.create('endless', MID, 500 + tier);
-    const r = JD.FRUITS[tier].r;
-    JD.addFruit(w, tier, JD.CX - r * 0.85, w.jar.bottom - r);
-    JD.addFruit(w, tier, JD.CX + r * 0.85, w.jar.bottom - r);
-    const ev = step(w, 10);
-    assert.equal(w.fruits.length, 1, `tier ${tier} merged into one fruit`);
-    assert.equal(w.fruits[0].tier, tier + 1);
-    assert.equal(w.merges, 1);
-    assert.ok(ev.some(e => e.t === 'merge' && e.tier === tier && e.toTier === tier + 1));
-    assert.ok(w.score >= JD.FRUITS[tier + 1].score);
-  }
+test('multi-tier chain merges, shockwave impulse, and Tier-9 Super Watermelon mega boom', () => {
+  // Chain merge: two Tier-1 cherries merge into a Tier-2 kiwi right next to another Tier-2 kiwi -> Tier-3 lemon!
+  const w = E.create({ mode: 'classic', diff: 'easy', seed: 303 });
+  const r1 = E.FRUITS[1].r, r2 = E.FRUITS[2].r;
+  const bystander = E.spawnFruit(w, 5, E.CX + 150, w.jar.bottom - E.FRUITS[5].r, 0, 0, null);
+  E.spawnFruit(w, 1, E.CX - r1 * 0.85, w.jar.bottom - r1, 0, 0, null);
+  E.spawnFruit(w, 1, E.CX + r1 * 0.85, w.jar.bottom - r1, 0, 0, null);
+  E.spawnFruit(w, 2, E.CX + r1 + r2 * 0.9, w.jar.bottom - r2, 0, 0, null);
 
-  // Merging two Tier-9 Giant Watermelons pops both + awards 500 bonus points!
-  const w = JD.create('endless', EASY, 999);
-  const wr = JD.FRUITS[9].r;
-  JD.addFruit(w, 9, JD.CX - wr * 0.9, w.jar.bottom - wr);
-  JD.addFruit(w, 9, JD.CX + wr * 0.9, w.jar.bottom - wr);
-  const ev = step(w, 12);
-  assert.equal(w.fruits.length, 0, 'both Giant Watermelons vanish in celebration');
-  assert.equal(w.watermelonsMerged, 1);
-  assert.equal(w.score, 500);
-  assert.equal(w.shakeCharge, 100);
-  assert.ok(ev.some(e => e.t === 'watermelon_boom' && e.bonus === 500));
+  const ev = step(w, 30);
+  assert.ok(w.merges >= 2, 'chained two consecutive merges');
+  assert.ok(w.combo >= 2, 'built multi-merge combo');
+  assert.ok(w.fruits.some(f => f.tier === 3), 'produced Tier-3 Turbo Lemon from chain');
+  assert.ok(bystander.x > E.CX + 150, 'merge shockwave nudged neighboring bystander fruit');
+  assert.ok(ev.some(e => e.t === 'merge' && e.toTier === 3));
+
+  // Two Tier-9 Super Watermelons trigger mega_boom (+600 pts)
+  const w2 = E.create({ mode: 'classic', diff: 'mid', seed: 304 });
+  const r9 = E.FRUITS[9].r;
+  E.spawnFruit(w2, 9, E.CX - r9 * 0.88, w2.jar.bottom - r9, 0, 0, null);
+  E.spawnFruit(w2, 9, E.CX + r9 * 0.88, w2.jar.bottom - r9, 0, 0, null);
+  const ev2 = step(w2, 12);
+  assert.equal(w2.fruits.length, 0);
+  assert.equal(w2.superBooms, 1);
+  assert.ok(w2.score >= E.SUPER_BOOM_BONUS);
+  assert.ok(ev2.some(e => e.t === 'mega_boom'));
 });
 
-test('World 2 ice cubes block fruits until adjacent merges crack and melt them into active fruits', () => {
-  const w = JD.create(4, MID, 321); // Stage 2-1 has 2 ice cubes (tier 3 Figs inside)
-  assert.equal(w.ices.length, 2);
-  const iceX = w.ices[0].x, iceY = w.ices[0].y;
-  // Place two Cherries right next to the first ice cube so they merge adjacent to it
-  JD.addFruit(w, 1, iceX, iceY - w.ices[0].r - 22);
-  JD.addFruit(w, 1, iceX + 18, iceY - w.ices[0].r - 22);
-  const ev = step(w, 20);
-  assert.ok(ev.some(e => e.t === 'melt' && e.freed === true), 'adjacent merge melted the ice cube');
-  assert.equal(w.melted, 1);
-  assert.equal(w.ices.length, 1);
-  assert.ok(w.fruits.some(f => f.tier === 3), 'trapped Fig popped out into active fruits');
+test('Fever Gauge launches Fever Mode and free Rainbow Wildcard merges with any fruit tier', () => {
+  const w = E.create({ mode: 'classic', diff: 'easy', seed: 404 });
+  w.fever = 90;
+  const r2 = E.FRUITS[2].r;
+  E.spawnFruit(w, 2, 500 - r2 * 0.85, w.jar.bottom - r2, 0, 0, null);
+  E.spawnFruit(w, 2, 500 + r2 * 0.85, w.jar.bottom - r2, 0, 0, null);
 
-  // Multi-layer ice cube (hp = 2) takes 2 nearby merges
-  const w2 = JD.create('endless', MID, 111);
-  JD.addIce(w2, 5, JD.CX, w2.jar.bottom - 62, 2);
-  JD.addFruit(w2, 0, JD.CX - 10, w2.jar.bottom - 140);
-  JD.addFruit(w2, 0, JD.CX + 10, w2.jar.bottom - 140);
-  step(w2, 10);
-  assert.equal(w2.ices.length, 1);
-  assert.equal(w2.ices[0].hp, 1, 'first merge cracked 1 frost layer');
-  JD.addFruit(w2, 0, JD.CX + 55, w2.jar.bottom - 75);
-  JD.addFruit(w2, 0, JD.CX + 75, w2.jar.bottom - 75);
-  step(w2, 15);
-  assert.equal(w2.ices.length, 0, 'second merge freed the Orange');
-  assert.ok(w2.fruits.some(f => f.tier === 5));
-});
-
-test('World 3 honey bubbles rise gently after play starts and pop for score + shake charge', () => {
-  const w = JD.create(8, MID, 777); // Stage 3-1
-  const bu = JD.addBubble(w, JD.CX, 420);
-  const y0 = bu.y;
-  step(w, 20);
-  assert.ok(bu.y < y0, 'honey bubble floats upward');
-  // Drop a fruit straight onto the honey bubble
-  JD.addFruit(w, 2, bu.x, bu.y - 10, 0, 120);
   const ev = step(w, 10);
-  assert.ok(ev.some(e => e.t === 'honey_pop'));
-  assert.equal(w.bubblesPopped, 1);
-  assert.ok(w.score >= 15);
-  assert.ok(w.shakeCharge >= 22);
+  assert.equal(w.feverActive, true, 'Fever activated at 100%');
+  assert.equal(w.currentPower, 'rainbow', 'Fever arms free Rainbow Wildcard in dropper');
+  assert.ok(ev.some(e => e.t === 'fever_start'));
+
+  // Drop the Rainbow Wildcard directly onto a Tier-6 Knight Pomegranate -> upgrades to Tier-7 Boxing Melon!
+  const target = E.spawnFruit(w, 6, 720, w.jar.bottom - E.FRUITS[6].r, 0, 0, null);
+  const aim = E.aimInfo({ ...w, cloudX: 720 });
+  assert.equal(aim.willMerge, true, 'aimInfo reports merge match for Rainbow Wildcard');
+
+  const evDrop = step(w, 45, { x: target.x, drop: true });
+  assert.ok(evDrop.some(e => e.t === 'merge' && e.toTier === 7 && e.rainbow === true), 'Rainbow Wildcard merged Tier 6 -> Tier 7');
+  assert.ok(w.fruits.some(f => f.tier === 7));
 });
 
-test('Combo Shake charges from merges and nudges separated same-tier fruits into chain merges', () => {
-  const w = JD.create('endless', MID, 202);
-  assert.equal(JD.shakeJar(w), false, 'cannot shake when meter < 100');
+test('Action Gadgets: Juice Bomb blasts 3 small clutter fruits, Tank Shake jolts pairs to merge, Swap changes fruit', () => {
+  const w = E.create({ mode: 'classic', diff: 'easy', seed: 505 });
+  E.spawnFruit(w, 0, 440, w.jar.bottom - 17, 0, 0, null);
+  E.spawnFruit(w, 1, 510, w.jar.bottom - 23, 0, 0, null);
+  E.spawnFruit(w, 2, 590, w.jar.bottom - 30, 0, 0, null);
+  E.spawnFruit(w, 7, 760, w.jar.bottom - 82, 0, 0, null);
 
-  // Put two Lemons separated horizontally on the floor so they cannot reach each other alone
-  JD.addFruit(w, 4, JD.CX - 115, w.jar.bottom - 46);
-  JD.addFruit(w, 4, JD.CX + 115, w.jar.bottom - 46);
-  step(w, 45);
-  assert.equal(w.merges, 0);
+  assert.equal(E.useGadget(w, 'bomb'), true);
+  assert.equal(w.fruits.length, 1, 'Juice Bomb cleared the 3 small clutter fruits and kept Tier-7');
+  assert.equal(w.fruits[0].tier, 7);
 
-  w.shakeCharge = 100;
-  const ev = step(w, 1, { shake: true });
-  assert.ok(ev.some(e => e.t === 'shake'));
-  assert.equal(w.shakeCharge, 0);
-  assert.equal(w.shakesUsed, 1);
-  step(w, 80);
-  assert.ok(w.merges >= 1 && w.fruits.some(f => f.tier === 5), 'Combo Shake nudged the two Lemons into merging into an Orange');
+  // Tank Shake nudges separated matching fruits together so they collide and merge
+  const wShake = E.create({ mode: 'classic', diff: 'easy', seed: 506 });
+  const r3 = E.FRUITS[3].r;
+  E.spawnFruit(wShake, 3, E.CX - r3 - 26, wShake.jar.bottom - r3, 0, 0, null);
+  E.spawnFruit(wShake, 3, E.CX + r3 + 26, wShake.jar.bottom - r3, 0, 0, null);
+  assert.equal(E.useGadget(wShake, 'shake'), true);
+  step(wShake, 60);
+  assert.equal(wShake.merges, 1, 'Tank Shake jolted matching pair into merging');
+
+  // Swap guarantees a different currentTier
+  const beforeTier = w.currentTier;
+  assert.equal(E.useGadget(w, 'swap'), true);
+  assert.notEqual(w.currentTier, beforeTier, 'Swap switched dropper to a distinct fruit tier');
 });
 
-test('overflow timer grace: warns only after 1.2s settled and ends round only after 2.8s continuous overflow', () => {
-  const w = JD.create('endless', JD.params(null), 808);
-  // Build a stable column of non-matching fruits reaching above TOP_Y (152)
-  // Floor = 668: radii 93 (d=186 -> 482), 79 (d=158 -> 324), 67 (d=134 -> 190), 46 (d=92 -> top at 98 < 152!)
-  const tiers = [8, 7, 6, 4];
-  let y = w.jar.bottom;
-  for (const t of tiers) {
-    const r = JD.FRUITS[t].r;
-    const f = JD.addFruit(w, t, w.jar.left + r + 2, y - r);
-    f.landed = true;
-    y -= r * 2;
+test('fair overflow grace timer: ignores fresh drops, warns first, and triggers overflow only after sustained rim breach', () => {
+  const w = E.create({ mode: 'classic', diff: 'hero', seed: 606 });
+  // Fresh drop above rim has age < 1.15s -> no warning or instant game-over
+  const f = E.spawnFruit(w, 5, E.CX, TOP_Y(w) - 20, 0, 0, null);
+  function TOP_Y(world) { return world.jar.top; }
+  // Keep fruit suspended above rim to test grace & warning progression
+  for (let i = 0; i < 50; i++) {
+    f.y = w.jar.top - 20;
+    f.vy = 0;
+    E.step(w, DT, {});
   }
-  // Keep vertical column pinned against wall by blocking beside it
-  const side = JD.addFruit(w, 9, w.jar.left + 250, w.jar.bottom - 108);
-  side.landed = true;
-  // Pin x so we test exact timer thresholds cleanly without rolling off
-  const pin = () => {
-    let py = w.jar.bottom;
-    for (let i = 0; i < 4; i++) {
-      const f = w.fruits[i];
-      f.x = w.jar.left + f.r + 2; f.y = py - f.r; f.vx = 0; f.vy = 0; f.landed = true;
-      py -= f.r * 2;
-    }
-  };
-
-  // At 1.0s (< 1.2s): NO warning, NO overflow
-  for (let i = 0; i < 60; i++) { pin(); JD.step(w, DT, {}); }
-  assert.equal(w.warning, false, 'no warning before 1.2s');
+  assert.equal(w.warning, false, 'no warning during initial 1.15s drop grace');
   assert.equal(w.over, false);
 
-  // At 1.3s (>= 1.2s, < 2.8s): warning is ON, still NOT game over!
-  for (let i = 0; i < 18; i++) { pin(); JD.step(w, DT, {}); }
-  assert.equal(w.warning, true, 'pulses warning after 1.2s');
-  assert.equal(w.over, false, 'does not end round at 1.3s');
-
-  // If overflow clears before 2.8s, warning & timer reset cleanly!
-  w.fruits.splice(3, 1); // top fruit merged/cleared
-  JD.step(w, DT, {});
-  assert.equal(w.warning, false, 'warning clears immediately when fruit settles below line');
-  assert.equal(w.overTime, 0, 'continuous overflow timer resets to 0');
-
-  // Put top fruit back and hold past 2.8s continuous overflow -> triggers round end!
-  const topF = JD.addFruit(w, 4, w.jar.left + 48, 130);
-  topF.landed = true;
-  for (let i = 0; i < 172; i++) {
-    topF.x = w.jar.left + 48; topF.y = 130; topF.vx = 0; topF.vy = 0; topF.landed = true;
-    JD.step(w, DT, {});
+  // Advance past age 1.15s while keeping fruit pinned above rim
+  let sawWarn = false;
+  for (let i = 0; i < 200 && !w.done; i++) {
+    f.y = w.jar.top - 25;
+    f.vy = 0;
+    E.step(w, DT, {});
+    if (w.warning) sawWarn = true;
   }
-  assert.equal(w.over, true, 'round ends after 2.8s continuous overflow');
-  assert.equal(w.done, true);
-  assert.equal(w.won, false);
+  assert.equal(sawWarn, true, 'warning blinks before game over');
+  assert.equal(w.over, true, 'sustained overflow ends the round fairly');
 });
 
-test('DDA parameters scale jar width, merge magnet, overflow grace, and multi-count goals cleanly', () => {
-  assert.ok(EASY.jarWidthBonus > MID.jarWidthBonus && MID.jarWidthBonus > HARD.jarWidthBonus);
-  assert.ok(EASY.mergeMagnet > MID.mergeMagnet && MID.mergeMagnet > HARD.mergeMagnet);
-  assert.ok(EASY.overflowGrace >= MID.overflowGrace && MID.overflowGrace >= HARD.overflowGrace);
-  assert.ok(EASY.goalScale < MID.goalScale && MID.goalScale < HARD.goalScale);
-
-  const wEasy = JD.create(8, EASY); // Stage 3-1 has bubbles: 3, oranges: 2
-  const wHard = JD.create(8, HARD);
-  assert.ok(wEasy.jar.hw > wHard.jar.hw, 'easy jar is wider than hard jar');
-  assert.ok(wEasy.goals[0].target <= wHard.goals[0].target, 'easy goal count <= hard goal count');
-});
-
-test('all 12 challenge stages are solvable by the greedy bot across EASY, MID, and HARD difficulty', () => {
-  for (let i = 0; i < JD.LEVELS.length; i++) {
-    for (const [label, P] of [['easy', EASY], ['mid', MID], ['hard', HARD]]) {
-      const w = playStageBot(i, P);
-      assert.equal(w.won, true, `Stage ${JD.LEVELS[i].id} (${label}) won: goals=${JSON.stringify(w.goals)} over=${w.over}`);
-      assert.ok(JD.stars(w) >= 1 && JD.stars(w) <= 3);
-    }
+test('Crate Smash & 90s Turbo Rush modes: crate destruction wins, Rush timer evaluates stars & Hero bumper moves', () => {
+  // Crate Smash mode
+  const wc = E.create({ mode: 'crates', diff: 'easy', seed: 707 });
+  assert.equal(wc.crates.length, 5);
+  while (wc.crates.length > 0 && !wc.done) {
+    const cr = wc.crates[0];
+    const r2 = E.FRUITS[2].r;
+    E.spawnFruit(wc, 2, cr.x - 12, cr.y - cr.r - r2 + 2, 0, 0, null);
+    E.spawnFruit(wc, 2, cr.x + 12, cr.y - cr.r - r2 + 2, 0, 0, null);
+    step(wc, 15);
   }
-});
+  assert.equal(wc.crates.length, 0);
+  assert.equal(wc.done, true);
+  assert.equal(wc.won, true);
+  assert.ok(wc.stars >= 1);
 
-test('saves, stars, shop purchases (5 jars + 5 faces), and endless coin guard (drops >= 5)', () => {
-  const fresh = plain(JD.freshSave());
-  assert.equal(fresh.lv.length, 12);
-  assert.equal(JD.JARS.length, 5);
-  assert.equal(JD.FACES.length, 5);
+  // 90s Turbo Rush mode on Hero difficulty (moving bumper + star target check)
+  const wr = E.create({ mode: 'rush', diff: 'hero', seed: 808 });
+  assert.ok(wr.bumper, 'Hero Rush includes moving bumper');
+  const startBumperX = wr.bumper.x;
+  step(wr, 20);
+  assert.notEqual(wr.bumper.x, startBumperX, 'bumper oscillates horizontally');
 
-  for (const corrupt of [null, undefined, 'bad', 42, [], {}, { v: 2 }, { v: 1, coins: -99, jar: 9, face: 3 }]) {
-    assert.deepEqual(plain(JD.loadSave(corrupt)), fresh);
-  }
+  wr.score = wr.targets[2] + 50;
+  wr.timeLeft = 0.02;
+  const evRush = step(wr, 3);
+  assert.equal(wr.done, true);
+  assert.equal(wr.won, true);
+  assert.equal(wr.stars, 3);
+  assert.ok(evRush.some(e => e.t === 'win' && e.stars === 3));
 
-  // Endless mode NEVER pays coins when drops < 5 (anti-farming guard)
-  const wShort = JD.create('endless');
-  wShort.score = 300;
-  wShort.drops = 4;
-  assert.equal(JD.endlessCoins(wShort), 0);
-  const s = JD.freshSave();
-  assert.equal(JD.applyEndlessResult(s, 300, 4, 10).coins, 0);
-  assert.equal(s.coins, 0);
-
-  // With drops >= 5, endless mode awards coins and tracks personal best!
-  wShort.drops = 5;
-  wShort.score = 350;
-  const c5 = JD.endlessCoins(wShort);
-  assert.ok(c5 > 0);
-  const er = JD.applyEndlessResult(s, 350, 5, c5);
-  assert.equal(er.best, true);
-  assert.equal(er.coins, c5);
-  assert.equal(s.bestEndless, 350);
-
-  // Stage progression unlocks next stage and worlds (every 4 stages)
-  for (let i = 0; i < 4; i++) {
-    const r = JD.applyStageResult(s, i, 3, 250, 8);
-    if (i === 3) assert.equal(r.world, 1, 'completing 1-4 opens World 2');
-  }
-  assert.equal(JD.totalStars(s), 12);
-  assert.equal(JD.isOpen(s, 4), true);
-  assert.equal(JD.nextLevel(s), 4);
-
-  // Shop buys & equips jars and face packs
-  s.coins = 50;
-  assert.equal(JD.buy(s, 'jar', 1), 'bought');
-  assert.equal(s.jar, 1);
-  assert.equal(JD.buy(s, 'face', 2), 'bought');
-  assert.equal(s.face, 2);
-  assert.equal(JD.buy(s, 'jar', 0), 'wear');
-  assert.equal(s.jar, 0);
-  s.coins = 1;
-  assert.equal(JD.buy(s, 'jar', 4), '', 'insufficient coins rejected');
+  // Shop purchase & equip
+  const save = E.loadSave({ coins: 60 });
+  assert.equal(E.buyOrEquip(save, 'dropper', 1), 'bought');
+  assert.equal(save.dropper, 1);
+  assert.equal(save.coins, 35);
+  assert.equal(E.buyOrEquip(save, 'dropper', 0), 'equipped');
+  assert.equal(save.dropper, 0);
 });

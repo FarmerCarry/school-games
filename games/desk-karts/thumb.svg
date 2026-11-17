@@ -1,109 +1,120 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" direction="rtl">
   <defs>
-    <linearGradient id="desk" x1="0" y1="0" x2="0.3" y2="1">
-      <stop offset="0" stop-color="#e0a45e"/>
-      <stop offset="1" stop-color="#b57232"/>
+    <linearGradient id="deskBg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f3c687"/>
+      <stop offset="100%" stop-color="#d29653"/>
     </linearGradient>
-    <radialGradient id="turboGlow">
-      <stop offset="0" stop-color="#ffd23f" stop-opacity="0.9"/>
-      <stop offset="0.55" stop-color="#ff5d9e" stop-opacity="0.35"/>
-      <stop offset="1" stop-color="#ff5d9e" stop-opacity="0"/>
-    </radialGradient>
-    <linearGradient id="gift" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#ff5d9e"/>
-      <stop offset="0.5" stop-color="#ffd23f"/>
-      <stop offset="1" stop-color="#3df0ff"/>
+    <linearGradient id="roadGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#434968"/>
+      <stop offset="100%" stop-color="#282d46"/>
+    </linearGradient>
+    <linearGradient id="kartRed" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ff7582"/>
+      <stop offset="55%" stop-color="#ff384c"/>
+      <stop offset="100%" stop-color="#b81d2d"/>
+    </linearGradient>
+    <linearGradient id="nitroFlame" x1="1" y1="0.5" x2="0" y2="0.5">
+      <stop offset="0%" stop-color="#fff7ae"/>
+      <stop offset="45%" stop-color="#ffd23f"/>
+      <stop offset="100%" stop-color="#ff4e00" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="boxGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ff5964"/>
+      <stop offset="50%" stop-color="#ffd23f"/>
+      <stop offset="100%" stop-color="#38bdf8"/>
     </linearGradient>
   </defs>
 
-  <!-- Warm honey-oak school desk planks -->
-  <rect width="400" height="400" fill="url(#desk)"/>
-  <g stroke="#7c4314" stroke-opacity="0.22" stroke-width="2.5">
-    <line x1="0" y1="82" x2="400" y2="82"/>
-    <line x1="0" y1="176" x2="400" y2="176"/>
-    <line x1="0" y1="274" x2="400" y2="274"/>
-    <path d="M30 42 Q120 34 210 44" fill="none"/>
-    <path d="M190 312 Q280 322 370 310" fill="none"/>
+  <!-- Classroom Wooden Desk Surface -->
+  <rect width="400" height="400" rx="32" fill="url(#deskBg)"/>
+  <g stroke="#c28340" stroke-width="3" opacity="0.45">
+    <line x1="0" y1="92" x2="400" y2="92"/>
+    <line x1="0" y1="196" x2="400" y2="196"/>
+    <line x1="0" y1="304" x2="400" y2="304"/>
   </g>
 
-  <!-- Corner lined notebook sheet -->
-  <g transform="translate(338 66) rotate(12)">
-    <rect x="-56" y="-44" width="112" height="88" rx="8" fill="#fffdf7" stroke="#141a44" stroke-width="4"/>
-    <g stroke="#90caf9" stroke-width="2">
-      <line x1="-48" y1="-22" x2="48" y2="-22"/>
-      <line x1="-48" y1="-4" x2="48" y2="-4"/>
-      <line x1="-48" y1="14" x2="48" y2="14"/>
-      <line x1="-48" y1="32" x2="48" y2="32"/>
+  <!-- Giant Classroom Props: Red Crayon & Pink/Blue Eraser -->
+  <g transform="translate(68 118) rotate(-22)">
+    <rect x="-52" y="-14" width="94" height="28" rx="6" fill="#ef4444" stroke="#1b1640" stroke-width="4"/>
+    <polygon points="42,-13 64,0 42,13" fill="#ef4444" stroke="#1b1640" stroke-width="4" stroke-linejoin="round"/>
+    <rect x="-28" y="-12" width="48" height="24" fill="#fee2e2" opacity="0.75"/>
+  </g>
+  <g transform="translate(332 320) rotate(16)">
+    <rect x="-42" y="-22" width="84" height="44" rx="10" fill="#fb7185" stroke="#1b1640" stroke-width="4"/>
+    <rect x="10" y="-22" width="32" height="44" rx="8" fill="#38bdf8" stroke="#1b1640" stroke-width="4"/>
+  </g>
+
+  <!-- Sweeping Micro-Machines Track Curve -->
+  <path d="M -30 330 Q 155 315 395 160" fill="none" stroke="#1b1640" stroke-width="148" stroke-linecap="round"/>
+  <path d="M -30 330 Q 155 315 395 160" fill="none" stroke="#ffffff" stroke-width="134" stroke-linecap="round"/>
+  <path d="M -30 330 Q 155 315 395 160" fill="none" stroke="#ff5964" stroke-width="134" stroke-dasharray="34 34" stroke-linecap="round"/>
+  <path d="M -30 330 Q 155 315 395 160" fill="none" stroke="url(#roadGrad)" stroke-width="114" stroke-linecap="round"/>
+  <path d="M -30 330 Q 155 315 395 160" fill="none" stroke="#ffffff" stroke-opacity="0.35" stroke-width="6" stroke-dasharray="22 24" stroke-linecap="round"/>
+
+  <!-- Wooden Centimeter Ruler Stunt Ramp -->
+  <g transform="translate(154 274) rotate(-25)">
+    <rect x="-78" y="-32" width="156" height="64" rx="10" fill="#fbbf24" stroke="#1b1640" stroke-width="4.5"/>
+    <rect x="-66" y="-24" width="132" height="10" rx="4" fill="#fef08a"/>
+    <g stroke="#1b1640" stroke-width="3">
+      <line x1="-56" y1="-32" x2="-56" y2="-16"/>
+      <line x1="-32" y1="-32" x2="-32" y2="-20"/>
+      <line x1="-8" y1="-32" x2="-8" y2="-16"/>
+      <line x1="16" y1="-32" x2="16" y2="-20"/>
+      <line x1="40" y1="-32" x2="40" y2="-16"/>
+      <line x1="64" y1="-32" x2="64" y2="-20"/>
     </g>
-    <line x1="28" y1="-40" x2="28" y2="40" stroke="#ff6b8b" stroke-width="2"/>
+    <polyline points="-18,-10 0,4 -18,18" fill="none" stroke="#00e5ff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+    <polyline points="14,-10 32,4 14,18" fill="none" stroke="#00e5ff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
   </g>
 
-  <!-- Sweeping tabletop S-curve racing track -->
-  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M-24 272 C88 276 112 126 218 134 C312 142 326 252 426 238" stroke="#141a44" stroke-opacity="0.32" stroke-width="124"/>
-    <path d="M-24 272 C88 276 112 126 218 134 C312 142 326 252 426 238" stroke="#141a44" stroke-width="112"/>
-    <path d="M-24 272 C88 276 112 126 218 134 C312 142 326 252 426 238" stroke="#ff6b8b" stroke-width="100"/>
-    <path d="M-24 272 C88 276 112 126 218 134 C312 142 326 252 426 238" stroke="#ffd166" stroke-width="100" stroke-dasharray="22 22" stroke-linecap="butt"/>
-    <path d="M-24 272 C88 276 112 126 218 134 C312 142 326 252 426 238" stroke="#383e56" stroke-width="86"/>
-    <path d="M-24 272 C88 276 112 126 218 134 C312 142 326 252 426 238" stroke="#ffffff" stroke-opacity="0.28" stroke-width="4" stroke-dasharray="12 16"/>
+  <!-- Rainbow Classroom Surprise Box & Gold Coins -->
+  <g transform="translate(332 156) rotate(10)">
+    <rect x="-28" y="-28" width="56" height="56" rx="13" fill="url(#boxGrad)" stroke="#1b1640" stroke-width="4.5"/>
+    <text x="0" y="10" text-anchor="middle" font-family="Fredoka, Cairo, sans-serif" font-weight="900" font-size="32" fill="#1b1640">؟</text>
+  </g>
+  <g transform="translate(284 218)">
+    <circle r="15" fill="#ffd23f" stroke="#1b1640" stroke-width="3.5"/>
+    <circle r="9" fill="none" stroke="#f59e0b" stroke-width="2.5"/>
   </g>
 
-  <!-- Wooden school ruler boost bridge on the curve -->
-  <g transform="translate(268 168) rotate(36)">
-    <rect x="-38" y="-17" width="76" height="34" rx="7" fill="#ffd166" stroke="#8c4a08" stroke-width="3.5"/>
-    <path d="M-28 -17 V-9 M-16 -17 V-11 M-4 -17 V-9 M8 -17 V-11 M20 -17 V-9 M32 -17 V-11" stroke="#7a4100" stroke-width="2.2"/>
-    <path d="M-16 -8 L-4 0 L-16 8 M6 -8 L18 0 L6 8" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Blue & Orange Drift Sparks + Twin Nitro Flames -->
+  <g transform="translate(208 206) rotate(-26)">
+    <ellipse cx="-92" cy="-14" rx="58" ry="14" fill="url(#nitroFlame)"/>
+    <ellipse cx="-92" cy="14" rx="58" ry="14" fill="url(#nitroFlame)"/>
+    <circle cx="-68" cy="28" r="11" fill="#ff7b00"/>
+    <circle cx="-88" cy="34" r="8" fill="#00e5ff"/>
+    <circle cx="-54" cy="-30" r="9" fill="#00e5ff"/>
+
+    <!-- Drop shadow -->
+    <ellipse cx="4" cy="34" rx="64" ry="20" fill="#120e2e" opacity="0.38"/>
+
+    <!-- Back Tires -->
+    <rect x="-54" y="-44" width="34" height="16" rx="7" fill="#1e2436" stroke="#1b1640" stroke-width="4"/>
+    <rect x="24" y="-44" width="34" height="16" rx="7" fill="#1e2436" stroke="#1b1640" stroke-width="4"/>
+
+    <!-- Exhaust Pipes & Gold Spoiler -->
+    <rect x="-72" y="-20" width="18" height="11" rx="4" fill="#cbd5e1" stroke="#1b1640" stroke-width="3.5"/>
+    <rect x="-72" y="9" width="18" height="11" rx="4" fill="#cbd5e1" stroke="#1b1640" stroke-width="3.5"/>
+    <rect x="-66" y="-36" width="20" height="72" rx="8" fill="#ffd23f" stroke="#1b1640" stroke-width="4.5"/>
+
+    <!-- Chunky Zoomed-In Cartoon Kart Chassis -->
+    <rect x="-58" y="-32" width="124" height="64" rx="24" fill="url(#kartRed)" stroke="#1b1640" stroke-width="5"/>
+    <rect x="-42" y="-10" width="98" height="20" rx="8" fill="#ffd23f"/>
+    <rect x="26" y="-22" width="24" height="8" rx="4" fill="#ffffff" opacity="0.55"/>
+
+    <!-- Cockpit & Racer Helmet -->
+    <rect x="-22" y="-21" width="46" height="42" rx="16" fill="#1e2436" stroke="#1b1640" stroke-width="4"/>
+    <circle cx="0" cy="0" r="19" fill="#ffffff" stroke="#1b1640" stroke-width="4"/>
+    <rect x="3" y="-13" width="15" height="26" rx="6" fill="#38bdf8" stroke="#1b1640" stroke-width="3"/>
+
+    <!-- Front Tires -->
+    <rect x="-54" y="28" width="34" height="16" rx="7" fill="#1e2436" stroke="#1b1640" stroke-width="4"/>
+    <rect x="24" y="28" width="34" height="16" rx="7" fill="#1e2436" stroke="#1b1640" stroke-width="4"/>
   </g>
 
-  <!-- Bouncy pink-and-blue school eraser bumper -->
-  <g transform="translate(86 118) rotate(-20)">
-    <rect x="-30" y="-17" width="60" height="34" rx="9" fill="#141a44" opacity="0.25" transform="translate(3 5)"/>
-    <rect x="-30" y="-17" width="60" height="34" rx="9" fill="#ff6b9d" stroke="#141a44" stroke-width="4"/>
-    <path d="M8 -15 H21 A7 7 0 0 1 28 -8 V8 A7 7 0 0 1 21 15 H8 Z" fill="#4cc9f0"/>
-    <rect x="-30" y="-17" width="60" height="34" rx="9" fill="none" stroke="#141a44" stroke-width="4"/>
-  </g>
-
-  <!-- Rainbow toy gift box -->
-  <g transform="translate(332 222) rotate(10)">
-    <rect x="-18" y="-18" width="36" height="36" rx="8" fill="url(#gift)" stroke="#141a44" stroke-width="4"/>
-    <rect x="-4" y="-16" width="8" height="32" fill="#ffffff"/>
-    <rect x="-16" y="-4" width="32" height="8" fill="#ffffff"/>
-  </g>
-
-  <!-- Rival cyan kart with rubber ducky chasing behind -->
-  <g transform="translate(96 244) rotate(-35)">
-    <ellipse cx="0" cy="4" rx="28" ry="20" fill="#141a44" opacity="0.32"/>
-    <g fill="#1d2238" stroke="#141a44" stroke-width="3">
-      <rect x="-20" y="-22" width="15" height="8" rx="3"/><rect x="-20" y="14" width="15" height="8" rx="3"/>
-      <rect x="8" y="-22" width="15" height="8" rx="3"/><rect x="8" y="14" width="15" height="8" rx="3"/>
-    </g>
-    <rect x="-25" y="-16" width="50" height="32" rx="13" fill="#2ec4ff" stroke="#141a44" stroke-width="4"/>
-    <rect x="-20" y="-4.5" width="40" height="9" fill="#ffffff"/>
-    <circle cx="-2" cy="0" r="9.5" fill="#fff" stroke="#141a44" stroke-width="3.2"/>
-    <rect x="2" y="-5.5" width="6" height="11" rx="2.5" fill="#ffd23f"/>
-  </g>
-
-  <!-- Hero red kart drifting ahead with pencil-rocket booster & juicy flame! -->
-  <circle cx="176" cy="158" r="58" fill="url(#turboGlow)"/>
-  <g transform="translate(192 146) rotate(-14)">
-    <path d="M-28 -10 L-62 0 L-28 10 Z" fill="#ff5d9e"/>
-    <path d="M-26 -6 L-48 0 L-26 6 Z" fill="#ffd23f"/>
-    <ellipse cx="2" cy="6" rx="34" ry="23" fill="#141a44" opacity="0.32"/>
-    <g fill="#1d2238" stroke="#141a44" stroke-width="3.2">
-      <rect x="-24" y="-26" width="18" height="10" rx="3.5"/><rect x="-24" y="16" width="18" height="10" rx="3.5"/>
-      <rect x="10" y="-26" width="18" height="10" rx="3.5"/><rect x="10" y="16" width="18" height="10" rx="3.5"/>
-    </g>
-    <rect x="-30" y="-19" width="60" height="38" rx="15" fill="#ff4d6d" stroke="#141a44" stroke-width="4.5"/>
-    <rect x="-24" y="-5.5" width="48" height="11" fill="#ffd166"/>
-    <!-- Pencil rocket topper -->
-    <rect x="-32" y="-7" width="20" height="14" rx="4" fill="#ffd166" stroke="#141a44" stroke-width="3"/>
-    <circle cx="-1" cy="0" r="11" fill="#ffffff" stroke="#141a44" stroke-width="3.5"/>
-    <rect x="3" y="-6.5" width="7" height="13" rx="3" fill="#3df0ff"/>
-  </g>
-
-  <!-- Arabic game title -->
-  <g font-family="Fredoka, 'Segoe UI', Tahoma, sans-serif" font-weight="700" text-anchor="middle" direction="rtl">
-    <text x="200" y="370" font-size="56" fill="#141a44" stroke="#141a44" stroke-width="15" stroke-linejoin="round" paint-order="stroke">سباق المكاتب</text>
-    <text x="200" y="370" font-size="56" fill="#ffffff">سباق المكاتب</text>
+  <!-- Title Banner Badge -->
+  <g transform="translate(200 56)">
+    <rect x="-166" y="-34" width="332" height="68" rx="22" fill="#1b1640" opacity="0.92" stroke="#ffd23f" stroke-width="4.5"/>
+    <text x="0" y="12" text-anchor="middle" font-family="Fredoka, Cairo, Tajawal, sans-serif" font-weight="900" font-size="42" fill="#ffd23f" stroke="#120e2e" stroke-width="2">سباق المكاتب</text>
   </g>
 </svg>

@@ -1,134 +1,146 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
   <defs>
     <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#3f93f0"/>
-      <stop offset="1" stop-color="#bfe8ff"/>
+      <stop offset="0" stop-color="#2678e8"/>
+      <stop offset="0.65" stop-color="#7fd2ff"/>
+      <stop offset="1" stop-color="#d8f5ff"/>
     </linearGradient>
-    <radialGradient id="sun" cx="0.5" cy="0.5" r="0.5">
-      <stop offset="0" stop-color="#fff6b0" stop-opacity="0.9"/>
-      <stop offset="1" stop-color="#ffd23a" stop-opacity="0"/>
+    <linearGradient id="cave" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#221e3d"/>
+      <stop offset="1" stop-color="#110e24"/>
+    </linearGradient>
+    <radialGradient id="dglow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#6ffcff" stop-opacity="0.85"/>
+      <stop offset="1" stop-color="#1fe0d8" stop-opacity="0"/>
     </radialGradient>
-    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
-      <stop offset="0" stop-color="#8ff8ff" stop-opacity="0.9"/>
-      <stop offset="1" stop-color="#3fe6dc" stop-opacity="0"/>
+    <radialGradient id="tglow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#fff07a" stop-opacity="0.95"/>
+      <stop offset="0.5" stop-color="#ff6a2a" stop-opacity="0.5"/>
+      <stop offset="1" stop-color="#ff2a2a" stop-opacity="0"/>
     </radialGradient>
-    <pattern id="dirt" width="20" height="20" patternUnits="userSpaceOnUse">
-      <rect width="20" height="20" fill="#8a5a36"/>
-      <rect x="3" y="4" width="4" height="3" fill="#6e4527"/>
-      <rect x="12" y="11" width="5" height="3" fill="#6e4527"/>
-      <rect x="14" y="2" width="3" height="2" fill="#a07048"/>
-      <rect x="5" y="14" width="3" height="3" fill="#a07048"/>
+    <pattern id="dirt" width="24" height="24" patternUnits="userSpaceOnUse">
+      <rect width="24" height="24" fill="#8b5a34"/>
+      <rect x="3" y="4" width="6" height="4" fill="#6f4526"/>
+      <rect x="14" y="13" width="6" height="4" fill="#6f4526"/>
+      <rect x="15" y="3" width="4" height="3" fill="#a87349"/>
+      <rect x="5" y="16" width="5" height="4" fill="#a87349"/>
     </pattern>
-    <pattern id="stone" width="20" height="20" patternUnits="userSpaceOnUse">
-      <rect width="20" height="20" fill="#5e5e68"/>
-      <rect x="2" y="3" width="6" height="3" fill="#6e6e78"/>
-      <rect x="11" y="12" width="6" height="3" fill="#4c4c56"/>
-      <rect x="13" y="4" width="3" height="3" fill="#71717b"/>
-      <rect x="4" y="13" width="3" height="3" fill="#4c4c56"/>
-    </pattern>
-    <pattern id="leaf" width="20" height="20" patternUnits="userSpaceOnUse">
-      <rect width="20" height="20" fill="#3a9e32"/>
-      <rect x="2" y="3" width="6" height="4" fill="#56c244"/>
-      <rect x="11" y="10" width="6" height="4" fill="#56c244"/>
-      <rect x="12" y="2" width="4" height="3" fill="#2a7a25"/>
-      <rect x="3" y="12" width="4" height="4" fill="#2a7a25"/>
-      <rect x="2" y="3" width="2" height="2" fill="#86e070"/>
+    <pattern id="stone" width="24" height="24" patternUnits="userSpaceOnUse">
+      <rect width="24" height="24" fill="#525468"/>
+      <rect x="2" y="3" width="8" height="4" fill="#64677e"/>
+      <rect x="12" y="14" width="8" height="4" fill="#3e4052"/>
+      <rect x="4" y="15" width="5" height="4" fill="#6a6d85"/>
     </pattern>
   </defs>
-  <rect width="400" height="400" fill="url(#sky)"/>
-  <!-- sun & clouds -->
-  <circle cx="330" cy="150" r="70" fill="url(#sun)"/>
-  <rect x="306" y="126" width="48" height="48" fill="#ffe45c"/>
-  <rect x="314" y="134" width="32" height="32" fill="#fff4a8"/>
-  <g fill="#ffffff">
-    <rect x="18" y="140" width="80" height="20" rx="10"/>
-    <circle cx="44" cy="140" r="16"/><circle cx="70" cy="134" r="20"/>
+
+  <!-- Sky & Sun -->
+  <rect width="400" height="260" fill="url(#sky)"/>
+  <circle cx="344" cy="116" r="44" fill="#fff394" opacity="0.45"/>
+  <rect x="322" y="94" width="44" height="44" rx="6" fill="#ffe042" stroke="#1b1640" stroke-width="3"/>
+  <rect x="330" y="102" width="28" height="28" rx="3" fill="#fff9b8"/>
+
+  <!-- Clouds & Hills -->
+  <g fill="#ffffff" opacity="0.92">
+    <rect x="20" y="128" width="76" height="20" rx="10"/>
+    <circle cx="44" cy="126" r="15"/><circle cx="68" cy="122" r="18"/>
   </g>
-  <!-- far hills -->
-  <path d="M0 250 L40 210 L80 232 L130 190 L180 226 L230 196 L290 230 L340 200 L400 226 L400 300 L0 300 Z" fill="#8fc0a8"/>
-  <!-- tree -->
-  <rect x="44" y="200" width="20" height="80" fill="#7a5230"/>
-  <rect x="50" y="200" width="4" height="80" fill="#5e3e20"/>
-  <path d="M14 220 v-20 h10 v-20 h10 v-10 h40 v10 h10 v20 h10 v20 h-10 v10 h-70 v-10 Z" fill="url(#leaf)"/>
-  <!-- ground: grass steps -->
-  <path d="M0 280 H120 V260 H240 V280 H300 V250 H400 V400 H0 Z" fill="url(#dirt)"/>
-  <path d="M0 280 H120 V260 H240 V280 H300 V250 H400 V262 H300 V292 H240 V272 H120 V292 H0 Z" fill="#5cc23c"/>
-  <path d="M0 290 H120 V270 H240 V290 H300 V260 H400 V264 H300 V294 H240 V274 H120 V294 H0 Z" fill="#3f942a"/>
-  <!-- underground cave with ores -->
-  <path d="M0 330 H400 V400 H0 Z" fill="url(#stone)"/>
-  <path d="M170 350 h60 v-10 h40 v20 h20 v40 H150 v-30 h20 Z" fill="#26263a"/>
-  <circle cx="215" cy="378" r="40" fill="url(#glow)"/>
-  <g>
-    <rect x="30" y="345" width="20" height="20" fill="#5e5e68"/>
-    <rect x="34" y="349" width="6" height="6" fill="#ffd23a"/><rect x="42" y="356" width="5" height="5" fill="#ffd23a"/><rect x="34" y="349" width="2" height="2" fill="#fffbc0"/>
-    <rect x="330" y="350" width="20" height="20" fill="#5e5e68"/>
-    <rect x="333" y="353" width="7" height="6" fill="#3fe6dc"/><rect x="341" y="360" width="6" height="6" fill="#3fe6dc"/><rect x="333" y="353" width="2" height="2" fill="#e8ffff"/>
-    <rect x="90" y="370" width="20" height="20" fill="#5e5e68"/>
-    <rect x="93" y="374" width="6" height="5" fill="#e07a3c"/><rect x="101" y="381" width="5" height="5" fill="#e07a3c"/>
+  <path d="M0 228 L52 188 L104 214 L164 176 L228 212 L292 182 L354 208 L400 186 V260 H0 Z" fill="#64ba7e"/>
+
+  <!-- Voxel Tree on Left -->
+  <rect x="36" y="176" width="20" height="58" fill="#784d2a" stroke="#1b1640" stroke-width="3"/>
+  <path d="M12 182 h68 v-24 h-12 v-18 h-44 v18 h-12 Z" fill="#3cc44b" stroke="#1b1640" stroke-width="3"/>
+  <rect x="24" y="146" width="20" height="8" fill="#7bf072"/>
+
+  <!-- Stepped Grass Surface -->
+  <path d="M0 232 H150 V248 H276 V226 H400 V290 H0 Z" fill="url(#dirt)" stroke="#1b1640" stroke-width="3"/>
+  <path d="M0 232 H150 V248 H276 V226 H400 V240 H276 V262 H150 V246 H0 Z" fill="#4cd94c" stroke="#1b1640" stroke-width="2.5"/>
+
+  <!-- Underground Monster & Treasure Cave -->
+  <rect x="0" y="274" width="400" height="126" fill="url(#stone)"/>
+  <path d="M18 286 H382 V388 H18 Z" rx="18" fill="url(#cave)" stroke="#1b1640" stroke-width="4"/>
+  <circle cx="206" cy="342" r="68" fill="url(#dglow)"/>
+
+  <!-- Embedded Cave Ores (Gold, Ruby, Diamond) -->
+  <g stroke="#1b1640" stroke-width="2.5">
+    <rect x="24" y="292" width="34" height="34" rx="4" fill="#5c5f76"/>
+    <rect x="30" y="298" width="9" height="9" fill="#ff3b6b"/><rect x="43" y="310" width="9" height="9" fill="#ff3b6b"/>
+    <rect x="342" y="292" width="34" height="34" rx="4" fill="#5c5f76"/>
+    <rect x="348" y="298" width="10" height="9" fill="#3ff6ee"/><rect x="360" y="311" width="9" height="9" fill="#3ff6ee"/>
+    <rect x="342" y="346" width="34" height="34" rx="4" fill="#5c5f76"/>
+    <rect x="349" y="353" width="9" height="9" fill="#ffd438"/><rect x="361" y="364" width="9" height="9" fill="#ffd438"/>
   </g>
-  <!-- big diamond sparkle in cave -->
-  <g transform="translate(200 360)">
-    <path d="M6 0 h18 l8 8 l-17 22 l-17 -22 Z" fill="#3fe6dc" stroke="#1a8f8c" stroke-width="2"/>
-    <path d="M6 0 h8 l-6 8 h-8 Z" fill="#b8fffb"/>
+
+  <!-- Glowing Treasure Chest in Cave -->
+  <g transform="translate(86 338)">
+    <rect x="-26" y="-14" width="52" height="38" rx="6" fill="#c97828" stroke="#1b1640" stroke-width="3.5"/>
+    <rect x="-26" y="-14" width="52" height="14" rx="5" fill="#e89a3c" stroke="#1b1640" stroke-width="3"/>
+    <rect x="-26" y="-2" width="52" height="6" fill="#ffd438"/>
+    <rect x="-6" y="-5" width="12" height="13" rx="3" fill="#fff08a" stroke="#1b1640" stroke-width="2.5"/>
   </g>
-  <!-- block being mined with pop particles -->
-  <rect x="262" y="210" width="40" height="40" fill="url(#dirt)" stroke="#3f2a18" stroke-width="2"/>
-  <rect x="262" y="210" width="40" height="10" fill="#5cc23c"/>
-  <path d="M282 222 l6 8 l-4 6 l8 6 M282 230 l-8 6" stroke="#2a1a0c" stroke-width="3" fill="none"/>
-  <rect x="310" y="196" width="10" height="10" fill="#8a5a36"/>
-  <rect x="318" y="178" width="7" height="7" fill="#5cc23c"/>
-  <rect x="300" y="182" width="8" height="8" fill="#6e4527"/>
-  <!-- player -->
-  <g transform="translate(206 260)">
-    <rect x="-12" y="-36" width="11" height="26" fill="#3b4a8c"/>
-    <rect x="1" y="-36" width="11" height="26" fill="#2f3c78"/>
-    <rect x="-13" y="-12" width="12" height="12" fill="#3a2a1a"/>
-    <rect x="1" y="-12" width="12" height="12" fill="#3a2a1a"/>
-    <rect x="-14" y="-68" width="28" height="34" fill="#2fb5a8"/>
-    <rect x="-14" y="-68" width="28" height="5" fill="#5fd8cc"/>
-    <rect x="-16" y="-100" width="32" height="32" fill="#f2c49b"/>
-    <rect x="-18" y="-104" width="36" height="11" fill="#5a3418"/>
-    <rect x="-18" y="-104" width="10" height="22" fill="#5a3418"/>
-    <rect x="4" y="-88" width="9" height="9" fill="#ffffff"/>
-    <rect x="8" y="-86" width="5" height="6" fill="#1d2340"/>
-    <rect x="1" y="-76" width="7" height="3" fill="#ff9a9a"/>
-    <!-- arm + pickaxe raised -->
-    <g transform="translate(6 -62) rotate(-60)">
-      <rect x="0" y="-5" width="26" height="10" fill="#27978c"/>
-      <rect x="22" y="-5" width="7" height="10" fill="#f2c49b"/>
-      <g transform="translate(28 0) rotate(20)">
-        <rect x="-3" y="-4" width="40" height="8" fill="#7a5230"/>
-        <path d="M30 -24 q16 24 0 48 l-8 -2 q12 -22 0 -44 Z" fill="#4ef0e6" stroke="#1fa8a4" stroke-width="2"/>
+
+  <!-- Big Sparkling Diamond -->
+  <g transform="translate(182 344)">
+    <polygon points="0,-24 22,-6 0,24 -22,-6" fill="#3ff6ee" stroke="#1b1640" stroke-width="3.5"/>
+    <polygon points="0,-24 12,-6 0,4 -12,-6" fill="#cafffd"/>
+  </g>
+
+  <!-- Bouncy Crystal Cave Slime (Right Side of Cave) -->
+  <g transform="translate(278 352)">
+    <rect x="-32" y="-32" width="64" height="52" rx="14" fill="#2ee89e" fill-opacity="0.9" stroke="#1b1640" stroke-width="3.5"/>
+    <rect x="-20" y="-20" width="40" height="30" rx="8" fill="#18a874" opacity="0.65"/>
+    <polygon points="0,-44 10,-30 -10,-30" fill="#7affd4" stroke="#1b1640" stroke-width="2.5"/>
+    <rect x="-18" y="-14" width="11" height="12" rx="3" fill="#ffffff"/>
+    <rect x="7" y="-14" width="11" height="12" rx="3" fill="#ffffff"/>
+    <rect x="-14" y="-10" width="6" height="7" rx="2" fill="#1b1640"/>
+    <rect x="10" y="-10" width="6" height="7" rx="2" fill="#1b1640"/>
+    <path d="M-8 6 Q0 13 8 6" fill="none" stroke="#1b1640" stroke-width="3" stroke-linecap="round"/>
+  </g>
+
+  <!-- TNT Crate with Sizzling Spark Fuse -->
+  <circle cx="322" cy="196" r="46" fill="url(#tglow)"/>
+  <g transform="translate(322 204) rotate(5)">
+    <rect x="-26" y="-26" width="52" height="52" rx="6" fill="#e63535" stroke="#1b1640" stroke-width="3.5"/>
+    <rect x="-26" y="-9" width="52" height="18" fill="#ffffff" stroke="#1b1640" stroke-width="2.5"/>
+    <text x="0" y="6" font-family="Fredoka, Arial, sans-serif" font-weight="900" font-size="16" text-anchor="middle" fill="#1b1640">TNT</text>
+    <path d="M0 -26 Q6 -38 14 -40" fill="none" stroke="#5a3a22" stroke-width="4" stroke-linecap="round"/>
+    <polygon points="16,-48 20,-40 28,-42 22,-35 26,-27 17,-31 10,-26 12,-35 5,-40 13,-41" fill="#fff266" stroke="#ff5a1f" stroke-width="1.5"/>
+  </g>
+
+  <!-- Voxel Hero Swinging Diamond Pickaxe -->
+  <g transform="translate(190 248)">
+    <!-- Jet-Spring Boots & Legs -->
+    <rect x="-15" y="-34" width="13" height="24" rx="2" fill="#32489c" stroke="#1b1640" stroke-width="3"/>
+    <rect x="2" y="-34" width="13" height="24" rx="2" fill="#25377d" stroke="#1b1640" stroke-width="3"/>
+    <rect x="-17" y="-12" width="16" height="12" rx="3" fill="#ff9f1c" stroke="#1b1640" stroke-width="3"/>
+    <rect x="1" y="-12" width="16" height="12" rx="3" fill="#ff9f1c" stroke="#1b1640" stroke-width="3"/>
+    <!-- Torso -->
+    <rect x="-17" y="-68" width="34" height="36" rx="4" fill="#22b8cf" stroke="#1b1640" stroke-width="3.5"/>
+    <rect x="-14" y="-64" width="28" height="7" fill="#66e4f7"/>
+    <!-- Head -->
+    <rect x="-19" y="-104" width="38" height="36" rx="5" fill="#f6c59c" stroke="#1b1640" stroke-width="3.5"/>
+    <path d="M-21 -106 h42 v13 h-30 v12 h-12 Z" fill="#593318" stroke="#1b1640" stroke-width="3"/>
+    <rect x="3" y="-89" width="10" height="10" rx="2" fill="#ffffff"/>
+    <rect x="7" y="-87" width="6" height="7" rx="1" fill="#1b1640"/>
+    <path d="M-1 -74 Q6 -69 12 -74" fill="none" stroke="#1b1640" stroke-width="2.8" stroke-linecap="round"/>
+    <!-- Raised Arm + Giant Diamond Pickaxe -->
+    <g transform="translate(10 -60) rotate(-42)">
+      <rect x="-4" y="-6" width="28" height="12" rx="4" fill="#1ca2b8" stroke="#1b1640" stroke-width="3"/>
+      <rect x="20" y="-6" width="9" height="12" rx="3" fill="#f6c59c" stroke="#1b1640" stroke-width="2.5"/>
+      <g transform="translate(30 0) rotate(18)">
+        <rect x="-4" y="-5" width="46" height="9" rx="3" fill="#8a562c" stroke="#1b1640" stroke-width="3"/>
+        <path d="M32 -28 Q52 0 32 28 L22 23 Q37 0 22 -23 Z" fill="#3ff6ee" stroke="#1b1640" stroke-width="3.5"/>
+        <path d="M31 -22 Q43 -4 35 10 L28 7 Q34 -4 26 -18 Z" fill="#d4ffff"/>
       </g>
     </g>
   </g>
-  <!-- pig -->
-  <g transform="translate(355 250)">
-    <rect x="-18" y="-10" width="7" height="10" fill="#e0899c"/><rect x="8" y="-10" width="7" height="10" fill="#e0899c"/>
-    <rect x="-22" y="-32" width="38" height="23" fill="#f7a8ba"/>
-    <rect x="10" y="-40" width="20" height="20" fill="#f7a8ba"/>
-    <rect x="24" y="-30" width="10" height="8" fill="#ee7f98"/>
-    <rect x="19" y="-35" width="4" height="4" fill="#1d2340"/>
-  </g>
-  <!-- logo (Arabic: عالم المكعبات). System fonts only: an SVG shown as <img> cannot load web fonts. -->
-  <g font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-weight="bold" text-anchor="middle" direction="rtl">
-    <g transform="translate(262 58) rotate(-4)">
-      <rect x="-92" y="-44" width="184" height="76" rx="16" fill="#1d2340" opacity="0.35" transform="translate(4 6)"/>
-      <rect x="-92" y="-44" width="184" height="76" rx="16" fill="#5cc23c"/>
-      <rect x="-92" y="-6" width="184" height="38" fill="#946340"/>
-      <rect x="-92" y="-10" width="184" height="6" fill="#3f942a"/>
-      <rect x="-92" y="-44" width="184" height="76" rx="16" fill="none" stroke="#ffffff" stroke-width="5"/>
-      <text x="3" y="16" font-size="62" fill="#1d2340" opacity="0.4" transform="translate(3 4)">عالم</text>
-      <text x="0" y="16" font-size="62" fill="#ffffff" stroke="#1d2340" stroke-width="3.5" paint-order="stroke">عالم</text>
-    </g>
-    <g transform="translate(176 124) rotate(3)">
-      <rect x="-150" y="-40" width="300" height="68" rx="15" fill="#1d2340" opacity="0.35" transform="translate(4 6)"/>
-      <rect x="-150" y="-40" width="300" height="68" rx="15" fill="#ffcc00"/>
-      <rect x="-150" y="-6" width="300" height="34" fill="#8e8e96"/>
-      <rect x="-150" y="-10" width="300" height="5" fill="#d49a10"/>
-      <rect x="-150" y="-40" width="300" height="68" rx="15" fill="none" stroke="#ffffff" stroke-width="5"/>
-      <text x="3" y="14" font-size="54" fill="#1d2340" opacity="0.4" transform="translate(3 4)">المكعبات</text>
-      <text x="0" y="14" font-size="54" fill="#ffffff" stroke="#1d2340" stroke-width="3.5" paint-order="stroke">المكعبات</text>
+
+  <!-- Arabic RTL Logo: عالم المكعبات -->
+  <g font-family="Fredoka, 'Segoe UI', Tahoma, Arial, sans-serif" font-weight="800" text-anchor="middle" direction="rtl">
+    <g transform="translate(200 58)">
+      <rect x="-174" y="-42" width="348" height="78" rx="20" fill="#1b1640" opacity="0.4" transform="translate(0 7)"/>
+      <rect x="-174" y="-42" width="348" height="78" rx="20" fill="#ffcc00" stroke="#1b1640" stroke-width="5"/>
+      <rect x="-168" y="-36" width="336" height="22" rx="12" fill="#ffe97d" opacity="0.7"/>
+      <text x="0" y="16" font-size="50" fill="#ffffff" stroke="#1b1640" stroke-width="8" paint-order="stroke fill">عالم المكعبات</text>
     </g>
   </g>
 </svg>

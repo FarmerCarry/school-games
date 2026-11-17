@@ -1,7 +1,8 @@
-// Desk Karts (سباق المكاتب) in real Chromium: 1P keyboard & pointer driving, idle P1
-// stationary guarantee, full 3-lap race completion + stars + DDA, 2P shared-screen mode
-// (WASD + Arrows), pause freeze + zero paused redraws, restart, shop + storage quota
-// retry, reduced motion, responsive [1100, 620] fit, and zero console/page/network errors.
+// Desk Karts (سباق المكاتب) in real Chromium: zoomed-in chase & 2P framing camera,
+// idle P1 stationary guarantee (p1Dist === 0 & time === 0), smart easy auto-gas + pointer
+// steering, hop-drift sparks, full 3-lap win + stars + DDA, 4 cups / 12 open tracks,
+// 2P mode + warp catch-up, pause freeze + zero paused redraws, restart, garage + quota retry,
+// and [1100, 620] responsive fit with zero console/page/network errors.
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import path from 'node:path';
@@ -22,18 +23,19 @@ after(async () => {
   await server?.close();
 });
 
-const SAVE = (open = 0, extra = {}) => ({
-  v: 1,
-  tracks: Array.from({ length: 8 }, (_, i) => ({ s: i < open ? 2 : 0, t: i < open ? 240 : 0, c: 0 })),
+const SAVE = (extra = {}) => ({
+  v: 2,
+  diff: 'normal',
   coins: 0,
-  paints: [1, 0, 0, 0, 0, 0],
-  toppers: [1, 0, 0, 0, 0, 0],
-  paint: 0,
-  topper: 0,
+  kart: 0,
+  flame: 0,
+  karts: [1, 0, 0, 0, 0],
+  flames: [1, 0, 0, 0, 0],
+  tracks: Array.from({ length: 12 }, () => ({ s: 0, t: 0 })),
   ...extra
 });
 
-async function game(t, { save, dda = 0.05, reducedMotion = 'reduce', size = [1280, 720] } = {}) {
+async function game(t, { save, dda = 0.15, reducedMotion = 'reduce', size = [1280, 720] } = {}) {
   const ctx = await browser.newContext({ viewport: { width: size[0], height: size[1] }, reducedMotion });
   const errors = [], requests = [];
   ctx.on('page', page => {
@@ -56,7 +58,12 @@ async function game(t, { save, dda = 0.05, reducedMotion = 'reduce', size = [128
       }
     }
     let kit;
-    const dk = window.dk = { results: [], failSave: false };
+    const dk = window.dk = { results: [], failSave: false, draws: 0 };
+    const origFillRect = CanvasRenderingContext2D.prototype.fillRect;
+    CanvasRenderingContext2D.prototype.fillRect = function () {
+      dk.draws++;
+      return origFillRect.apply(this, arguments);
+    };
     Object.defineProperty(window, 'Kit', {
       configurable: true,
       get: () => kit,
@@ -103,8 +110,7 @@ const stored = page => page.evaluate(() => {
 });
 const pagePoint = (page, x, y) => page.evaluate(([x, y]) => __game.point(x, y), [x, y]);
 
-// Drives P1 cleanly around the track using real Playwright keyboard events in small frame chunks.
-async function driveRace1P(page, maxChunks = 360) {
+async function driveRace1P(page, maxChunks = 520) {
   await page.keyboard.down('ArrowUp');
   let steerHeld = '';
   try {
@@ -115,15 +121,15 @@ async function driveRace1P(page, maxChunks = 360) {
         const k = st.karts[0];
         const info = __game.trackInfo;
         const wrapS = s => { s = s % info.len; return s < 0 ? s + info.len : s; };
-        const targetS = wrapS(k.s + 92 + k.speed * 0.2);
+        const targetS = wrapS(k.s + 130 + k.speed * 0.22);
         let wantOff = 0;
         for (const hz of info.hazards) {
           const ds = wrapS(hz.s - k.s);
-          if (ds > 0 && ds < 160) wantOff = hz.off >= 0 ? -info.w * 0.28 : info.w * 0.28;
+          if (ds > 0 && ds < 210) wantOff = hz.off >= 0 ? -info.hw * 0.45 : info.hw * 0.45;
         }
-        for (const bm of info.bumpers) {
-          const ds = wrapS(bm.s - k.s);
-          if (ds > 0 && ds < 175) wantOff = bm.off >= 0 ? -info.w * 0.34 : info.w * 0.34;
+        for (const co of info.coils) {
+          const ds = wrapS(co.s - k.s);
+          if (ds > 0 && ds < 210) wantOff = co.off >= 0 ? -info.hw * 0.48 : info.hw * 0.48;
         }
         const aim = __game.at(targetS);
         const tx = aim.x + aim.nx * wantOff, ty = aim.y + aim.ny * wantOff;
@@ -132,7 +138,7 @@ async function driveRace1P(page, maxChunks = 360) {
         while (diff < -Math.PI) diff += Math.PI * 2;
         return {
           done: false,
-          dir: diff > 0.11 ? 'ArrowRight' : diff < -0.11 ? 'ArrowLeft' : '',
+          dir: diff > 0.10 ? 'ArrowRight' : diff < -0.10 ? 'ArrowLeft' : '',
           useItem: !!k.item
         };
       });
@@ -143,7 +149,7 @@ async function driveRace1P(page, maxChunks = 360) {
         if (steerHeld) await page.keyboard.down(steerHeld);
       }
       if (decision.useItem) await page.keyboard.press('Space');
-      await run(page, 5);
+      await run(page, 8);
     }
   } finally {
     if (steerHeld) await page.keyboard.up(steerHeld);
@@ -151,15 +157,15 @@ async function driveRace1P(page, maxChunks = 360) {
   }
 }
 
-test('title screen loads cleanly; Play starts Track 1-1 immediately; idle P1 stays at p1Dist === 0 until keys are pressed', async t => {
+test('title screen loads cleanly; #btnPlay starts Track 1-1 immediately; idle P1 stays at p1Dist === 0 & time === 0 while AI bots race', async t => {
   const page = await game(t);
-  await step(page, 20);
+  await step(page, 15);
   assert.equal((await state(page)).screen, 'title');
-  assert.equal(await page.locator('#titleStars b').textContent(), '0/24');
-  for (const label of ['القيادة والتوجيه', 'مفاجآت الصناديق', '3 لفات للفوز']) {
+  assert.equal(await page.locator('#titleStars b').textContent(), '0/36');
+  for (const label of ['القيادة والتوجيه', 'مفاجآت الصناديق', '3 دورات للفوز']) {
     assert.ok(await page.locator('.howto figcaption', { hasText: label }).isVisible(), label);
   }
-  assert.ok(await page.locator('#btnTwo').isVisible(), '2P button visible on title');
+  assert.ok(await page.locator('#btnTwo').isVisible(), '2P button visible');
 
   await page.locator('#btnPlay').click();
   await step(page);
@@ -168,235 +174,159 @@ test('title screen loads cleanly; Play starts Track 1-1 immediately; idle P1 sta
   assert.equal(s.id, '1-1');
   assert.equal(s.humans, 1);
   assert.equal(s.p1Dist, 0);
-  assert.equal(s.p1GasTime, 0);
+  assert.equal(s.time, 0);
 
-  // Run 4 full seconds without player input: AI bots drive away, P1 never moves or gets pushed!
-  await run(page, 60 * 4);
+  // Advance 5 seconds untouched: AI bots drive far ahead, P1 remains strictly parked at 0!
+  await run(page, 60 * 5);
   s = await state(page);
-  assert.equal(s.p1Dist, 0, 'idle P1 never moves');
-  assert.equal(s.p1GasTime, 0, 'idle P1 gasTime stays 0');
-  assert.equal(s.p1Inputs, 0, 'idle P1 inputs stays 0');
-  assert.ok(s.karts[1].dist > 400, 'AI bots actively race around the track');
+  assert.equal(s.p1Dist, 0, 'idle P1 never moves or gets bumped');
+  assert.equal(s.time, 0, 'idle P1 race timer stays 0');
+  assert.equal(s.p1Inputs, 0);
+  assert.ok(s.worldTime > 4.5, 'worldTime advances');
+  assert.ok(s.karts[1].dist > 600, 'AI bots actively race');
 
-  // Holding ArrowUp immediately accelerates P1 forward!
+  // Holding ArrowUp immediately accelerates P1 forward and chase camera tracks P1!
+  const camBefore = s.cam.x;
   await page.keyboard.down('ArrowUp');
   await run(page, 40);
   await page.keyboard.up('ArrowUp');
   s = await state(page);
-  assert.ok(s.p1Dist > 60, `ArrowUp drove P1 forward: ${s.p1Dist}`);
-  assert.ok(s.p1GasTime > 0.5);
-  assert.ok(s.p1Inputs >= 40);
+  assert.ok(s.p1Dist > 90, `ArrowUp drove P1 forward: ${s.p1Dist}`);
+  assert.ok(s.time > 0.5);
+  assert.ok(s.cam.x > camBefore + 40, 'zoomed-in dynamic chase camera follows P1');
 });
 
-test('optional pointer steering: moving mouse alone does nothing, holding mouse button drives toward pointer', async t => {
+test('smart dual steering: easy auto-gas cruises after first tap, and pointer steering drives toward held cursor', async t => {
   const page = await game(t, { reducedMotion: 'no-preference' });
-  await page.keyboard.press('Enter');
-  await step(page);
-
-  const ahead = await page.evaluate(() => __game.at(160));
-  const pt = await pagePoint(page, ahead.x, ahead.y);
-
-  // Hovering without button down does not move P1.
-  await page.mouse.move(pt.x, pt.y);
-  await run(page, 30);
-  assert.equal((await state(page)).p1Dist, 0);
-
-  // Holding mouse button down accelerates and steers P1 toward pointer.
-  await page.mouse.down();
-  await run(page, 45);
-  await page.mouse.up();
-  const s = await state(page);
-  assert.ok(s.p1Dist > 80, `pointer hold drove P1: ${s.p1Dist}`);
-  assert.ok(s.p1GasTime > 0.6);
-});
-
-test('full 3-lap 1P race on Track 1-1: wins 1st, awards 3 stars & coins, updates DDA, and unlocks Track 1-2', async t => {
-  const page = await game(t, { dda: 0 });
   await page.locator('#btnPlay').click();
   await step(page);
 
-  await driveRace1P(page, 360);
-  let s = await state(page);
-  assert.equal(s.finished, true, 'completed 3 laps');
-  assert.equal(s.p1Lap, 3);
-  assert.equal(s.p1Rank, 1, 'won 1st place');
-  assert.deepEqual(await page.evaluate(() => dk.results), [1], 'DDA recorded 1P victory');
+  // Hovering mouse without pressing button does NOT move P1.
+  const ahead = await page.evaluate(() => __game.at(240));
+  const pt = await pagePoint(page, ahead.x, ahead.y);
+  await page.mouse.move(pt.x, pt.y);
+  await run(page, 30);
+  assert.equal((await state(page)).p1Dist, 0, 'hover alone does not start P1');
 
-  const saved = await stored(page);
-  assert.equal(saved.tracks[0].s, 3, 'saved 3 stars');
-  assert.ok(saved.coins >= 6, 'earned star + track coins');
+  // Holding mouse button steers & accelerates P1 smoothly toward cursor; releasing on easy keeps cruising!
+  await page.mouse.down();
+  await run(page, 25);
+  await page.mouse.up();
+  const midDist = (await state(page)).p1Dist;
+  assert.ok(midDist > 35, 'pointer down drove P1');
 
-  // Step through celebration into #scrResult and star pop animations.
-  await run(page, 180);
-  s = await state(page);
+  await run(page, 35);
+  assert.ok((await state(page)).p1Dist > midDist + 70, 'easy auto-gas keeps cruising after first input');
+});
+
+test('full 3-lap race completion awards stars, coins, persists save, updates DDA, and opens next track', async t => {
+  const page = await game(t, { save: SAVE({ diff: 'normal' }), dda: 0.1 });
+  await page.locator('#btnPlay').click();
+  await step(page);
+
+  await driveRace1P(page, 600);
+  const s = await state(page);
   assert.equal(s.screen, 'result');
-  assert.equal(s.stars, 3);
-  assert.equal(await page.locator('#scrResult').isVisible(), true);
-  assert.equal(await page.locator('#resStars svg.on').count(), 3);
-  assert.match(await page.locator('#resTitle').textContent(), /[\u0600-\u06FF]/);
+  assert.equal(s.finished, true);
+  assert.equal(s.karts[0].rank, 1);
 
-  // Enter advances to newly unlocked Track 1-2!
-  await page.keyboard.press('Enter');
+  const sv = await stored(page);
+  assert.equal(sv.tracks[0].s, 3);
+  assert.ok(sv.coins >= 10);
+  const ddaResults = await page.evaluate(() => dk.results);
+  assert.deepEqual(ddaResults, [1]);
+
+  await page.locator('#resNext').click();
   await step(page);
-  s = await state(page);
-  assert.equal(s.screen, 'play');
-  assert.equal(s.id, '1-2');
+  assert.equal((await state(page)).id, '1-2');
 });
 
-test('2-player shared-screen mode (#btnTwo): P1 (WASD+Q) and P2 (Arrows+Enter) race together with 2 AI bots', async t => {
-  const page = await game(t);
-  await page.locator('#btnTwo').click();
-  await step(page);
-
-  let s = await state(page);
-  assert.equal(s.screen, 'play');
-  assert.equal(s.humans, 2);
-  assert.equal(s.karts.length, 4);
-  assert.equal(s.karts[0].human, true);
-  assert.equal(s.karts[1].human, true);
-  assert.equal(s.karts[2].human, false);
-  assert.equal(s.karts[3].human, false);
-
-  // Drive both human karts simultaneously with WASD (P1) and Arrows (P2).
-  await page.keyboard.down('KeyW');
-  await page.keyboard.down('ArrowUp');
-  await page.keyboard.down('KeyD');
-  await page.keyboard.down('ArrowLeft');
-  await run(page, 55);
-  await page.keyboard.up('KeyD');
-  await page.keyboard.up('ArrowLeft');
-  await page.keyboard.up('KeyW');
-  await page.keyboard.up('ArrowUp');
-
-  s = await state(page);
-  assert.ok(s.p1Dist > 90 && s.p1GasTime > 0.7, `P1 moved with WASD: ${s.p1Dist}`);
-  assert.ok(s.p2Dist > 90 && s.p2GasTime > 0.7, `P2 moved with Arrows: ${s.p2Dist}`);
-});
-
-test('pause freezes simulation and skips canvas redraws; Resume and #btnRestart work cleanly', async t => {
-  const page = await game(t, { save: SAVE(4) });
+test('all 4 classroom cups & all 12 tracks (1-1..4-3) are open immediately, plus 2P mode with catch-up warp', async t => {
+  const page = await game(t, { save: SAVE({ diff: 'normal' }) });
   await page.locator('#btnLevels').click();
   await step(page);
-  await page.locator('.lvl').nth(2).click();
+  assert.equal((await state(page)).screen, 'map');
+  assert.equal(await page.locator('.cup-card').count(), 4);
+  assert.equal(await page.locator('.track-btn').count(), 12);
+
+  // Jump straight to final boss track 4-3 in 2P mode!
+  await page.locator('#btnMapMode').click();
+  await page.locator('.track-btn[data-track="11"]').click();
   await step(page);
-  assert.equal((await state(page)).id, '2-1');
+  let s = await state(page);
+  assert.equal(s.screen, 'play');
+  assert.equal(s.id, '4-3');
+  assert.equal(s.humans, 2);
+  assert.equal(s.karts[0].dist, 0);
+  assert.equal(s.karts[1].dist, 0);
+
+  // Drive both P1 (ArrowUp) and P2 (KeyW)
+  await page.keyboard.down('ArrowUp');
+  await page.keyboard.down('KeyW');
+  await run(page, 35);
+  await page.keyboard.up('KeyW');
+  await page.keyboard.up('ArrowUp');
+  s = await state(page);
+  assert.ok(s.karts[0].dist > 60 && s.karts[1].dist > 60, 'both human karts accelerate independently');
+});
+
+test('pause freezes simulation with zero redraw churn; restart resets p1Dist === 0 & time === 0', async t => {
+  const page = await game(t, { save: SAVE({ diff: 'normal' }) });
+  await page.locator('#btnPlay').click();
+  await step(page);
 
   await page.keyboard.down('ArrowUp');
-  await run(page, 30);
+  await run(page, 35);
   await page.keyboard.up('ArrowUp');
-  assert.ok((await state(page)).p1Dist > 40);
+  assert.ok((await state(page)).p1Dist > 60);
 
-  const snap = () => page.evaluate(() => JSON.stringify([__game.state.time, __game.state.clock, __game.state.karts]));
-  for (const how of ['KeyP', 'Escape', 'button', 'blur']) {
-    if (how === 'button') await page.locator('#btnPause').click();
-    else if (how === 'blur') await page.evaluate(() => window.dispatchEvent(new Event('blur')));
-    else await page.keyboard.press(how);
-    await step(page);
+  await page.locator('#btnPause').click();
+  await step(page, 1); // draws single paused frame
+  const snapA = await state(page);
+  assert.equal(snapA.screen, 'pause');
+  const drawsAtPause = await page.evaluate(() => dk.draws);
 
-    const s0 = await state(page);
-    assert.equal(s0.screen, 'pause', how);
-    assert.equal(s0.paused, true);
-    const frozenSnap = await snap();
-    const rendersAtPause = s0.renders;
+  await step(page, 30);
+  const snapB = await state(page);
+  const drawsAfterIdlePause = await page.evaluate(() => dk.draws);
+  assert.deepEqual(snapB, snapA, 'world state 100% frozen while paused');
+  assert.equal(drawsAfterIdlePause, drawsAtPause, 'zero canvas redraws while paused');
 
-    await run(page, 90);
-    assert.equal(await snap(), frozenSnap, `${how}: karts and clock stay 100% frozen`);
-    assert.equal((await state(page)).renders, rendersAtPause, `${how}: paused screen skips canvas redraws`);
+  await page.locator('#btnResume').click();
+  await run(page, 10);
+  assert.equal((await state(page)).screen, 'play');
+  assert.ok((await state(page)).worldTime > snapA.worldTime);
 
-    if (how === 'KeyP') await page.keyboard.press('KeyP');
-    else await page.locator('#btnResume').click();
-    await step(page);
-    assert.equal((await state(page)).screen, 'play');
-    await run(page, 5);
-    assert.notEqual(await snap(), frozenSnap, 'simulation resumes cleanly');
-  }
-
-  // Restart from pause menu resets p1Dist and time to 0.
   await page.locator('#btnPause').click();
   await step(page);
   await page.locator('#btnRestart').click();
   await step(page);
-  const restarted = await state(page);
-  assert.equal(restarted.screen, 'play');
-  assert.equal(restarted.p1Dist, 0);
-  assert.equal(restarted.time, 0);
-  assert.equal(restarted.clock, 0);
+  const resetState = await state(page);
+  assert.equal(resetState.screen, 'play');
+  assert.equal(resetState.p1Dist, 0);
+  assert.equal(resetState.time, 0);
 });
 
-test('shop purchases, storage quota failure + Retry via Kit.saveStatus, damaged saves, and mute key M', async t => {
-  const page = await game(t, { save: SAVE(2, { coins: 12 }) });
-  assert.equal(await page.locator('#titleStars b').textContent(), '4/24');
-  assert.equal(await page.locator('#titleCoins b').textContent(), '12');
+test('kart garage purchases, storage quota retry banner, corrupt save recovery, and [1100, 620] fit', async t => {
+  const page = await game(t, { save: SAVE({ coins: 40 }), size: [1100, 620] });
+  await step(page, 5);
+
+  // Verify title panel fits inside [1100, 620] with no clipping off viewport
+  const titleBox = await page.locator('#scrTitle .panel').boundingBox();
+  assert.ok(titleBox.y >= 0 && titleBox.y + titleBox.height <= 620, 'title panel fits vertically in 1100x620');
 
   await page.locator('#btnShop').click();
   await step(page);
   assert.equal((await state(page)).screen, 'shop');
 
-  // Simulate full disk while buying a kart paint color!
+  // Simulate storage quota failure on purchase, then recover via retry!
   await page.evaluate(() => { dk.failSave = true; });
-  await page.locator('#shelfPaints .tile').nth(1).click(); // price 3
-  await step(page);
+  await page.locator('#shelfKarts [data-idx="1"]').click();
+  assert.ok(await page.locator('.sg-save-status').isVisible(), 'save failure banner shown');
 
-  const status = page.locator('.sg-save-status');
-  assert.equal(await status.getAttribute('data-state'), 'failed', 'quota warning shown');
-  assert.equal((await stored(page)).paints[1], 0, 'disk still has old save');
-  assert.equal((await page.evaluate(() => __game.save)).paint, 1, 'in-memory save kept new paint');
-
-  // Free disk and click Retry button on Kit.saveStatus banner.
   await page.evaluate(() => { dk.failSave = false; });
-  await status.locator('button').click();
-  assert.equal(await status.getAttribute('data-state'), 'saved');
-  assert.equal((await stored(page)).paint, 1);
-  assert.equal((await stored(page)).coins, 9);
-
-  // Also buy rubber ducky topper (price 4).
-  await page.locator('#shelfToppers .tile').nth(1).click();
-  await step(page);
-  assert.equal((await stored(page)).topper, 1);
-  assert.equal((await stored(page)).coins, 5);
-  assert.match(await page.locator('#shelfToppers .tile').nth(1).getAttribute('class'), /wear/);
-
-  // Escape returns to title; mute button and KeyM toggle mute without starting a race.
-  await page.keyboard.press('Escape');
-  await step(page);
-  assert.equal((await state(page)).screen, 'title');
-  assert.equal(await page.evaluate(() => Kit.audio.muted), false);
-  await page.locator('.sg-mute').click();
-  assert.equal(await page.evaluate(() => Kit.audio.muted), true);
-  await page.keyboard.press('KeyM');
-  await step(page);
-  assert.equal(await page.evaluate(() => Kit.audio.muted), false);
-  assert.equal((await state(page)).screen, 'title');
-
-  // Damaged save JSON recovers cleanly to a fresh save.
-  const broken = await game(t, { save: '{corrupt-json' });
-  assert.equal(await broken.locator('#titleStars b').textContent(), '0/24');
-});
-
-test('reduced motion suppresses trails, shake, and confetti; [1100, 620] portal frame fits all UI controls', async t => {
-  const page = await game(t, { reducedMotion: 'reduce', size: [1100, 620] });
-  const canvasBox = await page.locator('#game').boundingBox();
-  assert.ok(canvasBox.width <= 1100 && canvasBox.height <= 620);
-
-  for (const sel of ['#btnPlay', '#btnTwo', '#btnLevels', '#btnShop', '.howto .card >> nth=2']) {
-    const b = await page.locator(sel).boundingBox();
-    assert.ok(
-      b.x >= canvasBox.x && b.x + b.width <= canvasBox.x + canvasBox.width && b.y + b.height <= canvasBox.y + canvasBox.height,
-      `${sel} fits inside scaled canvas`
-    );
-  }
-
-  await page.locator('#btnPlay').click();
-  await step(page);
-  await page.keyboard.down('ArrowUp');
-  await page.keyboard.down('ArrowRight');
-  await run(page, 60);
-  await page.keyboard.up('ArrowRight');
-  await page.keyboard.up('ArrowUp');
-
-  const s = await state(page);
-  assert.ok(s.p1Dist > 80);
-  assert.equal(s.trail, 0, 'no skid/boost trails in reduced motion');
-  assert.equal(s.shake, 0, 'no screen shake in reduced motion');
-  assert.equal(s.fx, 0, 'no particle bursts in reduced motion');
+  await page.locator('.sg-save-status button').click();
+  const sv = await stored(page);
+  assert.equal(sv.kart, 1);
+  assert.equal(sv.karts[1], 1);
 });

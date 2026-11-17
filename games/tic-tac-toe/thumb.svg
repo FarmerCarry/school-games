@@ -1,12 +1,93 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">
-<rect width="400" height="400" rx="45" fill="#10142b"/>
-<circle cx="48" cy="55" r="43" fill="#1d284b"/><circle cx="367" cy="344" r="72" fill="#1d284b"/>
-<g transform="translate(45 49) rotate(5 155 150)">
-<rect x="-4" y="14" width="318" height="318" rx="29" fill="#090e23"/>
-<rect width="310" height="310" rx="25" fill="#1b2b50" stroke="#426ca9" stroke-width="4"/>
-<g fill="#2b436a"><rect x="13" y="13" width="88" height="88" rx="13"/><rect x="111" y="13" width="88" height="88" rx="13"/><rect x="209" y="13" width="88" height="88" rx="13"/><rect x="13" y="111" width="88" height="88" rx="13"/><rect x="111" y="111" width="88" height="88" rx="13"/><rect x="209" y="111" width="88" height="88" rx="13"/><rect x="13" y="209" width="88" height="88" rx="13"/><rect x="111" y="209" width="88" height="88" rx="13"/><rect x="209" y="209" width="88" height="88" rx="13"/></g>
-<g stroke="#ffca45" stroke-width="15" stroke-linecap="round"><path d="m35 35 44 44m0-44L35 79M133 133l44 44m0-44-44 44m98 54 44 44m0-44-44 44m0-240 44 44m0-44-44 44"/></g>
-<g stroke="#ff6474" fill="none" stroke-width="14"><circle cx="155" cy="57" r="23"/><circle cx="57" cy="155" r="23"/><circle cx="155" cy="253" r="23"/></g>
-<path d="m39 39 232 232" stroke="white" stroke-width="7" stroke-linecap="round" opacity=".8"/>
-</g><path d="m50 31 4 12 12 4-12 4-4 12-4-12-12-4 12-4Z" fill="#ffca45"/>
+<defs>
+  <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="#23195c"/>
+    <stop offset="100%" stop-color="#0d102d"/>
+  </linearGradient>
+  <radialGradient id="glow" cx="50%" cy="52%" r="58%">
+    <stop offset="0%" stop-color="#a855f7" stop-opacity=".42"/>
+    <stop offset="100%" stop-color="#a855f7" stop-opacity="0"/>
+  </radialGradient>
+  <linearGradient id="pad" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="#2d3e7d"/>
+    <stop offset="100%" stop-color="#18224a"/>
+  </linearGradient>
+  <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="#3c5594"/>
+    <stop offset="100%" stop-color="#253663"/>
+  </linearGradient>
+  <linearGradient id="winTile" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="#34d399"/>
+    <stop offset="100%" stop-color="#158067"/>
+  </linearGradient>
+</defs>
+<rect width="400" height="400" rx="46" fill="url(#bg)"/>
+<rect width="400" height="400" rx="46" fill="url(#glow)"/>
+<circle cx="54" cy="340" r="56" fill="#ff597016"/>
+<circle cx="352" cy="64" r="52" fill="#ffc93c14"/>
+
+<!-- Tilted 3D Cyber-Toy Battle Pad -->
+<g transform="translate(42 66) rotate(4 152 152)">
+  <rect x="-4" y="16" width="312" height="312" rx="30" fill="#080c21" opacity=".78"/>
+  <rect x="0" y="9" width="304" height="304" rx="27" fill="#0f1738"/>
+  <rect width="304" height="304" rx="27" fill="url(#pad)" stroke="#6882db" stroke-width="4"/>
+
+  <!-- 3x3 Raised Arcade Tiles (Diagonal 0, 4, 8 Lit Emerald for Win!) -->
+  <g stroke="#526db8" stroke-width="2.5">
+    <rect x="14" y="14" width="84" height="84" rx="15" fill="url(#winTile)" stroke="#a7f3d0" stroke-width="3"/>
+    <rect x="110" y="14" width="84" height="84" rx="15" fill="url(#tile)"/>
+    <rect x="206" y="14" width="84" height="84" rx="15" fill="url(#tile)" stroke="#fde047" stroke-dasharray="7 5"/>
+    <rect x="14" y="110" width="84" height="84" rx="15" fill="url(#tile)"/>
+    <rect x="110" y="110" width="84" height="84" rx="15" fill="url(#winTile)" stroke="#a7f3d0" stroke-width="3"/>
+    <rect x="206" y="110" width="84" height="84" rx="15" fill="url(#tile)"/>
+    <rect x="14" y="206" width="84" height="84" rx="15" fill="url(#tile)"/>
+    <rect x="110" y="206" width="84" height="84" rx="15" fill="url(#tile)"/>
+    <rect x="206" y="206" width="84" height="84" rx="15" fill="url(#winTile)" stroke="#a7f3d0" stroke-width="3"/>
+  </g>
+
+  <!-- Vanishing X Ghost Mark in Top-Right Tile (Vanishing XO Twist!) -->
+  <g stroke="#ffc93c" stroke-width="13" stroke-linecap="round" opacity=".48">
+    <path d="m229 37 38 38m0-38-38 38"/>
+  </g>
+
+  <!-- Turbo-Coral O Plasma Rings -->
+  <g fill="none" stroke="#ff5970" stroke-width="13">
+    <circle cx="152" cy="56" r="22"/>
+    <circle cx="56" cy="152" r="22"/>
+    <circle cx="152" cy="248" r="22"/>
+  </g>
+  <g fill="none" stroke="#ffb3be" stroke-width="3.5" opacity=".7">
+    <circle cx="152" cy="56" r="22"/>
+    <circle cx="56" cy="152" r="22"/>
+    <circle cx="152" cy="248" r="22"/>
+  </g>
+
+  <!-- Winning Gold Crossed X Energy Blades -->
+  <g stroke="#995704" stroke-width="15" stroke-linecap="round" transform="translate(0 3)">
+    <path d="m36 36 40 40m0-40-40 40M132 132l40 40m0-40-40 40m96 56 40 40m0-40-40 40"/>
+  </g>
+  <g stroke="#ffd24c" stroke-width="14" stroke-linecap="round">
+    <path d="m36 36 40 40m0-40-40 40M132 132l40 40m0-40-40 40m96 56 40 40m0-40-40 40"/>
+  </g>
+
+  <!-- Electric Winning Laser Beam -->
+  <path d="M40 40L264 264" stroke="#fde047" stroke-width="13" stroke-linecap="round" opacity=".52"/>
+  <path d="M40 40L264 264" stroke="#fff" stroke-width="6" stroke-linecap="round"/>
+</g>
+
+<!-- Expressive Professor Mech Rival Badge in Top-Left -->
+<g transform="translate(18 14) rotate(-8 46 46)">
+  <circle cx="46" cy="49" r="41" fill="#14163d" stroke="#7c8ce8" stroke-width="4"/>
+  <path d="M29 24l3.5-13 13.5 8 13.5-8 3.5 13Z" fill="#facc15" stroke="#854d0e" stroke-width="3" stroke-linejoin="round"/>
+  <rect x="18" y="23" width="56" height="51" rx="15" fill="#6366f1" stroke="#312e81" stroke-width="4"/>
+  <rect x="25" y="35" width="42" height="31" rx="10" fill="#13112e"/>
+  <polygon points="29,43 41,45.5 30,50" fill="#facc15"/>
+  <circle cx="56" cy="46.5" r="4.5" fill="#facc15"/>
+  <circle cx="56" cy="46.5" r="9.5" fill="#fde04724" stroke="#facc15" stroke-width="3.2"/>
+  <path d="M36 58q10 3.5 18-2" fill="none" stroke="#fde047" stroke-width="3.4" stroke-linecap="round"/>
+</g>
+
+<!-- Sparkle Accents -->
+<path d="m350 42 4 11 11 4-11 4-4 11-4-11-11-4 11-4Z" fill="#ffc93c"/>
+<path d="m36 346 3 9 9 3-9 3-3 9-3-9-9-3 9-3Z" fill="#a855f7"/>
 </svg>
