@@ -209,7 +209,9 @@ deploy job asks that server's `/v1/health` and stops before publishing while `ac
    slug while still answering `204`) and fallback names/metadata in `dashboard/names.js`
    (regenerated with `node dashboard/make-names.mjs`). Whenever a game is added or renamed in
    `js/catalog.js`, update `games.mjs` and regenerate `dashboard/names.js` in
-   `school-games-telemetry` before or alongside publishing the game.
+   `school-games-telemetry` before or alongside publishing the game (and describe a new
+   score in its `dashboard/scores.js`). That repository's tests check all three against this
+   site on every push and weekly, so a missed update shows up there as a failing test.
 3. In the GitHub repository: **Settings → Secrets and variables → Actions → Variables → New
    repository variable**, name **`SG_TELEMETRY_URL`**, value the full address, for example
    `https://telemetry.example.org/v1/batch`. It is a variable, not a secret: the address ends
