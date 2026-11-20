@@ -695,6 +695,7 @@ h1, h2, h3 { font-weight: 700; margin: 0; }
   color: var(--ink-soft);
 }
 .foot span { display: inline-block; padding: 10px 22px; border-radius: 999px; background: rgba(255, 255, 255, 0.7); }
+.foot .credit { margin: 10px 0 0; font-size: 15px; }
 
 .toast {
   position: fixed;
