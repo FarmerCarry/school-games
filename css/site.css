@@ -124,7 +124,7 @@ h1, h2, h3 { font-weight: 700; margin: 0; }
 .logo:hover .logo-word { animation: logoJump 0.6s cubic-bezier(.3, 1.6, .5, 1); }
 
 /* Site author credit, always on screen in the top bar. */
-.top-credit {
+.tc {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
@@ -134,24 +134,23 @@ h1, h2, h3 { font-weight: 700; margin: 0; }
   border: 3px solid var(--blue);
   border-radius: 999px;
   background: #fff;
-  color: var(--ink);
   line-height: 1.15;
   white-space: nowrap;
   box-shadow: 0 4px 0 #1a8fd0;
 }
-.top-credit-ico {
+.tc i {
   display: grid;
   place-items: center;
   width: 38px;
   height: 38px;
   border-radius: 50%;
-  background: linear-gradient(180deg, #ffd83a, #ffbf00);
+  background: #ffcc00;
   box-shadow: inset 0 -3px 0 #d69a00;
-  font-size: 19px;
+  font: normal 19px/1 var(--font);
 }
-.top-credit-txt { display: flex; flex-direction: column; }
-.top-credit-lbl { font-size: 12px; font-weight: 700; color: var(--ink-soft); }
-.top-credit-name { font-size: 18px; font-weight: 700; color: var(--ink); }
+.tc span { display: flex; flex-direction: column; font-weight: 700; }
+.tc small { font-size: 12px; color: var(--ink-soft); }
+.tc b { font-size: 18px; }
 
 .search {
   flex: 1 1 auto;
@@ -788,10 +787,10 @@ h1, h2, h3 { font-weight: 700; margin: 0; }
   .logo-svg { height: 44px; }
   .search { flex: 0 0 100%; order: 1; }
   .surprise { margin-inline-start: auto; }
-  .top-credit { padding: 2px 4px 2px 10px; gap: 6px; }
-  .top-credit-ico { width: 30px; height: 30px; font-size: 15px; }
-  .top-credit-lbl { font-size: 11px; }
-  .top-credit-name { font-size: 15px; }
+  .tc { padding: 2px 4px 2px 10px; gap: 6px; }
+  .tc i { width: 30px; height: 30px; font-size: 15px; }
+  .tc small { font-size: 11px; }
+  .tc b { font-size: 15px; }
 }
 @media (max-width: 560px) {
   :root { --gap: 10px; }
@@ -806,10 +805,10 @@ h1, h2, h3 { font-weight: 700; margin: 0; }
 @media (max-width: 400px) {
   .logo-svg { height: 40px; }
   .topbar { gap: 4px; }
-  .top-credit { padding: 2px 10px; gap: 4px; }
-  .top-credit-ico { display: none; }
-  .top-credit-lbl { font-size: 10px; }
-  .top-credit-name { font-size: 13px; }
+  .tc { padding: 2px 10px; gap: 4px; }
+  .tc i { display: none; }
+  .tc small { font-size: 10px; }
+  .tc b { font-size: 13px; }
 }
 
 /* ------------------------------------------------------------ animations */
