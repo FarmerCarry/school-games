@@ -131,15 +131,13 @@ h1, h2, h3 { font-weight: 700; margin: 0; }
   gap: 9px;
   margin: 0;
   padding: 4px 6px 4px 16px;
-  border: 3px solid transparent;
+  border: 3px solid var(--blue);
   border-radius: 999px;
-  background:
-    linear-gradient(#fff, #fff) padding-box,
-    linear-gradient(270deg, #ff4f6d, #ff9f1c, #ffd21f, #3ddc84, #22b8ff, #a66bff) border-box;
+  background: #fff;
   color: var(--ink);
   line-height: 1.15;
   white-space: nowrap;
-  box-shadow: 0 4px 0 rgba(28, 34, 80, 0.12);
+  box-shadow: 0 4px 0 #1a8fd0;
 }
 .top-credit-ico {
   display: grid;
