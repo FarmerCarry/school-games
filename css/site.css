@@ -695,7 +695,18 @@ h1, h2, h3 { font-weight: 700; margin: 0; }
   color: var(--ink-soft);
 }
 .foot span { display: inline-block; padding: 10px 22px; border-radius: 999px; background: rgba(255, 255, 255, 0.7); }
-.foot .credit { margin: 10px 0 0; font-size: 15px; }
+.foot .credit {
+  display: block;
+  width: fit-content;
+  margin: 14px auto 0;
+  padding: 12px 30px;
+  border-radius: 999px;
+  background: var(--yellow);
+  color: #3a2a00;
+  font-size: 22px;
+  font-weight: 700;
+  box-shadow: 0 5px 0 #d69a00, 0 10px 22px rgba(28, 34, 80, 0.22);
+}
 
 .toast {
   position: fixed;
