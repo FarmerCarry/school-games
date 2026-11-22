@@ -1,1195 +1,825 @@
-/*
- * مطبخ الفسحة (Recess Kitchen: Turbo Robo-Chef & Burger Cannon)
- * Canvas 2D rendering via Kit.art, discrete Kit.juice SFX, UI overlays, DDA & Telemetry.
- */
+/* Recess Kitchen 3D (مطبخ الفسحة) — UI, controls, picture tickets, Kit DDA/stats/juice wiring.
+ * Pure simulation lives in engine.js; 3D kitchen renderer lives in art.js. */
 (function () {
   'use strict';
 
-  var E = window.RKEngine, J = Kit.juice, A = Kit.art;
-  var W = E.W, H = E.H, TILE = E.TILE, TAU = Math.PI * 2, INK = '#1b1640';
-  var $ = function (id) { return document.getElementById(id); };
-  var canvas = $('game'), ui = $('ui');
-  var calm = function () { return Kit.motion.reduced(); };
+  var E = window.RecessEngine;
+  var A = window.RecessArt;
+  var J = Kit.juice;
+  function $(id) { return document.getElementById(id); }
 
-  A.init({ canvas: canvas, mode: '2d', theme: 'day' });
+  var canvas = $('scene');
+  var body = document.body;
 
-  var dirty = true;
-  var view = Kit.fit(canvas, W, H, {
-    maxDpr: 1.5,
-    onResize: function (v) {
-      ui.style.left = canvas.style.left;
-      ui.style.top = canvas.style.top;
-      ui.style.transform = 'scale(' + v.scale + ')';
-      dirty = true;
-    }
-  });
-  var ctx = view.ctx;
+  /* --------------------------------------------------------------- Picture SVG Tickets */
+  function svg(inner) {
+    return '<svg viewBox="0 0 64 56" aria-hidden="true">' + inner + '</svg>';
+  }
 
-  var fx = Kit.particles(), camShake = Kit.shake();
+  var DISH_SVG = {
+    burger: svg(
+      '<ellipse cx="32" cy="46" rx="26" ry="7" fill="#fff" stroke="#352116" stroke-width="3"/>' +
+      '<rect x="13" y="34" width="38" height="10" rx="5" fill="#e89c3c" stroke="#352116" stroke-width="3"/>' +
+      '<rect x="11" y="25" width="42" height="10" rx="5" fill="#7a381e" stroke="#352116" stroke-width="3"/>' +
+      '<path d="M12 25 Q22 19 32 25 Q42 19 52 25" fill="none" stroke="#4cd957" stroke-width="4" stroke-linecap="round"/>' +
+      '<path d="M13 24 C13 7 51 7 51 24 Z" fill="#f5ab42" stroke="#352116" stroke-width="3"/>' +
+      '<circle cx="24" cy="15" r="1.8" fill="#fff5cc"/><circle cx="33" cy="13" r="1.8" fill="#fff5cc"/><circle cx="41" cy="16" r="1.8" fill="#fff5cc"/>'
+    ),
+    cheeseburger: svg(
+      '<ellipse cx="32" cy="46" rx="26" ry="7" fill="#fff" stroke="#352116" stroke-width="3"/>' +
+      '<rect x="13" y="35" width="38" height="9" rx="4.5" fill="#e89c3c" stroke="#352116" stroke-width="3"/>' +
+      '<rect x="11" y="26" width="42" height="10" rx="5" fill="#7a381e" stroke="#352116" stroke-width="3"/>' +
+      '<path d="M11 25 H53 L47 33 L36 27 L25 34 L16 28 Z" fill="#ffd428" stroke="#352116" stroke-width="2.5" stroke-linejoin="round"/>' +
+      '<path d="M13 24 C13 7 51 7 51 24 Z" fill="#f5ab42" stroke="#352116" stroke-width="3"/>' +
+      '<circle cx="25" cy="15" r="1.8" fill="#fff5cc"/><circle cx="34" cy="13" r="1.8" fill="#fff5cc"/><circle cx="42" cy="16" r="1.8" fill="#fff5cc"/>'
+    ),
+    salad: svg(
+      '<ellipse cx="32" cy="45" rx="25" ry="7" fill="#fff" stroke="#352116" stroke-width="3"/>' +
+      '<path d="M12 32 C12 48 52 48 52 32 Z" fill="#4ecdc4" stroke="#352116" stroke-width="3"/>' +
+      '<circle cx="22" cy="28" r="10" fill="#4cd957" stroke="#352116" stroke-width="2.8"/>' +
+      '<circle cx="42" cy="28" r="10" fill="#4cd957" stroke="#352116" stroke-width="2.8"/>' +
+      '<circle cx="32" cy="24" r="11" fill="#6ae868" stroke="#352116" stroke-width="2.8"/>' +
+      '<circle cx="24" cy="23" r="4.5" fill="#ff3b47" stroke="#352116" stroke-width="2"/>' +
+      '<circle cx="39" cy="22" r="4.5" fill="#ff3b47" stroke="#352116" stroke-width="2"/>' +
+      '<circle cx="32" cy="29" r="4" fill="#ff3b47" stroke="#352116" stroke-width="2"/>'
+    ),
+    fries: svg(
+      '<g fill="#ffd447" stroke="#352116" stroke-width="2.6">' +
+      '<rect x="19" y="8" width="6" height="22" rx="2" transform="rotate(-8 22 19)"/>' +
+      '<rect x="27" y="5" width="6" height="24" rx="2"/>' +
+      '<rect x="34" y="6" width="6" height="23" rx="2" transform="rotate(6 37 18)"/>' +
+      '<rect x="40" y="10" width="6" height="20" rx="2" transform="rotate(14 43 20)"/></g>' +
+      '<path d="M16 24 H48 L43 50 H21 Z" fill="#ff4052" stroke="#352116" stroke-width="3" stroke-linejoin="round"/>' +
+      '<circle cx="32" cy="37" r="6" fill="#ffe066"/>'
+    ),
+    pizza: svg(
+      '<path d="M12 14 Q32 6 52 14 L32 50 Z" fill="#ffd447" stroke="#352116" stroke-width="3" stroke-linejoin="round"/>' +
+      '<path d="M11 15 Q32 5 53 15 L50 22 Q32 13 14 22 Z" fill="#e89432" stroke="#352116" stroke-width="3" stroke-linejoin="round"/>' +
+      '<circle cx="26" cy="26" r="4.5" fill="#e63946" stroke="#352116" stroke-width="2"/>' +
+      '<circle cx="38" cy="28" r="4.5" fill="#e63946" stroke="#352116" stroke-width="2"/>' +
+      '<circle cx="32" cy="38" r="4" fill="#e63946" stroke="#352116" stroke-width="2"/>'
+    ),
+    juice: svg(
+      '<path d="M35 4 L42 22" stroke="#ff4d79" stroke-width="5" stroke-linecap="round"/>' +
+      '<path d="M20 18 H44 L40 50 H24 Z" fill="#ff842b" stroke="#352116" stroke-width="3" stroke-linejoin="round"/>' +
+      '<ellipse cx="32" cy="18" rx="12" ry="4" fill="#ffe066" stroke="#352116" stroke-width="2.6"/>' +
+      '<circle cx="28" cy="33" r="3.5" fill="#fff5cc" opacity="0.65"/>'
+    )
+  };
+
+  var RECIPE_HEADER_BG = {
+    burger: '#ff6b35',
+    cheeseburger: '#e08e00',
+    salad: '#2eb85c',
+    fries: '#e63946',
+    pizza: '#f77f00',
+    juice: '#e84393'
+  };
+
+  var RECIPE_STEPS_HTML = {
+    burger: '<span class="step-chip">🥩🔥</span><span class="step-chip">🍞</span>',
+    cheeseburger: '<span class="step-chip">🥩🔥</span><span class="step-chip">🍞</span><span class="step-chip">🧀</span>',
+    salad: '<span class="step-chip">🥬🔪</span><span class="step-chip">🍅🔪</span>',
+    fries: '<span class="step-chip">🥔🔪</span><span class="step-chip">🔥</span>',
+    pizza: '<span class="step-chip">🍕🔥</span>',
+    juice: '<span class="step-chip">🍓⚡</span>'
+  };
+
+  var HAT_ICONS = ['👨‍🍳', '🎀', '🧢', '🍓', '⭐', '👑'];
+
+  /* --------------------------------------------------------------- Save & DDA */
   var store = Kit.store('recess-kitchen');
   var saveStatus = Kit.saveStatus({ retry: persist });
-  var save = E.loadSave(store.get('save', null));
-  var dda = Kit.dda('recess-kitchen', { id: 'main', start: 0.35 });
-
+  var save = E.loadSave(store.get('save3', null));
   function persist() {
-    if (store.set('save', save) === false) {
-      saveStatus.failed();
-      return false;
-    }
+    if (store.set('save3', save) === false) { saveStatus.failed(); return false; }
     saveStatus.saved();
     return true;
   }
 
-  function sfx(name, arg) {
-    if (J && typeof J[name] === 'function') J[name](arg);
+  var dda = Kit.dda('recess-kitchen', { id: 'main', target: 0.72, tiers: 5 });
+
+  /* --------------------------------------------------------------- App State */
+  var mode = 'title';
+  var duo = false;
+  var world = null;
+  var demo = null;
+  var view = null;
+  var loop = null;
+  var live = false;
+  var failed = false;
+  var contextLost = false;
+  var dirty = true;
+  var snap = true;
+
+  var time = 0;
+  var viewTime = 0;
+  var roundOpen = false;
+  var resultData = null;
+  var resultT = 0;
+  var resultLock = 0;
+  var starShown = 0;
+  var toastT = 0;
+  var idleT = 0;
+  var tutorialActive = false;
+
+  var prevAct1 = false, prevDash1 = false;
+  var prevAct2 = false, prevDash2 = false;
+
+  var hudCache = { stage: '', score: -1, time: -1, combo: -1, stars: -1, orderSig: '' };
+  var ticketEls = {};
+
+  function say(txt) { $('live').textContent = txt; }
+  function focusCanvas() { try { canvas.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }
+
+  /* --------------------------------------------------------------- Screens */
+  var SCREENS = { title: 'scrTitle', levels: 'scrLevels', wardrobe: 'scrWardrobe', pause: 'scrPause', result: 'scrResult' };
+  function setMode(next) {
+    mode = next;
+    body.dataset.mode = next;
+    for (var k in SCREENS) $(SCREENS[k]).hidden = k !== next;
+    $('hud').hidden = !(next === 'play' || next === 'pause');
+    if (next !== 'play') $('ghostHint').hidden = true;
+    dirty = true;
+    if (next === 'play') focusCanvas();
   }
 
-  /* -------------------------------------- Bounded Static Sprite Library */
-  var BLINK_SLOTS = [{}, {}, {}, {}, {}, {}];
-
-  function rr(c, x, y, w, h, r) {
-    A.round(c, x, y, w, h, r);
+  function refreshTitleUI() {
+    $('titleStars').querySelector('b').textContent = E.totalStars(save) + '/' + (E.LEVELS.length * 3);
+    $('titleCoins').querySelector('b').textContent = Kit.fmt(save.coins);
+    $('titleBest').querySelector('b').textContent = Kit.fmt(Math.max(save.bestScore, save.bestEndless));
+    var btnDuo = $('btnDuo');
+    btnDuo.setAttribute('aria-pressed', String(duo));
+    btnDuo.textContent = duo ? '👥 لاعبان (تعاون)' : '👤 لاعب واحد';
+    $('controlsBar').innerHTML = duo
+      ? 'طاهي 1: <span dir="ltr"><span class="sg-key">W</span><span class="sg-key">A</span><span class="sg-key">S</span><span class="sg-key">D</span> <span class="sg-key">مسافة</span> <span class="sg-key">Q</span></span> <span class="sep">·</span> طاهي 2: <span dir="ltr"><span class="sg-key">←</span><span class="sg-key">→</span><span class="sg-key">↑</span><span class="sg-key">↓</span> <span class="sg-key">Enter</span> <span class="sg-key">/</span></span>'
+      : '<span dir="ltr"><span class="sg-key">←</span><span class="sg-key">→</span><span class="sg-key">↑</span><span class="sg-key">↓</span> / <span class="sg-key">WASD</span></span> حركة <span class="sep">·</span> <span dir="ltr"><span class="sg-key">مسافة</span> / <span class="sg-key">E</span></span> تفاعل <span class="sep">·</span> <span dir="ltr"><span class="sg-key">Shift</span></span> اندفاع';
   }
 
-  function strokeFill(c, fill, lw) {
-    c.fillStyle = fill;
-    c.fill();
-    c.lineWidth = lw || 3.5;
-    c.strokeStyle = INK;
-    c.lineJoin = 'round';
-    c.stroke();
+  function initDemo() {
+    demo = E.create({ demo: true, level: 0, seed: 4242, apron: save.apron, hat: save.hat });
   }
 
-  function drawText(c, txt, x, y, size, fill, align) {
-    c.save();
-    c.font = '800 ' + size + 'px Fredoka';
-    c.textAlign = align || 'center';
-    c.textBaseline = 'middle';
-    c.direction = 'rtl';
-    c.lineJoin = 'round';
-    c.lineWidth = Math.max(3.5, size * 0.22);
-    c.strokeStyle = INK;
-    c.strokeText(txt, x, y);
-    c.fillStyle = fill || '#ffffff';
-    c.fillText(txt, x, y);
-    c.restore();
-  }
-
-  function paintFoodArt(c, kind, s) {
-    var cx = s / 2, cy = s / 2;
-    c.lineJoin = 'round';
-    c.lineCap = 'round';
-    if (kind === 'bun' || kind === 'bunCheese') {
-      c.beginPath(); c.ellipse(cx, cy + 4, s * 0.36, s * 0.22, 0, 0, TAU);
-      strokeFill(c, '#f4a261', 3);
-      c.beginPath(); c.ellipse(cx, cy - 2, s * 0.34, s * 0.2, 0, Math.PI, TAU);
-      strokeFill(c, '#f6bd60', 3);
-      c.fillStyle = '#fff8eb';
-      c.beginPath(); c.arc(cx - 6, cy - 8, 2, 0, TAU); c.arc(cx + 5, cy - 9, 2, 0, TAU); c.arc(cx, cy - 5, 2, 0, TAU); c.fill();
-      if (kind === 'bunCheese') {
-        c.beginPath(); c.moveTo(cx - 14, cy + 2); c.lineTo(cx + 14, cy + 2); c.lineTo(cx + 8, cy + 12); c.lineTo(cx - 10, cy + 10); c.closePath();
-        strokeFill(c, '#ffd166', 2.5);
-      }
-    } else if (kind === 'meatRaw' || kind === 'meatCooked' || kind === 'meatCheese') {
-      var mCol = kind === 'meatRaw' ? '#ef6351' : '#7f3718';
-      c.beginPath(); c.ellipse(cx, cy + 2, s * 0.36, s * 0.23, 0, 0, TAU);
-      strokeFill(c, mCol, 3);
-      if (kind !== 'meatRaw') {
-        c.strokeStyle = '#3d1706'; c.lineWidth = 3;
-        c.beginPath(); c.moveTo(cx - 9, cy - 4); c.lineTo(cx - 5, cy + 7); c.moveTo(cx + 3, cy - 5); c.lineTo(cx + 7, cy + 6); c.stroke();
-      } else {
-        c.strokeStyle = '#ffd6d0'; c.lineWidth = 2.5;
-        c.beginPath(); c.moveTo(cx - 7, cy); c.lineTo(cx + 6, cy + 3); c.stroke();
-      }
-      if (kind === 'meatCheese') {
-        c.beginPath(); c.rect(cx - 11, cy - 7, 22, 11);
-        strokeFill(c, '#ffd166', 2.5);
-      }
-    } else if (kind === 'cheese') {
-      c.beginPath(); c.moveTo(cx - 16, cy + 10); c.lineTo(cx + 16, cy + 10); c.lineTo(cx + 6, cy - 13); c.lineTo(cx - 14, cy - 6); c.closePath();
-      strokeFill(c, '#ffd166', 3);
-      c.fillStyle = '#f59e0b';
-      c.beginPath(); c.arc(cx - 4, cy + 3, 3, 0, TAU); c.arc(cx + 5, cy + 5, 2.2, 0, TAU); c.fill();
-    } else if (kind === 'potatoRaw') {
-      c.beginPath(); c.ellipse(cx, cy + 1, s * 0.33, s * 0.24, -0.25, 0, TAU);
-      strokeFill(c, '#d4a373', 3);
-      c.fillStyle = '#8d5b34';
-      c.beginPath(); c.arc(cx - 6, cy - 2, 2, 0, TAU); c.arc(cx + 6, cy + 4, 2, 0, TAU); c.fill();
-    } else if (kind === 'fries') {
-      c.strokeStyle = INK; c.lineWidth = 2.5;
-      var xs = [-10, -4, 2, 8];
-      for (var fi = 0; fi < 4; fi++) {
-        rr(c, cx + xs[fi] - 3, cy - 17 + (fi % 2) * 3, 6, 20, 2);
-        strokeFill(c, '#ffd166', 2.5);
-      }
-      c.beginPath(); c.moveTo(cx - 15, cy - 2); c.lineTo(cx + 15, cy - 2); c.lineTo(cx + 12, cy + 16); c.lineTo(cx - 12, cy + 16); c.closePath();
-      strokeFill(c, '#ef476f', 3);
-      c.fillStyle = '#ffd166'; c.beginPath(); c.arc(cx, cy + 7, 4, 0, TAU); c.fill();
-    } else if (kind === 'fruitRaw') {
-      c.beginPath(); c.moveTo(cx, cy + 15); c.quadraticCurveTo(cx - 17, cy - 3, cx - 7, cy - 11); c.quadraticCurveTo(cx, cy - 14, cx + 7, cy - 11); c.quadraticCurveTo(cx + 17, cy - 3, cx, cy + 15);
-      strokeFill(c, '#ff4d6d', 3);
-      c.beginPath(); c.ellipse(cx, cy - 13, 9, 4, 0, 0, TAU);
-      strokeFill(c, '#3ddc84', 2.5);
-    } else if (kind === 'juice') {
-      c.beginPath(); c.moveTo(cx + 3, cy - 20); c.lineTo(cx + 9, cy - 8); c.strokeStyle = '#00f5d4'; c.lineWidth = 4; c.stroke();
-      c.beginPath(); c.moveTo(cx - 12, cy - 9); c.lineTo(cx + 12, cy - 9); c.lineTo(cx + 9, cy + 16); c.lineTo(cx - 9, cy + 16); c.closePath();
-      strokeFill(c, '#ff5d8f', 3);
-      c.fillStyle = 'rgba(255,255,255,0.55)'; c.fillRect(cx - 6, cy - 5, 4, 17);
-    } else if (kind === 'dough' || kind === 'pizzaRaw') {
-      c.beginPath(); c.arc(cx, cy + 1, s * 0.34, 0, TAU);
-      strokeFill(c, '#fde68a', 3);
-      if (kind === 'pizzaRaw') {
-        c.beginPath(); c.arc(cx, cy + 1, s * 0.26, 0, TAU);
-        strokeFill(c, '#ef476f', 2);
-        c.fillStyle = '#ffd166';
-        c.beginPath(); c.arc(cx - 5, cy - 2, 4, 0, TAU); c.arc(cx + 6, cy + 3, 4, 0, TAU); c.arc(cx - 1, cy + 6, 3.5, 0, TAU); c.fill();
-      }
-    } else if (kind === 'pizza') {
-      c.beginPath(); c.arc(cx, cy + 1, s * 0.38, 0, TAU);
-      strokeFill(c, '#f59e0b', 3);
-      c.beginPath(); c.arc(cx, cy + 1, s * 0.29, 0, TAU);
-      c.fillStyle = '#ffd166'; c.fill();
-      c.fillStyle = '#d90429';
-      c.beginPath(); c.arc(cx - 6, cy - 4, 4, 0, TAU); c.arc(cx + 6, cy - 2, 4, 0, TAU); c.arc(cx, cy + 7, 4, 0, TAU); c.fill();
-    } else if (kind === 'burger' || kind === 'cheeseburger') {
-      // Tray glow underneath finished dish
-      c.beginPath(); c.ellipse(cx, cy + 12, s * 0.41, s * 0.16, 0, 0, TAU);
-      strokeFill(c, '#ffffff', 2.8);
-      c.beginPath(); c.ellipse(cx, cy + 8, s * 0.33, s * 0.13, 0, 0, TAU);
-      strokeFill(c, '#e7984f', 2.6);
-      c.beginPath(); c.ellipse(cx, cy + 2, s * 0.35, s * 0.14, 0, 0, TAU);
-      strokeFill(c, '#7f3718', 2.6);
-      if (kind === 'cheeseburger') {
-        c.beginPath(); c.moveTo(cx - 15, cy - 2); c.lineTo(cx + 15, cy - 2); c.lineTo(cx + 4, cy + 7); c.lineTo(cx - 12, cy + 3); c.closePath();
-        strokeFill(c, '#ffd166', 2.4);
-      }
-      c.beginPath(); c.ellipse(cx, cy - 4, s * 0.34, s * 0.18, 0, Math.PI, TAU);
-      c.closePath();
-      strokeFill(c, '#f6bd60', 2.8);
-      c.fillStyle = '#fff8eb';
-      c.beginPath(); c.arc(cx - 5, cy - 10, 1.8, 0, TAU); c.arc(cx + 5, cy - 10, 1.8, 0, TAU); c.arc(cx, cy - 12, 1.8, 0, TAU); c.fill();
-    } else if (kind === 'burnt') {
-      A.blob(c, cx, cy + 2, s * 0.3, 0.14, 1.2);
-      strokeFill(c, '#334155', 3);
+  function closeOpenRound() {
+    if (roundOpen) {
+      Kit.stats.end('quit');
+      roundOpen = false;
     }
   }
 
-  function itemSprite(kind) {
-    return A.sprite('it_' + kind, 52, 52, function (c, bw) {
-      paintFoodArt(c, kind, bw);
-    }, { pad: 4 });
+  function toTitle() {
+    closeOpenRound();
+    world = null;
+    if (!demo) initDemo();
+    demo.chefs[0].apron = save.apron;
+    demo.chefs[0].hat = save.hat;
+    snap = true;
+    refreshTitleUI();
+    setMode('title');
   }
 
-  function miniIconSprite(kind) {
-    if (E.ITEMS[kind]) return itemSprite(kind);
-    return A.sprite('ic_' + kind, 40, 40, function (c, bw, bh) {
-      rr(c, 4, 4, bw - 8, bh - 8, 10);
-      var col = kind === 'grill' ? '#f97316' : kind === 'fryer' ? '#eab308' : kind === 'blender' ? '#06b6d4' : '#8b5cf6';
-      strokeFill(c, col, 3);
-      c.fillStyle = '#fff';
-      c.beginPath();
-      if (kind === 'blender') { c.moveTo(20, 9); c.lineTo(28, 29); c.lineTo(12, 29); c.closePath(); c.fill(); }
-      else if (kind === 'oven') { c.arc(20, 23, 9, Math.PI, TAU); c.fill(); }
-      else { c.arc(20, 20, 8, 0, TAU); c.fill(); }
-    }, { pad: 3 });
+  /* --------------------------------------------------------------- Levels & Wardrobe UI */
+  function openLevels() {
+    J.select();
+    $('levelsStars').querySelector('b').textContent = E.totalStars(save) + '/' + (E.LEVELS.length * 3);
+    var host = $('levelsGrid');
+    host.innerHTML = '';
+    for (var c = 0; c < E.CANTEENS.length; c++) {
+      var wrap = document.createElement('div');
+      wrap.className = 'canteen-row';
+      var title = document.createElement('div');
+      title.className = 'canteen-title';
+      title.textContent = (c + 1) + '. ' + E.CANTEENS[c].name;
+      wrap.appendChild(title);
+      var row = document.createElement('div');
+      row.className = 'canteen-levels';
+      for (var i = 0; i < E.LEVELS.length; i++) {
+        var lv = E.LEVELS[i];
+        if (lv.canteen !== c) continue;
+        var unlocked = E.isLevelUnlocked(save, lv.index);
+        var prog = save.levels[lv.index];
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'lvl-btn';
+        btn.disabled = !unlocked;
+        btn.dataset.level = String(lv.index);
+        var starsHtml = '';
+        for (var st = 0; st < 3; st++) starsHtml += st < prog.stars ? '<b>★</b>' : '★';
+        btn.innerHTML = '<span class="lvl-id">' + (unlocked ? lv.id : '🔒 ' + lv.id) + '</span>' +
+          '<span class="lvl-name">' + lv.name + '</span>' +
+          '<span class="lvl-stars">' + starsHtml + '</span>';
+        (function (idx) {
+          btn.addEventListener('click', function () { startLevel(idx, false); });
+        })(lv.index);
+        row.appendChild(btn);
+      }
+      wrap.appendChild(row);
+      host.appendChild(wrap);
+    }
+    setMode('levels');
   }
 
-  function stationSprite(st, worldIdx) {
-    var key = 'st_' + st.type + (st.kind ? '_' + st.kind : '') + (st.dir ? '_' + st.dir : '') + (st.type === 'wall' ? '_w' + worldIdx : '');
-    return A.sprite(key, TILE, TILE, function (c, bw, bh) {
-      var wd = E.WORLDS[worldIdx] || E.WORLDS[0];
-      if (st.type === 'wall') {
-        rr(c, 3, 3, bw - 6, bh - 6, 14);
-        strokeFill(c, A.shade(wd.color, -0.22), 3.5);
-        rr(c, 10, 9, bw - 20, bh - 24, 10);
-        c.fillStyle = wd.color; c.fill();
-        A.gloss(c, 12, 10, bw - 24, 22);
+  function renderWardrobe() {
+    $('shopCoins').querySelector('b').textContent = Kit.fmt(save.coins);
+    var aHost = $('apronGrid');
+    aHost.innerHTML = '';
+    for (var i = 0; i < E.APRONS.length; i++) {
+      var ap = E.APRONS[i];
+      var owned = save.aprons.indexOf(i) !== -1;
+      var eq = save.apron === i;
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'skin-card' + (eq ? ' equipped' : owned ? '' : ' locked');
+      var hex = '#' + ap.color.toString(16).padStart(6, '0');
+      btn.innerHTML = '<span class="skin-swatch" style="background:' + hex + '"></span>' +
+        '<span class="skin-meta"><span class="skin-name">' + ap.name + '</span>' +
+        '<span class="skin-cost">' + (eq ? '✓ مُرتدى' : owned ? 'اختيار' : '🪙 ' + ap.cost) + '</span></span>';
+      (function (idx) {
+        btn.addEventListener('click', function () { selectSkin('apron', idx); });
+      })(i);
+      aHost.appendChild(btn);
+    }
+
+    var hHost = $('hatGrid');
+    hHost.innerHTML = '';
+    for (var j = 0; j < E.HATS.length; j++) {
+      var ht = E.HATS[j];
+      var hOwned = save.hats.indexOf(j) !== -1;
+      var hEq = save.hat === j;
+      var hBtn = document.createElement('button');
+      hBtn.type = 'button';
+      hBtn.className = 'skin-card' + (hEq ? ' equipped' : hOwned ? '' : ' locked');
+      hBtn.innerHTML = '<span class="skin-swatch" style="background:#fff3da">' + (HAT_ICONS[j] || '👒') + '</span>' +
+        '<span class="skin-meta"><span class="skin-name">' + ht.name + '</span>' +
+        '<span class="skin-cost">' + (hEq ? '✓ مُرتدى' : hOwned ? 'اختيار' : '🪙 ' + ht.cost) + '</span></span>';
+      (function (idx) {
+        hBtn.addEventListener('click', function () { selectSkin('hat', idx); });
+      })(j);
+      hHost.appendChild(hBtn);
+    }
+  }
+
+  function selectSkin(kind, idx) {
+    var list = kind === 'apron' ? E.APRONS : E.HATS;
+    var ownedList = kind === 'apron' ? save.aprons : save.hats;
+    var item = list[idx];
+    if (!item) return;
+    if (ownedList.indexOf(idx) === -1) {
+      if (save.coins < item.cost) {
+        J.error();
         return;
       }
-
-      // Base chunky block with front depth lip
-      rr(c, 2, 6, bw - 4, bh - 8, 16);
-      strokeFill(c, '#8d6e63', 3.5);
-
-      if (st.type === 'counter') {
-        rr(c, 2, 2, bw - 4, bh - 12, 16);
-        strokeFill(c, '#fff3d6', 3.5);
-        rr(c, 12, 12, bw - 24, bh - 32, 10);
-        c.strokeStyle = '#f3d5a5'; c.lineWidth = 2.5; c.stroke();
-      } else if (st.type === 'belt') {
-        rr(c, 2, 2, bw - 4, bh - 12, 16);
-        strokeFill(c, '#334155', 3.5);
-        c.strokeStyle = '#38bdf8'; c.lineWidth = 4.5; c.lineCap = 'round'; c.lineJoin = 'round';
-        for (var bi = -1; bi <= 1; bi++) {
-          var bx = bw / 2 + bi * 18;
-          c.beginPath();
-          c.moveTo(bx - st.dir * 7, 22);
-          c.lineTo(bx + st.dir * 7, 36);
-          c.lineTo(bx - st.dir * 7, 50);
-          c.stroke();
-        }
-      } else if (st.type === 'warp') {
-        rr(c, 2, 2, bw - 4, bh - 12, 16);
-        strokeFill(c, '#3b0764', 3.5);
-        c.beginPath(); c.arc(bw / 2, 36, 24, 0, TAU);
-        strokeFill(c, '#a855f7', 3);
-        c.beginPath(); c.arc(bw / 2, 36, 13, 0, TAU);
-        c.fillStyle = '#00f5d4'; c.fill();
-      } else if (st.type === 'crate') {
-        rr(c, 2, 2, bw - 4, bh - 12, 16);
-        strokeFill(c, '#f6bd60', 3.5);
-        rr(c, 9, 8, bw - 18, bh - 26, 11);
-        strokeFill(c, '#fff8eb', 2.5);
-        var fSpr = itemSprite(st.kind);
-        A.blit(c, fSpr, bw / 2, 33, { sx: 0.92, sy: 0.92 });
-        drawText(c, E.ITEMS[st.kind].name, bw / 2, bh - 13, 13, '#ffffff');
-      } else if (st.type === 'grill') {
-        rr(c, 2, 2, bw - 4, bh - 12, 16);
-        strokeFill(c, '#334155', 3.5);
-        rr(c, 11, 10, bw - 22, bh - 30, 10);
-        strokeFill(c, '#ea580c', 3);
-        c.strokeStyle = '#cbd5e1'; c.lineWidth = 3.5;
-        for (var gi = 0; gi < 4; gi++) {
-          var gx = 20 + gi * 14;
-          c.beginPath(); c.moveTo(gx, 13); c.lineTo(gx, bh - 23); c.stroke();
-        }
-        drawText(c, 'شواية', bw / 2, bh - 12, 13, '#ffd166');
-      } else if (st.type === 'fryer') {
-        rr(c, 2, 2, bw - 4, bh - 12, 16);
-        strokeFill(c, '#475569', 3.5);
-        rr(c, 11, 10, bw - 22, bh - 30, 10);
-        strokeFill(c, '#facc15', 3);
-        c.fillStyle = '#fef08a';
-        c.beginPath(); c.arc(28, 26, 5, 0, TAU); c.arc(48, 34, 6, 0, TAU); c.arc(36, 42, 4, 0, TAU); c.fill();
-        drawText(c, 'مقلاة', bw / 2, bh - 12, 13, '#fef08a');
-      } else if (st.type === 'blender') {
-        rr(c, 2, 2, bw - 4, bh - 12, 16);
-        strokeFill(c, '#0284c7', 3.5);
-        c.beginPath(); c.arc(bw / 2, 34, 21, 0, TAU);
-        strokeFill(c, '#e0f2fe', 3);
-        c.beginPath(); c.arc(bw / 2, 34, 12, 0, TAU);
-        c.fillStyle = '#ff4d6d'; c.fill();
-        drawText(c, 'خلاط', bw / 2, bh - 12, 13, '#ffffff');
-      } else if (st.type === 'oven') {
-        rr(c, 2, 2, bw - 4, bh - 12, 16);
-        strokeFill(c, '#7c2d12', 3.5);
-        c.beginPath(); c.arc(bw / 2, 44, 24, Math.PI, TAU); c.closePath();
-        strokeFill(c, '#ff9f1c', 3);
-        drawText(c, 'فرن', bw / 2, bh - 12, 13, '#ffd166');
-      } else if (st.type === 'cannon') {
-        rr(c, 2, 2, bw - 4, bh - 10, 16);
-        strokeFill(c, '#ef476f', 3.5);
-        // Cannon barrel pointing up toward Serving Window
-        rr(c, bw / 2 - 18, 4, 36, 40, 12);
-        strokeFill(c, '#ffd166', 3.5);
-        c.beginPath(); c.moveTo(bw / 2, 10); c.lineTo(bw / 2 - 9, 25); c.lineTo(bw / 2 + 9, 25); c.closePath();
-        c.fillStyle = '#1b1640'; c.fill();
-        drawText(c, 'أطلق!', bw / 2, bh - 15, 14, '#ffffff');
-      } else if (st.type === 'trash') {
-        rr(c, 2, 2, bw - 4, bh - 12, 16);
-        strokeFill(c, '#10b981', 3.5);
-        c.beginPath(); c.arc(bw / 2, 35, 18, 0, TAU);
-        strokeFill(c, '#064e3b', 3);
-        drawText(c, 'تدوير', bw / 2, bh - 12, 13, '#ffffff');
-      }
-    }, { pad: 4 });
-  }
-
-  function floorPadSprite(fp) {
-    var key = 'fp_' + fp.type + '_' + fp.dir;
-    return A.sprite(key, TILE, TILE, function (c, bw, bh) {
-      if (fp.type === 'boost') {
-        rr(c, 6, 6, bw - 12, bh - 12, 14);
-        strokeFill(c, 'rgba(0, 245, 212, 0.35)', 2.5);
-        c.strokeStyle = '#00bbf9'; c.lineWidth = 5; c.lineCap = 'round';
-        for (var i = -1; i <= 1; i++) {
-          var x = bw / 2 + i * 16;
-          c.beginPath();
-          c.moveTo(x - fp.dir * 7, 26);
-          c.lineTo(x + fp.dir * 7, bh / 2);
-          c.lineTo(x - fp.dir * 7, bh - 26);
-          c.stroke();
-        }
-      } else {
-        c.beginPath(); c.arc(bw / 2, bh / 2, 34, 0, TAU);
-        strokeFill(c, '#bae6fd', 3);
-        c.beginPath(); c.arc(bw / 2, bh / 2, 22, 0, TAU);
-        strokeFill(c, '#38bdf8', 2.5);
-      }
-    }, { pad: 2 });
-  }
-
-  function customerSprite(custId, blink) {
-    var bKey = blink ? '1' : '0';
-    return A.sprite('cust_' + custId + '_' + bKey, 92, 92, function (c, bw, bh) {
-      var cx = bw / 2, cy = bh / 2 + 6;
-      if (custId === 'striker') {
-        // Soccer Athlete
-        c.beginPath(); c.arc(cx, cy, 30, 0, TAU);
-        strokeFill(c, '#ffcfb3', 3.5);
-        // Spiky hair + sporty headband
-        c.beginPath(); c.moveTo(cx - 28, cy - 12); c.lineTo(cx - 18, cy - 36); c.lineTo(cx - 4, cy - 26); c.lineTo(cx + 8, cy - 38); c.lineTo(cx + 20, cy - 25); c.lineTo(cx + 30, cy - 12); c.closePath();
-        strokeFill(c, '#1e293b', 3.5);
-        rr(c, cx - 30, cy - 17, 60, 10, 5);
-        strokeFill(c, '#38bdf8', 3);
-      } else if (custId === 'robo') {
-        // Hungry Friendly Robot
-        c.beginPath(); c.moveTo(cx, cy - 42); c.lineTo(cx, cy - 28); c.strokeStyle = INK; c.lineWidth = 4; c.stroke();
-        c.beginPath(); c.arc(cx, cy - 44, 6, 0, TAU); strokeFill(c, '#00f5d4', 3);
-        rr(c, cx - 30, cy - 28, 60, 56, 16);
-        strokeFill(c, '#a855f7', 3.5);
-        rr(c, cx - 22, cy - 18, 44, 24, 8);
-        strokeFill(c, '#1e1b4b', 2.5);
-      } else if (custId === 'dino') {
-        // Cute Baby T-Rex
-        for (var si = -1; si <= 1; si++) {
-          c.beginPath(); c.moveTo(cx + si * 12 - 6, cy - 26); c.lineTo(cx + si * 12, cy - 40); c.lineTo(cx + si * 12 + 6, cy - 26); c.closePath();
-          strokeFill(c, '#fb923c', 2.8);
-        }
-        c.beginPath(); c.arc(cx, cy, 31, 0, TAU);
-        strokeFill(c, '#22c55e', 3.5);
-      } else {
-        // Recess Ninja
-        c.beginPath(); c.arc(cx, cy, 30, 0, TAU);
-        strokeFill(c, '#ef233c', 3.5);
-        rr(c, cx - 24, cy - 14, 48, 18, 8);
-        strokeFill(c, '#ffe5d9', 3);
-        c.beginPath(); c.arc(cx, cy - 23, 5, 0, TAU);
-        strokeFill(c, '#ffd166', 2.5);
-      }
-
-      // Expressive eyes & happy open mouth
-      var ey = custId === 'ninja' ? cy - 5 : cy - 6;
-      for (var side = -1; side <= 1; side += 2) {
-        var ex = cx + side * 11;
-        if (blink) {
-          c.beginPath(); c.moveTo(ex - 5, ey); c.lineTo(ex + 5, ey);
-          c.strokeStyle = custId === 'robo' ? '#00f5d4' : INK; c.lineWidth = 3.5; c.stroke();
-        } else {
-          c.beginPath(); c.arc(ex, ey, 5.5, 0, TAU);
-          c.fillStyle = custId === 'robo' ? '#00f5d4' : '#ffffff'; c.fill();
-          if (custId !== 'robo') {
-            c.lineWidth = 2.2; c.strokeStyle = INK; c.stroke();
-            c.beginPath(); c.arc(ex + side, ey + 1, 2.8, 0, TAU); c.fillStyle = INK; c.fill();
-          }
-        }
-      }
-      if (custId !== 'ninja') {
-        c.beginPath(); c.arc(cx, cy + 10, 9, 0, Math.PI); c.closePath();
-        strokeFill(c, '#ef476f', 2.8);
-      }
-    }, { pad: 4 });
-  }
-
-  function chefSprite(apronIdx, hatIdx, pIdx) {
-    var aCol = pIdx === 1 ? '#38bdf8' : E.APRONS[apronIdx].color;
-    return A.sprite('chef_' + pIdx + '_' + apronIdx + '_' + hatIdx, 76, 84, function (c, bw, bh) {
-      var cx = bw / 2, cy = bh / 2 + 8;
-      // Apron body
-      c.beginPath(); c.arc(cx, cy + 10, 24, 0, TAU);
-      strokeFill(c, aCol, 3.5);
-      // Cute hands
-      c.beginPath(); c.arc(cx - 23, cy + 8, 7, 0, TAU); strokeFill(c, '#ffd6a5', 3);
-      c.beginPath(); c.arc(cx + 23, cy + 8, 7, 0, TAU); strokeFill(c, '#ffd6a5', 3);
-      // Head
-      c.beginPath(); c.arc(cx, cy - 6, 20, 0, TAU);
-      strokeFill(c, '#ffdbac', 3.5);
-      // Eyes & grin
-      c.fillStyle = INK;
-      c.beginPath(); c.arc(cx - 7, cy - 6, 3.2, 0, TAU); c.arc(cx + 7, cy - 6, 3.2, 0, TAU); c.fill();
-      c.beginPath(); c.arc(cx, cy + 1, 6, 0.15, Math.PI - 0.15); c.strokeStyle = INK; c.lineWidth = 2.8; c.stroke();
-
-      // Hat
-      if (hatIdx === 0) {
-        c.beginPath(); c.arc(cx - 9, cy - 28, 10, 0, TAU); c.arc(cx + 9, cy - 28, 10, 0, TAU); c.arc(cx, cy - 32, 12, 0, TAU);
-        strokeFill(c, '#ffffff', 3.2);
-        rr(c, cx - 15, cy - 24, 30, 8, 4);
-        strokeFill(c, '#ffd166', 2.8);
-      } else if (hatIdx === 1) {
-        // Pirate Hat
-        c.beginPath(); c.moveTo(cx - 24, cy - 18); c.quadraticCurveTo(cx, cy - 42, cx + 24, cy - 18); c.closePath();
-        strokeFill(c, '#1e293b', 3.2);
-        c.beginPath(); c.arc(cx, cy - 26, 4.5, 0, TAU); c.fillStyle = '#ffd166'; c.fill();
-      } else if (hatIdx === 2) {
-        // Space Visor Helmet
-        c.beginPath(); c.arc(cx, cy - 7, 23, Math.PI, TAU);
-        strokeFill(c, 'rgba(56, 189, 248, 0.55)', 3.2);
-        c.beginPath(); c.arc(cx, cy - 32, 4, 0, TAU); strokeFill(c, '#00f5d4', 2.5);
-      } else {
-        // Golden Crown
-        c.beginPath(); c.moveTo(cx - 16, cy - 20); c.lineTo(cx - 18, cy - 36); c.lineTo(cx - 7, cy - 27);
-        c.lineTo(cx, cy - 39); c.lineTo(cx + 7, cy - 27); c.lineTo(cx + 18, cy - 36); c.lineTo(cx + 16, cy - 20); c.closePath();
-        strokeFill(c, '#ffd166', 3.2);
-      }
-    }, { pad: 4 });
-  }
-
-  function sousBotSprite() {
-    return A.sprite('sous_bot', 68, 68, function (c, bw, bh) {
-      var cx = bw / 2, cy = bh / 2 + 4;
-      c.beginPath(); c.moveTo(cx, 8); c.lineTo(cx, 18); c.strokeStyle = INK; c.lineWidth = 4; c.stroke();
-      c.beginPath(); c.arc(cx, 7, 5, 0, TAU); strokeFill(c, '#00f5d4', 2.8);
-      rr(c, cx - 20, 18, 40, 34, 12);
-      strokeFill(c, '#38bdf8', 3.5);
-      rr(c, cx - 14, 24, 28, 14, 6);
-      strokeFill(c, '#0f172a', 2.5);
-      c.fillStyle = '#00f5d4';
-      c.beginPath(); c.arc(cx - 6, 31, 3, 0, TAU); c.arc(cx + 6, 31, 3, 0, TAU); c.fill();
-    }, { pad: 4 });
-  }
-
-  function roomBackdrop(worldIdx) {
-    return A.bake('room_' + worldIdx, W, H, function (c) {
-      var wd = E.WORLDS[worldIdx] || E.WORLDS[0];
-      var g = c.createLinearGradient(0, 0, 0, 196);
-      g.addColorStop(0, A.shade(wd.color, -0.35));
-      g.addColorStop(1, A.shade(wd.color, 0.18));
-      c.fillStyle = g;
-      c.fillRect(0, 0, W, 196);
-
-      // Striped cafeteria awning at very top
-      for (var i = 0; i < 20; i++) {
-        c.fillStyle = i % 2 === 0 ? wd.color : '#fff8eb';
-        c.fillRect(i * 64, 0, 64, 18);
-      }
-      c.fillStyle = INK;
-      c.fillRect(0, 18, W, 4);
-
-      // Serving Window sill
-      c.fillStyle = '#5c3a21';
-      c.fillRect(0, 178, W, 18);
-      c.fillStyle = INK;
-      c.fillRect(0, 176, W, 4);
-      c.fillRect(0, 194, W, 4);
-
-      // Outer floor margin
-      c.fillStyle = '#251e4d';
-      c.fillRect(0, 196, W, H - 196);
-
-      // Checkerboard kitchen floor
-      rr(c, E.GX - 6, E.GY - 6, E.COLS * TILE + 12, E.ROWS * TILE + 12, 20);
-      strokeFill(c, INK, 4);
-      for (var r = 0; r < E.ROWS; r++) {
-        for (var col = 0; col < E.COLS; col++) {
-          c.fillStyle = (r + col) % 2 === 0 ? wd.floorA : wd.floorB;
-          c.fillRect(E.GX + col * TILE, E.GY + r * TILE, TILE, TILE);
-        }
-      }
-    });
-  }
-
-  /* -------------------------------------------- State & UI Screens */
-  var screen = 'title';
-  var menuPlayers = 1;
-  var world = E.create(0, { players: 1, difficulty: save.difficulty, dda: dda.level });
-  var roundOpen = false;
-  var act1Queued = false, act2Queued = false, dash1Queued = false, dash2Queued = false, botQueued = false;
-
-  function syncTopCounters() {
-    var starsStr = E.totalStars(save) + '/36';
-    var coinsStr = Kit.fmt(save.coins);
-    $('titleStars').querySelector('b').textContent = starsStr;
-    $('titleCoins').querySelector('b').textContent = coinsStr;
-    $('mapStars').querySelector('b').textContent = starsStr;
-    $('shopCoins').querySelector('b').textContent = coinsStr;
-
-    var pills = document.querySelectorAll('.diff-pill');
-    for (var i = 0; i < pills.length; i++) {
-      pills[i].classList.toggle('active', pills[i].getAttribute('data-diff') === save.difficulty);
+      save.coins -= item.cost;
+      ownedList.push(idx);
+      J.coin(3);
+      if (view && demo) view.burst(demo.chefs[0].x, demo.chefs[0].y, { count: 20, colors: [0xffd447, 0x38d975, 0xff5a5f], speed: 4.5, up: 4.5 });
+    } else {
+      J.select();
     }
-    $('mapModeTxt').textContent = menuPlayers === 2 ? 'لاعبان' : 'لاعب واحد';
+    if (kind === 'apron') save.apron = idx;
+    else save.hat = idx;
+    if (demo && demo.chefs[0]) {
+      demo.chefs[0].apron = save.apron;
+      demo.chefs[0].hat = save.hat;
+    }
+    persist();
+    renderWardrobe();
+    refreshTitleUI();
   }
 
-  function showScreen(next) {
-    screen = next;
-    $('scrTitle').hidden = next !== 'title';
-    $('scrMap').hidden = next !== 'map';
-    $('scrShop').hidden = next !== 'shop';
-    $('scrPause').hidden = next !== 'pause';
-    $('scrResult').hidden = next !== 'result';
-    $('hud').hidden = next !== 'play';
-    if (next === 'play') $('btnBot').hidden = world.players !== 1;
-    syncTopCounters();
+  /* --------------------------------------------------------------- Start / Pause / End */
+  function startLevel(levelIndex, endless) {
+    closeOpenRound();
+    J.select();
+    Kit.keys.reset();
+    prevAct1 = prevDash1 = prevAct2 = prevDash2 = false;
+
+    var opts = {
+      level: levelIndex,
+      endless: !!endless,
+      duo: duo,
+      apron: save.apron,
+      hat: save.hat,
+      apron2: save.apron === 4 ? 1 : 4,
+      hat2: save.hat === 1 ? 2 : 1
+    };
+
+    if (!duo) {
+      opts.patienceMult = dda.value(1.28, 0.86);
+      opts.spawnMult = dda.value(1.22, 0.84);
+      opts.burnMult = dda.value(1.40, 0.85);
+    } else {
+      opts.patienceMult = 1.08;
+      opts.spawnMult = 0.88;
+      opts.burnMult = 1.15;
+    }
+
+    world = E.create(opts);
+    resultData = null;
+    toastT = 0;
+    idleT = 0;
+    $('toast').hidden = true;
+    hudCache = { stage: '', score: -1, time: -1, combo: -1, stars: -1, orderSig: '' };
+    ticketEls = {};
+    $('ordersBar').innerHTML = '';
+
+    var rid = (duo ? 'duo-' : 'L') + (endless ? 'endless' : (levelIndex + 1));
+    Kit.stats.round(rid);
+    roundOpen = true;
+
+    tutorialActive = !endless && levelIndex === 0 && !save.tutorialDone;
+    if (tutorialActive) Kit.stats.tutorial('start');
+
+    snap = true;
+    setMode('play');
+    syncHUD();
+    say('بدأت المرحلة ' + world.id);
+  }
+
+  function pauseGame(userClicked) {
+    if (mode !== 'play') return;
+    if (userClicked) J.back();
+    $('pauseSub').innerHTML = world ? ('المرحلة <span dir="ltr">' + world.id + '</span> — ' + world.levelName) : '';
+    setMode('pause');
     dirty = true;
   }
 
-  function beginTelemetryRound() {
-    var roundId = (world.players === 2 ? 'rk_coop_' : 'rk_') + (world.levelIndex + 1);
-    Kit.stats.round(roundId);
-    roundOpen = true;
-  }
-
-  function closeTelemetryRound(outcome, includeScore) {
-    if (!roundOpen) return;
-    roundOpen = false;
-    if (includeScore) Kit.stats.end(outcome, world.coins);
-    else Kit.stats.end(outcome);
-  }
-
-  function startGame(lvIdx, players) {
-    closeTelemetryRound('quit', world.players === 1);
-    world = E.create(lvIdx, {
-      players: players || 1,
-      difficulty: save.difficulty,
-      dda: dda.level
-    });
-    act1Queued = act2Queued = dash1Queued = dash2Queued = botQueued = false;
-    fx.clear();
-    Kit.keys.reset();
-    beginTelemetryRound();
-    showScreen('play');
-    try { canvas.focus(); } catch (e) { /* ignore */ }
-  }
-
-  function pauseGame() {
-    if (screen !== 'play') return;
-    Kit.keys.reset();
-    showScreen('pause');
-  }
-
   function resumeGame() {
-    if (screen !== 'pause') return;
+    if (mode !== 'pause') return;
+    J.select();
     Kit.keys.reset();
-    showScreen('play');
+    prevAct1 = prevDash1 = prevAct2 = prevDash2 = false;
+    setMode('play');
   }
 
-  function restartGame() {
-    startGame(world.levelIndex, world.players);
+  function showToast(text, cls, dur) {
+    var el = $('toast');
+    el.textContent = text;
+    el.className = 'toast' + (cls ? ' ' + cls : '');
+    el.hidden = false;
+    toastT = dur || 1.5;
   }
 
-  function buildMapUI() {
-    var root = $('worlds');
-    root.textContent = '';
-    for (var wIdx = 0; wIdx < E.WORLDS.length; wIdx++) {
-      var wd = E.WORLDS[wIdx];
-      var box = document.createElement('div');
-      box.className = 'world-box';
-      var head = document.createElement('div');
-      head.className = 'world-head';
-      var titleSpan = document.createElement('span');
-      var dot = document.createElement('i');
-      dot.className = 'world-dot';
-      dot.style.background = wd.color;
-      titleSpan.appendChild(dot);
-      titleSpan.appendChild(document.createTextNode((wIdx + 1) + '. ' + wd.name));
-      head.appendChild(titleSpan);
-      box.appendChild(head);
+  function handleRoundEnd(res) {
+    resultData = res;
+    resultT = 0;
+    resultLock = 0.35;
+    starShown = 0;
 
-      var row = document.createElement('div');
-      row.className = 'lv-row';
-      for (var sub = 0; sub < 3; sub++) {
-        (function (idx) {
-          var lv = E.LEVELS[idx];
-          var st = save.lv[idx];
-          var b = document.createElement('button');
-          b.type = 'button';
-          b.className = 'lv-btn';
-          var idSpan = document.createElement('span');
-          idSpan.className = 'lv-id';
-          idSpan.dir = 'ltr';
-          idSpan.textContent = lv.id;
-          var nmSpan = document.createElement('span');
-          nmSpan.className = 'lv-name';
-          nmSpan.textContent = lv.name;
-          var stSpan = document.createElement('span');
-          stSpan.className = 'lv-stars';
-          for (var k = 0; k < 3; k++) {
-            var sEl = document.createElement('span');
-            if (k < st.s) sEl.className = 'lit';
-            sEl.textContent = '★';
-            stSpan.appendChild(sEl);
-          }
-          b.appendChild(idSpan);
-          b.appendChild(nmSpan);
-          b.appendChild(stSpan);
-          b.addEventListener('click', function () {
-            sfx('select');
-            startGame(idx, menuPlayers);
-          });
-          row.appendChild(b);
-        })(wIdx * 3 + sub);
-      }
-      box.appendChild(row);
-      root.appendChild(box);
+    var isNewBest = false;
+    save.coins += res.coins;
+    if (res.endless) {
+      if (res.score > save.bestEndless) { save.bestEndless = res.score; isNewBest = res.score > 0; }
+    } else if (res.levelIndex >= 0 && res.levelIndex < save.levels.length) {
+      var lvSave = save.levels[res.levelIndex];
+      if (res.stars > lvSave.stars) lvSave.stars = res.stars;
+      if (res.score > lvSave.best) lvSave.best = res.score;
+      if (res.score > save.bestScore) { save.bestScore = res.score; isNewBest = res.score > 0; }
     }
-  }
-
-  function buildShopUI() {
-    function fillShelf(elId, list, cat, ownedArr, equippedIdx) {
-      var shelf = $(elId);
-      shelf.textContent = '';
-      for (var i = 0; i < list.length; i++) {
-        (function (idx) {
-          var item = list[idx];
-          var owned = !!ownedArr[idx];
-          var active = equippedIdx === idx;
-          var b = document.createElement('button');
-          b.type = 'button';
-          b.className = 'tile' + (active ? ' active' : '');
-          var sw = document.createElement('div');
-          sw.className = 'tile-swatch';
-          sw.style.background = item.color;
-          var nm = document.createElement('div');
-          nm.className = 'tile-name';
-          nm.textContent = item.name;
-          var tag = document.createElement('div');
-          tag.className = 'tile-tag';
-          tag.textContent = active ? 'مُجهّز ✓' : owned ? 'اختر' : item.cost + ' عملة';
-          b.appendChild(sw);
-          b.appendChild(nm);
-          b.appendChild(tag);
-          b.addEventListener('click', function () {
-            var res = E.buyOrEquip(save, cat, idx);
-            if (!res.ok) {
-              sfx('error');
-              return;
-            }
-            if (res.action === 'buy') {
-              sfx('coin', 3);
-              fx.burst(W / 2, H / 2, { count: 18, colors: ['#ffd166', '#3ddc84', '#38bdf8'] });
-              camShake.add(4);
-            } else {
-              sfx('select');
-            }
-            persist();
-            syncTopCounters();
-            buildShopUI();
-            dirty = true;
-          });
-          shelf.appendChild(b);
-        })(i);
-      }
-    }
-    fillShelf('shelfAprons', E.APRONS, 'apron', save.aprons, save.apron);
-    fillShelf('shelfHats', E.HATS, 'hat', save.hats, save.hat);
-  }
-
-  function handleEvents(evList) {
-    for (var i = 0; i < evList.length; i++) {
-      var ev = evList[i];
-      if (ev.t === 'pickup' || ev.t === 'place' || ev.t === 'putback' || ev.t === 'beltMove') {
-        sfx('tap');
-      } else if (ev.t === 'cookStart') {
-        sfx('pop', 0.35);
-      } else if (ev.t === 'cooked') {
-        sfx('chime', 1);
-        fx.burst(ev.x, ev.y - 20, { count: 8, colors: ['#ffd166', '#3ddc84'] });
-        A.pop('جاهز! ✨', ev.x, ev.y - 34, { color: '#3ddc84', size: 22 });
-      } else if (ev.t === 'combine') {
-        sfx('pop', 0.8);
-        fx.burst(ev.x, ev.y - 12, { count: 16, colors: ['#ffd166', '#38bdf8', '#ff4d6d', '#3ddc84'] });
-        A.pop('دمج رائع!', ev.x, ev.y - 36, { color: '#ffd166', size: 24 });
-      } else if (ev.t === 'warp') {
-        sfx('whoosh', 0.7);
-        fx.burst(ev.x, ev.y, { count: 14, colors: ['#a855f7', '#00f5d4', '#ffffff'] });
-      } else if (ev.t === 'dash' || ev.t === 'botGo') {
-        sfx('whoosh', 0.5);
-        fx.burst(ev.x, ev.y + 10, { count: 8, colors: ['#38bdf8', '#ffffff'] });
-      } else if (ev.t === 'botDrop' || ev.t === 'botRescue') {
-        sfx('chime', 2);
-        A.pop('تفضل يا شيف! 🤖', ev.x, ev.y - 36, { color: '#00f5d4', size: 22 });
-      } else if (ev.t === 'serve') {
-        Kit.track.hit();
-        sfx('impact', 0.45);
-        sfx('streak', Math.min(10, ev.streak));
-        sfx('coin', Math.min(5, ev.mult + 1));
-        fx.burst(330 + ev.slot * 310, 110, { count: 24, colors: ['#ffd166', '#3ddc84', '#38bdf8', '#ff4d6d'] });
-        camShake.add(5);
-        A.pop('+' + ev.coins + (ev.mult > 1 ? ' ×' + ev.mult : ''), 330 + ev.slot * 310, 128, { color: '#ffd166', size: 30 });
-      } else if (ev.t === 'warn') {
-        sfx('tap');
-      } else if (ev.t === 'burn') {
-        Kit.track.miss();
-        sfx('error');
-        fx.burst(ev.x, ev.y - 18, { count: 10, colors: ['#475569', '#94a3b8'] });
-      } else if (ev.t === 'expire') {
-        Kit.track.miss();
-        sfx('error');
-      } else if (ev.t === 'toss') {
-        sfx('pop', 0.25);
-      } else if (ev.t === 'hint') {
-        sfx('error');
-      } else if (ev.t === 'finish') {
-        onRoundFinish();
-      }
-    }
-  }
-
-  function onRoundFinish() {
-    var isNewBest = E.recordRound(save, world);
     persist();
-    if (world.players === 1) {
-      dda.result(Kit.clamp(world.stars / 3, 0, 1));
-      closeTelemetryRound(world.stars >= 1 ? 'win' : 'lose', true);
-    } else {
-      closeTelemetryRound('end', false);
-    }
 
-    $('resBest').hidden = !isNewBest;
-    $('resTitle').textContent = world.stars >= 2 ? 'أبدعت يا شيف!' : world.stars === 1 ? 'أحسنت!' : 'حاول مجدداً!';
-    var svgs = $('resStars').querySelectorAll('svg');
-    for (var i = 0; i < 3; i++) svgs[i].classList.toggle('on', i < world.stars);
-    $('resServed').textContent = String(world.served);
-    $('resStreak').textContent = '×' + Math.max(1, world.bestStreak >= 4 ? 3 : world.bestStreak >= 2 ? 2 : 1);
-    $('resCoins').textContent = '+' + Kit.fmt(world.coins);
-
-    if (world.stars >= 1) sfx('levelUp'); else sfx('back');
-    showScreen('result');
-  }
-
-  /* -------------------------------------------- Button & Input Bindings */
-  $('btnPlay').addEventListener('click', function () { sfx('select'); menuPlayers = 1; startGame(0, 1); });
-  $('btnCoop').addEventListener('click', function () { sfx('select'); menuPlayers = 2; startGame(0, 2); });
-  $('btnLevels').addEventListener('click', function () { sfx('select'); buildMapUI(); showScreen('map'); });
-  $('btnShop').addEventListener('click', function () { sfx('select'); buildShopUI(); showScreen('shop'); });
-
-  var diffBtns = document.querySelectorAll('.diff-pill');
-  for (var di = 0; di < diffBtns.length; di++) {
-    diffBtns[di].addEventListener('click', function () {
-      var d = this.getAttribute('data-diff');
-      if (E.DIFFICULTIES[d]) {
-        save.difficulty = d;
-        sfx('tap');
-        persist();
-        syncTopCounters();
-      }
-    });
-  }
-
-  $('mapHome').addEventListener('click', function () { sfx('back'); showScreen('title'); });
-  $('mapMode').addEventListener('click', function () {
-    menuPlayers = menuPlayers === 1 ? 2 : 1;
-    sfx('tap');
-    syncTopCounters();
-  });
-  $('shopBack').addEventListener('click', function () { sfx('back'); showScreen('title'); });
-
-  $('btnPause').addEventListener('click', function () { sfx('tap'); pauseGame(); });
-  $('btnBot').addEventListener('click', function () { botQueued = true; });
-  $('btnResume').addEventListener('click', function () { sfx('select'); resumeGame(); });
-  $('btnRestart').addEventListener('click', function () { sfx('select'); restartGame(); });
-  $('btnMap').addEventListener('click', function () {
-    sfx('back');
-    closeTelemetryRound('quit', world.players === 1);
-    buildMapUI();
-    showScreen('map');
-  });
-  $('btnPauseHome').addEventListener('click', function () {
-    sfx('back');
-    closeTelemetryRound('quit', world.players === 1);
-    showScreen('title');
-  });
-
-  $('resNext').addEventListener('click', function () {
-    sfx('select');
-    startGame((world.levelIndex + 1) % E.LEVELS.length, world.players);
-  });
-  $('resAgain').addEventListener('click', function () {
-    sfx('select');
-    startGame(world.levelIndex, world.players);
-  });
-  $('resMap').addEventListener('click', function () {
-    sfx('select');
-    buildMapUI();
-    showScreen('map');
-  });
-
-  window.addEventListener('keydown', function (e) {
-    if (!Kit.isGameKeyEvent(e) || e.repeat) return;
-    var code = e.code;
-
-    if (screen === 'title') {
-      if (code === 'Enter') { sfx('select'); startGame(0, 1); }
-      return;
-    }
-    if (screen === 'map' || screen === 'shop') {
-      if (code === 'Escape') { sfx('back'); showScreen('title'); }
-      return;
-    }
-    if (screen === 'pause') {
-      if (code === 'Escape' || code === 'KeyP') { sfx('select'); resumeGame(); }
-      else if (code === 'KeyR') { sfx('select'); restartGame(); }
-      return;
-    }
-    if (screen === 'result') {
-      if (code === 'Enter') { sfx('select'); startGame((world.levelIndex + 1) % E.LEVELS.length, world.players); }
-      else if (code === 'KeyR') { sfx('select'); startGame(world.levelIndex, world.players); }
-      else if (code === 'Escape') { sfx('back'); buildMapUI(); showScreen('map'); }
-      return;
-    }
-    if (screen === 'play') {
-      if (code === 'Escape' || code === 'KeyP') { sfx('tap'); pauseGame(); return; }
-      if (code === 'KeyR') { sfx('select'); restartGame(); return; }
-      if (world.players === 1) {
-        if (code === 'Space' || code === 'Enter') act1Queued = true;
-        else if (code === 'ShiftLeft' || code === 'ShiftRight' || code === 'KeyQ' || code === 'KeyE') dash1Queued = true;
-        else if (code === 'KeyF') botQueued = true;
+    if (roundOpen) {
+      if (res.duo) {
+        Kit.stats.end('end');
+      } else if (res.endless) {
+        Kit.stats.end('end', res.score);
       } else {
-        if (code === 'Space') act1Queued = true;
-        else if (code === 'ShiftLeft' || code === 'KeyQ' || code === 'KeyE') dash1Queued = true;
-        else if (code === 'Enter') act2Queued = true;
-        else if (code === 'ShiftRight' || code === 'Slash') dash2Queued = true;
+        Kit.stats.end(res.won ? 'win' : 'lose', res.score);
+      }
+      roundOpen = false;
+    }
+
+    if (!res.duo) {
+      dda.result(res.ddaOutcome);
+    }
+
+    $('resNewBest').hidden = !isNewBest;
+    if (res.endless) {
+      $('resTitle').textContent = res.served >= 6 ? 'شيف لا يُقهر! 🏆' : 'انتهى الوقت! ⏱';
+    } else if (res.stars === 3) {
+      $('resTitle').textContent = 'شيف أسطوري! 🌟';
+    } else if (res.won) {
+      $('resTitle').textContent = 'ممتاز يا شيف! 🎉';
+    } else {
+      $('resTitle').textContent = 'حاول مرة أخرى! 💪';
+    }
+
+    $('resScore').textContent = Kit.fmt(res.score);
+    $('resServed').textContent = String(res.served);
+    $('resCoins').textContent = '+' + Kit.fmt(res.coins);
+
+    var starEls = $('resStars').querySelectorAll('.star');
+    for (var i = 0; i < starEls.length; i++) starEls[i].classList.remove('on');
+    $('resStars').hidden = res.endless;
+
+    var hasNext = !res.endless && res.levelIndex + 1 < E.LEVELS.length && E.isLevelUnlocked(save, res.levelIndex + 1);
+    $('btnNext').hidden = !hasNext;
+
+    setMode('result');
+    if (res.won) {
+      J.levelUp();
+      if (view) view.burst(5.5, 3.5, { count: 36, colors: [0xffd447, 0x38d975, 0xff5a5f, 0x3ec6ff], y: 1.8, speed: 6.5, up: 6.5, life: 1.1, size: 0.24 });
+    } else {
+      J.fail();
+    }
+    say($('resTitle').textContent);
+  }
+
+  /* --------------------------------------------------------------- HUD Sync */
+  function syncHUD() {
+    if (!world) return;
+    var stageTxt = world.endless ? '∞' : world.id;
+    if (hudCache.stage !== stageTxt) {
+      hudCache.stage = stageTxt;
+      $('hudStage').textContent = stageTxt;
+    }
+    if (hudCache.score !== world.score) {
+      hudCache.score = world.score;
+      $('hudScore').textContent = Kit.fmt(world.score);
+    }
+    var curStars = world.endless ? 0 : E.calcStars(world.level, world.score, world.served);
+    if (hudCache.stars !== curStars) {
+      hudCache.stars = curStars;
+      var dots = $('hudStars');
+      dots.hidden = world.endless;
+      var kids = dots.children;
+      for (var s = 0; s < kids.length; s++) kids[s].classList.toggle('on', s < curStars);
+    }
+    var sec = Math.ceil(world.timeLeft);
+    if (hudCache.time !== sec) {
+      hudCache.time = sec;
+      $('hudTime').textContent = String(sec);
+      $('hudTimeWrap').classList.toggle('low', sec <= 15 && sec > 0);
+    }
+    if (hudCache.combo !== world.combo) {
+      hudCache.combo = world.combo;
+      $('hudCombo').hidden = world.combo < 2;
+      $('hudComboVal').textContent = '×' + world.combo;
+    }
+
+    // Picture Order Tickets (DOM diffed by order IDs to avoid layout thrash)
+    var sig = '';
+    for (var i = 0; i < world.orders.length; i++) sig += world.orders[i].id + ',';
+    var bar = $('ordersBar');
+    if (sig !== hudCache.orderSig) {
+      hudCache.orderSig = sig;
+      var alive = {};
+      for (i = 0; i < world.orders.length; i++) alive[world.orders[i].id] = 1;
+      for (var idKey in ticketEls) {
+        if (!alive[idKey]) {
+          if (ticketEls[idKey].el.parentNode) bar.removeChild(ticketEls[idKey].el);
+          delete ticketEls[idKey];
+        }
+      }
+      for (i = 0; i < world.orders.length; i++) {
+        var ord = world.orders[i];
+        if (!ticketEls[ord.id]) {
+          var rec = E.RECIPES[ord.recipe];
+          var card = document.createElement('div');
+          card.className = 'ticket';
+          card.innerHTML =
+            '<div class="ticket-head" style="background:' + (RECIPE_HEADER_BG[ord.recipe] || '#ff6b35') + '">' + rec.name + '</div>' +
+            '<div class="ticket-dish">' + (DISH_SVG[ord.recipe] || '') + '</div>' +
+            '<div class="ticket-steps">' + (RECIPE_STEPS_HTML[ord.recipe] || '') + '</div>' +
+            '<div class="ticket-bar"><div class="ticket-fill"></div></div>';
+          bar.appendChild(card);
+          ticketEls[ord.id] = { el: card, fill: card.querySelector('.ticket-fill') };
+        }
       }
     }
-  });
-
-  canvas.addEventListener('pointerdown', function (e) {
-    if (screen !== 'play') return;
-    if (e.button === 2) {
-      dash1Queued = true;
-      return;
+    // Update ticket patience bars smoothly
+    for (var j = 0; j < world.orders.length; j++) {
+      var o = world.orders[j];
+      var tObj = ticketEls[o.id];
+      if (!tObj) continue;
+      var pct = Math.max(0, Math.min(100, (o.patience / Math.max(1, o.maxPatience)) * 100));
+      tObj.fill.style.width = pct.toFixed(1) + '%';
+      tObj.fill.className = 'ticket-fill' + (pct < 28 ? ' low' : pct < 55 ? ' mid' : '');
+      tObj.el.classList.toggle('urgent', pct < 28);
     }
-    if (world.players === 1 && e.button === 0) {
-      var pt = view.toLogical(e.clientX, e.clientY);
-      if (pt.y >= E.GY - 24) {
-        world.ev.length = 0;
-        E.clickAt(world, 0, pt.x, pt.y);
-        handleEvents(world.ev);
-        dirty = true;
-      }
-    }
-  });
+  }
 
-  /* -------------------------------------------- Simulation & Render Loop */
+  /* --------------------------------------------------------------- Inputs & Events */
   function readInputs() {
     var K = Kit.keys;
-    if (world.players === 1) {
-      var mx1 = (K.anyDown(['KeyD', 'ArrowRight']) ? 1 : 0) - (K.anyDown(['KeyA', 'ArrowLeft']) ? 1 : 0);
-      var my1 = (K.anyDown(['KeyS', 'ArrowDown']) ? 1 : 0) - (K.anyDown(['KeyW', 'ArrowUp']) ? 1 : 0);
-      var inp = { mx: mx1, my: my1, act: act1Queued, dash: dash1Queued, bot: botQueued };
-      act1Queued = dash1Queued = botQueued = false;
-      return [inp];
+    if (!duo) {
+      var mx = (K.anyDown(['ArrowRight', 'KeyD']) ? 1 : 0) - (K.anyDown(['ArrowLeft', 'KeyA']) ? 1 : 0);
+      var my = (K.anyDown(['ArrowDown', 'KeyS']) ? 1 : 0) - (K.anyDown(['ArrowUp', 'KeyW']) ? 1 : 0);
+      var aDown = K.anyDown(['Space', 'KeyE']);
+      var aPress = K.anyPressed(['Space', 'KeyE']) || (aDown && !prevAct1);
+      var dDown = K.anyDown(['ShiftLeft', 'ShiftRight', 'KeyQ']);
+      var dPress = K.anyPressed(['ShiftLeft', 'ShiftRight', 'KeyQ']) || (dDown && !prevDash1);
+      prevAct1 = aDown; prevDash1 = dDown;
+      return [{ mx: mx, my: my, interact: aPress, dash: dPress }];
     }
+    // 2P Co-op: P1 WASD + Space/E (+ Q/ShiftLeft dash), P2 Arrows + Enter/. (+ / / ShiftRight dash)
     var p1x = (K.down('KeyD') ? 1 : 0) - (K.down('KeyA') ? 1 : 0);
     var p1y = (K.down('KeyS') ? 1 : 0) - (K.down('KeyW') ? 1 : 0);
+    var a1D = K.anyDown(['Space', 'KeyE']);
+    var a1P = K.anyPressed(['Space', 'KeyE']) || (a1D && !prevAct1);
+    var d1D = K.anyDown(['KeyQ', 'ShiftLeft']);
+    var d1P = K.anyPressed(['KeyQ', 'ShiftLeft']) || (d1D && !prevDash1);
+    prevAct1 = a1D; prevDash1 = d1D;
+
     var p2x = (K.down('ArrowRight') ? 1 : 0) - (K.down('ArrowLeft') ? 1 : 0);
     var p2y = (K.down('ArrowDown') ? 1 : 0) - (K.down('ArrowUp') ? 1 : 0);
-    var pair = [
-      { mx: p1x, my: p1y, act: act1Queued, dash: dash1Queued },
-      { mx: p2x, my: p2y, act: act2Queued, dash: dash2Queued }
+    var a2D = K.anyDown(['Enter', 'Period', 'NumpadEnter']);
+    var a2P = K.anyPressed(['Enter', 'Period', 'NumpadEnter']) || (a2D && !prevAct2);
+    var d2D = K.anyDown(['Slash', 'ShiftRight']);
+    var d2P = K.anyPressed(['Slash', 'ShiftRight']) || (d2D && !prevDash2);
+    prevAct2 = a2D; prevDash2 = d2D;
+
+    return [
+      { mx: p1x, my: p1y, interact: a1P, dash: d1P },
+      { mx: p2x, my: p2y, interact: a2P, dash: d2P }
     ];
-    act1Queued = act2Queued = dash1Queued = dash2Queued = botQueued = false;
-    return pair;
   }
 
-  function update(dt) {
-    if (screen === 'play') {
-      world.ev.length = 0;
-      E.step(world, dt, readInputs());
-      handleEvents(world.ev);
-      if (world.sousBot) {
-        var bBtn = $('btnBot');
-        var cooling = world.sousBot.state !== 'ready';
-        bBtn.classList.toggle('cooling', cooling);
-        $('botLabel').textContent = cooling ? 'يشحن... ' + Math.ceil(world.sousBot.cd) : 'المساعد الآلي';
+  function handleEvents(events) {
+    if (!events || !events.length) return;
+    for (var i = 0; i < events.length; i++) {
+      var ev = events[i];
+      if (ev.type === 'pickup') {
+        J.pop(0.45);
+        if (view) view.burst(ev.x, ev.y, { count: 6, colors: [0xffffff, 0xffe066], speed: 2.2, up: 2.4, life: 0.3, size: 0.12 });
+      } else if (ev.type === 'drop') {
+        J.tap();
+      } else if (ev.type === 'combine') {
+        J.chime(ev.dish ? 2 : 1);
+        if (view) view.burst(ev.x, ev.y, { count: 12, colors: [0xffd447, 0x38d975, 0xffffff], speed: 3.4, up: 3.4, life: 0.45, size: 0.15 });
+      } else if (ev.type === 'chopStart' || ev.type === 'chopBoost') {
+        J.impact(0.35);
+      } else if (ev.type === 'chopDone') {
+        J.chime(1);
+        if (view) view.burst(ev.x, ev.y, { count: 10, colors: [0x52d165, 0xffe066, 0xffffff], speed: 3.0, up: 3.0, life: 0.42, size: 0.14 });
+      } else if (ev.type === 'cookStart') {
+        J.whoosh(0.5);
+      } else if (ev.type === 'cookDone' || ev.type === 'juiceDone') {
+        J.chime(2);
+        if (view) view.burst(ev.x, ev.y, { count: 14, colors: [0xffcf2e, 0xffffff, 0xff842b], speed: 3.6, up: 3.8, life: 0.5, size: 0.16 });
+      } else if (ev.type === 'burnWarn') {
+        J.error();
+      } else if (ev.type === 'burnt') {
+        J.impact(0.75);
+        Kit.track.miss();
+        showToast('احترق الطعام! ارمِه في السلة 🗑️', 'warn', 1.7);
+        if (view) {
+          view.shake(0.5);
+          view.burst(ev.x, ev.y, { count: 16, colors: [0x3d3a42, 0xff5a5f, 0x6c6573], speed: 3.2, up: 4.0, life: 0.65, size: 0.2 });
+        }
+      } else if (ev.type === 'trash') {
+        J.whoosh(0.7);
+        if (view) view.burst(ev.x, ev.y, { count: 8, colors: [0xd9e2ec, 0x9aa5b1], speed: 2.5, up: 2.8, life: 0.35, size: 0.14 });
+      } else if (ev.type === 'dash') {
+        J.whoosh(0.85);
+        if (view) view.burst(ev.x, ev.y, { count: 7, colors: [0xffffff, 0xfff3d4], y: 0.2, speed: 2.4, up: 1.4, life: 0.32, size: 0.15, g: 3 });
+      } else if (ev.type === 'serve') {
+        J.chime(3);
+        J.streak(Math.min(ev.combo, 8));
+        J.coin(Math.min(ev.combo, 5));
+        Kit.track.hit();
+        if (tutorialActive) {
+          tutorialActive = false;
+          save.tutorialDone = true;
+          persist();
+          Kit.stats.tutorial('done');
+        }
+        var msg = '+' + ev.points + ' ⭐' + (ev.combo >= 2 ? '  🔥 ×' + ev.combo : '');
+        showToast(msg, 'good', 1.4);
+        if (view) {
+          view.shake(0.32);
+          view.burst(ev.x, ev.y, { count: 26, colors: [0xffd447, 0x38d975, 0xff5a5f, 0x3ec6ff, 0xffffff], y: 1.3, speed: 5.5, up: 5.5, life: 0.85, size: 0.2 });
+        }
+      } else if (ev.type === 'wrongDish') {
+        J.error();
+        showToast('هذا الطبق غير مطلوب الآن!', 'warn', 1.3);
+      } else if (ev.type === 'notReady') {
+        J.error();
+        showToast('أكمِل تجهيز الطبق أولًا!', 'warn', 1.3);
+      } else if (ev.type === 'bonk') {
+        J.tap();
+      } else if (ev.type === 'expired') {
+        J.fail();
+        Kit.track.miss();
+        showToast('فات موعد أحد الطلبات! ⏱', 'warn', 1.5);
+      } else if (ev.type === 'roundEnd') {
+        handleRoundEnd(ev.result);
       }
-      fx.update(dt);
-      camShake.update(dt);
-      A.pop.update(dt);
-      dirty = true;
-    } else if (screen !== 'pause') {
-      if (fx.list.length > 0 || camShake.power > 0) {
-        fx.update(dt);
-        camShake.update(dt);
-        dirty = true;
-      }
-      A.pop.update(dt);
     }
+  }
+
+  /* --------------------------------------------------------------- Update & Render */
+  var currentHintStation = null;
+
+  function update(dt) {
+    time += dt;
+    if (mode === 'play' && world) {
+      var inputs = readInputs();
+      var anyInput = false;
+      for (var i = 0; i < inputs.length; i++) {
+        if (inputs[i].mx || inputs[i].my || inputs[i].interact || inputs[i].dash) anyInput = true;
+      }
+      idleT = anyInput ? 0 : idleT + dt;
+
+      var events = E.step(world, dt, inputs);
+      handleEvents(events);
+      syncHUD();
+
+      // Ghost hint during first-time tutorial or when idle > 4s
+      var showGhost = !world.over && (tutorialActive || (world.served === 0 && world.time < 12) || idleT >= 4.2);
+      if (showGhost) {
+        var hint = E.nextHint(world);
+        if (hint && hint.station) {
+          currentHintStation = hint.station;
+          $('ghostText').textContent = hint.text;
+          $('ghostHint').hidden = false;
+        } else {
+          currentHintStation = null;
+          $('ghostHint').hidden = true;
+        }
+      } else {
+        currentHintStation = null;
+        $('ghostHint').hidden = true;
+      }
+    } else if (mode === 'title' || mode === 'levels' || mode === 'wardrobe') {
+      currentHintStation = null;
+      if (demo) E.step(demo, dt); // Zero audio in demo!
+    } else if (mode === 'result' && resultData) {
+      currentHintStation = null;
+      resultT += dt;
+      if (resultLock > 0) resultLock -= dt;
+      if (!resultData.endless && starShown < resultData.stars && resultT >= 0.26 + starShown * 0.28) {
+        starShown++;
+        var sEl = $('resStars').querySelector('[data-i="' + starShown + '"]');
+        if (sEl) sEl.classList.add('on');
+        J.star(starShown);
+      }
+    }
+
+    if (toastT > 0 && mode !== 'pause') {
+      toastT -= dt;
+      if (toastT <= 0) $('toast').hidden = true;
+    }
+    if (mode !== 'pause') dirty = true;
     Kit.keys.endFrame();
   }
 
-  function drawServingWindow() {
-    for (var i = 0; i < world.orders.length; i++) {
-      var ord = world.orders[i];
-      var sx = 330 + ord.slot * 310;
-      var bob = calm() ? 0 : Math.sin(world.time * 4.2 + ord.slot * 1.7) * 4;
-      var blink = !calm() && A.blink(BLINK_SLOTS[ord.slot]) > 0.5;
-
-      // VIP golden halo
-      if (ord.vip) {
-        ctx.save();
-        ctx.beginPath(); ctx.arc(sx - 66, 118 + bob, 44, 0, TAU);
-        ctx.fillStyle = 'rgba(255, 209, 102, 0.38)'; ctx.fill();
-        ctx.restore();
-      }
-
-      var cSpr = customerSprite(ord.customer, blink);
-      A.blit(ctx, cSpr, sx - 66, 120 + bob);
-      if (ord.vip) drawText(ctx, '👑 ×2', sx - 66, 68 + bob, 16, '#ffd166');
-
-      // Visual Recipe Bubble right beside customer
-      var bx = sx - 16, by = 34, bw = 166, bh = 128;
-      ctx.save();
-      rr(ctx, bx, by, bw, bh, 20);
-      strokeFill(ctx, ord.vip ? '#fffbeb' : '#ffffff', 3.5);
-
-      // Finished dish icon + Arabic name
-      var dSpr = itemSprite(ord.dish);
-      A.blit(ctx, dSpr, bx + bw - 34, by + 34, { sx: 0.95, sy: 0.95 });
-      drawText(ctx, E.DISHES[ord.dish].name, bx + 66, by + 32, 16, '#ffffff');
-
-      // 2-3 clear step icons equation bar
-      rr(ctx, bx + 10, by + 62, bw - 20, 38, 12);
-      ctx.fillStyle = '#f1f5f9'; ctx.fill();
-      var steps = ord.steps;
-      var stepStart = bx + bw / 2 - ((steps.length - 1) * 24);
-      for (var si = 0; si < steps.length; si++) {
-        var ic = miniIconSprite(steps[si]);
-        var ix = stepStart + si * 48;
-        A.blit(ctx, ic, ix, by + 81, { sx: 0.68, sy: 0.68 });
-        if (si + 1 < steps.length) {
-          var sym = (steps[si + 1] === 'blender' || steps[si + 1] === 'fryer' || steps[si + 1] === 'oven') ? '←' : '+';
-          drawText(ctx, sym, ix + 24, by + 81, 15, '#ffd166');
-        }
-      }
-
-      // Patience bar
-      var patRatio = Kit.clamp(ord.patience / ord.maxPatience, 0, 1);
-      rr(ctx, bx + 14, by + bh - 18, bw - 28, 10, 5);
-      ctx.fillStyle = '#e2e8f0'; ctx.fill();
-      rr(ctx, bx + 14, by + bh - 18, (bw - 28) * patRatio, 10, 5);
-      ctx.fillStyle = patRatio > 0.5 ? '#22c55e' : patRatio > 0.25 ? '#f59e0b' : '#ef4444';
-      ctx.fill();
-      ctx.restore();
-    }
-  }
-
-  function drawHudMeters() {
-    // Left meter: Coins + 3-Star Goals + Fever Streak
-    ctx.save();
-    rr(ctx, 82, 12, 178, 72, 18);
-    strokeFill(ctx, 'rgba(27, 22, 64, 0.85)', 3);
-    drawText(ctx, 'العملات: ' + world.coins, 171, 34, 20, '#ffd166');
-    var gMax = world.goals[2];
-    var pRatio = Kit.clamp(world.coins / gMax, 0, 1);
-    rr(ctx, 96, 54, 150, 14, 7);
-    ctx.fillStyle = '#334155'; ctx.fill();
-    rr(ctx, 96, 54, 150 * pRatio, 14, 7);
-    ctx.fillStyle = '#3ddc84'; ctx.fill();
-    for (var gi = 0; gi < 3; gi++) {
-      var gx = 96 + 150 * (world.goals[gi] / gMax);
-      drawText(ctx, '★', gx, 60, 15, world.coins >= world.goals[gi] ? '#ffd166' : '#94a3b8');
-    }
-
-    if (world.streak >= 2) {
-      rr(ctx, 82, 92, 178, 40, 14);
-      strokeFill(ctx, world.fever ? '#ff9f1c' : '#38bdf8', 3);
-      drawText(ctx, world.fever ? 'حماس تيربو ×3 🔥' : 'سلسلة حماس ×2 ⚡', 171, 112, 17, '#ffffff');
-    }
-
-    // Right meter: Stage & Timer (left of mute button)
-    rr(ctx, W - 216, 12, 152, 74, 18);
-    strokeFill(ctx, 'rgba(27, 22, 64, 0.85)', 3);
-    drawText(ctx, world.id + ' ' + E.WORLDS[world.world].name, W - 140, 32, 15, '#bae6fd');
-    var secs = Math.ceil(world.timeLeft);
-    drawText(ctx, '⏱ ' + secs, W - 140, 62, 26, secs <= 10 ? '#ff5d8f' : '#ffffff');
-    ctx.restore();
-  }
-
-  function drawWorld() {
-    var bg = roomBackdrop(world.world);
-    if (bg.canvas) ctx.drawImage(bg.canvas, 0, 0, W, H);
-
-    drawServingWindow();
-
-    // Floor pads (boost & sousPad)
-    for (var fi = 0; fi < world.floorPads.length; fi++) {
-      var fp = world.floorPads[fi];
-      A.blit(ctx, floorPadSprite(fp), fp.x, fp.y);
-    }
-
-    // Highlighted prompts for Chef 1 & Chef 2
-    var prompts = [];
-    for (var pi = 0; pi < world.chefs.length; pi++) {
-      var pr = E.promptFor(world, pi);
-      if (pr) prompts.push({ p: pr, ci: pi });
-    }
-
-    // Stations & placed/cooking items
-    for (var i = 0; i < world.stations.length; i++) {
-      var st = world.stations[i];
-      var wob = (!calm() && st.wobble > 0) ? Math.sin(st.wobble * 28) * 0.12 : 0;
-      A.blit(ctx, stationSprite(st, world.world), st.x, st.y, { rot: wob, sx: 1 + Math.abs(wob) * 0.4, sy: 1 - Math.abs(wob) * 0.3 });
-
-      if (st.item) {
-        A.blit(ctx, itemSprite(st.item.kind), st.x, st.y - 6);
-      } else if (st.prep) {
-        A.blit(ctx, itemSprite(st.prep), st.x, st.y - 4, { sx: 0.85, sy: 0.85 });
-      } else if (st.cook && st.cook.state !== 'idle') {
-        var ap = E.APPLIANCES[st.type], ck = st.cook;
-        var showKind = ck.state === 'burnt' ? 'burnt' : ck.state === 'cooking' ? ap.inKind : ap.outKind;
-        A.blit(ctx, itemSprite(showKind), st.x, st.y - 6);
-
-        // Progress or warning badge above appliance
-        if (ck.state === 'cooking') {
-          rr(ctx, st.x - 28, st.y - 44, 56, 10, 5);
-          strokeFill(ctx, '#1e293b', 2);
-          rr(ctx, st.x - 26, st.y - 42, 52 * ck.prog, 6, 3);
-          ctx.fillStyle = world.fever ? '#ffd166' : '#3ddc84';
-          ctx.fill();
-        } else if (ck.state === 'done') {
-          drawText(ctx, 'جاهز ✓', st.x, st.y - 40, 15, '#3ddc84');
-        } else if (ck.state === 'warning') {
-          var pulse = calm() ? 1 : (1 + Math.sin(world.time * 16) * 0.12);
-          ctx.save();
-          ctx.translate(st.x, st.y - 42);
-          ctx.scale(pulse, pulse);
-          drawText(ctx, 'سريع! 🔥', 0, 0, 17, '#ff9f1c');
-          ctx.restore();
-        } else if (ck.state === 'burnt') {
-          drawText(ctx, 'نظّف! 💨', st.x, st.y - 40, 16, '#cbd5e1');
-        }
-      }
-    }
-
-    // Glowing target ring + floating action pill
-    for (var qi = 0; qi < prompts.length; qi++) {
-      var pst = prompts[qi].p.station;
-      var ringCol = prompts[qi].ci === 1 ? '#38bdf8' : '#ffd166';
-      ctx.save();
-      rr(ctx, pst.x - TILE / 2 - 2, pst.y - TILE / 2 - 2, TILE + 4, TILE + 4, 18);
-      ctx.lineWidth = 4.5;
-      ctx.strokeStyle = ringCol;
-      ctx.stroke();
-      ctx.restore();
-      drawText(ctx, prompts[qi].p.label, pst.x, pst.y - 48, 16, ringCol);
-    }
-
-    // Mini Sous-Bot
-    if (world.sousBot) {
-      var bot = world.sousBot;
-      A.shadow(ctx, bot.x - 26, bot.y - 26, 52, 52, 0.38);
-      A.blit(ctx, sousBotSprite(), bot.x, bot.y - 4);
-      if (bot.state === 'go' && bot.gift) {
-        A.blit(ctx, itemSprite(bot.gift), bot.x, bot.y - 38, { sx: 0.78, sy: 0.78 });
-      }
-    }
-
-    // Chefs
-    for (var ci = 0; ci < world.chefs.length; ci++) {
-      var ch = world.chefs[ci];
-      var bobY = (!calm() && (ch.vx || ch.vy)) ? Math.sin(world.time * 18 + ci) * 3 : 0;
-      A.shadow(ctx, ch.x - 28, ch.y - 26, 56, 54, 0.45);
-      A.blit(ctx, chefSprite(save.apron, save.hat, ci), ch.x, ch.y - 10 + bobY);
-      if (world.players === 2) {
-        drawText(ctx, ci === 0 ? 'طاهي 1' : 'طاهي 2', ch.x, ch.y + 34, 14, ci === 0 ? '#ffd166' : '#38bdf8');
-      }
-      if (ch.held) {
-        A.blit(ctx, itemSprite(ch.held.kind), ch.x + ch.faceX * 16, ch.y - 44 + bobY, { sx: 0.96, sy: 0.96 });
-      }
-    }
-
-    // Flying Burger-Cannon shots!
-    for (var si = 0; si < world.shots.length; si++) {
-      var sh = world.shots[si];
-      var u = Kit.clamp(sh.t / sh.dur, 0, 1);
-      var sx = Kit.lerp(sh.x0, sh.x1, u);
-      var sy = Kit.lerp(sh.y0, sh.y1, u) - Math.sin(u * Math.PI) * 90;
-      var sc = 1 + Math.sin(u * Math.PI) * 0.45;
-      A.blit(ctx, itemSprite(sh.dish), sx, sy, { sx: sc, sy: sc, rot: u * 0.6 });
-    }
-
-    // Non-silent friendly guidance bubbles + target station arrow!
-    for (var hi = 0; hi < world.hints.length; hi++) {
-      var h = world.hints[hi];
-      var alpha = Kit.clamp(h.life / 0.35, 0, 1);
-      ctx.save();
-      ctx.globalAlpha = alpha;
-      if (h.targetX != null && h.targetY != null) {
-        ctx.strokeStyle = '#ffd166';
-        ctx.lineWidth = 5;
-        ctx.setLineDash([10, 8]);
-        ctx.beginPath();
-        ctx.moveTo(h.x, h.y + 16);
-        ctx.lineTo(h.targetX, h.targetY);
-        ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.beginPath();
-        ctx.arc(h.targetX, h.targetY, 44, 0, TAU);
-        ctx.stroke();
-      }
-      ctx.font = '800 18px Fredoka';
-      var tw = Math.max(150, ctx.measureText(h.text).width + 32);
-      var by = clampY(h.y);
-      var bx = Kit.clamp(h.x, tw / 2 + 16, W - tw / 2 - 16);
-      rr(ctx, bx - tw / 2, by - 22, tw, 44, 16);
-      strokeFill(ctx, '#fff8eb', 3.5);
-      drawText(ctx, h.text, bx, by, 18, '#ff9f1c');
-      ctx.restore();
-    }
-
-    fx.draw(ctx);
-    A.pop.draw(ctx);
-    if (screen === 'play' || screen === 'pause' || screen === 'result') drawHudMeters();
-  }
-
-  function clampY(y) {
-    return y < 44 ? 44 : y > H - 44 ? H - 44 : y;
-  }
-
   function render() {
-    if (screen === 'pause' && !dirty) return;
-    if (!dirty && calm()) return;
-    dirty = false;
+    if (!view || contextLost || (!dirty && mode === 'pause')) return;
+    var now = performance.now();
+    if (!view.mayDraw(now, mode === 'play')) return;
 
-    ctx.save();
-    if (screen === 'play' && !calm()) ctx.translate(camShake.x, camShake.y);
-    drawWorld();
-    ctx.restore();
+    if (mode !== 'pause' || snap) {
+      var dt = Math.max(0, Math.min(0.1, time - viewTime));
+      viewTime = time;
+      var activeWorld = (mode === 'play' || mode === 'pause' || mode === 'result') && world ? world : demo;
+      view.sync(activeWorld, { dt: dt, t: time, mode: mode, snap: snap, hintStation: currentHintStation });
+      snap = false;
+    }
+    view.render();
+    dirty = false;
   }
 
-  /* -------------------------------------------- Public Test & Scenario API */
-  window.__game = {
-    get state() {
-      return {
-        screen: screen,
-        paused: screen === 'pause',
-        id: world.id,
-        levelIndex: world.levelIndex,
-        difficulty: world.difficulty,
-        players: world.players,
-        time: world.time,
-        timeLeft: world.timeLeft,
-        atStart: world.atStart,
-        served: world.served,
-        coins: world.coins,
-        score: world.score,
-        streak: world.streak,
-        fever: world.fever,
-        stars: world.stars,
-        goals: world.goals,
-        chefs: world.chefs.map(function (c) {
-          return { x: c.x, y: c.y, vx: c.vx, vy: c.vy, held: c.held, moved: c.moved, dashT: c.dashT };
-        }),
-        orders: world.orders.map(function (o) {
-          return { id: o.id, slot: o.slot, dish: o.dish, customer: o.customer, vip: o.vip, patience: o.patience, maxPatience: o.maxPatience };
-        }),
-        hints: world.hints,
-        sousBot: world.sousBot,
-        fx: calm() ? 0 : fx.list.length,
-        shake: calm() ? 0 : camShake.power
-      };
-    },
-    get stations() {
-      return world.stations;
-    },
-    get save() {
-      return save;
-    },
-    point: function (lx, ly) {
-      var r = canvas.getBoundingClientRect();
-      return { x: r.left + lx * view.scale, y: r.top + ly * view.scale };
+  function layout() {
+    if (view) view.resize(window.innerWidth, window.innerHeight);
+    dirty = true;
+  }
+
+  /* --------------------------------------------------------------- Keyboard & Buttons */
+  window.addEventListener('keydown', function (e) {
+    if (!Kit.isGameKeyEvent(e) || e.repeat) return;
+    if (e.code === 'KeyP' || e.code === 'Escape') {
+      if (mode === 'play') { e.preventDefault(); pauseGame(true); }
+      else if (mode === 'pause') { e.preventDefault(); resumeGame(); }
+      else if (mode === 'levels' || mode === 'wardrobe') { e.preventDefault(); J.back(); toTitle(); }
+      return;
     }
-  };
+    if (mode === 'title' && (e.code === 'Enter' || e.code === 'Space')) {
+      e.preventDefault();
+      startLevel(E.nextPlayableLevel(save), false);
+      return;
+    }
+    if (mode === 'result' && resultLock <= 0 && (e.code === 'Enter' || e.code === 'Space' || e.code === 'KeyR')) {
+      e.preventDefault();
+      if (world) startLevel(Math.max(0, world.levelIndex), world.endless);
+      return;
+    }
+    if (mode === 'play' && e.code === 'KeyR') {
+      e.preventDefault();
+      if (world) startLevel(Math.max(0, world.levelIndex), world.endless);
+    }
+  });
+
+  function bindButtons() {
+    $('btnPlay').addEventListener('click', function () { startLevel(E.nextPlayableLevel(save), false); });
+    $('btnDuo').addEventListener('click', function () {
+      duo = !duo;
+      J.toggle(duo);
+      refreshTitleUI();
+    });
+    $('btnLevels').addEventListener('click', openLevels);
+    $('btnEndless').addEventListener('click', function () { startLevel(0, true); });
+    $('btnLevelsEndless').addEventListener('click', function () { startLevel(0, true); });
+    $('btnLevelsBack').addEventListener('click', function () { J.back(); toTitle(); });
+    $('btnWardrobe').addEventListener('click', function () { J.select(); renderWardrobe(); setMode('wardrobe'); });
+    $('btnShopBack').addEventListener('click', function () { J.back(); toTitle(); });
+    $('btnPause').addEventListener('click', function () { pauseGame(true); });
+    $('btnResume').addEventListener('click', resumeGame);
+    $('btnRestart').addEventListener('click', function () {
+      if (world) startLevel(Math.max(0, world.levelIndex), world.endless);
+    });
+    $('btnHome').addEventListener('click', function () { J.back(); toTitle(); });
+    $('btnNext').addEventListener('click', function () {
+      if (world && !world.endless && world.levelIndex + 1 < E.LEVELS.length) {
+        startLevel(world.levelIndex + 1, false);
+      }
+    });
+    $('btnAgain').addEventListener('click', function () {
+      if (world) startLevel(Math.max(0, world.levelIndex), world.endless);
+    });
+    $('btnResHome').addEventListener('click', function () { J.back(); toTitle(); });
+  }
+
+  /* --------------------------------------------------------------- Boot */
+  function fail(err) {
+    if (failed) return;
+    failed = true; live = false;
+    if (loop) loop.stop();
+    for (var k in SCREENS) $(SCREENS[k]).hidden = true;
+    $('hud').hidden = true;
+    $('scrError').hidden = false;
+    body.dataset.mode = 'error';
+    Kit.fail(err);
+  }
+
+  function goLive() {
+    if (failed) return;
+    window.__game = {
+      get mode() { return mode; },
+      get duo() { return duo; },
+      get world() { return world; },
+      get demo() { return demo; },
+      get stations() { return world ? world.stations : []; },
+      get save() { return JSON.parse(JSON.stringify(save)); },
+      get result() { return resultData; },
+      get state() { return E.publicState(world, mode); },
+      startLevel: function (idx, endless) { startLevel(idx, endless); },
+      setDuo: function (on) { duo = !!on; refreshTitleUI(); }
+    };
+    loop = Kit.loop(update, render);
+    live = true;
+    Kit.ready();
+  }
 
   Kit.muteButton();
   Kit.lifecycle({
-    pause: function () {
-      if (screen === 'play') pauseGame();
-    }
+    pause: function () { pauseGame(false); },
+    reset: function () { prevAct1 = prevDash1 = prevAct2 = prevDash2 = false; }
   });
-  syncTopCounters();
-  showScreen('title');
-  A.loop(update, render);
-  Kit.ready();
+  Kit.motion.onChange(function (r) { if (view) view.calm = r; dirty = true; });
+  window.addEventListener('resize', layout);
+  window.addEventListener('pageshow', function () { dirty = true; });
+  canvas.addEventListener('webglcontextlost', function (e) {
+    e.preventDefault();
+    contextLost = true;
+    pauseGame(false);
+    $('ctxNotice').hidden = false;
+  });
+  canvas.addEventListener('webglcontextrestored', function () {
+    contextLost = false;
+    $('ctxNotice').hidden = true;
+    snap = true;
+    dirty = true;
+    layout();
+  });
+
+  try {
+    bindButtons();
+    initDemo();
+    refreshTitleUI();
+    setMode('title');
+
+    var started3D = false;
+    var boot3D = function () {
+      if (started3D || failed) return;
+      started3D = true;
+      try {
+        view = A.createView(canvas);
+        view.calm = Kit.motion.reduced();
+        layout();
+        view.prepare(function () {
+          if (failed) return;
+          try {
+            view.sync(demo, { dt: 0, t: 0, mode: 'title', snap: true });
+            view.render();
+            view.whenDrawn(goLive, 5000);
+          } catch (e) { fail(e); }
+        });
+      } catch (e) { fail(e); }
+    };
+    requestAnimationFrame(function () { setTimeout(boot3D, 0); });
+    setTimeout(boot3D, 80);
+  } catch (err) {
+    fail(err);
+  }
 })();
