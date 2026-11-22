@@ -1,103 +1,175 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>النار والجليد</title>
-<link rel="icon" type="image/svg+xml" href="../../favicon.svg">
 <link rel="stylesheet" href="../../shared/game.css">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<canvas id="game" tabindex="0"></canvas>
+<canvas id="game" tabindex="0" aria-label="النار والجليد"></canvas>
 
-<button id="pauseBtn" class="fi-pause" type="button" aria-label="إيقاف مؤقت" hidden>❚❚</button>
+<!-- Top HUD (top-right kept clear for Kit.muteButton) -->
+<header id="hud" class="hud" hidden>
+  <div class="hud-grp hud-right-clear">
+    <span class="pill stage-pill" id="hudStage">1 / 15</span>
+    <span class="pill timer-pill" id="hudTimer">0:00.0</span>
+  </div>
+  <div class="hud-grp hud-center">
+    <span class="pill gem-pill gem-fire" id="hudFireGems" aria-label="جواهر النار">◆ 0/0</span>
+    <span class="pill gem-pill gem-ice" id="hudIceGems" aria-label="جواهر الجليد">◆ 0/0</span>
+    <button type="button" class="pill solo-chip" id="soloChip" hidden title="تبديل البطل">
+      <span id="soloName">شعلة</span>
+      <kbd dir="ltr">Tab</kbd>
+    </button>
+  </div>
+  <div class="hud-grp hud-left">
+    <button type="button" class="icon-btn" id="hudRestartBtn" aria-label="إعادة المرحلة" title="إعادة (R)">↻</button>
+    <button type="button" class="icon-btn" id="pauseBtn" aria-label="إيقاف مؤقت" title="إيقاف (Esc)">❚❚</button>
+  </div>
+</header>
 
-<!-- Title -->
-<div id="titleScreen" class="sg-overlay fi-title-ov" hidden>
-  <div class="fi-title-wrap">
-    <h1 class="fi-logo"><span class="fire">النار</span><span class="amp">و</span><span class="ice">الجليد</span></h1>
-    <div class="fi-sub">الهروب من المعبد</div>
-    <div class="fi-modes">
-      <button id="modeDuo" class="fi-mode" type="button"><b>لاعبان</b><small>على لوحة مفاتيح واحدة</small></button>
-      <button id="modeSolo" class="fi-mode" type="button"><b>لاعب واحد</b><small>بدّل بين البطلين</small></button>
+<!-- Gentle Level 1 keycap coach (fades away on first move) -->
+<div id="coachPill" class="coach-pill" hidden>
+  <span class="coach-fire">شعلة <kbd dir="ltr">←</kbd><kbd dir="ltr">↑</kbd><kbd dir="ltr">→</kbd></span>
+  <span class="coach-sep">•</span>
+  <span class="coach-ice">ثلجة <kbd dir="ltr">A</kbd><kbd dir="ltr">W</kbd><kbd dir="ltr">D</kbd></span>
+</div>
+
+<!-- Minimal Poki Title Overlay over live lit 3D temple -->
+<section id="titleScreen" class="title-screen">
+  <div class="title-top">
+    <div class="star-pill" id="titleStars">★ 0 / 45</div>
+  </div>
+  <div class="title-center">
+    <div class="logo-card">
+      <h1 class="game-logo">
+        <span class="logo-fire">النار</span>
+        <span class="logo-amp">و</span>
+        <span class="logo-ice">الجليد</span>
+      </h1>
     </div>
-    <div class="fi-btns">
-      <button id="playBtn" class="sg-btn fi-play" type="button">▶ العب</button>
-      <button id="mapBtn" class="sg-btn secondary" type="button">خريطة المراحل</button>
-    </div>
-    <div class="fi-how">
-      <div id="howDuo" class="fi-howrow">
-        <div class="fi-hero fire"><em>النار</em><span dir="ltr" class="fi-keys"><span class="sg-key">←</span><span class="sg-key">↑</span><span class="sg-key">→</span></span></div>
-        <div class="fi-hero ice"><em>الجليد</em><span dir="ltr" class="fi-keys"><span class="sg-key">A</span><span class="sg-key">W</span><span class="sg-key">D</span></span></div>
+    <button type="button" class="play-btn" id="playBtn">
+      <span class="play-tri">▶</span>
+      <span id="playLabel">ابدأ اللعب</span>
+    </button>
+    <div class="title-actions">
+      <div class="mode-seg" role="group" aria-label="نمط اللعب">
+        <button type="button" class="seg-btn" id="modeDuo">لاعبان</button>
+        <button type="button" class="seg-btn" id="modeSolo">لاعب واحد</button>
       </div>
-      <div id="howSolo" class="fi-howrow" hidden>
-        <div class="fi-hero both"><em>تحرّك</em><span dir="ltr" class="fi-keys"><span class="sg-key">A</span><span class="sg-key">W</span><span class="sg-key">D</span></span>أو<span dir="ltr" class="fi-keys"><span class="sg-key">←</span><span class="sg-key">↑</span><span class="sg-key">→</span></span></div>
-        <div class="fi-hero swap"><em>بدّل البطل</em><span class="sg-key">Tab</span>أو<span class="sg-key">Shift</span></div>
+      <button type="button" class="sec-btn" id="mapBtn">المعابد</button>
+      <button type="button" class="sec-btn" id="hatsBtn">القبعات</button>
+    </div>
+  </div>
+  <div class="title-keys" id="titleKeys">
+    <span class="k-fire">شعلة: <kbd dir="ltr">← ↑ →</kbd></span>
+    <span class="k-dot">•</span>
+    <span class="k-ice">ثلجة: <kbd dir="ltr">A W D</kbd></span>
+    <span class="k-dot">•</span>
+    <span class="k-sw">تبديل (1P): <kbd dir="ltr">Tab</kbd></span>
+  </div>
+</section>
+
+<!-- Pause Overlay -->
+<section id="pauseScreen" class="sg-overlay" hidden>
+  <div class="sg-panel modal-card">
+    <h2 class="modal-title">إيقاف مؤقت</h2>
+    <p class="modal-sub" id="pauseLevelName">معبد الشمس</p>
+    <div class="btn-stack">
+      <button type="button" class="sg-btn sg-primary" id="resumeBtn">متابعة</button>
+      <button type="button" class="sg-btn" id="restartBtn">إعادة المرحلة</button>
+      <button type="button" class="sg-btn" id="pauseSolo">النمط: لاعبان</button>
+      <div class="btn-row">
+        <button type="button" class="sg-btn" id="pauseMapBtn">المعابد</button>
+        <button type="button" class="sg-btn" id="pauseHomeBtn">الرئيسية</button>
       </div>
-      <p class="fi-rules"><b class="t-fire">النار</b> تمشي على <b class="t-lava">الحمم</b>، و<b class="t-ice">الجليد</b> يسبح في <b class="t-water">الماء</b>، و<b class="t-goo">الوحل الأخضر</b> خطر على الاثنين!<br>أوصِلوا كل بطل إلى بابه لتهربوا من المعبد.</p>
     </div>
-    <div class="fi-progress"><span class="st">★</span> <span id="titleStars" dir="ltr">0 / 36</span> <span class="dot">·</span> <span id="titleLevel">المرحلة 1</span></div>
   </div>
-</div>
+</section>
 
-<!-- Pause -->
-<div id="pauseScreen" class="sg-overlay" hidden>
-  <div class="sg-panel fi-panel">
-    <h2 class="sg-title">إيقاف مؤقت</h2>
-    <p class="sg-sub" id="pauseLevel"></p>
-    <div><button id="resumeBtn" class="sg-btn good" type="button">▶ تابِع</button></div>
-    <div><button id="restartBtn" class="sg-btn" type="button">↻ من جديد (R)</button><button id="pauseMapBtn" class="sg-btn secondary" type="button">الخريطة</button></div>
-    <div class="fi-toggles"><button id="pauseSolo" class="fi-toggle" type="button">لاعب واحد: لا</button></div>
-    <p class="fi-small">في وضع اللاعب الواحد: <span class="sg-key">Tab</span> أو <span class="sg-key">Shift</span> للتبديل بين النار والجليد.</p>
-  </div>
-</div>
-
-<!-- Dead -->
-<div id="deadScreen" class="sg-overlay" hidden>
-  <div class="sg-panel fi-panel fi-dead">
-    <h2 class="sg-title" id="deadTitle">أوه لا!</h2>
-    <p class="sg-sub" id="deadTip"></p>
-    <button id="retryBtn" class="sg-btn" type="button">↻ حاول مجددًا</button><button id="deadMapBtn" class="sg-btn secondary" type="button">الخريطة</button>
-    <p class="fi-small">اضغط <span class="sg-key">R</span> أو <span class="sg-key">Enter</span> للمحاولة مجددًا</p>
-  </div>
-</div>
-
-<!-- Win -->
-<div id="winScreen" class="sg-overlay" hidden>
-  <div class="sg-panel fi-panel fi-win">
-    <div id="winMedal" class="medal gold"><span id="winMedalText">ذهبية</span></div>
-    <h2 class="sg-title" id="winTitle">نجحتم!</h2>
-    <p class="fi-winname" id="winName"></p>
-    <div id="winStars" class="fi-crits"></div>
-    <p class="fi-time" id="winTime"></p>
-    <div id="winNew" class="fi-newbest" hidden>رقم قياسي جديد!</div>
-    <div id="winHat" class="fi-hat" hidden></div>
-    <div class="fi-winbtns">
-      <button id="winNext" class="sg-btn good" type="button">المرحلة التالية ◀</button>
-      <button id="winFinal" class="sg-btn good" type="button" hidden>النهاية! ◀</button>
-      <button id="winReplay" class="sg-btn" type="button">↻ العب مجددًا</button>
-      <button id="winMap" class="sg-btn secondary" type="button">الخريطة</button>
+<!-- Death / Retry Overlay -->
+<section id="deadScreen" class="sg-overlay" hidden>
+  <div class="sg-panel modal-card dead-card">
+    <h2 class="modal-title" id="deadTitle">أوه! حاول مجدداً</h2>
+    <p class="modal-sub" id="deadSub">احذر من البركة الخطرة!</p>
+    <div class="btn-stack">
+      <button type="button" class="sg-btn sg-primary" id="retryBtn">محاولة سريعة</button>
+      <button type="button" class="sg-btn" id="deadMapBtn">المعابد</button>
     </div>
-    <p class="fi-small"><span class="sg-key">Enter</span> التالية · <span class="sg-key">R</span> إعادة · <span class="sg-key">Esc</span> الخريطة</p>
+    <p class="modal-hint"><kbd dir="ltr">Space</kbd> أو <kbd dir="ltr">R</kbd> للإعادة الفورية</p>
   </div>
-</div>
+</section>
 
-<!-- Final -->
-<div id="finalScreen" class="sg-overlay" hidden>
-  <div class="sg-panel fi-panel fi-final">
-    <h2 class="sg-title">هربتم من المعبد!</h2>
-    <p class="sg-sub">النار والجليد أحرار! يا لكم من فريق رائع!</p>
-    <div class="fi-bigstars">★ <span id="finalStars" dir="ltr">0 / 36</span></div>
-    <p class="fi-small">ارجعوا واجمعوا الميداليات الذهبية لتفتحوا كل القبعات. الهالة الذهبية تحتاج 36 نجمة!</p>
-    <button id="finalMap" class="sg-btn good" type="button">الخريطة</button>
+<!-- Victory Overlay -->
+<section id="winScreen" class="sg-overlay" hidden>
+  <div class="sg-panel modal-card win-card">
+    <div class="win-badge" id="winBadge">عمل جماعي رائع!</div>
+    <h2 class="modal-title" id="winTitle">فُتح المعبد!</h2>
+    <div class="win-stars" id="winStars" aria-label="النجوم">★★★</div>
+    <div class="win-stats">
+      <div class="stat-box"><span class="stat-lbl">الوقت</span><strong id="winTime">0:00.0</strong></div>
+      <div class="stat-box"><span class="stat-lbl">الوقت القياسي</span><strong id="winPar">0:22.0</strong></div>
+      <div class="stat-box"><span class="stat-lbl">الجواهر</span><strong id="winGems">0 / 0</strong></div>
+    </div>
+    <div class="win-unlock" id="winUnlock" hidden></div>
+    <div class="btn-stack">
+      <button type="button" class="sg-btn sg-primary" id="winNext">المعبد التالي</button>
+      <div class="btn-row">
+        <button type="button" class="sg-btn" id="winReplay">إعادة</button>
+        <button type="button" class="sg-btn" id="winMap">المعابد</button>
+      </div>
+    </div>
   </div>
-</div>
+</section>
+
+<!-- Temple Map Selector -->
+<section id="mapScreen" class="sg-overlay" hidden>
+  <div class="sg-panel wide-card">
+    <div class="wide-head">
+      <h2 class="modal-title">خريطة المعابد</h2>
+      <span class="star-pill" id="mapStars">★ 0 / 45</span>
+    </div>
+    <div class="wings-wrap" id="wingsWrap"></div>
+    <div class="wide-foot">
+      <button type="button" class="sg-btn" id="mapBackBtn">رجوع</button>
+    </div>
+  </div>
+</section>
+
+<!-- Hats Wardrobe -->
+<section id="hatsScreen" class="sg-overlay" hidden>
+  <div class="sg-panel wide-card">
+    <div class="wide-head">
+      <h2 class="modal-title">قبعات الأبطال</h2>
+      <span class="star-pill" id="hatsStars">★ 0 / 45</span>
+    </div>
+    <div class="hats-grid" id="hatsGrid"></div>
+    <div class="wide-foot">
+      <button type="button" class="sg-btn" id="hatsBackBtn">رجوع</button>
+    </div>
+  </div>
+</section>
+
+<!-- WebGL Error Fallback (Arabic RTL) -->
+<section id="scrError" class="sg-overlay" hidden>
+  <div class="sg-panel modal-card">
+    <h2 class="modal-title">الرسوم ثلاثية الأبعاد غير متاحة</h2>
+    <p class="modal-sub">لم يتمكن المتصفح من تشغيل <span dir="ltr">WebGL</span> لهذه اللعبة. جرّب تحديث الصفحة أو تفعيل تسريع الرسوم.</p>
+    <button type="button" class="sg-btn sg-primary" id="errReloadBtn">إعادة المحاولة</button>
+  </div>
+</section>
+
+<!-- WebGL Context Lost Notice -->
+<div id="contextNotice" class="context-notice" hidden>جارٍ استعادة مشهد المعبد…</div>
 
 <script src="../../shared/kit.js"></script>
+<script src="../../shared/juice.js"></script>
+<script src="../../lib/three/three.min.js"></script>
 <script src="engine.js"></script>
 <script src="levels.js"></script>
-<script src="render.js"></script>
-<script src="main.js"></script>
+<script src="art.js"></script>
+<script src="game.js"></script>
 </body>
 </html>
