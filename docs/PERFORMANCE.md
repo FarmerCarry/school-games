@@ -1341,3 +1341,50 @@ Measured with the Linux minified build and the default statistics address:
 | Portal | 480,963 | 481,105 | 481,000 | 482,000 |
 | Offline precache, 66 files | 7,699,215 | 7,700,553 | 7,700,000 | 7,702,000 |
 
+## Chaos Island 3D rebuild, 22 November 2026
+
+جزيرة الفوضى (`chaos-island`) is rebuilt from scratch as a low-poly 3D tropical-island disaster survival game using the shared `lib/three/three.min.js`. Static island terrain, towers, bridge, shelter and props merge into one vertex-colored mesh, while blob shadows, coins, warning rings, hazards and particles use pooled `InstancedMesh` draws; software WebGL drops MSAA, renders at 0.75× scale, and fence-paces menus (`art.js`). The inlined page measures ~105,852 bytes (with a 5,229-byte thumbnail), so its limit in `tools/asset-budgets.json` moves from `91,000` to `107,000`.
+
+
+## Magic Crayon 3D rebuild, 22 November 2026
+
+القلم السحري (`magic-crayon`) is rebuilt from scratch as a 2.5D three.js toy-diorama physics puzzle reusing the shared `lib/three/three.min.js`. Deterministic 2D rigid-body monster-truck physics and 21 handcrafted levels across 3 themed worlds live in `engine.js`, while `art.js` renders extruded single-mesh 3D waxy crayon tubes, a 6-skin monster truck, spinning stars, a canvas-textured waving checkered flag, and a pooled 140-instance `InstancedMesh` particle system; software WebGL disables MSAA, renders at 0.75× scale, and fence-paces menus. The estimated minified inlined page measures ~109.5 KB (with a 6,356-byte thumbnail), so its limit in `tools/asset-budgets.json` moves from `94,500` to `112,000`.
+
+## Toy Castle 3D rebuild, 22 November 2026
+
+قلعة الألعاب (`toy-castle`) is rebuilt from scratch as a 3D three.js tabletop toy-diorama tug-of-war strategy game reusing the shared `lib/three/three.min.js`. The pure deterministic simulation and 9 campaign battles across 3 themed worlds (Playroom Carpet, Block Castle, Space Desk) live in `engine.js`, while `art.js` merges each world's static tabletop, wooden blocks, bridges, trees and props into one vertex-colored mesh, pools 3D toy units (Foam Knight, Toy Blaster, Wind-Up Dino Tank, Mega Mech), animates dual plastic-brick castles with 5 skins + 5 toppers and swivel cork cannons, and uses `InstancedMesh` for blob shadows, ballistic aim dots and 160 tumbling brick/confetti particles; software WebGL disables MSAA, renders at 0.75× scale, and fence-paces menus. The estimated minified inlined page measures ~109.7 KB (with a 7,462-byte thumbnail), so its limit in `tools/asset-budgets.json` moves from `98,000` to `112,000`.
+
+## Recess Kitchen 3D rebuild, 22 November 2026
+
+مطبخ الفسحة (`recess-kitchen`) is rebuilt from scratch as a sunlit isometric 3D three.js co-op canteen rush reusing the shared `lib/three/three.min.js`. Pure deterministic cooking/assembly simulation, 9 handcrafted levels across 3 themed canteens and Endless Rush live in `engine.js`, while `art.js` merges each kitchen's checkered floor, walls, awning, bunting, counters and station frames into one vertex-colored mesh, animates chunky 3D kid chefs with 6 aprons + 6 hats and visibly held 3D food models, and uses pooled `InstancedMesh` draws for blob shadows and 160 steam/chop/confetti particles; software WebGL disables MSAA, renders at 0.75× scale, and fence-paces menus. The estimated minified inlined page measures ~116.7 KB (with a 7,581-byte thumbnail), so its limit in `tools/asset-budgets.json` moves from `103,000` to `119,000`.
+
+## Desk Karts 3D rebuild, 22 November 2026
+
+سباق المكاتب (`desk-karts`) is rebuilt from scratch as a sunlit 3D three.js Micro Machines-style school-desk toy kart racer reusing the shared `lib/three/three.min.js`. Pure deterministic racing physics, 6 handcrafted 3-lap circuits across 2 cups (Math Desk, Art Table, Science Bench, Library Stack, Geometry Loop, Principal's Mega Desk), forgiving wall bounce, Blue/Gold drift mini-turbo, textbook ramps, bouncy pink erasers, glossy ink spills, 3 pickup items (Rocket, Shield, Ink) and 2P catch-up warp live in `engine.js`, while `art.js` merges each circuit's track ribbon, yellow pencils, wooden rulers, checkered gantry, ramps and giant desk props into static vertex-colored meshes, animates 4 unlockable toy kart silhouettes + 6 paints with spinning wheels, drift sparks and turbo flames, and uses pooled `InstancedMesh` draws for coins, blob shadows and 150 particles; software WebGL disables MSAA, renders at 0.75× scale, and fence-paces menus. The estimated minified inlined page measures ~108.4 KB (with a smaller 5,631-byte thumbnail), so its limit in `tools/asset-budgets.json` moves from `95,500` to `111,000`.
+
+## Hoop Heads 3D rebuild, 22 November 2026
+
+سلة الرؤوس الكبيرة (`hoop-heads`) is rebuilt from scratch as a sunlit side-view 3D three.js cartoon 1v1 big-head basketball game (1P 5-opponent `Kit.dda` ladder + 2P local) reusing the shared `lib/three/three.min.js`. Pure deterministic side-plane physics (rim/backboard collisions, swish net detection, 2-pt/3-pt scoring, sweet-spot shot gauge, Slam & Fireball Super Dunks, blocks, bump-steals, buzzer beaters and sudden-death overtime) live in `engine.js`, while `art.js` merges the static stadium/bleachers/banners/trees/floodlights into one vertex-colored mesh, renders a procedural hardwood court + 5 unlockable 3D basketballs, glowing transparent backboards, flexing orange rims, swaying 3D nets, 6 unlockable 3D big-head accessories, and pooled `InstancedMesh` draws for 54 cheering spectators, 3 blob shadows, 11 ballistic arc dots and 140 particles; software WebGL disables MSAA, renders at 0.75× scale, and fence-paces menus. The estimated minified inlined page measures ~110.3 KB (with a 6,442-byte thumbnail), so its limit in `tools/asset-budgets.json` moves from `106,500` to `112,500`.
+
+## Skybound Golf 3D rebuild, 22 November 2026
+
+ضربة إلى الفضاء (`skybound-golf`) is rebuilt from scratch as a dynamic side-following 3D three.js one-button golf launcher reusing the shared `lib/three/three.min.js`. Pure deterministic physics, seeded course generation, water-skipping, bouncy chain targets (trampolines, TNT crates, hot-air balloons, golden boost rings, UFOs), 4 incremental upgrades, 5 ball skins, and 4 milestones live in `physics.js` (checked by `verify.js`), while `art.js` streams a single vertex-colored 3D terrain ribbon, smoothly transitions sky/lighting across 5 altitude layers (Sunny Meadow → Fluffy Clouds → High Sky → Stratosphere Aurora → Outer Space), animates a chunky cartoon golfer with 3D aim/power arc meters, and uses pooled `InstancedMesh` draws for parallax hills, trees, clouds, coins, stars, asteroids, blob shadows, trail spheres, and 150 particles; software WebGL disables MSAA, renders at 0.75× scale, and fence-paces menus. The estimated minified inlined page measures ~114.8 KB (with a 4,760-byte thumbnail), so its limit in `tools/asset-budgets.json` moves from `102,500` to `117,000`.
+
+## Dino 3D smooth low-poly rebuild, 22 November 2026
+
+الديناصور ثلاثي الأبعاد (`dino-3d`) is rebuilt from scratch replacing Minecraft-style voxels with smooth stylized low-poly 3D characters and curved-horizon worlds using the shared `lib/three/three.min.js`. Pure deterministic physics (coyote time, jump buffer, variable hop height, fast-fall duck/slide, bouncy mushroom double-bounces, rechargeable sonic-ring Roar smash), 15 journey levels across 5 worlds (Golden Desert, Lush Jungle, Snowy Peaks, Volcano Valley, Royal Family Nest), Endless Run with optional 4-digit course codes, and v3 save migration live in `engine.js`. `art.js` merges smooth organic meshes and crisp faceted props onto a single vertex-colored Lambert + Glow material pair, pools `InstancedMesh` draws for speckled/golden/rainbow eggs, heart berries, blob shadows, ambient motes, and 120 confetti/dust particles, and preserves all software-WebGL guardrails (no MSAA, 0.75× pixel ratio, precompiled shaders before `Kit.ready()` via `gl.fenceSync`, fence-paced menus, frozen paused redraws, and `#scrError` Arabic fallback). The estimated minified inlined page measures ~129.5 KB (with a 7.3 KB thumbnail), so its limit in `tools/asset-budgets.json` moves from `128,500` to `131,500`.
+
+## Wave-1 3D rebuilds, Fire & Ice 2.5D, and aggregate budgets, 22 November 2026
+
+Rounding out the 13-game Three.js rebuild (all reusing the shared cached `lib/three/three.min.js` with merged static geometry, pooled `InstancedMesh` draws, and software-WebGL guardrails):
+
+- **هوكي الهواء (`air-hockey`)** rebuilt as a 3D glowing arena table with continuous swept-circle physics: built HTML **105,999 bytes** (limit `95,500` → `108,500`).
+- **سباق البيض (`egg-rush`)** redesigned as a 3D school sports-day egg-and-spoon race across 3 worlds (9 tracks): built HTML **117,523 bytes** (limit `99,000` → `120,000`).
+- **سلّة الفواكه (`juicy-drop`)** rebuilt as a 2.5D sunlit kitchen glass-jar fruit-merge game: built HTML **93,212 bytes** (limit `88,000` → `95,500`).
+- **مصنع الاختصارات (`shortcut-factory`)** redesigned as a 3D toy factory teaching real `Ctrl+C/V/X/Z/Y/A/S/Delete` shortcuts across 12 levels + Rush: built HTML **130,033 bytes** (limit `101,000` → `132,500`).
+- **النار والجليد (`fire-and-ice`)** rebuilt as a 2.5D torchlit Three.js temple co-op platformer with 15 solver-verified levels: built HTML **111,036 bytes** (down from `124,000` limit).
+- **Portal (`index.html`)**: inlined updated Poki-style SVG thumbnails for the 13 rebuilt games bring the built portal to **480,969 bytes** (limit `478,000` → `485,000`).
+- **Offline precache (66 files)**: **7,511,668 bytes** total across all 52 games + shared runtime + fonts (limit `7,400,000` → `7,600,000`).
+
+
+

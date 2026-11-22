@@ -75,53 +75,50 @@ test('Block Burst bot runs are repeatable without global randomness and failures
   } finally { Math.random = originalRandom; }
 });
 
-// Execute the real power-up handler with only its drawing/audio dependencies stubbed.
-// Keeping the whole handler covers side selection and nearest-puck selection too.
-const hockey = readFileSync(new URL('../../games/air-hockey/game.js', import.meta.url), 'utf8');
-const powerSource = hockey.slice(hockey.indexOf('  function applyPower('), hockey.indexOf('  /* ---------------------------------------------------------- update */'));
-const fireCap = Number(hockey.match(/PMAX_FIRE = (\d+)/)[1]);
-function fire(vx, vy, side, direct = true) {
-  const puck = { x: 500, y: 300, vx, vy, alive: true, scored: false };
-  const context = {
-    st: { mallets: [{ x: 100, y: 300 }, { x: 900, y: 300 }], pucks: [puck] },
-    Kit: { dist: (x1, y1, x2, y2) => Math.hypot(x2 - x1, y2 - y1) },
-    sideIdx: side => side < 0 ? 0 : 1,
-    S: { power() {}, fire() {} }, shake: { add() {} },
-    emit() {}, ring() {}, popup() {}, PMAX_FIRE: fireCap
+// Verify rebuilt Air Hockey engine power-ups launch extra pucks toward the opponent and respect MAX_PUCK.
+const hockeyEngineSource = readFileSync(new URL('../../games/air-hockey/engine.js', import.meta.url), 'utf8');
+const ahMod = { exports: {} };
+vm.runInNewContext(hockeyEngineSource, { module: ahMod, exports: ahMod.exports, Math, Object, Array });
+const AHEngine = ahMod.exports;
+
+test('Air Hockey multi-puck power-up launches bonus pucks toward the opponent goal for either side', () => {
+  for (const side of [0, 1]) {
+    const w = AHEngine.create({ target: 7, powerUps: true, seed: 3 });
+    w.phase = 'play';
+    const p = w.pucks[0];
+    p.alive = true; p.x = 0; p.y = 0; p.vx = 0; p.vy = 0; p.last = side;
+    w.item.alive = true; w.item.kind = 'multi'; w.item.x = 0; w.item.y = 0; w.item.t = 0;
+    AHEngine.step(w, 1 / 60, [{ x: 0, y: 320, spd: 0 }, { x: 0, y: -320, spd: 0 }]);
+    const spawned = w.pucks.filter((q, idx) => idx > 0 && q.alive);
+    assert.equal(spawned.length, 2);
+    const expectedDir = side === 0 ? -1 : 1;
+    for (const q of spawned) assert.equal(Math.sign(q.vy), expectedDir);
+  }
+});
+
+test('Air Hockey puck speed stays capped at MAX_PUCK after extreme mallet strikes', () => {
+  const w = AHEngine.create({ target: 7, powerUps: false, seed: 9 });
+  w.phase = 'play';
+  const p = w.pucks[0];
+  p.alive = true; p.x = 0; p.y = 180; p.vx = 0; p.vy = 1800;
+  w.mallets[0].x = 0; w.mallets[0].y = 260; w.mallets[0].px = 0; w.mallets[0].py = 260;
+  for (let i = 0; i < 6; i++) {
+    AHEngine.step(w, 1 / 60, [{ x: 0, y: 40, spd: 5000 }, { x: 0, y: -320, spd: 0 }]);
+    assert.ok(Math.hypot(p.vx, p.vy) <= AHEngine.T.MAX_PUCK + 1e-6);
+  }
+});
+
+test('Air Hockey engine is deterministic for a fixed seed and freezes on zero dt', () => {
+  const run = () => {
+    const w = AHEngine.create({ target: 5, powerUps: true, seed: 42 });
+    w.phase = 'play';
+    w.pucks[0].alive = true; w.pucks[0].vx = 380; w.pucks[0].vy = -510;
+    for (let i = 0; i < 60; i++) AHEngine.step(w, 1 / 60, [{ x: 40, y: 300, spd: 900 }, { x: -40, y: -300, spd: 900 }]);
+    const frozenT = w.t, frozenX = w.pucks[0].x;
+    AHEngine.step(w, 0, [{ x: 200, y: 200, spd: 900 }, { x: 0, y: -200, spd: 900 }]);
+    assert.equal(w.t, frozenT);
+    assert.equal(w.pucks[0].x, frozenX);
+    return [w.t, w.pucks[0].x, w.pucks[0].y, w.score];
   };
-  vm.runInNewContext(`${powerSource}; this.applyPower = applyPower;`, context);
-  context.applyPower({ x: 500, y: 300, def: { id: 'fire', color: '#fff', name: 'fire' } }, side, direct ? puck : null);
-  return puck;
-}
-
-test('Air Hockey fire launches a resting puck toward the opposing goal for either player', () => {
-  for (const side of [-1, 1]) for (const direct of [false, true]) {
-    const puck = fire(0, 0, side, direct);
-    assert.equal(puck.vx, -side * 1500);
-    assert.equal(puck.vy, 0);
-    assert.equal(puck.fire, 5);
-  }
-});
-
-test('Air Hockey fire preserves moving-puck angles, reverses own-goal shots, and caps speed', () => {
-  for (const side of [-1, 1]) {
-    const puck = fire(side * 300, 400, side);
-    assert.equal(puck.vx, -side * 900);
-    assert.equal(puck.vy, 1200);
-    assert.equal(Math.hypot(puck.vx, puck.vy), 1500);
-    const fast = fire(-side * 2400, 3200, side);
-    assert.ok(Math.abs(Math.hypot(fast.vx, fast.vy) - fireCap) < 1e-9);
-  }
-});
-
-test('Air Hockey pause freezes its clock as well as physics and drains frame inputs', () => {
-  const updateSource = hockey.slice(hockey.indexOf('  function update(dt)'), hockey.indexOf('  /* ========================================================== render */'));
-  let keyFrames = 0, pointerFrames = 0;
-  const state = { paused: true, t: 12, stateT: 2, lastRocket: 11 };
-  const context = { st: state, Kit: { keys: { endFrame() { keyFrames++; } } }, ptr: { endFrame() { pointerFrames++; } } };
-  vm.runInNewContext(`${updateSource}; this.update = update;`, context);
-  for (let i = 0; i < 120; i++) context.update(1 / 60);
-  assert.deepEqual(state, { paused: true, t: 12, stateT: 2, lastRocket: 11 });
-  assert.equal(keyFrames, 120);
-  assert.equal(pointerFrames, 120);
+  assert.deepEqual(run(), run());
 });

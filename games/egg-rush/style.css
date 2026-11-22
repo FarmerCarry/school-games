@@ -3,7 +3,7 @@ body { background: #9fdcff; }
 .defs { position: absolute; width: 0; height: 0; overflow: hidden; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 #gl { position: absolute; }
-#ui { position: absolute; width: 1280px; height: 720px; transform-origin: 0 0; pointer-events: none; font-family: var(--sg-font); }
+#ui { position: absolute; width: 1280px; height: 720px; transform-origin: 0 0; pointer-events: none; font-family: var(--sg-font); overflow: hidden; }
 #ui button, #ui .card, #ui .rcard, #ui .picker { pointer-events: auto; }
 .screen { position: absolute; inset: 0; }
 .screen[hidden], #hud[hidden], [hidden] { display: none !important; }

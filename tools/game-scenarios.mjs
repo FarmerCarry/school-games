@@ -113,10 +113,10 @@ export const scenarios = {
   'tank-splat': defaults(['[data-act="free"]','[data-act="startFree"]'], `${g}.app.screen === 'game'`, `${g}.app.game.tanks.map(t => [t.x,t.y,t.a,t.score,t.alive])`, hold('KeyD', 300), '#pauseBtn', `${g}.app.screen === 'pause'`, '#scr-pause [data-act="restart"]', `${g}.app.game.state === 'ready' && ${g}.app.game.tanks.every(t => t.score === 0)`, { ready: `${g}.app.game.state === 'play'` }),
   'sumo-bonk': defaults(['#b1p','#bFight'], `${g}.state.scr === 'game' && !${g}.state.paused`, select(`${g}.state`, ['players','roundT','score']), hold('ArrowDown'), '#bPause', `${g}.state.paused`, '#bRestart', `${g}.state.phase === 'intro' && ${g}.state.score.every(n => n === 0)`, { ready: `${g}.state.phase === 'fight'` }),
   'air-hockey': defaults(['#btnPlay'], `!${g}.state().demo && !${g}.state().paused`, select(`${g}.state()`, ['pucks','mallets','score']), move, '#pauseBtn', `${g}.state().paused`, '#btnRestart', `${g}.state().score.every(n => n === 0)`),
-  'hoop-heads': defaults(['[data-act="cpu"]','#selGo'], `${g}.state === 'play'`, select(`${g}.info()`, ['time','score','ball','p']), hold('ArrowRight'), '#pauseBtn', `${g}.state === 'pause'`, '#pRestart', `${g}.match.phase === 'intro' && ${g}.match.players.every(p => p.score === 0)`, { ready: `${g}.match.phase === 'play'` }),
+  'hoop-heads': defaults(['[data-act="cpu"]'], `${g}.state === 'play'`, select(`${g}.info()`, ['time','score','ball','p']), hold('ArrowRight'), '#pauseBtn', `${g}.state === 'pause'`, '#pRestart', `${g}.match.phase === 'intro' && ${g}.match.players.every(p => p.score === 0)`, { ready: `${g}.match.phase === 'play'` }),
   'wacky-soccer': defaults(['#b1p','#bGo'], `${g}.state === 'play'`, `[${g}.match.time,${g}.match.score,${g}.world.players.map(p => [p.x,p.y])]`, hold('Space'), '#bPause', `${g}.state === 'pause'`, '#bRestart', `${g}.match.phase === 'count' && ${g}.match.score.every(n => n === 0)`, { ready: `${g}.match.phase === 'play'` }),
   'pool-party': defaults(['#btnPlay'], `${g}.screen === 'game'`, `[${g}.balls(),${g}.aim,${g}.phase]`, holdUntilChanged('ArrowRight', `${g}.aim`), '#pauseBtn', `${g}.screen === 'pause'`, '#pRestart', `${g}.phase === 'aim' && ${g}.balls().length === 16`, { ready: `${g}.phase === 'aim'` }),
-  'skybound-golf': defaults(['#play'], `document.getElementById('title-screen').hidden && document.getElementById('modal').hidden`, `document.getElementById('meters').textContent`, click('#game'), '#pause', `!document.getElementById('pause-content').hidden && !document.getElementById('modal').hidden`, '#restart', `document.getElementById('ui').dataset.phase === 'ready' && document.getElementById('meters').textContent === '0'`),
+  'skybound-golf': defaults(['#play'], `document.getElementById('title-screen').hidden && document.getElementById('modal').hidden`, `[${g}.phase,${g}.meters]`, async page => { await click('#game')(page); await page.waitForTimeout(160); await click('#game')(page); }, '#pause', `!document.getElementById('pause-content').hidden && !document.getElementById('modal').hidden`, '#restart', `${g}.phase === 'aim' && ${g}.meters === 0`),
   'critter-mart': defaults(['#playBtn'], `${g}.mode === 'play'`, select(`${g}.state()`, ['player','coins','play','served']), hold('ArrowRight'), '#pauseBtn', `${g}.mode === 'pause'`, '#resumeBtn', `${g}.mode === 'play'`, { persistent: true }),
   'pizza-clicker': defaults(['#bPlay'], `${g}.mode === 'play'`, `[${g}.S.pizzas,${g}.S.clicks]`, async page => { await page.mouse.click(840, 405); }, '#bPause', `${g}.mode === 'pause'`, '#bResume', `${g}.mode === 'play'`, { persistent: true }),
   'block-world': defaults(['#playBtn','#modeCrea'], `${g}.G.mode === 'play'`, `[${g}.player.x,${g}.player.y,${g}.G.tod]`, hold('ArrowRight'), '#pausebtn', `${g}.G.mode === 'pause'`, '#resumeBtn', `${g}.G.mode === 'play'`, { persistent: true, startIf: ['true', `${g}.G.mode === 'newworld'`] }),
@@ -237,9 +237,9 @@ export const scenarios = {
     await page.waitForFunction(() => !!window.__game.state.need, null, { timeout: 15000, polling: 40 });
     await page.keyboard.press(await page.evaluate(() => window.__game.state.need));
   }, '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.keys === 0 && ${g}.state.done === 0 && ${g}.state.item === 0`),
-  // The first yard opens behind a picture card; a held arrow closes it and walks the kid.
-  // Restart puts the kid back on the doorstep with no egg hatched.
-  'egg-rush': defaults(['#btnPlay'], `${g}.screen==='play'`, `[${g}.px,${g}.py,${g}.time,${g}.hatched,${g}.guards]`, hold('ArrowRight'), '#btnPause', `${g}.screen==='pause'`, '#btnRestart', `${g}.screen==='play' && ${g}.atStart && ${g}.hatched===0 && !${g}.intro`),
+  // Egg Rush 3D: a first visit opens track 1-1 after a short 3-2-1 countdown.
+  // The runner jogs forward by itself; only ArrowRight steers sideways on the track.
+  'egg-rush': defaults(['#btnPlay'], `${g}.state.screen === 'play'`, `[${g}.state.time,${g}.state.p1.s,${g}.state.p1.x]`, hold('ArrowRight'), '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.p1.s === 0`, { ready: `${g}.state.phase === 'race'` }),
   // Seek and Zoom: a first visit opens the park's first round with the whole scene fixed
   // on screen and the magnifying glass always visible. Holding an arrow key (or moving the
   // pointer / turning the wheel) moves and zooms the lens; Restart starts the round again
@@ -263,40 +263,34 @@ export const scenarios = {
     for (const p of pts.slice(1)) await page.mouse.move(p.x, p.y, { steps: 4 });
     await page.mouse.up();
   }, '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.atStart`),
-  // Shortcut Factory: a first visit starts level 1-1 behind its Ctrl+C / Ctrl+V demo card
-  // (Enter closes it, or it closes by itself). The belt carries the duck by itself; only the
-  // child's click on the duck, then real Ctrl+C and Ctrl+V, put a duck into the box.
-  // Restart begins the level again: an empty box and an empty copy machine.
-  'shortcut-factory': defaults(['#btnPlay', async page => { await page.waitForTimeout(500); await page.keyboard.press('Enter'); }],
-    `${g}.state.screen === 'play' && ${g}.state.level === 0`, `[${g}.state.time,${g}.state.offset,${g}.state.boxes,${g}.state.clip,${g}.state.sel]`, async page => {
-      const toy = await page.evaluate(() => window.__game.state.belts[0].items.find(t => t.visible));
-      const point = await page.evaluate(id => window.__game.toyPoint(id), toy.id);
-      await page.mouse.click(point.x, point.y);
+  // Shortcut Factory 3D: a first visit starts hall 1-1 with a toy riding along the belt.
+  // Selecting a toy then pressing real Ctrl+C and Ctrl+V copies and pastes it onto the belt.
+  'shortcut-factory': defaults(['#btnPlay'], `${g}.state.screen === 'play' && ${g}.state.level === 0`, `[${g}.state.time,${g}.state.toys,${g}.state.clip,${g}.state.copies,${g}.state.pastes]`, async page => {
+      await page.keyboard.press('ArrowRight');
       await page.keyboard.press('Control+KeyC');
       await page.keyboard.press('Control+KeyV');
-    }, '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.boxes[0].items.length === 0 && !${g}.state.clip`,
-    { settle: `!${g}.state.demo`, settleTimeout: 15000 }),
+    }, '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.copies === 0 && ${g}.state.pastes === 0 && ${g}.state.clip === 0`),
   // Math Gates: a first visit starts level 1-1 in the middle lane. The crowd runs by itself;
   // only the child's keys (or mouse) change its lane. Restart begins the level again.
   'math-gates': defaults(['#btnPlay'], `${g}.state.screen === 'play'`, `[${g}.state.d,${g}.state.lane,${g}.state.count,${g}.state.t]`, hold('ArrowLeft'), '#btnPause', `${g}.state.screen === 'paused'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.attempt > 1 && ${g}.state.passed === 0 && ${g}.state.lane === 1`),
   // Splat Catapult: a first visit opens level 1-1 at the slingshot. Aim changes only when
   // the player drags or presses the aim keys; Restart returns to a fresh round with 0 shots.
   'splat-catapult': defaults(['#btnPlay'], `${g}.state.screen === 'play'`, `[${g}.state.time,${g}.state.aimAngle,${g}.state.shots,${g}.state.activeProjectile]`, hold('ArrowUp'), '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.shots === 0 && ${g}.state.time < 0.5`),
-  // Recess Kitchen: a first visit opens kitchen 1-1. Customers arrive by themselves, while
-  // Chef 1 moves only when the child presses a direction or clicks; Restart resets positions.
+  // Recess Kitchen 3D: a first visit opens School Snack Bar 1-1. Orders arrive by themselves, while
+  // Chef 1 moves only when the child holds movement keys; Restart resets chef position and score.
   'recess-kitchen': defaults(['#btnPlay'], `${g}.state.screen === 'play' && ${g}.state.id === '1-1'`, `[${g}.state.time,${g}.state.timeLeft,${g}.state.chefs,${g}.state.orders]`, hold('ArrowRight'), '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.atStart && ${g}.state.served === 0`),
   // Desk Karts: a first visit starts track 1-1. Rival karts race by themselves; Player 1's
   // kart accelerates from the grid only when the child holds gas or steers.
   'desk-karts': defaults(['#btnPlay'], `${g}.state.screen === 'play' && ${g}.state.id === '1-1'`, `[${g}.state.worldTime,${g}.state.p1Dist,${g}.state.karts]`, hold('ArrowUp'), '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.p1Dist === 0 && ${g}.state.time === 0`),
-  // Toy Castle: a first visit opens playroom 1-1 with 30 starting energy. Energy ticks up
+  // Toy Castle 3D: a first visit opens Playroom Carpet 1-1 with 35 starting energy. Energy ticks up
   // and rival toys march by themselves; only the child's summon spawns a left-castle unit.
   'toy-castle': defaults(['#btnPlay'], `${g}.state.screen === 'play' && ${g}.state.id === '1-1'`, `[${g}.state.time,${g}.state.energy,${g}.state.p1Spawned,${g}.state.units]`, hold('Digit1'), '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.p1Spawned === 0 && ${g}.state.time < 1`),
-  // Magic Crayon: a first visit opens notebook 1-1 with Karroum waiting on his pedestal.
-  // Only the child's drag (or Shift+arrows) draws crayon ink, and Space launches the marble.
-  'magic-crayon': defaults(['#btnPlay'], `${g}.state.screen === 'play' && ${g}.state.id === '1-1'`, `[${g}.state.time,${g}.state.rolling,${g}.state.inkUsed,${g}.state.ball]`, hold('Space'), '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.inkUsed === 0 && !${g}.state.rolling && ${g}.state.strokes === 0`),
-  // Juicy Drop: a first visit opens stage 1-1 with the helper cloud waiting above the jar.
+  // Magic Crayon 3D: a first visit opens Notebook Desk 1-1 with the toy monster truck waiting on its pad.
+  // Only the child's drag draws 3D crayon tubes, and Space launches the monster truck.
+  'magic-crayon': defaults(['#btnPlay'], `${g}.state.screen === 'play' && ${g}.state.id === '1-1'`, `[${g}.state.time,${g}.state.rolling,${g}.state.inkUsed,${g}.state.truck]`, hold('Space'), '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.inkUsed === 0 && !${g}.state.rolling && ${g}.state.strokes === 0`),
+  // Juicy Drop 2.5D: a first visit opens the sunny kitchen jar with the cloud holding a fruit.
   // Nothing drops until the child clicks or presses Space; Restart clears the jar.
-  'juicy-drop': defaults(['#btnPlay'], `${g}.state.screen === 'play'`, `[${g}.state.time,${g}.state.cloudX,${g}.state.drops,${g}.state.fruits]`, hold('Space'), '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.drops === 0 && ${g}.state.score === 0`),
+  'juicy-drop': defaults(['#btnPlay'], `${g}.state.screen === 'play'`, `[${g}.state.time,${g}.state.aim,${g}.state.drops,${g}.state.fruits]`, hold('Space'), '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.drops === 0 && ${g}.state.score === 0`, { ready: `${g}.state.canDrop` }),
   // Robo Swarm: the foam blaster fires by itself. Only the child's keys move the hero.
   'robo-swarm': defaults(['#btnPlay'], `${g}.state === 'play' && !${g}.paused`, `[${g}.px,${g}.t]`, hold('ArrowRight'), '#btnPause', `${g}.state === 'pause'`, '#btnRestart', `${g}.t < 0.5`),
   // Balloon Blast: critters walk only when the child holds a direction. The splash at the
@@ -325,11 +319,11 @@ const inputSnapshots = {
   'lucky-lake': `${g}.state.p1.casts`, 'typing-test': `${g}.state.keys`, 'word-garden': `${g}.state.keys`,
   'bubble-bop': `[${g}.state.hits,${g}.state.travel]`,
   'key-runner': `${g}.state.hits`, 'keyboard-obby': `${g}.state.hops`,
-  'shortcut-factory': `${g}.state.boxes[0].items.length`,
+  'shortcut-factory': `[${g}.state.copies,${g}.state.pastes]`,
   'block-world': `${g}.player.x`, 'candy-rope': `${g}.world().ropes.filter(r => r.alive).length`,
   'maze-dash': `[${g}.state.px,${g}.state.py,${g}.state.dots]`,
   // Paint Grab's blob keeps moving; only the arrow keys or pointer set its steering target.
-  'paint-grab': `${g}.player.target`, 'snake-arena': `SA.game.kb`, 'egg-rush': `${g}.px`,
+  'paint-grab': `${g}.player.target`, 'snake-arena': `SA.game.kb`, 'egg-rush': `${g}.state.p1.x`,
   'blob-battle': `${g}.info().player`, 'splat-strike': `[${g}.state.player.x,${g}.state.player.z]`,
   // Only the child's lens button, keys, wheel or pointer move Seek and Zoom's magnifying glass.
   'seek-zoom': `${g}.state.lens`,
@@ -385,8 +379,10 @@ const inputSeen = {
   'keyboard-obby': `${g}.state.hops > sgInput.before`,
   // A spark sent home after a touch moves too; only a real drag adds to how far it was dragged.
   'steady-hand': `${g}.state.dragged > sgInput.before + 20`,
-  // The belt moves the toys by itself; only a pasted copy puts a toy into the box.
-  'shortcut-factory': `${g}.state.boxes[0].items.length > sgInput.before`,
+  // The belt moves the toys by itself; only Ctrl+C then Ctrl+V pastes a copy onto the belt.
+  'shortcut-factory': `${g}.state.pastes > sgInput.before[1]`,
+  // Egg Rush runners jog forward by themselves; only steering right moves p1 sideways.
+  'egg-rush': `${g}.state.p1.x > sgInput.before + 0.05`,
   // The crowd runs forward by itself; only the child's keys or mouse move it to another lane.
   'math-gates': `${g}.state.lane !== sgInput.before`,
   'splat-catapult': `${g}.state.aimAngle > sgInput.before`,
@@ -474,8 +470,8 @@ export async function performInput(page, slug, {repeat = false} = {}) {
     const legal = page.locator('[data-move]:enabled');
     if (await legal.count()) await legal.first().click();
   } else if (repeat && slug === 'skybound-golf') {
-    // One button: swing on the tee, then rockets and super bounces in flight.
-    if (['ready', 'flight'].includes(await evaluate(page, `document.getElementById('ui').dataset.phase`)) &&
+    // One button: lock angle & swing on the tee, then rocket boost / super bounce in flight.
+    if (['aim', 'power', 'flight'].includes(await evaluate(page, `document.getElementById('ui').dataset.phase`)) &&
       await evaluate(page, `document.getElementById('modal').hidden`)) await click('#game')(page);
     else await page.waitForTimeout(250);
   } else if (repeat && slug === 'pool-party') {

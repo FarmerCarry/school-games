@@ -57,7 +57,7 @@ const games = [
     snapshot: () => ({ paused: __game.state.paused, x: __game.state.x, y: __game.state.y, attempts: __game.state.attempt }),
     paused: state => state.paused === true },
   { slug: 'air-hockey', start: () => document.querySelector('#btnPlay').click(), resume: '#btnResume',
-    snapshot: () => { const s = __game.state(); return { paused: s.paused, time: __game.st.t, pucks: s.pucks, mallets: s.mallets, score: s.score, scene: s.scene }; },
+    snapshot: () => { const s = __game.state(); return { paused: s.paused, time: s.t, pucks: s.pucks, mallets: s.mallets, score: s.score, scene: s.screen }; },
     paused: state => state.paused === true },
   { slug: 'blob-battle', start: () => document.querySelector('#btnPlay').click(), resume: '#btnResume',
     snapshot: () => { const s = __game.info(); return { state: s.state, T: s.T, player: s.player, mass: s.mass }; },
