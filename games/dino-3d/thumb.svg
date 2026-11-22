@@ -1,48 +1,130 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
-<defs><linearGradient id="s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3fb0ff"/><stop offset=".62" stop-color="#9fdcff"/><stop offset="1" stop-color="#ffe3a6"/></linearGradient></defs>
-<rect width="400" height="400" fill="url(#s)"/>
-<circle cx="52" cy="170" r="50" fill="#fff6b0" opacity=".6"/>
-<g fill="#fff"><rect x="300" y="140" width="76" height="20" rx="10"/><rect x="318" y="128" width="40" height="20" rx="10"/><rect x="196" y="186" width="54" height="16" rx="8"/></g>
-<g stroke="#2a2140" stroke-width="4" stroke-linejoin="round">
-<circle cx="52" cy="170" r="26" fill="#ffe14d" stroke-width="5"/>
-<path d="M-6 300V214H34V196H92V226H128V300Z" fill="#e0763c"/><path d="M34 196H92V208H34Z" fill="#f7b866"/>
-<path d="M262 300V230H300V206H372V238H406V300Z" fill="#d9692f"/><path d="M300 206H372V218H300Z" fill="#f09a4c"/>
-<path d="M118 300V252H170V240H226V262H268V300Z" fill="#ee9248"/>
-<path d="M58 300V236q0-8 8-8t8 8v64ZM74 262h10v-14q0-6 5-6t5 6v20q0 4-4 4H74Z" fill="#3a9a50"/>
-<path d="M344 300V246q0-7 7-7t7 7v54ZM344 270h-9v-12q0-5-4-5t-4 5v17q0 3 3 3h14Z" fill="#3a9a50"/>
-</g>
-<path d="M-10 292 410 276V400H-10Z" fill="#ffd27a"/>
-<path d="M30 291h52l2 41-54 1ZM134 287h52l2 41-54 1ZM238 283h52l2 41-54 1ZM342 279h52l2 41-54 1Z" fill="#f7c66a"/>
-<path d="M-10 336 410 320V400H-10Z" fill="#c8763c" stroke="#2a2140" stroke-width="5"/>
-<path d="M-10 336 410 320v10L-10 346Z" fill="#e0a352"/>
-<path d="M-10 292 410 276" stroke="#2a2140" stroke-width="4"/>
-<ellipse cx="248" cy="318" rx="36" ry="7" fill="#2a2140" opacity=".22"/>
-<g stroke="#2a2140" stroke-width="5" stroke-linejoin="round">
-<path d="M236 318V266q0-10 10-10t10 10v52ZM256 290h12v-14q0-6 5-6t5 6v18q0 4-4 4H256ZM236 300h-10v-14q0-6-5-6t-5 6v18q0 4 4 4h16Z" fill="#45c45e"/>
-<circle cx="246" cy="254" r="8" fill="#ff6fae"/>
-<ellipse cx="292" cy="186" rx="17" ry="21" fill="#fff8ea" transform="rotate(14 292 186)" stroke-width="4"/>
-<ellipse cx="340" cy="226" rx="15" ry="19" fill="#fff8ea" transform="rotate(20 340 226)" stroke-width="4"/>
-</g>
-<circle cx="286" cy="182" r="5" fill="#45c4ff"/><circle cx="298" cy="194" r="5" fill="#ff6fae"/><circle cx="295" cy="175" r="3.5" fill="#6fe04f"/><circle cx="335" cy="222" r="4.5" fill="#ff6fae"/><circle cx="345" cy="232" r="4" fill="#45c4ff"/>
-<path d="M60 304q26-18 50-22" fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round" stroke-dasharray="2 14"/>
-<g fill="#fff6dc" stroke="#2a2140" stroke-width="3.5"><circle cx="48" cy="306" r="11"/><circle cx="30" cy="312" r="8"/><circle cx="66" cy="314" r="7"/></g>
-<g transform="translate(150 252) scale(.8) rotate(-14)" stroke="#2a2140" stroke-width="5" stroke-linejoin="round" fill="#49d16a">
-<path d="M-52-4-112 4q-20 2-26-18l20 2 58-18Z"/>
-<path d="M-120-12-114-26-104-15M-96-18-88-32-80-21M-50-34-42-50-32-34M-26-38-16-56-6-38M10-122 20-140 30-122M36-124 46-142 56-124" fill="#ff9a3c"/>
-<rect x="-20" y="36" width="26" height="34" rx="7" fill="#3fb85a" transform="rotate(28 -7 36)"/>
-<rect x="14" y="34" width="26" height="32" rx="7" fill="#3fb85a" transform="rotate(14 27 34)"/>
-<rect x="-58" y="-34" width="104" height="84" rx="20"/>
-<rect x="2" y="-14" width="40" height="58" rx="12" fill="#fff1c8"/>
-<rect x="36" y="2" width="22" height="14" rx="6"/>
-<rect x="-14" y="-122" width="128" height="104" rx="24"/>
-<rect x="58" y="-98" width="24" height="32" rx="8" fill="#2a2140"/>
-<path d="M70-46q22 16 42-2" fill="#7a1f3d"/>
-<g stroke="none"><circle cx="74" cy="-89" r="6" fill="#fff"/><circle cx="65" cy="-76" r="3" fill="#fff"/><ellipse cx="50" cy="-52" rx="12" ry="7" fill="#ff8db5"/><circle cx="104" cy="-104" r="3.5" fill="#2a2140"/></g>
-</g>
-<g font-family="Fredoka, 'Segoe UI', Tahoma, sans-serif" font-weight="700" text-anchor="middle" direction="rtl">
-<text x="200" y="68" font-size="62" fill="#2a2140" stroke="#2a2140" stroke-width="14" stroke-linejoin="round">الديناصور</text>
-<text x="200" y="64" font-size="62" fill="#ffd23f">الديناصور</text>
-<rect x="112" y="80" width="176" height="40" rx="20" fill="#ff5fa4" stroke="#2a2140" stroke-width="5"/>
-<text x="200" y="110" font-size="27" fill="#fff">ثلاثي الأبعاد</text>
-</g>
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#2bb8ff"/>
+      <stop offset="62%" stop-color="#9be8ff"/>
+      <stop offset="100%" stop-color="#fff0b8"/>
+    </linearGradient>
+    <linearGradient id="hillBack" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#7ce073"/>
+      <stop offset="100%" stop-color="#35a853"/>
+    </linearGradient>
+    <linearGradient id="hillFront" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffd56b"/>
+      <stop offset="100%" stop-color="#e89438"/>
+    </linearGradient>
+    <linearGradient id="dinoBody" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#6cf07a"/>
+      <stop offset="100%" stop-color="#27a84f"/>
+    </linearGradient>
+    <linearGradient id="eggGold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#fff7b2"/>
+      <stop offset="55%" stop-color="#ffd23f"/>
+      <stop offset="100%" stop-color="#f28c18"/>
+    </linearGradient>
+    <linearGradient id="roarGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#ffe853" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#ff6b35" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="sh" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="6" stdDeviation="4" flood-color="#1c2747" flood-opacity="0.32"/>
+    </filter>
+  </defs>
+
+  <!-- Radiant Sky -->
+  <rect width="400" height="400" fill="url(#sky)"/>
+
+  <!-- Warm Sun & Fluffy Clouds -->
+  <circle cx="326" cy="72" r="42" fill="#ffe66d"/>
+  <circle cx="326" cy="72" r="56" fill="#ffe66d" opacity="0.28"/>
+  <g fill="#ffffff" opacity="0.92">
+    <circle cx="72" cy="72" r="22"/><circle cx="96" cy="64" r="27"/><circle cx="122" cy="74" r="19"/>
+    <rect x="72" y="70" width="50" height="24" rx="12"/>
+  </g>
+  <g fill="#ffffff" opacity="0.82">
+    <circle cx="246" cy="116" r="16"/><circle cx="266" cy="110" r="20"/><circle cx="284" cy="118" r="14"/>
+  </g>
+
+  <!-- Rainbow Arc -->
+  <path d="M 38 250 A 170 155 0 0 1 372 246" fill="none" stroke="#ff6ba9" stroke-width="10" opacity="0.45"/>
+  <path d="M 48 250 A 160 145 0 0 1 362 246" fill="none" stroke="#ffd84d" stroke-width="10" opacity="0.48"/>
+  <path d="M 58 250 A 150 135 0 0 1 352 246" fill="none" stroke="#4fe3c1" stroke-width="10" opacity="0.45"/>
+
+  <!-- Curved Horizon Hills -->
+  <ellipse cx="310" cy="300" rx="220" ry="110" fill="url(#hillBack)"/>
+  <ellipse cx="145" cy="338" rx="260" ry="105" fill="url(#hillFront)"/>
+  <path d="M 0 330 Q 200 282 400 326 L 400 400 L 0 400 Z" fill="#f7c45f"/>
+  <path d="M 0 356 Q 200 318 400 352 L 400 400 L 0 400 Z" fill="#d97a30"/>
+
+  <!-- Stylized Smooth Cactus & Bouncy Mushroom -->
+  <g stroke="#24314a" stroke-width="5" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M 334 298 L 334 234 Q 334 220 346 220 Q 358 220 358 234 L 358 298 Z" fill="#32b859"/>
+    <path d="M 334 264 L 320 264 Q 312 264 312 252 L 312 244 Q 312 236 319 236 Q 326 236 326 244 L 326 254 L 334 254" fill="#32b859"/>
+    <circle cx="346" cy="218" r="7" fill="#ff6ba9"/>
+  </g>
+  <g stroke="#24314a" stroke-width="4.5" stroke-linejoin="round">
+    <rect x="60" y="286" width="18" height="22" rx="6" fill="#fff2d2"/>
+    <ellipse cx="69" cy="283" rx="28" ry="15" fill="#ff5578"/>
+    <circle cx="58" cy="280" r="4.5" fill="#fff6e0" stroke="none"/>
+    <circle cx="76" cy="276" r="5" fill="#fff6e0" stroke="none"/>
+    <circle cx="84" cy="285" r="3.5" fill="#fff6e0" stroke="none"/>
+  </g>
+
+  <!-- Sonic Roar Wave Rings -->
+  <ellipse cx="282" cy="186" rx="14" ry="34" fill="none" stroke="#fff3a0" stroke-width="6" opacity="0.9"/>
+  <ellipse cx="308" cy="184" rx="20" ry="48" fill="none" stroke="#ff9f38" stroke-width="5" opacity="0.65"/>
+
+  <!-- Floating Golden & Speckled Eggs -->
+  <g filter="url(#sh)" stroke="#24314a" stroke-width="5">
+    <path d="M 294 128 C 306 128 313 148 313 156 C 313 168 304 174 294 174 C 284 174 275 168 275 156 C 275 148 282 128 294 128 Z" fill="url(#eggGold)"/>
+    <ellipse cx="287" cy="147" rx="4" ry="7" fill="#ffffff" opacity="0.7" stroke="none"/>
+    <path d="M 342 152 C 351 152 356 166 356 173 C 356 182 350 187 342 187 C 334 187 328 182 328 173 C 328 166 333 152 342 152 Z" fill="#fff6df"/>
+    <circle cx="337" cy="170" r="3.5" fill="#38b6ff" stroke="none"/>
+    <circle cx="347" cy="176" r="4" fill="#ff6ba9" stroke="none"/>
+  </g>
+
+  <!-- Soft Shadow under Leaping Dino -->
+  <ellipse cx="176" cy="310" rx="54" ry="12" fill="#9c541f" opacity="0.35"/>
+
+  <!-- Adorable Smooth Stylized Baby Dino -->
+  <g transform="translate(172, 208) rotate(-8)" filter="url(#sh)">
+    <!-- Rounded Dorsal Crests -->
+    <g fill="#ff9f38" stroke="#24314a" stroke-width="5" stroke-linejoin="round">
+      <circle cx="-48" cy="-16" r="10"/>
+      <circle cx="-32" cy="-36" r="12"/>
+      <circle cx="-8" cy="-56" r="11"/>
+      <circle cx="16" cy="-62" r="10"/>
+    </g>
+    <!-- Back Leg -->
+    <path d="M -20 44 L -32 74 Q -35 84 -22 86 L -4 86 Q 4 86 2 76 L -4 48 Z" fill="#239146" stroke="#24314a" stroke-width="5" stroke-linejoin="round"/>
+    <!-- Wagging Smooth Tail -->
+    <path d="M -38 20 Q -92 22 -106 -14 Q -80 -2 -44 -6 Z" fill="url(#dinoBody)" stroke="#24314a" stroke-width="5" stroke-linejoin="round"/>
+    <!-- Chubby Pear Body -->
+    <ellipse cx="-14" cy="18" rx="44" ry="48" fill="url(#dinoBody)" stroke="#24314a" stroke-width="5"/>
+    <!-- Warm Cream Belly -->
+    <ellipse cx="12" cy="24" rx="22" ry="34" fill="#fff3c4"/>
+    <!-- Front Leg (jaunty leap!) -->
+    <path d="M 6 44 L 22 68 Q 30 78 40 72 L 46 66 Q 52 58 42 50 L 22 36 Z" fill="#46d468" stroke="#24314a" stroke-width="5" stroke-linejoin="round"/>
+    <!-- Tiny Cute Arm -->
+    <path d="M 22 10 Q 44 10 42 22 Q 36 28 20 22 Z" fill="#5ce378" stroke="#24314a" stroke-width="4.5" stroke-linejoin="round"/>
+    <!-- Smooth Rounded Head & Chubby Snout -->
+    <path d="M -30 -34 C -30 -72 22 -76 48 -58 C 76 -48 82 -26 70 -10 C 56 6 20 6 -10 2 C -26 -2 -30 -16 -30 -34 Z" fill="url(#dinoBody)" stroke="#24314a" stroke-width="5" stroke-linejoin="round"/>
+    <!-- Cute Smile & Cheek Blush -->
+    <path d="M 38 -12 Q 56 -8 66 -18" fill="none" stroke="#24314a" stroke-width="4.5" stroke-linecap="round"/>
+    <ellipse cx="26" cy="-16" rx="9" ry="5.5" fill="#ff7db5" opacity="0.72"/>
+    <circle cx="58" cy="-34" r="3" fill="#1e7538"/>
+    <!-- Big Expressive Glossy Eye -->
+    <ellipse cx="24" cy="-38" rx="15" ry="18" fill="#1f2544"/>
+    <circle cx="30" cy="-45" r="5.5" fill="#ffffff"/>
+    <circle cx="20" cy="-31" r="2.8" fill="#ffffff"/>
+    <!-- Mini Golden Crown Hat -->
+    <path d="M -10 -66 L -14 -92 L 2 -78 L 12 -98 L 22 -78 L 36 -90 L 30 -64 Z" fill="#ffd23f" stroke="#24314a" stroke-width="4.5" stroke-linejoin="round"/>
+    <circle cx="11" cy="-74" r="4.5" fill="#ff4d79"/>
+  </g>
+
+  <!-- Crisp Arabic Title Banner -->
+  <g transform="translate(200, 362)">
+    <text x="0" y="0" text-anchor="middle" font-family="Fredoka, 'Baloo Bhaijaan 2', Tahoma, sans-serif" font-size="38" font-weight="800" fill="#24314a" stroke="#24314a" stroke-width="11" stroke-linejoin="round">الديناصور ثلاثي الأبعاد</text>
+    <text x="0" y="0" text-anchor="middle" font-family="Fredoka, 'Baloo Bhaijaan 2', Tahoma, sans-serif" font-size="38" font-weight="800" fill="#fff7d6">الديناصور ثلاثي الأبعاد</text>
+  </g>
 </svg>

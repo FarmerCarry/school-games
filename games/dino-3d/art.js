@@ -1,25 +1,21 @@
-/* Dino 3D art: the baby dino, its family, five voxel biomes, obstacles, eggs, fruit,
- * particles and the follow camera, all built in code with three.js.
- * Every model is a list of boxes [x, y0, z, w, h, d, colour, glow] (in decimetres)
- * merged into one vertex-coloured geometry, so each object is one draw call. The
- * course is baked in 16 m chunks (ground, goo, mud and scenery in one mesh each);
- * eggs, fruit, blob shadows, particles and fireflies are instanced. Materials and
- * geometries are made once and cached. Nothing here reads or changes the engine. */
+/* Dino 3D (الديناصور ثلاثي الأبعاد) — Smooth stylized low-poly 3D renderer (three.js).
+ * Unified vertex-colored geometry builder (smooth organic characters + crisp low-poly props
+ * sharing 1 Lambert + 1 Glow material), curved-horizon 5 worlds, pooled InstancedMesh pickups,
+ * particles & shadows, and full software-WebGL guardrails (fence sync, menu pacing, 0.75x DPR). */
 (function () {
   'use strict';
   var D = window.Dino3D;
 
-  // Whether WebGL here is drawn by the processor instead of a graphics card (SwiftShader,
-  // Windows' Basic Render Driver, llvmpipe). A throwaway context answers before the game's
-  // own context is made, because MSAA cannot be switched off once a context exists.
-  function softwareGL() {
+  // Detect software WebGL (SwiftShader, Basic Render Driver, llvmpipe, WARP) before
+  // creating the main renderer so MSAA can be disabled up front.
+  function detectSoftwareGL() {
     var gl = null;
     try {
-      var c = document.createElement('canvas'), opts = { powerPreference: 'high-performance' };
+      var c = document.createElement('canvas');
+      var opts = { powerPreference: 'high-performance' };
       gl = c.getContext('webgl2', opts) || c.getContext('webgl', opts);
       if (!gl) return false;
       var name = String(gl.getParameter(gl.RENDERER) || '');
-      // Chromium reports "WebKit WebGL" there; Firefox already gives the real name.
       if (/^webkit webgl$/i.test(name)) {
         var info = gl.getExtension('WEBGL_debug_renderer_info');
         if (info) name = String(gl.getParameter(info.UNMASKED_RENDERER_WEBGL) || '');
@@ -28,749 +24,1497 @@
     } catch (e) {
       return false;
     } finally {
-      try { var lose = gl && gl.getExtension('WEBGL_lose_context'); if (lose) lose.loseContext(); } catch (e) { /* ignore */ }
+      try {
+        var lose = gl && gl.getExtension('WEBGL_lose_context');
+        if (lose) lose.loseContext();
+      } catch (e) { /* ignore */ }
     }
   }
 
   D.createView = function (canvas) {
     var T = window.THREE;
     if (!T) throw new Error('three.js is unavailable');
-    // On a software renderer 4x MSAA and a full-size drawing buffer are about half the cost
-    // of every frame (a 1280x720 title frame in Chromium's SwiftShader: 205 ms of GPU-process
-    // time, 106 ms without MSAA at 0.75 size), and a cold browser spends seconds on its first
-    // frames. There the game draws without MSAA at 0.75 of the size, the floor the slow-frame
-    // fallback below uses. A graphics card keeps both.
-    var software = softwareGL();
-    var renderer = new T.WebGLRenderer({ canvas: canvas, antialias: !software, powerPreference: 'high-performance' });
+
+    var software = detectSoftwareGL();
+    var renderer = new T.WebGLRenderer({
+      canvas: canvas,
+      antialias: !software,
+      powerPreference: 'high-performance'
+    });
+    if (renderer.outputColorSpace !== undefined && T.SRGBColorSpace) {
+      renderer.outputColorSpace = T.SRGBColorSpace;
+    }
     var ratio = software ? 0.75 : Math.min(window.devicePixelRatio || 1, 1.5);
     renderer.setPixelRatio(ratio);
-    var scene = new T.Scene(), camera = new T.PerspectiveCamera(48, 16 / 9, 0.1, 400);
-    scene.fog = new T.Fog(0xffffff, 30, 110);
-    var hemi = new T.HemisphereLight(0xffffff, 0x888888, 1.6), sun = new T.DirectionalLight(0xffffff, 2.2);
-    sun.position.set(-6, 14, 9);
-    scene.add(hemi, sun);
-    var C = new T.Color(), C2 = new T.Color(), M4 = new T.Matrix4(), Q = new T.Quaternion(), E = new T.Euler(), V1 = new T.Vector3(), V2 = new T.Vector3(), S1 = new T.Vector3();
-    var LIT = new T.MeshLambertMaterial({ vertexColors: true }), GLOW = new T.MeshBasicMaterial({ vertexColors: true });
-    var FLASH = new T.MeshLambertMaterial({ vertexColors: true, emissive: 0xffa21f, emissiveIntensity: 0.45 });
-    var MATS = [LIT, GLOW], FLASHMATS = [FLASH, GLOW];
-    var view = { renderer: renderer, scene: scene, camera: camera };
 
-    /* ------------------------------------------------------- voxel geometry */
-    // Boxes with the glow flag go to a second, unlit group (night mushrooms, lava).
-    function build(list, s, keepBottom) {
-      s = s || 0.1;
-      var lit = [], glow = [];
-      for (var i = 0; i < list.length; i++) (list[i][7] ? glow : lit).push(list[i]);
-      var all = lit.concat(glow), faces = keepBottom ? 6 : 5, n = all.length * faces * 6;
-      var pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), col = new Float32Array(n * 3), o = 0, r = 0, g = 0, b = 0;
-      function v(x, y, z, a, bb, c) { pos[o] = x; pos[o + 1] = y; pos[o + 2] = z; nor[o] = a; nor[o + 1] = bb; nor[o + 2] = c; col[o] = r; col[o + 1] = g; col[o + 2] = b; o += 3; }
-      function q(a, bb, c, d, nx, ny, nz) { v(a[0], a[1], a[2], nx, ny, nz); v(bb[0], bb[1], bb[2], nx, ny, nz); v(c[0], c[1], c[2], nx, ny, nz); v(a[0], a[1], a[2], nx, ny, nz); v(c[0], c[1], c[2], nx, ny, nz); v(d[0], d[1], d[2], nx, ny, nz); }
-      for (i = 0; i < all.length; i++) {
-        var e = all[i], x0 = (e[0] - e[3] / 2) * s, x1 = (e[0] + e[3] / 2) * s, y0 = e[1] * s, y1 = (e[1] + e[4]) * s, z0 = (e[2] - e[5] / 2) * s, z1 = (e[2] + e[5] / 2) * s;
-        C.setHex(e[6]); r = C.r; g = C.g; b = C.b;
-        q([x1, y0, z1], [x1, y0, z0], [x1, y1, z0], [x1, y1, z1], 1, 0, 0);
-        q([x0, y0, z0], [x0, y0, z1], [x0, y1, z1], [x0, y1, z0], -1, 0, 0);
-        q([x0, y1, z1], [x1, y1, z1], [x1, y1, z0], [x0, y1, z0], 0, 1, 0);
-        q([x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1], 0, 0, 1);
-        q([x1, y0, z0], [x0, y0, z0], [x0, y1, z0], [x1, y1, z0], 0, 0, -1);
-        if (keepBottom) q([x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1], 0, -1, 0);
+    var scene = new T.Scene();
+    var camera = new T.PerspectiveCamera(44, 16 / 9, 0.2, 260);
+    scene.fog = new T.Fog(0xffe0a8, 30, 108);
+
+    // Rich sunlit cartoon lighting: bright hemisphere sky/ground bounce + warm directional sun.
+    var hemi = new T.HemisphereLight(0xfff8e6, 0x7a6a58, 1.48);
+    var sun = new T.DirectionalLight(0xfff2d6, 2.05);
+    sun.position.set(-7, 16, 13);
+    scene.add(hemi, sun);
+
+    // Reusable scratch objects (zero per-frame heap churn in hot loops).
+    var C1 = new T.Color(), C2 = new T.Color(), C3 = new T.Color();
+    var M4 = new T.Matrix4(), M4B = new T.Matrix4(), M3 = new T.Matrix3();
+    var Q1 = new T.Quaternion(), E1 = new T.Euler();
+    var V1 = new T.Vector3(), V2 = new T.Vector3(), S1 = new T.Vector3();
+
+    // Minimal material set (tiny shader count = fast cold startup on software WebGL).
+    var MAT_LIT = new T.MeshLambertMaterial({ vertexColors: true });
+    var MAT_GLOW = new T.MeshBasicMaterial({ vertexColors: true });
+    var MAT_FLASH = new T.MeshLambertMaterial({ vertexColors: true, emissive: 0xff9a2e, emissiveIntensity: 0.5 });
+    var MAT_INST_LIT = new T.MeshLambertMaterial({ vertexColors: true });
+    var MAT_INST_GLOW = new T.MeshBasicMaterial({ color: 0xffffff });
+    var MAT_SHADOW = new T.MeshBasicMaterial({ color: 0x1b1530, transparent: true, opacity: 0.26, depthWrite: false });
+    var MATS = [MAT_LIT, MAT_GLOW];
+    var FLASH_MATS = [MAT_FLASH, MAT_GLOW];
+
+    function mixHex(a, b, t) { C1.setHex(a); C2.setHex(b); return C1.lerp(C2, t).getHex(); }
+    function shadeHex(a, f) { return mixHex(a, f < 1 ? 0x181028 : 0xffffff, f < 1 ? 1 - f : f - 1); }
+
+    /* ------------------------------------------- smooth/low-poly GeoBuilder */
+    // Caches unit primitives so procedural models build in milliseconds.
+    var prims = {};
+    function getPrim(key, factory) {
+      if (!prims[key]) prims[key] = factory();
+      return prims[key];
+    }
+
+    function makeEggGeo(segsW, segsH) {
+      var g = new T.SphereGeometry(0.5, segsW || 10, segsH || 8);
+      var pos = g.attributes.position;
+      for (var i = 0; i < pos.count; i++) {
+        var x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+        var taper = y > 0 ? (1 - y * 0.42) : (1 + y * 0.08);
+        pos.setXYZ(i, x * taper * 0.86, y * 1.18, z * taper * 0.86);
       }
+      g.computeVertexNormals();
+      return g;
+    }
+
+    function makeHeartGeo() {
+      var shape = new T.Shape();
+      shape.moveTo(0, -0.32);
+      shape.bezierCurveTo(0.42, 0.02, 0.44, 0.44, 0.2, 0.46);
+      shape.bezierCurveTo(0.06, 0.46, 0, 0.34, 0, 0.26);
+      shape.bezierCurveTo(0, 0.34, -0.06, 0.46, -0.2, 0.46);
+      shape.bezierCurveTo(-0.44, 0.44, -0.42, 0.02, 0, -0.32);
+      var g = new T.ExtrudeGeometry(shape, { depth: 0.16, bevelEnabled: true, bevelThickness: 0.08, bevelSize: 0.06, bevelSegments: 2, curveSegments: 8 });
+      g.center();
+      g.computeVertexNormals();
+      return g;
+    }
+
+    var P_SPHERE = getPrim('sph10', function () { return new T.SphereGeometry(0.5, 10, 8); });
+    var P_SPHERE_HI = getPrim('sph12', function () { return new T.SphereGeometry(0.5, 12, 10); });
+    var P_SPHERE_LO = getPrim('sph7', function () { return new T.SphereGeometry(0.5, 7, 6); });
+    var P_CYL = getPrim('cyl9', function () { return new T.CylinderGeometry(0.5, 0.5, 1, 9, 1); });
+    var P_CONE = getPrim('cone8', function () { return new T.ConeGeometry(0.5, 1, 8, 1); });
+    var P_CONE_TAPER = getPrim('taper8', function () { return new T.CylinderGeometry(0.28, 0.5, 1, 8, 1); });
+    var P_ICO = getPrim('ico', function () { return new T.IcosahedronGeometry(0.5, 0); });
+    var P_OCT = getPrim('oct', function () { return new T.OctahedronGeometry(0.5, 0); });
+    var P_BOX = getPrim('box', function () { return new T.BoxGeometry(1, 1, 1); });
+    var P_TORUS = getPrim('torus', function () { return new T.TorusGeometry(0.5, 0.14, 7, 14); });
+    var P_EGG = getPrim('egg', function () { return makeEggGeo(10, 8); });
+    var P_HEART = getPrim('heart', makeHeartGeo);
+
+    // Unified vertex-colored Geometry Builder: merges smooth AND faceted primitives
+    // into one BufferGeometry with 2 material groups (0: lit Lambert, 1: unlit Glow).
+    function Builder() {
+      this.lit = [];
+      this.glow = [];
+    }
+    Builder.prototype.add = function (srcGeo, px, py, pz, sx, sy, sz, rx, ry, rz, colorHex, opts) {
+      opts = opts || {};
+      var g = srcGeo.index ? srcGeo.toNonIndexed() : srcGeo.clone();
+      if (opts.flat) {
+        g.computeVertexNormals();
+      } else if (!g.attributes.normal) {
+        g.computeVertexNormals();
+      }
+      E1.set(rx || 0, ry || 0, rz || 0);
+      Q1.setFromEuler(E1);
+      V1.set(px || 0, py || 0, pz || 0);
+      S1.set(sx == null ? 1 : sx, sy == null ? 1 : sy, sz == null ? 1 : sz);
+      M4.compose(V1, Q1, S1);
+
+      var pos = g.attributes.position;
+      var nor = g.attributes.normal;
+      var count = pos.count;
+      var pArr = new Float32Array(count * 3);
+      var nArr = new Float32Array(count * 3);
+      var cArr = new Float32Array(count * 3);
+      M3.getNormalMatrix(M4);
+
+      var topHex = opts.top != null ? opts.top : (opts.flat ? colorHex : shadeHex(colorHex, 1.12));
+      var botHex = opts.bot != null ? opts.bot : (opts.flat ? shadeHex(colorHex, 0.86) : shadeHex(colorHex, 0.82));
+      C1.setHex(botHex);
+      C2.setHex(topHex);
+
+      // Find local Y bounds for soft organic top-to-bottom painted shading.
+      var minY = 1e9, maxY = -1e9;
+      for (var i = 0; i < count; i++) {
+        var ly = pos.getY(i);
+        if (ly < minY) minY = ly;
+        if (ly > maxY) maxY = ly;
+      }
+      var spanY = Math.max(0.001, maxY - minY);
+
+      for (i = 0; i < count; i++) {
+        var lx = pos.getX(i), ly2 = pos.getY(i), lz = pos.getZ(i);
+        V2.set(lx, ly2, lz).applyMatrix4(M4);
+        pArr[i * 3] = V2.x; pArr[i * 3 + 1] = V2.y; pArr[i * 3 + 2] = V2.z;
+
+        V2.set(nor.getX(i), nor.getY(i), nor.getZ(i)).applyMatrix3(M3).normalize();
+        nArr[i * 3] = V2.x; nArr[i * 3 + 1] = V2.y; nArr[i * 3 + 2] = V2.z;
+
+        var u = (ly2 - minY) / spanY;
+        C3.copy(C1).lerp(C2, u);
+        cArr[i * 3] = C3.r; cArr[i * 3 + 1] = C3.g; cArr[i * 3 + 2] = C3.b;
+      }
+      g.dispose();
+      (opts.glow ? this.glow : this.lit).push({ p: pArr, n: nArr, c: cArr, count: count });
+      return this;
+    };
+    Builder.prototype.finish = function () {
+      var litCount = 0, glowCount = 0, i;
+      for (i = 0; i < this.lit.length; i++) litCount += this.lit[i].count;
+      for (i = 0; i < this.glow.length; i++) glowCount += this.glow[i].count;
+      var total = litCount + glowCount;
+      var p = new Float32Array(total * 3);
+      var n = new Float32Array(total * 3);
+      var c = new Float32Array(total * 3);
+      var off = 0;
+      function append(list) {
+        for (var j = 0; j < list.length; j++) {
+          p.set(list[j].p, off * 3);
+          n.set(list[j].n, off * 3);
+          c.set(list[j].c, off * 3);
+          off += list[j].count;
+        }
+      }
+      append(this.lit);
+      append(this.glow);
       var geo = new T.BufferGeometry();
-      geo.setAttribute('position', new T.BufferAttribute(pos, 3));
-      geo.setAttribute('normal', new T.BufferAttribute(nor, 3));
-      geo.setAttribute('color', new T.BufferAttribute(col, 3));
-      var split = lit.length * faces * 6;
-      geo.addGroup(0, split, 0); geo.addGroup(split, n - split, 1);
+      geo.setAttribute('position', new T.BufferAttribute(p, 3));
+      geo.setAttribute('normal', new T.BufferAttribute(n, 3));
+      geo.setAttribute('color', new T.BufferAttribute(c, 3));
+      geo.addGroup(0, litCount, 0);
+      geo.addGroup(litCount, glowCount, 1);
       geo.computeBoundingSphere();
       return geo;
-    }
-    var cache = {};
-    function model(key, fn) { return cache[key] || (cache[key] = build(fn())); }
-    function mesh(geo) { return new T.Mesh(geo, MATS); }
-    function mix(a, b, t) { C.setHex(a); C2.setHex(b); return C.lerp(C2, t).getHex(); }
-    function shade(a, f) { return mix(a, f < 1 ? 0x000000 : 0xffffff, f < 1 ? 1 - f : f - 1); }
-    // Seeded scenery: the same chunk always looks the same.
-    function rng(seed) { var s = seed >>> 0 || 1; return function () { s ^= s << 13; s ^= s >>> 17; s ^= s << 5; return (s >>> 0) / 4294967296; }; }
+    };
 
-    /* ------------------------------------------------------------- biomes */
-    var BIO = [
-      { sky: [0x47b5ff, 0xffe3a6], fog: 0xffd9a0, hemi: [0xfff3dc, 0xc98a52, 1.7], sun: [0xfff0d0, 2.3], path: [0xf7cd73, 0xf0bf62], edge: 0xe0a352, dirt: [0xc8763c, 0xa95f30],
-        side: [0xeeb563, 0xe4a756], back: [0xe8914a, 0xdb8040, 0xcf6e3a], fill: 0xf1c06a, goo: 0x7be05a, mud: 0x9a6236, stone: 0xc58450 },
-      { sky: [0x3ab2ff, 0xc9f6c4], fog: 0xb4ecbc, hemi: [0xf2fff0, 0x4f8a3c, 1.7], sun: [0xfffbe6, 2.2], path: [0xe0b77a, 0xd4a96c], edge: 0x5fb03f, dirt: [0x8b5a35, 0x744a2c],
-        side: [0x6fc449, 0x63b840], back: [0x4fae3c, 0x449f37, 0x3a9032], fill: 0x5fba42, goo: 0x58d0ff, mud: 0x7d4f2c, stone: 0x9a8c7a },
-      { sky: [0x6bb8ff, 0xeef8ff], fog: 0xe3f1ff, hemi: [0xffffff, 0x8fb2d8, 1.75], sun: [0xffffff, 2.1], path: [0xd6ebfb, 0xc8e2f7], edge: 0x8fb8de, dirt: [0x8aa6c9, 0x7290b6],
-        side: [0xf0f7fd, 0xe2eef8], back: [0xdcebf7, 0xcfe3f4, 0xc2d9ee], fill: 0xeaf4fc, goo: 0x7fe4ff, mud: 0xc6dcf2, stone: 0x9fb4cc },
-      { sky: [0xff8a6b, 0xffe2a4], fog: 0xffc79e, hemi: [0xfff0e0, 0x8a5a6a, 1.75], sun: [0xffe2c0, 2.3], path: [0xf0c48a, 0xe6b67a], edge: 0xc4875a, dirt: [0x7a5470, 0x6a4762],
-        side: [0x8a6a80, 0x806278], back: [0x5fbf5a, 0x8a6a80, 0x7a5c72], fill: 0x34c6e8, goo: 0xff6a3c, mud: 0x6e3f2e, stone: 0x8d7480 },
-      { sky: [0x10133e, 0x4b3c93], fog: 0x2d2a6a, hemi: [0xaab2ff, 0x3a3168, 1.6], sun: [0xc8d0ff, 1.6], path: [0x6a6fd0, 0x5f64c4], edge: 0x4a4fa8, dirt: [0x3a2f6e, 0x30285e],
-        side: [0x3d4fa0, 0x374896], back: [0x2f3f86, 0x29387a, 0x24326e], fill: 0x2d3d84, goo: 0x46ffd2, mud: 0x5b3a7c, stone: 0x6d6aa8 }
+    /* ----------------------------------------------------------- 5 Worlds */
+    var PALETTES = [
+      // 0: Golden Desert (الصحراء الذهبية)
+      {
+        skyTop: 0x2ba8ff, skyMid: 0x8be2ff, skyBot: 0xffe4a8, fog: 0xffd99e,
+        hemiTop: 0xfff5dc, hemiBot: 0xd98e46, sun: 0xfff0c8, sunInt: 2.1,
+        pathTop: 0xfad27a, pathSide: 0xd9873b, curb: 0xe86c3a, ground: 0xf2b55c,
+        hillA: 0xe69244, hillB: 0xd46f38, accent: 0x3ac463, sunColor: 0xffe86b,
+        mote: 0xfff2b2
+      },
+      // 1: Lush Jungle (الغابة الخضراء)
+      {
+        skyTop: 0x20a6ff, skyMid: 0x8cf2d6, skyBot: 0xd8ffd2, fog: 0xbaf2c8,
+        hemiTop: 0xf0fff2, hemiBot: 0x3b8a42, sun: 0xfffce0, sunInt: 2.0,
+        pathTop: 0xe0b572, pathSide: 0x8f5b32, curb: 0x4bc74c, ground: 0x4bb852,
+        hillA: 0x37a64d, hillB: 0x288546, accent: 0x2de0c8, sunColor: 0xfff49c,
+        mote: 0xd9ff73
+      },
+      // 2: Snowy Peaks (جبال الثلج)
+      {
+        skyTop: 0x3d7eff, skyMid: 0x9ed8ff, skyBot: 0xebf8ff, fog: 0xddf2ff,
+        hemiTop: 0xffffff, hemiBot: 0x7ea7d9, sun: 0xffffff, sunInt: 1.95,
+        pathTop: 0xedf6ff, pathSide: 0x9ac1e6, curb: 0x5ec6ff, ground: 0xdcf0ff,
+        hillA: 0xb9daf7, hillB: 0x8eb8e5, accent: 0x58ffe6, sunColor: 0xffffff,
+        mote: 0xffffff
+      },
+      // 3: Volcano Valley (وادي البراكين)
+      {
+        skyTop: 0x4b245c, skyMid: 0xc2494e, skyBot: 0xffa652, fog: 0xe87b4a,
+        hemiTop: 0xffd2a8, hemiBot: 0x6b2f3c, sun: 0xffbf7a, sunInt: 2.15,
+        pathTop: 0x695d75, pathSide: 0x3b3145, curb: 0xff6229, ground: 0x4b3c54,
+        hillA: 0x5b3752, hillB: 0x442540, accent: 0xff7729, sunColor: 0xffc159,
+        mote: 0xffaa3b
+      },
+      // 4: Royal Nest / Rainbow Valley (العش الملكي)
+      {
+        skyTop: 0x668aff, skyMid: 0xc9a8ff, skyBot: 0xffe4f0, fog: 0xffdcf0,
+        hemiTop: 0xfff7ff, hemiBot: 0x86c99b, sun: 0xfff8e6, sunInt: 2.05,
+        pathTop: 0xfff1c9, pathSide: 0xe0a2b8, curb: 0xff72b6, ground: 0x82e39c,
+        hillA: 0xff9ec7, hillB: 0xa994ff, accent: 0x57f0d6, sunColor: 0xfff08a,
+        mote: 0xffe87a
+      }
     ];
-    view.BIO = BIO;
 
-    /* -------------------------------------------------------------- models */
-    var INK = 0x2a2140, WHITE = 0xffffff, PINK = 0xff8db5;
-    // The baby dino, facing +x. Parts are separate meshes so they can move.
-    function dinoParts(c) {
-      var dark = shade(c, 0.74), belly = mix(c, 0xfff4d6, 0.84), spike = mix(c, 0xff9a3c, 0.7);
-      var body = [[0, 3.2, 0, 6.2, 5.6, 5.8, c], [0, 2.8, 0, 5.4, 6.4, 5.2, c], [1.9, 3.4, 0, 3.2, 4.6, 6, belly],
-        [3.4, 5.4, 2.4, 1.4, 1.5, 1.1, c], [3.4, 5.4, -2.4, 1.4, 1.5, 1.1, c], [4.2, 5.4, 2.4, 0.5, 0.5, 1.1, WHITE], [4.2, 5.4, -2.4, 0.5, 0.5, 1.1, WHITE],
-        [-2.2, 8.6, 0, 1.4, 1.4, 1.2, spike], [-0.4, 9, 0, 1.4, 1.4, 1.2, spike]];
-      var head = [[2.2, -0.6, 0, 8.4, 6.4, 6.6, c], [2.2, -1, 0, 7.4, 7.2, 5.8, c], [2.2, -0.2, 0, 9, 5.6, 5.8, c], [3.2, -1.2, 0, 6, 0.8, 5.4, belly],
-        [6.72, 0.6, 0, 0.2, 0.5, 3, INK], [5.6, 0.6, 3.02, 2.4, 0.5, 0.2, INK], [4.4, 0.9, 3.02, 0.5, 0.8, 0.2, INK], [5.6, 0.6, -3.02, 2.4, 0.5, 0.2, INK], [4.4, 0.9, -3.02, 0.5, 0.8, 0.2, INK],
-        [6.72, 3.4, 1, 0.2, 0.6, 0.6, dark], [6.72, 3.4, -1, 0.2, 0.6, 0.6, dark],
-        [3.6, 1.6, 3.32, 1.4, 0.8, 0.2, PINK], [3.6, 1.6, -3.32, 1.4, 0.8, 0.2, PINK],
-        [0.4, 5.8, 0, 1.6, 1.4, 1.4, spike], [2.2, 6, 0, 1.4, 1, 1.4, spike]];
-      // Eyes wrap the front corners of the head: seen from the side and from the front.
-      var eyes = [];
-      [1, -1].forEach(function (k) { eyes.push([5.9, 2.3, 2.7 * k, 1.7, 2.5, 1.4, INK], [6.8, 3.8, 2.35 * k, 0.1, 0.6, 0.5, WHITE], [6.25, 3.8, 3.42 * k, 0.6, 0.6, 0.1, WHITE], [6.8, 2.8, 2.9 * k, 0.1, 0.3, 0.3, WHITE]); });
-      var tail = [[-1.8, -1.8, 0, 3.8, 4, 4.4, c], [-4.6, -1, 0, 2.6, 2.8, 3.2, c], [-6.6, -0.2, 0, 1.8, 1.8, 2.2, c], [-7.8, 0.4, 0, 1, 1.2, 1.4, dark],
-        [-2.2, 2.2, 0, 1.2, 1.2, 1.1, spike], [-4.6, 1.8, 0, 1, 1, 0.9, spike]];
-      var leg = [[0, -3.4, 0, 2.6, 3.8, 2.4, c], [0.6, -3.6, 0, 3.4, 1.1, 2.8, dark], [2.2, -3.6, 0.8, 0.5, 0.5, 0.6, WHITE], [2.2, -3.6, -0.8, 0.5, 0.5, 0.6, WHITE]];
-      return { body: body, head: head, eyes: eyes, tail: tail, leg: leg };
+    /* ----------------------------------------------------------- Sky Dome */
+    var skyGeo = new T.SphereGeometry(180, 14, 10);
+    var skyPos = skyGeo.attributes.position;
+    var skyColArr = new Float32Array(skyPos.count * 3);
+    skyGeo.setAttribute('color', new T.BufferAttribute(skyColArr, 3));
+    var skyMat = new T.MeshBasicMaterial({ vertexColors: true, side: T.BackSide, fog: false, depthWrite: false });
+    var skyMesh = new T.Mesh(skyGeo, skyMat);
+    scene.add(skyMesh);
+
+    // Radiant Sun + Halo Disc + Rainbow Arc (visible in World 4!)
+    var skyDecor = new T.Group();
+    scene.add(skyDecor);
+    var sunCore = new T.Mesh(new T.SphereGeometry(7.2, 12, 10), new T.MeshBasicMaterial({ color: 0xffe86b, fog: false }));
+    sunCore.position.set(34, 24, -88);
+    var sunHalo = new T.Mesh(new T.SphereGeometry(11.2, 12, 10), new T.MeshBasicMaterial({ color: 0xfff5b8, transparent: true, opacity: 0.25, fog: false }));
+    sunHalo.position.copy(sunCore.position);
+    skyDecor.add(sunCore, sunHalo);
+
+    // Giant Pastel 3D Rainbow Arc for World 4 (Royal Nest / Rainbow Valley).
+    var rainbowGroup = new T.Group();
+    var rbColors = [0xff5f8f, 0xffb347, 0xffe857, 0x57e389, 0x5cc8ff, 0xb27aff];
+    for (var rb = 0; rb < rbColors.length; rb++) {
+      var rbMesh = new T.Mesh(
+        new T.TorusGeometry(48 - rb * 2.2, 1.15, 6, 26, Math.PI),
+        new T.MeshBasicMaterial({ color: rbColors[rb], transparent: true, opacity: 0.72, fog: false })
+      );
+      rainbowGroup.add(rbMesh);
     }
-    var HATS = {
-      none: function () { return []; },
-      bow: function () { return [[0, 0, 2.6, 1.4, 1.4, 1.2, 0xff4f9a], [-1.3, -0.2, 2.6, 1.6, 2, 1, 0xff7eb9], [1.3, -0.2, 2.6, 1.6, 2, 1, 0xff7eb9]]; },
-      cap: function () { return [[0, 0, 0, 7, 2.4, 6.8, 0xff4b4b], [4.6, 0, 0, 3.4, 0.6, 6, 0xff4b4b], [0, 2.4, 0, 1.2, 0.6, 1.2, WHITE], [0, 0.8, 3.45, 3, 1.2, 0.1, WHITE]]; },
-      flower: function () {
-        var l = [[0, 0, 0, 7.4, 0.8, 7, 0x4fbf4a]], cols = [0xff6fae, 0xffd23f, 0x7ad3ff, 0xff9a3c, 0xc79bff];
-        for (var i = 0; i < 5; i++) { var a = i / 5 * 6.28 + 0.3; l.push([Math.cos(a) * 3.2, 0.5, Math.sin(a) * 3.1, 1.8, 1.2, 1.8, cols[i]], [Math.cos(a) * 3.2, 1.3, Math.sin(a) * 3.1, 0.7, 0.4, 0.7, 0xfff4b0]); }
-        return l;
-      },
-      party: function () { return [[0, 0, 0, 4.4, 2, 4.4, 0x7a5cff], [0, 2, 0, 3.2, 2, 3.2, 0xffd23f], [0, 4, 0, 2, 1.8, 2, 0x7a5cff], [0, 5.8, 0, 1.6, 1.4, 1.6, 0xff4f9a]]; },
-      shades: function () { return [[4.15, -4.2, 1.8, 0.5, 2.6, 2.8, INK], [4.15, -4.2, -1.8, 0.5, 2.6, 2.8, INK], [4.15, -2.6, 0, 0.5, 0.6, 1.2, INK], [2, -2.4, 3.5, 4.4, 0.6, 0.3, INK], [2, -2.4, -3.5, 4.4, 0.6, 0.3, INK], [4.45, -2.6, 2.4, 0.1, 0.6, 0.8, 0x8fd8ff], [4.45, -2.6, -1.2, 0.1, 0.6, 0.8, 0x8fd8ff]]; },
-      crown: function () {
-        var G = 0xffcf2e, l = [[0, 0, 0, 6, 1.6, 6, G]];
-        [[-2.4, -2.4], [2.4, -2.4], [-2.4, 2.4], [2.4, 2.4], [0, 2.6], [0, -2.6]].forEach(function (p) { l.push([p[0], 1.6, p[1], 1.2, 1.6, 1.2, G]); });
-        l.push([0, 0.4, 3.05, 1.2, 0.9, 0.2, 0xff4b6e], [3.05, 0.4, 0, 0.2, 0.9, 1.2, 0x4bd0ff]);
-        return l;
-      },
-      viking: function () { return [[0, 0, 0, 7, 2.6, 6.8, 0xb9c3d6], [0, 0, 0, 7.4, 0.8, 7.2, 0x8a6a3a], [0, 2.6, 0, 3, 0.8, 3, 0xb9c3d6], [0, 1, 4, 1.4, 1.4, 1.6, WHITE], [0, 2.2, 4.8, 1, 2, 1, WHITE], [0, 1, -4, 1.4, 1.4, 1.6, WHITE], [0, 2.2, -4.8, 1, 2, 1, WHITE]]; },
-      wizard: function () { return [[0, 0, 0, 8, 0.8, 8, 0x5b3fd1], [0, 0.8, 0, 5, 2.4, 5, 0x6b4fe6], [-0.4, 3.2, 0, 3.6, 2.2, 3.6, 0x6b4fe6], [-1, 5.4, 0, 2.2, 2, 2.2, 0x6b4fe6], [-1.8, 7.2, 0, 1.2, 1.4, 1.2, 0x6b4fe6], [1, 1.6, 2.55, 1, 1, 0.1, 0xffe14d], [-0.6, 3.8, 1.85, 0.8, 0.8, 0.1, 0xffe14d]]; }
+    rainbowGroup.position.set(16, -4, -95);
+    rainbowGroup.visible = false;
+    skyDecor.add(rainbowGroup);
+
+    // Aurora ribbons for World 2 (Snowy Peaks).
+    var auroraGroup = new T.Group();
+    var auColors = [0x47ffd9, 0x6ba8ff, 0xc97aff];
+    for (var au = 0; au < auColors.length; au++) {
+      var auMesh = new T.Mesh(
+        new T.TorusGeometry(54 + au * 6, 1.8, 5, 22, Math.PI * 0.7),
+        new T.MeshBasicMaterial({ color: auColors[au], transparent: true, opacity: 0.34, fog: false })
+      );
+      auMesh.rotation.set(0.55, 0.2 * au, 0.22 - au * 0.14);
+      auroraGroup.add(auMesh);
+    }
+    auroraGroup.position.set(12, 18, -92);
+    auroraGroup.visible = false;
+    skyDecor.add(auroraGroup);
+
+    var curSky = {
+      top: new T.Color(PALETTES[0].skyTop),
+      mid: new T.Color(PALETTES[0].skyMid),
+      bot: new T.Color(PALETTES[0].skyBot),
+      fog: new T.Color(PALETTES[0].fog),
+      hemiTop: new T.Color(PALETTES[0].hemiTop),
+      hemiBot: new T.Color(PALETTES[0].hemiBot),
+      sun: new T.Color(PALETTES[0].sun),
+      sunDisc: new T.Color(PALETTES[0].sunColor)
     };
-    // A dino rig: root (position, squash, tumble) > body > head > eyes, hat; tail; legs.
-    function makeDino(color, hat, size) {
-      var g = new T.Group(), pivot = new T.Group(), body = new T.Group();
-      g.add(pivot); pivot.add(body);
-      var parts = dinoParts(color);
-      var torso = mesh(build(parts.body)), head = mesh(build(parts.head)), eyes = mesh(build(parts.eyes)), tail = mesh(build(parts.tail));
-      var legA = mesh(build(parts.leg)), legB = mesh(build(parts.leg)), hatM = mesh(build(HATS[hat] ? HATS[hat]() : []));
-      head.position.set(0.12, 0.8, 0); tail.position.set(-0.28, 0.48, 0); legA.position.set(0.04, 0.36, 0.16); legB.position.set(0.04, 0.36, -0.16);
-      hatM.position.set(0.22, 0.6, 0);
-      head.add(eyes, hatM); head.scale.setScalar(1.12); body.add(torso, head, tail, legA, legB);
-      g.scale.setScalar(size || 1);
-      var rig = { root: g, pivot: pivot, body: body, head: head, eyes: eyes, tail: tail, legA: legA, legB: legB, hat: hatM, parts: [torso, head, eyes, tail, legA, legB, hatM] };
-      rig.dispose = function () { rig.parts.forEach(function (m) { m.geometry.dispose(); }); };
-      return rig;
-    }
+    var targetWorld = 0;
+    var lastSkyWorld = -1;
 
-    // Obstacles by biome: what they look like (the engine says what they do).
-    var OB = {
-      block: function (b, form, look) {
-        var P = BIO[b], l = [];
-        if (b === 0) {
-          if (form === 'wide') return [[0, 0, 0, 17, 3.6, 6.4, 0xe0763c], [0.6, 3.6, 0, 14, 2.4, 5.6, 0xf09a4c], [-1, 6, 0, 8, 1.4, 4.6, 0xf7b866], [5, 0, 3.3, 4, 1.2, 0.4, 0xc95f30]];
-          var h = form === 'tall' ? 12.6 : 7.4, G = 0x3fbf5a;
-          l.push([0, 0, 0, 7, 0.8, 6, 0xf0bf62], [0, 0.6, 0, 3.8, h, 3.8, G], [0, 0.6 + h, 0, 2.6, 0.8, 2.6, 0x58d872], [0, 1.4 + h, 0, 1.8, 1, 1.8, 0xff6fae]);
-          l.push([-2.8, 3.6, 0, 1.8, 1.4, 1.8, G], [-3.2, 3.6, 0, 1.4, h * 0.42, 1.6, G], [2.8, 2.6 + (look ? 2 : 0), 0, 1.8, 1.4, 1.8, G], [3.2, 2.6 + (look ? 2 : 0), 0, 1.4, h * 0.32, 1.6, G]);
-          for (var i = 0; i < 4; i++) l.push([(i % 2 ? 1.95 : -1.95), 2 + i * h * 0.2, 0.9, 0.2, 0.5, 0.2, 0xfff6c8], [0.9, 1.6 + i * h * 0.2, 1.95, 0.5, 0.5, 0.2, 0xfff6c8]);
-          return l;
+    function paintSkyDome() {
+      var arr = skyGeo.attributes.color.array;
+      for (var i = 0; i < skyPos.count; i++) {
+        var ny = skyPos.getY(i) / 180; // -1 .. 1
+        var u = D.clamp((ny + 0.08) / 0.85, 0, 1);
+        if (u < 0.42) {
+          C3.copy(curSky.bot).lerp(curSky.mid, u / 0.42);
+        } else {
+          C3.copy(curSky.mid).lerp(curSky.top, (u - 0.42) / 0.58);
         }
-        if (b === 1) {
-          if (form === 'wide') return [[0, 0, 0, 17, 6, 6.2, 0x8a5a33], [8.6, 0.4, 0, 0.4, 5.2, 5.4, 0xe2b77a], [-8.6, 0.4, 0, 0.4, 5.2, 5.4, 0xe2b77a], [8.8, 2, 0, 0.2, 2, 2, 0xb88a52], [-2, 6, 0, 7, 0.8, 4.6, 0x5ec44a], [3, 6, 1, 2, 1.6, 2, 0xff5a5a], [3, 7.6, 1, 3, 0.6, 3, 0xffe0e0]];
-          var th = form === 'tall' ? 12.6 : 6.6;
-          l.push([0, 0, 0, 7.4, th, 7, 0x93603a], [0, th, 0, 7.8, 0.8, 7.4, 0xe6bd80], [0, th + 0.2, 0, 4, 0.8, 3.6, 0xcf9c62], [-2, 0, 3.6, 2.6, th * 0.6, 0.4, 0x5ec44a], [2.4, th * 0.4, 3.6, 2, 2, 0.4, 0x6fd24f]);
-          l.push([2.6, th + 0.8, -1.6, 1, 1.4, 1, 0xfff1d6], [2.6, th + 2.2, -1.6, 2.6, 1, 2.6, 0xff5a5a]);
-          return l;
-        }
-        if (b === 2) {
-          if (form === 'tall') return [[0, 0, 0, 8.4, 6.4, 8.4, WHITE], [0, 6.4, 0, 6.4, 5, 6.4, WHITE], [0, 5.8, 0, 7.4, 1.2, 7.4, 0xff4b4b], [2.6, 5, 3.8, 1.4, 3, 0.6, 0xff4b4b],
-            [3.6, 8.6, 0, 2.6, 1, 1.2, 0xff8a1f], [3.25, 9.6, 1.4, 0.2, 0.8, 0.8, INK], [3.25, 9.6, -1.4, 0.2, 0.8, 0.8, INK], [0, 11.4, 0, 4.4, 0.6, 4.4, INK], [0, 12, 0, 3, 2.2, 3, INK], [4.25, 2, 0, 0.2, 1, 1, INK], [4.25, 4, 0, 0.2, 1, 1, INK]];
-          if (form === 'wide') return [[0, 0, 0, 17, 5.6, 6, 0x8f6a4a], [0, 5.6, 0, 17.4, 1.6, 6.4, WHITE], [8.6, 0.4, 0, 0.4, 4.8, 5.2, 0xe2c8a6], [-3, 7.2, 0, 5, 0.8, 4, WHITE]];
-          return [[0, 0, 0, 8.4, 7.6, 7.6, 0x9fdcff], [0, 7.6, 0, 8.8, 0.8, 8, WHITE], [-1.6, 2, 3.85, 1, 4, 0.2, 0xe6f8ff], [1.4, 4, 3.85, 1.6, 1, 0.2, 0xe6f8ff], [0, 0, 0, 9, 0.6, 8.4, 0x7fc6f2]];
-        }
-        if (b === 3) {
-          if (form === 'wide') return [[0, 0, 0, 17, 5.4, 6, 0xa8774f], [-4, 0, 0, 0.6, 5.6, 6.2, 0x7d5638], [2, 0, 0, 0.6, 5.6, 6.2, 0x7d5638], [8.6, 0.4, 0, 0.4, 4.6, 5.2, 0xe8c48e], [-7, 5.4, 0, 4, 1.4, 4, 0x3fbf5a], [-6, 6.8, 0, 6, 0.6, 2, 0x5ed872]];
-          var vh = form === 'tall' ? 12.8 : 7.6, R = 0x4a3346;
-          l.push([0, 0, 0, 8, vh, 7.4, R], [0.6, vh, 0, 5.6, 1.2, 5.6, 0x5b4058], [-1, 1.4, 3.75, 3, 0.7, 0.2, 0xff8a3c, 1], [1.4, vh * 0.55, 3.75, 0.7, 3, 0.2, 0xffb03c, 1], [0.4, vh * 0.35, 3.75, 2.4, 0.6, 0.2, 0xff8a3c, 1], [4.05, vh * 0.5, 0, 0.2, 2.4, 2, 0xff8a3c, 1]);
-          return l;
-        }
-        if (form === 'wide') return [[0, 0, 0, 17, 5.4, 6, 0x3f3a7a], [8.6, 0.4, 0, 0.4, 4.6, 5.2, 0x8f86d6], [-3, 5.4, 1, 1.2, 1.6, 1.2, 0xe8e6ff], [-3, 7, 1, 4, 1.4, 4, 0x46ffd2, 1], [3, 5.4, -1, 1, 1.2, 1, 0xe8e6ff], [3, 6.6, -1, 3.2, 1.2, 3.2, 0xff6fd8, 1]];
-        if (form === 'tall') return [[0, 0, 0, 5, 9, 5, 0xb38cff, 1], [0, 9, 0, 3, 3.6, 3, 0xd9c2ff, 1], [-2.8, 0, 1, 3, 6, 3, 0x9a6dff, 1], [2.8, 0, -1, 2.6, 7, 2.6, 0x8fd8ff, 1], [0, 0, 0, 8.4, 0.6, 7, 0x4a4fa8]];
-        return [[0, 0, 0, 2.6, 4.4, 2.6, 0xf2efff], [0, 4.4, 0, 8.4, 2.6, 7.6, 0x46ffd2, 1], [0, 7, 0, 5.4, 0.8, 5, 0x9effe6, 1], [-2, 5.2, 3.85, 1.2, 1.2, 0.2, WHITE, 1], [2, 5.6, 3.85, 1, 1, 0.2, WHITE, 1]];
-      },
-      crate: function (b, form) {
-        var wood = [0xf2b248, 0xe8a640, 0xf0b24c, 0xe8a640, 0xd9963a][b], band = [0xa45f22, 0x8a4f1f, 0x9a5a22, 0x8a4f1f, 0x7a4418][b], star = 0xffe14d, glow = b === 4 ? 1 : 0;
-        var l = [], n = form === 'wall' ? 2 : 1;
-        for (var i = 0; i < n; i++) {
-          var x = (i - (n - 1) / 2) * 10;
-          l.push([x, 0, 0, 9.6, 9.6, 9.6, wood], [x - 4.3, 0, 0, 1, 9.8, 9.8, band], [x + 4.3, 0, 0, 1, 9.8, 9.8, band], [x, 8.8, 0, 9.8, 1, 9.8, band], [x, 0, 0, 9.8, 1, 9.8, band],
-            [x, 3.3, 4.9, 3.4, 3, 0.2, star, glow], [x, 4.3, 4.95, 1.2, 1, 0.1, 0xffffff, glow], [x, 3.3, -4.9, 3.4, 3, 0.2, star, glow]);
-        }
-        return l;
-      },
-      vine: function (b) {
-        var rope = [0x4cbf3c, 0x3fae36, 0x9fe6ff, 0x3fbf5a, 0xb38cff][b], leaf = [0x6fe04f, 0x7fe85a, WHITE, 0x7fe85a, 0x46ffd2][b], bulb = [0xff6fae, 0xff6fae, 0x7fd6ff, 0xffb03c, 0xff6fd8][b], glow = b === 4 ? 1 : 0;
-        var l = [[0, -3, -4, 4, 3, 16, 0x8a5a33], [0, -33, 0, 1.4, 31, 1.4, rope, glow]];
-        for (var i = 0; i < 6; i++) l.push([(i % 2 ? 1.4 : -1.4), -7 - i * 4.4, 0, 2, 1.2, 1.6, leaf, glow]);
-        l.push([0, -35, 0, 4.2, 3, 4.2, bulb, glow], [0, -35.6, 0, 2.6, 0.6, 2.6, shade(bulb, 0.8), glow], [1.6, -34, 2.15, 0.6, 0.7, 0.1, INK], [1.6, -34, -2.15, 0.6, 0.7, 0.1, INK]);
-        return l;
-      },
-      // Night kites glow like paper lanterns, so they read in the dark.
-      flyerBody: function (b, look) {
-        var c = [0x3fe6dc, 0xffa04c, 0xc77bff][look], belly = 0xfff1c8, l = [[0, -1.6, 0, 6.4, 3.2, 3.6, c], [0.4, -1.8, 0, 4, 1, 3, belly], [-4.2, -0.8, 0, 4.2, 3.4, 3.4, c], [-7.6, 0, 0, 3.2, 1.2, 1.8, 0xffd23f], [-3.4, 2.4, 0, 3, 1, 1, 0xff6fae],
-          [4, -1, 0, 2.4, 1, 1, c], [6, -1.4, 0, 1.6, 1.6, 0.4, 0xff4f9a], [8, -1.8, 0, 1.6, 1.6, 0.4, 0xffd23f], [10, -2.2, 0, 1.6, 1.6, 0.4, 0x4fb8ff]];
-        l.forEach(function (e) { e.push(1); });
-        return l.concat([[-5, 0.8, 1.75, 1.4, 1.4, 0.1, WHITE, 1], [-5.2, 0.9, 1.82, 0.7, 0.9, 0.1, INK], [-5, 0.8, -1.75, 1.4, 1.4, 0.1, WHITE, 1], [-5.2, 0.9, -1.82, 0.7, 0.9, 0.1, INK]]);
-      },
-      flyerWings: function (b, look) {
-        var w = [0xffe14d, 0x7fd6ff, 0xff8fc6][look], l = [[0, 0, 4.4, 5, 0.6, 7, w], [0.6, 0, 9.2, 3.6, 0.5, 3, mix(w, WHITE, 0.4)], [0, 0, -4.4, 5, 0.6, 7, w], [0.6, 0, -9.2, 3.6, 0.5, 3, mix(w, WHITE, 0.4)], [-1.2, 0.3, 4.4, 1, 0.3, 6, WHITE], [-1.2, 0.3, -4.4, 1, 0.3, 6, WHITE]];
-        l.forEach(function (e) { e.push(1); });
-        return l;
-      },
-      roller: function (b) {
-        var base = [WHITE, 0x8a5a33, WHITE, 0x8a5a33, 0xb38cff][b], dot = [0xbfe4ff, 0x5a3a20, 0xbfe4ff, 0x5a3a20, 0xe8d6ff][b], glow = b === 4 ? 1 : 0;
-        var l = [[0, -4.5, 0, 5, 9, 5, base, glow], [0, -3.75, 0, 7.8, 7.5, 7.8, base, glow], [0, -2.25, 0, 9.2, 4.5, 6.4, base, glow], [0, -2.25, 0, 6.4, 4.5, 9.2, base, glow], [0, -3.2, 0, 6.4, 6.4, 6.4, base, glow]];
-        l.push([4.4, 0, 2, 0.4, 1.4, 1.4, dot], [-4.4, -1.6, -1, 0.4, 1.2, 1.2, dot], [1, 3.9, 1, 1.4, 0.4, 1.4, dot], [2, -2, 4.4, 1.2, 1.2, 0.4, dot], [-2, 1, 4.4, 1.6, 1, 0.4, dot], [1.6, 1, -4.4, 1.2, 1.2, 0.4, dot]);
-        return l;
+        arr[i * 3] = C3.r; arr[i * 3 + 1] = C3.g; arr[i * 3 + 2] = C3.b;
       }
-    };
-    var ITEM = {
-      egg: function () {
-        var E = 0xfff8ea, l = [[0, -2.4, 0, 2, 0.5, 2, E, 1], [0, -2, 0, 3, 1, 3, E, 1], [0, -1.2, 0, 3.6, 1.8, 3.6, E, 1], [0, 0.6, 0, 3.2, 1.2, 3.2, E, 1], [0, 1.8, 0, 2.6, 0.8, 2.6, E, 1], [0, 2.6, 0, 1.6, 0.6, 1.6, E, 1]];
-        [[1, -0.6, 1.85, 1, 1, 0.1, 0x45c4ff], [-0.9, 1, 1.65, 0.8, 0.8, 0.1, 0xff6fae], [1.85, -0.2, -0.7, 0.1, 1, 1, 0x45c4ff], [-1.85, -0.9, 0.5, 0.1, 1, 1, 0xff6fae], [0.4, -1, -1.85, 1, 1, 0.1, 0x6fe04f], [-0.6, 1.2, -1.65, 0.8, 0.8, 0.1, 0xffc12e]].forEach(function (d) { d.push(1); l.push(d); });
-        return l;
-      },
-      fruit0: function () { return [[0, -2, 0, 4.6, 4, 4, 0x3fbf5a], [0, -1.6, 0, 5, 3.2, 3.4, 0x2f9e48], [-1.2, -2, 2.05, 0.8, 4, 0.1, 0x7be05a], [1.2, -2, 2.05, 0.8, 4, 0.1, 0x7be05a], [0, 2, 0, 0.6, 1, 0.6, 0x8a5a33]]; },
-      fruit1: function () { return [[-1.4, -2, 0, 1.4, 4, 1.4, 0xffd23f], [0, -2.4, 0, 1.4, 4.4, 1.4, 0xffe14d], [1.4, -2, 0, 1.4, 4, 1.4, 0xffd23f], [0, 2, 0, 1.2, 1, 1.2, 0x8a5a33], [0, -2.6, 0, 3, 0.6, 1, 0x7a5a20]]; },
-      fruit2: function () { return [[0, -2.2, 0, 2.4, 1, 2.4, 0xff3b52], [0, -1.2, 0, 3.6, 2.6, 3.6, 0xff3b52], [0, 1.4, 0, 3.8, 0.8, 3.8, 0x3fbf5a], [0, 2.2, 0, 1, 1, 1, 0x3fbf5a], [1.81, 0, 0.6, 0.1, 0.5, 0.5, 0xfff1a8], [-0.6, -0.6, 1.81, 0.5, 0.5, 0.1, 0xfff1a8]]; },
-      fruit3: function () { return [[0, -2.4, 0, 3.6, 4, 3.6, 0xffb02e], [0, -2, 0, 3.9, 3.2, 3.9, 0xff9a1f], [0, 1.6, 0, 1.2, 2.4, 1.2, 0x3fbf5a], [-1, 1.6, 0, 1, 1.6, 1, 0x58d872], [1, 1.6, 0, 1, 1.6, 1, 0x58d872]]; },
-      fruit4: function () { return [[0, -2, 0, 4, 4, 4, 0xc77bff, 1], [0, -1.6, 0, 4.4, 3.2, 4.4, 0xb05cff, 1], [0, 2, 0, 0.6, 1, 0.6, 0x46ffd2, 1], [0.8, 2.6, 0, 1.6, 0.6, 1, 0x46ffd2, 1]]; },
-      heart: function () { return [[-1.2, -2, 0, 2.4, 3.6, 1.8, 0xff3b6b], [1.2, -2, 0, 2.4, 3.6, 1.8, 0xff3b6b], [0, -2.8, 0, 2, 1.6, 1.6, 0xff3b6b], [-1.5, 1.6, 0, 2.2, 0.8, 1.6, 0xff3b6b], [1.5, 1.6, 0, 2.2, 0.8, 1.6, 0xff3b6b], [-1.6, 0.4, 0.95, 0.8, 0.8, 0.1, WHITE]]; },
-      star: function () { return [[0, -1.2, 0, 1.2, 2.4, 0.6, 0xffe14d, 1], [0, -0.4, 0, 2.8, 0.8, 0.6, 0xffe14d, 1], [0, -0.2, 0.31, 0.6, 0.6, 0.1, 0xffffff, 1]]; }
-    };
-
-    /* ----------------------------------------------------- scenery props */
-    // small: only low scenery (next to the path nothing may look like an obstacle).
-    function prop(b, r, x, y, z, l, small) {
-      function add(e) { l.push([e[0] + x, e[1] + y, e[2] + z, e[3], e[4], e[5], e[6], e[7]]); }
-      var k = small ? 0.62 + r() * 0.38 : r();
-      if (b === 0) {
-        if (k < 0.4) { var h = 14 + r() * 16, G = 0x3a9a50; [[0, 0, 0, 4.2, h, 4.2, G], [-3.4, h * 0.4, 0, 2.6, 2, 2.4, G], [-4, h * 0.4, 0, 2, h * 0.35, 2.2, G], [3.4, h * 0.55, 0, 2.6, 2, 2.4, G], [4, h * 0.55, 0, 2, h * 0.28, 2.2, G], [0, h, 0, 2.6, 1, 2.6, 0xff6fae]].forEach(add); }
-        else if (k < 0.7) [[0, 0, 0, 9, 4, 7, 0xe0763c], [0.6, 4, 0, 6.6, 3, 5.4, 0xf09a4c], [-0.4, 7, 0, 3.6, 2, 3.6, 0xf7b866]].forEach(add);
-        else [[0, 0, 0, 3.6, 3.6, 3.6, 0x58c46a], [0, 3.6, 0, 1.6, 1.2, 1.6, 0xffd23f], [3, 0, 2, 1, 1.6, 1, 0xff8a3c]].forEach(add);
-      } else if (b === 1) {
-        if (k < 0.45) { var th = 22 + r() * 18; [[0, 0, 0, 3.6, th, 3.6, 0x8a5a33], [0, th, 0, 16, 5, 14, 0x3fae36], [1, th + 5, 0, 11, 4, 10, 0x55c440], [-4, th - 3, 3, 8, 3, 8, 0x47b83a], [5, th - 2, -3, 7, 3, 7, 0x4cbc3c], [0, th + 9, 0, 5, 2, 5, 0x6fd24f]].forEach(add); }
-        else if (k < 0.75) [[0, 0, 0, 8, 5, 8, 0x3fae36], [0, 5, 0, 5, 3, 5, 0x55c440], [3, 5, 3, 2, 2, 2, 0xff5a5a], [-2, 6, -2, 2, 2, 2, 0xffd23f]].forEach(add);
-        else [[0, 0, 0, 1, 6, 1, 0x3fae36], [0, 6, 0, 4, 3, 4, 0xff5a8a], [0, 9, 0, 1.6, 1, 1.6, 0xffe14d], [3, 0, 1, 1, 4, 1, 0x3fae36], [3, 4, 1, 3, 2, 3, 0xffd23f]].forEach(add);
-      } else if (b === 2) {
-        if (k < 0.55) { var ph = 6 + r() * 4, P = 0x2f8a5a; [[0, 0, 0, 2.6, 4, 2.6, 0x7a5a3a], [0, 4, 0, 13, ph, 13, P], [0, 4 + ph, 0, 13.4, 1.2, 13.4, WHITE], [0, 5 + ph, 0, 9, ph, 9, P], [0, 5 + ph * 2, 0, 9.4, 1.2, 9.4, WHITE], [0, 6 + ph * 2, 0, 5, ph, 5, P], [0, 6 + ph * 3, 0, 5.4, 1.4, 5.4, WHITE]].forEach(add); }
-        else if (k < 0.8) [[0, 0, 0, 9, 5, 8, 0x9fb4cc], [0, 5, 0, 9.4, 2, 8.4, WHITE], [3, 0, 3, 4, 3, 4, 0x8aa0bb]].forEach(add);
-        else [[0, 0, 0, 2, 8, 2, 0x9fe6ff], [2, 0, 1, 1.6, 5, 1.6, 0xbff0ff], [-1.6, 0, -1, 1.4, 4, 1.4, 0x7fd6ff]].forEach(add);
-      } else if (b === 3) {
-        if (k < 0.5) { var lh = 20 + r() * 12, lean = r() < 0.5 ? -1 : 1; for (var i = 0; i < 5; i++) add([lean * i * i * 0.35, i * lh / 5, 0, 2.8, lh / 5 + 0.4, 2.8, i % 2 ? 0xb07a4a : 0x9a6a40]);
-          var tx = lean * 7; [[tx, lh, 0, 4, 2, 4, 0x8a5a33], [tx + 5, lh - 1, 0, 8, 1.2, 3, 0x3fbf5a], [tx - 5, lh - 1, 0, 8, 1.2, 3, 0x3fbf5a], [tx, lh - 1, 5, 3, 1.2, 8, 0x58d872], [tx, lh - 1, -5, 3, 1.2, 8, 0x58d872], [tx + 8, lh - 3, 0, 2, 2, 2.4, 0x3fbf5a], [tx - 8, lh - 3, 0, 2, 2, 2.4, 0x3fbf5a]].forEach(add); }
-        else if (k < 0.8) [[0, 0, 0, 8, 6, 7, 0x4a3346], [0, 6, 0, 5, 2, 5, 0x5b4058], [2, 2, 3.6, 3, 0.6, 0.2, 0xff8a3c, 1]].forEach(add);
-        else [[0, 0, 0, 1, 5, 1, 0x3fbf5a], [0, 5, 0, 3.6, 2.4, 3.6, 0xff4f9a], [0, 7.4, 0, 1.4, 0.8, 1.4, 0xffe14d], [-3, 0, 2, 4, 2, 4, 0x3fbf5a]].forEach(add);
-      } else {
-        if (k < 0.4) { var nh = 18 + r() * 14; [[0, 0, 0, 3.4, nh, 3.4, 0x2a2457], [0, nh, 0, 13, 6, 12, 0x2f3f86], [0, nh + 6, 0, 8, 4, 8, 0x37489a], [-4, nh - 2, 4, 6, 3, 6, 0x29387a]].forEach(add); }
-        else if (k < 0.75) { var mc = [0x46ffd2, 0xff6fd8, 0x8fd8ff][(r() * 3) | 0]; [[0, 0, 0, 1.6, 4, 1.6, 0xe8e6ff], [0, 4, 0, 6, 2, 6, mc, 1], [0, 6, 0, 3.6, 1, 3.6, mix(mc, WHITE, 0.4), 1], [4, 0, 2, 1, 2.4, 1, 0xe8e6ff], [4, 2.4, 2, 3, 1.2, 3, mc, 1]].forEach(add); }
-        else [[0, 0, 0, 3, 9, 3, 0xb38cff, 1], [2.4, 0, 1, 2, 6, 2, 0x8fd8ff, 1], [-2, 0, -1, 2, 5, 2, 0xd9c2ff, 1]].forEach(add);
-      }
-    }
-    function tuft(b, r, x, z, l) {
-      var c = [[0xffd23f, 0xe9a95a, 0xff8a3c], [0x8fe05a, 0xff5a8a, 0xffe14d], [0xffffff, 0xbfe4ff, 0x9fb4cc], [0x3fbf5a, 0xff4f9a, 0x8d7480], [0x46ffd2, 0x8fd8ff, 0xff6fd8]][b][(r() * 3) | 0];
-      var glow = b === 4 ? 1 : 0;
-      var y = z > 0 ? -2.5 : -0.5;
-      if (r() < 0.5) l.push([x, y, z, 1, 2.2, 1, c, glow], [x + 1, y, z + 0.5, 0.8, 1.4, 0.8, c, glow]);
-      else l.push([x, y, z, 2, 1, 1.6, c, glow]);
-    }
-
-    /* ------------------------------------------------------- course chunks */
-    var CH = 16, chunks = new Map(), world = null;
-    function biomeAt(x) { return world ? D.biomeAt(world, x) : 0; }
-    // The goo and mud of the course near [a, b].
-    function terrain(a, b) {
-      var out = [];
-      if (!world) return out;
-      for (var i = 0; i < world.obs.length; i++) {
-        var o = world.obs[i];
-        if (o.x > b + 2) break;
-        if ((o.kind === 'gap' || o.kind === 'mud') && o.x + o.w > a - 2) out.push(o);
-      }
-      return out;
-    }
-    function buildChunk(k) {
-      var x0 = k * CH, l = [], r = rng(k * 2654435761 + 97), gaps = terrain(x0, x0 + CH), cuts = [x0, x0 + CH];
-      gaps.forEach(function (o) { if (o.kind === 'gap') o.goo.forEach(function (s) { cuts.push(s[0], s[1]); }); });
-      cuts = cuts.filter(function (c) { return c >= x0 && c <= x0 + CH; }).sort(function (a, b) { return a - b; });
-      function gooAt(x) { for (var i = 0; i < gaps.length; i++) { var o = gaps[i]; if (o.kind === 'gap') for (var j = 0; j < o.goo.length; j++) if (x > o.goo[j][0] && x < o.goo[j][1]) return o; } return null; }
-      function mudAt(x) { for (var i = 0; i < gaps.length; i++) if (gaps[i].kind === 'mud' && x > gaps[i].x && x < gaps[i].x + gaps[i].w) return gaps[i]; return null; }
-      for (var c = 0; c < cuts.length - 1; c++) {
-        var a = cuts[c], bnd = cuts[c + 1];
-        if (bnd - a < 0.01) continue;
-        var mid = (a + bnd) / 2, b = biomeAt(mid), P = BIO[b];
-        if (gooAt(mid)) {
-          l.push([mid * 10, -12, 0, (bnd - a) * 10, 8.6, 30, P.dirt[1]], [mid * 10, -3.6, 0, (bnd - a) * 10, 0.8, 29, P.goo, 1], [mid * 10, -3.4, 15.4, (bnd - a) * 10, 2, 0.8, shade(P.goo, 0.8), 1]);
-          if (r() < 0.6) l.push([mid * 10 + (r() - 0.5) * (bnd - a) * 6, -2.9, (r() - 0.5) * 20, 1.4, 0.6, 1.4, mix(P.goo, WHITE, 0.5), 1]);
-          continue;
-        }
-        // Solid ground in 1 m columns (cut at goo edges), path checkered.
-        for (var xa = a; xa < bnd - 0.01;) {
-          var xb = Math.min(bnd, Math.floor(xa + 1.0001)), cx = (xa + xb) / 2, cw = (xb - xa) * 10, col = Math.floor(xa) % 2 ? P.path[0] : P.path[1];
-          b = biomeAt(cx); P = BIO[b];
-          l.push([cx * 10, -1.6, -5, cw, 1.6, 10, col], [cx * 10, -1.6, 5, cw, 1.6, 10, Math.floor(xa) % 2 ? P.path[1] : P.path[0]], [cx * 10, -1.6, 12.5, cw, 1.6, 5, P.edge]);
-          l.push([cx * 10, -10, 1, cw, 8.4, 30, Math.floor(xa) % 2 ? P.dirt[0] : P.dirt[1]], [cx * 10, 0, -11, cw, 1.4, 1.8, Math.floor(xa) % 2 ? P.edge : shade(P.edge, 0.82)]);
-          var m = mudAt(cx);
-          if (m) {
-            l.push([cx * 10, 0, 0, cw, 0.5, 26, P.mud], [cx * 10 + 1, 0.5, (r() - 0.5) * 16, 3, 0.4, 3, shade(P.mud, b === 2 ? 1.05 : 0.8)]);
-            if (b === 2) l.push([cx * 10, 0.5, (r() - 0.5) * 10, cw, 2 + r() * 2, 8, 0xf4fbff]);
-          } else if (r() < 0.25) l.push([cx * 10 + (r() - 0.5) * 6, 0, (r() - 0.5) * 22, 1.6, 0.4, 1.6, shade(col, 0.92)]);
-          xa = xb;
-        }
-      }
-      // Front verge and the rising ground behind the path, with scenery.
-      for (var i = 0; i < CH; i++) {
-        var x = x0 + i + 0.5, bb = biomeAt(x), Q = BIO[bb], X = x * 10;
-        l.push([X, -6.5, 33.5, 10, 4, 37, i % 2 ? Q.side[0] : Q.side[1]], [X, -12, 33.5, 10, 5.5, 37, Q.dirt[1]]);
-        if (r() < 0.4 && Math.abs(x) > 8) tuft(bb, r, X + (r() - 0.5) * 6, 18 + r() * 12, l); // none right under the menu camera
-        var h1 = 1 + r() * 3, h2 = 3 + r() * 6, h3 = 8 + r() * 14;
-        l.push([X, -2, -20, 10, h1 + 2, 10, Q.back[0]], [X, -2, -32, 10, h2 + 2, 14, Q.back[1]], [X, -2, -50, 10, h3 + 2, 22, Q.back[2]]);
-        if (bb === 0 && r() < 0.5) l.push([X, h3, -56, 10, 4 + r() * 10, 10, r() < 0.5 ? 0xd96a3a : 0xe8894a]);
-        if (bb === 2 && r() < 0.6) l.push([X, h3, -52, 10, 1.2, 18, WHITE]);
-        if (r() < 0.14) prop(bb, r, X, h1, -20 + (r() - 0.5) * 3, l, true);
-        else if (r() < 0.2) prop(bb, r, X, h2, -32, l, true);
-        else if (r() < 0.36) prop(bb, r, X, h3, -50, l);
-        if (r() < 0.25) tuft(bb, r, X, -18 + r() * 2, l);
-      }
-      var mm = mesh(build(l));
-      mm.position.x = 0;
-      return mm;
-    }
-    function syncChunks(camX, all) {
-      var k0 = Math.floor((camX - 22) / CH), k1 = Math.floor((camX + 74) / CH);
-      chunks.forEach(function (m, k) { if (k < k0 - 1 || k > k1 + 1) { scene.remove(m); m.geometry.dispose(); chunks.delete(k); } });
-      // One new chunk per frame at most, nearest first, so a weak PC never stalls.
-      for (var k = k0; k <= k1; k++) if (!chunks.has(k)) { var m = buildChunk(k); chunks.set(k, m); scene.add(m); if (!all) return; }
-    }
-    function clearChunks() { chunks.forEach(function (m) { scene.remove(m); m.geometry.dispose(); }); chunks.clear(); }
-
-    /* ------------------------------------------------- far scenery, sky */
-    var FAR_P = 150;
-    function farBoxes(b) {
-      var l = [], r = rng(1234 + b * 77), P = BIO[b];
-      l.push([FAR_P * 5, -8, 160, FAR_P * 10 + 4, 5, 220, P.fill], [FAR_P * 5, -2, -260, FAR_P * 10 + 4, 6, 420, shade(P.back[2], 0.94)]);
-      for (var hi = 0; hi < 24; hi++) {
-        var hx = hi * FAR_P * 10 / 24 + r() * 30, hz = -140 - r() * 110, hh = 6 + r() * 22;
-        l.push([hx, 2, hz, 50 + r() * 60, hh, 60, r() < 0.5 ? P.back[1] : P.back[2]]);
-        if (r() < 0.7) prop(b, r, hx, hh + 2, hz, l);
-      }
-      for (var i = 0; i < 26; i++) {
-        var x = i * FAR_P * 10 / 26 + r() * 30, w = 40 + r() * 60, h = 30 + r() * 70, z = -380 - r() * 160;
-        if (b === 0) { l.push([x, -2, z, w, h, 60, 0xd96a3a], [x, h - 2, z, w * 0.8, h * 0.18, 56, 0xe8894a], [x, h * 1.16 - 2, z, w * 0.5, 6, 50, 0xf09a4c]); }
-        else if (b === 1) { l.push([x, -2, z, w * 1.4, h * 0.6, 80, 0x3a9032], [x, h * 0.6 - 2, z, w, h * 0.3, 70, 0x47a83a], [x + 10, h * 0.9 - 2, z, w * 0.5, h * 0.2, 60, 0x55b844]); }
-        else if (b === 2) { var mh = h * 1.6; l.push([x, -2, z, w * 1.5, mh * 0.5, 90, 0x7f9fc6], [x, mh * 0.5 - 2, z, w, mh * 0.3, 80, 0x93b2d6], [x, mh * 0.8 - 2, z, w * 0.55, mh * 0.25, 70, WHITE], [x, mh * 1.05 - 2, z, w * 0.25, mh * 0.12, 50, WHITE]); }
-        else if (b === 3) { l.push([x, -2, z, w * 1.3, h * 0.4, 70, 0x4f3d54], [x, h * 0.4 - 2, z, w * 0.8, h * 0.2, 60, 0x5b475f]); }
-        else { l.push([x, -2, z, w * 1.4, h * 0.5, 80, 0x1f2a66], [x, h * 0.5 - 2, z, w * 0.9, h * 0.25, 70, 0x24326e]); }
-      }
-      if (b === 3) for (var v = 0; v < 2; v++) {
-        var vx = 300 + v * 700, vz = -520;
-        [[vx, -2, vz, 320, 60, 200, 0x5b475f], [vx, 58, vz, 240, 60, 160, 0x6b5470], [vx, 118, vz, 160, 50, 120, 0x7a6080], [vx, 168, vz, 100, 10, 80, 0xff8a3c, 1], [vx, 178, vz, 60, 6, 50, 0xffd23f, 1],
-          [vx - 20, 200, vz, 60, 30, 40, WHITE], [vx + 30, 230, vz, 80, 36, 50, 0xf2eef6], [vx, 270, vz, 50, 24, 40, WHITE]].forEach(function (e) { l.push(e); });
-      }
-      if (b !== 4) for (var c = 0; c < 9; c++) {
-        var cx = c * 170 + r() * 80, cy = 160 + r() * 120, cz = -300 - r() * 200, cw = 60 + r() * 50;
-        l.push([cx, cy, cz, cw, 14, 30, WHITE], [cx + 10, cy + 12, cz, cw * 0.6, 12, 26, WHITE], [cx - cw * 0.3, cy - 4, cz, cw * 0.5, 10, 28, 0xf4f8ff]);
-      }
-      return l;
-    }
-    var farGeo = [], farMeshes = [0, 1, 2].map(function () { return mesh(new T.BufferGeometry()); });
-    farMeshes.forEach(function (m) { m.visible = false; scene.add(m); });
-    function syncFar(camX) {
-      var n = Math.floor(camX / FAR_P);
-      for (var i = 0; i < 3; i++) {
-        var seg = n - 1 + i, b = biomeAt(seg * FAR_P + FAR_P / 2), m = farMeshes[i];
-        if (!farGeo[b]) farGeo[b] = build(farBoxes(b));
-        m.geometry = farGeo[b]; m.position.x = seg * FAR_P; m.visible = true;
-      }
-    }
-    // Sky: a gradient dome that follows the camera, with stars and a moon at night.
-    var skyGeo = new T.SphereGeometry(300, 24, 12), skyCol = new Float32Array(skyGeo.attributes.position.count * 3);
-    skyGeo.setAttribute('color', new T.BufferAttribute(skyCol, 3));
-    var sky = new T.Mesh(skyGeo, new T.MeshBasicMaterial({ vertexColors: true, side: T.BackSide, fog: false, depthWrite: false }));
-    sky.renderOrder = -2; scene.add(sky);
-    var starPos = new Float32Array(160 * 3), sr = rng(5);
-    for (var si = 0; si < 160; si++) { var th = sr() * 6.28, ph = 0.12 + sr() * 1.2; starPos[si * 3] = Math.cos(th) * Math.cos(ph) * 280; starPos[si * 3 + 1] = Math.sin(ph) * 280; starPos[si * 3 + 2] = Math.sin(th) * Math.cos(ph) * 280; }
-    var starGeo = new T.BufferGeometry(); starGeo.setAttribute('position', new T.BufferAttribute(starPos, 3));
-    var stars = new T.Points(starGeo, new T.PointsMaterial({ color: 0xffffff, size: 2.4, sizeAttenuation: false, fog: false, transparent: true, opacity: 0 }));
-    var moon = new T.Mesh(new T.CircleGeometry(18, 20), new T.MeshBasicMaterial({ color: 0xfff6c8, fog: false, transparent: true, opacity: 0 }));
-    moon.position.set(90, 140, -230); moon.lookAt(0, 0, 0);
-    sky.add(stars, moon);
-    var look = { top: new T.Color(), low: new T.Color(), fog: new T.Color(), hs: new T.Color(), hg: new T.Color(), sun: new T.Color(), hi: 1.6, si: 2.2, night: 0 };
-    var want = { top: new T.Color(), low: new T.Color(), fog: new T.Color(), hs: new T.Color(), hg: new T.Color(), sun: new T.Color(), hi: 1.6, si: 2.2, night: 0 };
-    function aim(o, b) { var P = BIO[b]; o.top.setHex(P.sky[0]); o.low.setHex(P.sky[1]); o.fog.setHex(P.fog); o.hs.setHex(P.hemi[0]); o.hg.setHex(P.hemi[1]); o.hi = P.hemi[2]; o.sun.setHex(P.sun[0]); o.si = P.sun[1]; o.night = b === 4 ? 1 : 0; }
-    function paintSky() {
-      var p = skyGeo.attributes.position;
-      for (var i = 0; i < p.count; i++) { var t = Math.max(0, Math.min(1, p.getY(i) / 300 * 1.6 + 0.1)); C.copy(look.low).lerp(look.top, t); skyCol[i * 3] = C.r; skyCol[i * 3 + 1] = C.g; skyCol[i * 3 + 2] = C.b; }
       skyGeo.attributes.color.needsUpdate = true;
-      scene.fog.color.copy(look.fog); hemi.color.copy(look.hs); hemi.groundColor.copy(look.hg); hemi.intensity = look.hi; sun.color.copy(look.sun); sun.intensity = look.si;
-      stars.material.opacity = look.night; moon.material.opacity = look.night; stars.visible = moon.visible = look.night > 0.02;
-      renderer.setClearColor(look.fog);
-    }
-    var skyMix = 1;
-    view.setBiome = function (b, instant) {
-      aim(want, b);
-      if (instant) { aim(look, b); skyMix = 1; paintSky(); } else skyMix = 0;
-    };
-    function stepSky(dt) {
-      if (skyMix >= 1) return;
-      skyMix = Math.min(1, skyMix + dt * 0.4);
-      var k = skyMix >= 1 ? 1 : 1 - Math.exp(-dt * 2.2);
-      ['top', 'low', 'fog', 'hs', 'hg', 'sun'].forEach(function (n) { look[n].lerp(want[n], k); });
-      look.hi += (want.hi - look.hi) * k; look.si += (want.si - look.si) * k; look.night += (want.night - look.night) * k;
-      paintSky();
     }
 
-    /* --------------------------------------------- instanced small things */
-    function inst(geo, mat, cap) { var m = new T.InstancedMesh(geo, mat, cap); m.count = 0; m.frustumCulled = false; scene.add(m); return m; }
-    var eggs = inst(model('egg', ITEM.egg), MATS, 64), fruits = [0, 1, 2, 3, 4].map(function (i) { return inst(model('fruit' + i, ITEM['fruit' + i]), MATS, 16); });
-    var hearts = inst(model('heart', ITEM.heart), MATS, 4);
-    var shadowGeo = new T.CircleGeometry(0.5, 16); shadowGeo.rotateX(-Math.PI / 2);
-    var shadows = inst(shadowGeo, new T.MeshBasicMaterial({ color: 0x1a1030, transparent: true, opacity: 0.22, depthWrite: false }), 80);
-    shadows.renderOrder = 1;
-    var PCAP = 260, cubes = inst(new T.BoxGeometry(1, 1, 1), new T.MeshBasicMaterial({ color: 0xffffff }), PCAP);
-    // Coloured from the start, so the shader compileRest builds is the one the first dust uses.
-    cubes.setColorAt(0, C.setHex(0xffffff)); cubes.visible = false;
-    var pd = new Float32Array(PCAP * 12), pn = 0;
-    var flies = inst(new T.BoxGeometry(0.07, 0.07, 0.07), new T.MeshBasicMaterial({ color: 0xeaff7a, fog: false }), 40);
-    var starsAround = inst(model('star', ITEM.star), MATS, 5);
-    function put(im, i, x, y, z, s, ry, rz, sy) {
-      E.set(0, ry || 0, rz || 0); Q.setFromEuler(E); V1.set(x, y, z); S1.set(s, sy || s, s);
-      M4.compose(V1, Q, S1); im.setMatrixAt(i, M4);
-    }
-    function shadow(i, x, y, z, size) {
-      if (i >= 80) return i;
-      var k = Math.max(0.25, 1 - Math.max(0, y) * 0.22);
-      put(shadows, i, x, 0.03, z, size * k);
-      return i + 1;
-    }
-    // Particles: [x, y, z, vx, vy, vz, life, max, size, gravity, spin, colour]
-    view.burst = function (x, y, z, o) {
-      if (view.calm) return;
-      var n = o.count || 10, cols = o.colors || [0xffffff];
-      for (var i = 0; i < n; i++) {
-        var j;
-        if (pn < PCAP) j = pn++; else j = (Math.random() * PCAP) | 0;
-        var a = Math.random() * 6.283, el = (o.up != null ? o.up : 0.5) + Math.random() * (o.spread != null ? o.spread : 1), sp = (o.speed || 3) * (0.5 + Math.random() * 0.6), d = pd, k = j * 12;
-        d[k] = x + (Math.random() - 0.5) * (o.jitter || 0.2); d[k + 1] = y; d[k + 2] = z + (Math.random() - 0.5) * (o.jitter || 0.2);
-        d[k + 3] = Math.cos(a) * sp * (o.flat || 1) + (o.vx || 0); d[k + 4] = el * sp; d[k + 5] = Math.sin(a) * sp * (o.flat || 1);
-        d[k + 6] = d[k + 7] = (o.life || 0.6) * (0.6 + Math.random() * 0.5); d[k + 8] = (o.size || 0.12) * (0.6 + Math.random() * 0.8);
-        d[k + 9] = o.gravity != null ? o.gravity : 9; d[k + 10] = (Math.random() - 0.5) * 12; d[k + 11] = cols[(Math.random() * cols.length) | 0];
+    function applyPalette(worldIdx, instant, dt) {
+      var p = PALETTES[worldIdx % PALETTES.length];
+      var k = instant ? 1 : Math.min(1, (dt || 0.016) * 2.2);
+      curSky.top.lerp(C1.setHex(p.skyTop), k);
+      curSky.mid.lerp(C1.setHex(p.skyMid), k);
+      curSky.bot.lerp(C1.setHex(p.skyBot), k);
+      curSky.fog.lerp(C1.setHex(p.fog), k);
+      curSky.hemiTop.lerp(C1.setHex(p.hemiTop), k);
+      curSky.hemiBot.lerp(C1.setHex(p.hemiBot), k);
+      curSky.sun.lerp(C1.setHex(p.sun), k);
+      curSky.sunDisc.lerp(C1.setHex(p.sunColor), k);
+
+      if (instant || k < 0.999 || lastSkyWorld !== worldIdx) {
+        paintSkyDome();
+        scene.fog.color.copy(curSky.fog);
+        hemi.color.copy(curSky.hemiTop);
+        hemi.groundColor.copy(curSky.hemiBot);
+        sun.color.copy(curSky.sun);
+        sun.intensity = p.sunInt;
+        sunCore.material.color.copy(curSky.sunDisc);
+        sunHalo.material.color.copy(curSky.sunDisc);
+        rainbowGroup.visible = worldIdx === 4;
+        auroraGroup.visible = worldIdx === 2;
+        lastSkyWorld = worldIdx;
       }
-    };
-    function stepParticles(dt) {
-      for (var i = 0; i < pn; i++) {
-        var k = i * 12, d = pd;
-        d[k + 6] -= dt;
-        if (d[k + 6] <= 0) { pn--; if (i !== pn) { for (var c = 0; c < 12; c++) d[k + c] = d[pn * 12 + c]; } i--; continue; }
-        d[k + 4] -= d[k + 9] * dt; d[k] += d[k + 3] * dt; d[k + 1] += d[k + 4] * dt; d[k + 2] += d[k + 5] * dt;
-        if (d[k + 1] < 0.02 && d[k + 9] > 0) { d[k + 1] = 0.02; d[k + 4] *= -0.35; d[k + 3] *= 0.7; d[k + 5] *= 0.7; }
-      }
-    }
-    function drawParticles() {
-      for (var i = 0; i < pn; i++) {
-        var k = i * 12, d = pd, s = d[k + 8] * Math.min(1, d[k + 6] / d[k + 7] * 2);
-        put(cubes, i, d[k], d[k + 1], d[k + 2], s, d[k + 10] * d[k + 6], d[k + 10] * 0.5 * d[k + 6]);
-        C.setHex(d[k + 11]); cubes.setColorAt(i, C);
-      }
-      cubes.count = pn; cubes.instanceMatrix.needsUpdate = true; cubes.visible = pn > 0;
-      if (cubes.instanceColor) cubes.instanceColor.needsUpdate = true;
     }
 
-    /* ----------------------------------------------------- the dinos */
-    var hero = null, heroLook = '';
-    view.setLook = function (colorHex, hatId) {
-      var key = colorHex + ':' + hatId;
-      if (key === heroLook) return;
-      heroLook = key;
-      var old = hero;
-      hero = makeDino(colorHex, hatId, 1);
-      if (old) { hero.root.position.copy(old.root.position); scene.remove(old.root); old.dispose(); }
-      scene.add(hero.root);
-    };
-    var family = new T.Group(), famDinos = [];
-    (function () {
-      var nest = [], r = rng(31);
-      for (var i = 0; i < 14; i++) { var a = i / 14 * 6.283; nest.push([Math.cos(a) * 15, 0, Math.sin(a) * 15, 8, 3 + r() * 2, 8, i % 2 ? 0xb07a4a : 0x8a5a33]); }
-      nest.push([0, 0, 0, 24, 1.4, 24, 0xd9a86a], [-4, 1.4, -3, 3.4, 4.4, 3.4, 0xfff6e0], [3, 1.4, 4, 3.4, 4.4, 3.4, 0xfff6e0], [3.6, 3.4, 5.75, 1, 1, 0.1, 0xff7eb6]);
-      family.add(mesh(build(nest)));
-      [[0xff8fb8, 1.75, -1.2, 0, -0.8], [0x6fb7ff, 1.9, 1.2, 0, -1.4], [0xffd23f, 0.85, 0.2, 0, 1.2]].forEach(function (f) {
-        var d = makeDino(f[0], f[0] === 0x6fb7ff ? 'none' : 'none', f[1]);
-        d.root.position.set(f[2], f[3], f[4]); d.root.rotation.y = Math.PI; family.add(d.root); famDinos.push(d);
+    /* ------------------------------------------- Adorable Smooth Baby Dino */
+    function buildHatGeo(hatId) {
+      var b = new Builder();
+      if (hatId === 'leaf') {
+        b.add(P_CYL, 0, 0.14, 0, 0.07, 0.28, 0.07, 0, 0, 0.12, 0x3da843);
+        b.add(P_SPHERE, 0.16, 0.28, 0.04, 0.34, 0.1, 0.18, 0.1, 0.25, 0.32, 0x5ee862, { top: 0x9bff75, bot: 0x2ba846 });
+        b.add(P_SPHERE, -0.14, 0.25, -0.04, 0.28, 0.09, 0.16, -0.1, -0.25, -0.35, 0x48d454, { top: 0x85f76d, bot: 0x24913c });
+      } else if (hatId === 'explorer') {
+        b.add(P_CYL, 0, 0.05, 0, 0.88, 0.08, 0.82, 0, 0, -0.05, 0xe8c47a);
+        b.add(P_SPHERE, 0, 0.16, 0, 0.62, 0.44, 0.58, 0, 0, 0, 0xf2d28b, { top: 0xffe6a8, bot: 0xcfa355 });
+        b.add(P_CYL, 0, 0.11, 0, 0.64, 0.1, 0.6, 0, 0, 0, 0xd95638);
+        b.add(P_SPHERE, 0, 0.38, 0, 0.11, 0.08, 0.11, 0, 0, 0, 0xd95638);
+      } else if (hatId === 'party') {
+        b.add(P_CONE, 0, 0.3, 0, 0.56, 0.64, 0.56, 0, 0, -0.08, 0x7c5cff, { top: 0xb18cff, bot: 0x5838d9 });
+        b.add(P_TORUS, 0, 0.02, 0, 0.54, 0.54, 0.54, Math.PI * 0.5, 0, 0, 0xffd23f);
+        b.add(P_SPHERE, 0.14, 0.22, 0.14, 0.11, 0.11, 0.11, 0, 0, 0, 0xffd23f, { glow: true });
+        b.add(P_SPHERE, -0.12, 0.32, 0.12, 0.1, 0.1, 0.1, 0, 0, 0, 0x4df5d8, { glow: true });
+        b.add(P_SPHERE, 0.04, 0.64, 0, 0.2, 0.2, 0.2, 0, 0, 0, 0xff5fa2, { glow: true });
+      } else if (hatId === 'astronaut') {
+        b.add(P_TORUS, 0.04, 0.02, 0, 0.78, 0.78, 0.78, Math.PI * 0.5, 0, 0, 0xeef5ff);
+        b.add(P_SPHERE, 0.04, 0.1, 0, 0.76, 0.54, 0.74, 0, 0, 0, 0x8be2ff, { top: 0xd9f7ff, bot: 0x49b2f5 });
+        b.add(P_CYL, -0.16, 0.42, 0, 0.05, 0.28, 0.05, 0, 0, 0.2, 0xdbe6f5);
+        b.add(P_SPHERE, -0.2, 0.58, 0, 0.15, 0.15, 0.15, 0, 0, 0, 0xffe44d, { glow: true });
+      } else if (hatId === 'crown') {
+        b.add(P_CYL, 0, 0.12, 0, 0.58, 0.22, 0.56, 0, 0, 0, 0xffcc29, { top: 0xffe875, bot: 0xd99216 });
+        for (var k = 0; k < 5; k++) {
+          var ang = (k / 5) * Math.PI * 2;
+          b.add(P_CONE, Math.cos(ang) * 0.22, 0.3, Math.sin(ang) * 0.22, 0.18, 0.24, 0.18, 0, 0, 0, 0xffd847, { flat: true });
+        }
+        b.add(P_OCT, 0.28, 0.14, 0, 0.12, 0.14, 0.12, 0, 0, 0, 0xff3b6e, { glow: true, flat: true });
+        b.add(P_OCT, 0, 0.14, 0.28, 0.12, 0.14, 0.12, 0, 0, 0, 0x3bd4ff, { glow: true, flat: true });
+        b.add(P_OCT, 0, 0.14, -0.28, 0.12, 0.14, 0.12, 0, 0, 0, 0x3bd4ff, { glow: true, flat: true });
+      }
+      return b.finish();
+    }
+
+    var hatGeoCache = {};
+    function getHatGeo(hatId) {
+      if (!hatGeoCache[hatId]) hatGeoCache[hatId] = buildHatGeo(hatId);
+      return hatGeoCache[hatId];
+    }
+
+    // Smooth stylized low-poly dino rig (used for player AND cheering dino family!).
+    function createDinoRig(colorDef, hatId, scale) {
+      var c = colorDef.hex;
+      var dark = shadeHex(c, 0.72);
+      var light = shadeHex(c, 1.18);
+      var belly = colorDef.belly;
+      var crest = colorDef.crest;
+      var ink = 0x1e2140;
+      var cheek = 0xff7eb6;
+
+      var root = new T.Group();
+      var squash = new T.Group();
+      var bodyGrp = new T.Group();
+      root.add(squash);
+      squash.add(bodyGrp);
+
+      // 1. Chubby pear-shaped torso + warm cream belly + smooth dorsal crests
+      var bTorso = new Builder();
+      bTorso.add(P_SPHERE_HI, 0, 0.56, 0, 0.78, 0.84, 0.74, 0, 0, -0.18, c, { top: light, bot: dark });
+      bTorso.add(P_SPHERE_HI, 0.17, 0.49, 0, 0.56, 0.62, 0.54, 0, 0, -0.16, belly, { top: 0xffffff, bot: shadeHex(belly, 0.88) });
+      // Rounded teardrop crests along back
+      bTorso.add(P_SPHERE, -0.28, 0.86, 0, 0.2, 0.24, 0.15, 0, 0, 0.4, crest);
+      bTorso.add(P_SPHERE, -0.34, 0.64, 0, 0.18, 0.21, 0.14, 0, 0, 0.65, crest);
+      var torsoMesh = new T.Mesh(bTorso.finish(), MATS);
+      bodyGrp.add(torsoMesh);
+
+      // 2. Expressive rounded head + chubby snout + glossy big eyes + cheek blushes
+      var headPivot = new T.Group();
+      headPivot.position.set(0.14, 0.96, 0);
+      bodyGrp.add(headPivot);
+
+      var bHead = new Builder();
+      // Main rounded cranium
+      bHead.add(P_SPHERE_HI, 0.04, 0.24, 0, 0.78, 0.72, 0.74, 0, 0, 0, c, { top: light, bot: dark });
+      // Chubby rounded snout
+      bHead.add(P_SPHERE_HI, 0.35, 0.17, 0, 0.58, 0.44, 0.56, 0, 0, -0.04, c, { top: light, bot: dark });
+      // Cute nostrils
+      bHead.add(P_SPHERE_LO, 0.6, 0.24, 0.11, 0.06, 0.06, 0.05, 0, 0, 0, dark);
+      bHead.add(P_SPHERE_LO, 0.6, 0.24, -0.11, 0.06, 0.06, 0.05, 0, 0, 0, dark);
+      // Rosy oval cheeks
+      bHead.add(P_SPHERE_LO, 0.26, 0.08, 0.33, 0.16, 0.1, 0.08, 0, 0, 0, cheek);
+      bHead.add(P_SPHERE_LO, 0.26, 0.08, -0.33, 0.16, 0.1, 0.08, 0, 0, 0, cheek);
+      // Cute rounded head crests
+      bHead.add(P_SPHERE, -0.22, 0.52, 0, 0.19, 0.22, 0.14, 0, 0, 0.32, crest);
+      bHead.add(P_SPHERE, -0.04, 0.58, 0, 0.17, 0.19, 0.13, 0, 0, 0.1, crest);
+      var headMesh = new T.Mesh(bHead.finish(), MATS);
+      headPivot.add(headMesh);
+
+      // Separate eye group so we can blink by squashing Y!
+      var eyeGrp = new T.Group();
+      var bEyes = new Builder();
+      for (var s = -1; s <= 1; s += 2) {
+        // Large glossy dark iris bulging slightly at front-side corner
+        bEyes.add(P_SPHERE, 0.22, 0.3, s * 0.29, 0.24, 0.29, 0.17, 0, 0, 0, ink, { top: 0x353b6b, bot: 0x101326 });
+        // Double bright sparkling catchlights (unlit glow!)
+        bEyes.add(P_SPHERE_LO, 0.31, 0.36, s * 0.34, 0.085, 0.095, 0.06, 0, 0, 0, 0xffffff, { glow: true });
+        bEyes.add(P_SPHERE_LO, 0.26, 0.23, s * 0.36, 0.048, 0.048, 0.04, 0, 0, 0, 0xffffff, { glow: true });
+      }
+      var eyeMesh = new T.Mesh(bEyes.finish(), MATS);
+      eyeGrp.add(eyeMesh);
+      headPivot.add(eyeGrp);
+
+      // Articulated Lower Jaw (tucked seamlessly into snout, opens wide during Roar!)
+      var jawPivot = new T.Group();
+      jawPivot.position.set(0.2, 0.04, 0);
+      var bJaw = new Builder();
+      bJaw.add(P_SPHERE, 0.16, -0.02, 0, 0.44, 0.17, 0.44, 0, 0, 0, c, { top: light, bot: dark });
+      bJaw.add(P_SPHERE_LO, 0.16, -0.07, 0, 0.34, 0.1, 0.32, 0, 0, 0, belly);
+      // Cute pink tongue visible when jaw drops during Roar
+      bJaw.add(P_SPHERE_LO, 0.18, 0.04, 0, 0.28, 0.07, 0.26, 0, 0, 0, 0xff6b8b, { glow: true });
+      var jawMesh = new T.Mesh(bJaw.finish(), MATS);
+      jawPivot.add(jawMesh);
+      headPivot.add(jawPivot);
+
+      // Hat anchor on top of head
+      var hatAnchor = new T.Group();
+      hatAnchor.position.set(0.02, 0.56, 0);
+      var hatMesh = new T.Mesh(getHatGeo(hatId || 'none'), MATS);
+      hatAnchor.add(hatMesh);
+      headPivot.add(hatAnchor);
+
+      // 3. Segmented wagging smooth tail (2 articulated segments with rounded blend joint!)
+      var tail1 = new T.Group();
+      tail1.position.set(-0.24, 0.38, 0);
+      var bT1 = new Builder();
+      bT1.add(P_CONE_TAPER, -0.22, 0.02, 0, 0.48, 0.56, 0.46, 0, 0, Math.PI * 0.46, c, { top: light, bot: dark });
+      bT1.add(P_SPHERE, -0.45, 0.06, 0, 0.3, 0.3, 0.29, 0, 0, 0, c, { top: light, bot: dark });
+      bT1.add(P_SPHERE, -0.22, 0.22, 0, 0.15, 0.17, 0.12, 0, 0, 0.4, crest);
+      var t1Mesh = new T.Mesh(bT1.finish(), MATS);
+      tail1.add(t1Mesh);
+
+      var tail2 = new T.Group();
+      tail2.position.set(-0.44, 0.06, 0);
+      var bT2 = new Builder();
+      bT2.add(P_CONE, -0.24, 0.06, 0, 0.29, 0.58, 0.28, 0, 0, Math.PI * 0.4, c, { top: light, bot: dark });
+      bT2.add(P_SPHERE_LO, -0.5, 0.15, 0, 0.13, 0.13, 0.13, 0, 0, 0, crest);
+      var t2Mesh = new T.Mesh(bT2.finish(), MATS);
+      tail2.add(t2Mesh);
+      tail1.add(tail2);
+      bodyGrp.add(tail1);
+
+      // 4. Bouncy rounded legs with cute white toe claws
+      function makeLeg() {
+        var pivot = new T.Group();
+        var bL = new Builder();
+        bL.add(P_SPHERE, 0, -0.12, 0, 0.28, 0.34, 0.26, 0, 0, 0, c, { top: light, bot: dark });
+        bL.add(P_SPHERE, 0.08, -0.32, 0, 0.36, 0.18, 0.26, 0, 0, 0, dark);
+        bL.add(P_SPHERE_LO, 0.23, -0.34, 0.06, 0.08, 0.07, 0.06, 0, 0, 0, 0xffffff);
+        bL.add(P_SPHERE_LO, 0.23, -0.34, -0.06, 0.08, 0.07, 0.06, 0, 0, 0, 0xffffff);
+        var m = new T.Mesh(bL.finish(), MATS);
+        pivot.add(m);
+        return { pivot: pivot, mesh: m };
+      }
+      var legL = makeLeg(), legR = makeLeg();
+      legL.pivot.position.set(0.02, 0.39, 0.22);
+      legR.pivot.position.set(0.02, 0.39, -0.22);
+      bodyGrp.add(legL.pivot, legR.pivot);
+
+      // 5. Tiny cute pumping arms
+      function makeArm() {
+        var pivot = new T.Group();
+        var bA = new Builder();
+        bA.add(P_SPHERE, 0.1, -0.03, 0, 0.24, 0.14, 0.14, 0, 0, -0.25, c, { top: light, bot: dark });
+        bA.add(P_SPHERE_LO, 0.21, -0.05, 0, 0.07, 0.07, 0.08, 0, 0, 0, 0xffffff);
+        var m = new T.Mesh(bA.finish(), MATS);
+        pivot.add(m);
+        return { pivot: pivot, mesh: m };
+      }
+      var armL = makeArm(), armR = makeArm();
+      armL.pivot.position.set(0.28, 0.68, 0.31);
+      armR.pivot.position.set(0.28, 0.68, -0.31);
+      bodyGrp.add(armL.pivot, armR.pivot);
+
+      root.scale.setScalar(scale || 1.0);
+      var ownedGeos = [torsoMesh.geometry, headMesh.geometry, eyeMesh.geometry, jawMesh.geometry, t1Mesh.geometry, t2Mesh.geometry, legL.mesh.geometry, legR.mesh.geometry, armL.mesh.geometry, armR.mesh.geometry];
+      var allMeshes = [torsoMesh, headMesh, eyeMesh, jawMesh, t1Mesh, t2Mesh, legL.mesh, legR.mesh, armL.mesh, armR.mesh, hatMesh];
+
+      return {
+        root: root, squash: squash, body: bodyGrp, head: headPivot, eyes: eyeGrp, jaw: jawPivot,
+        tail1: tail1, tail2: tail2, legL: legL.pivot, legR: legR.pivot, armL: armL.pivot, armR: armR.pivot,
+        hat: hatMesh, meshes: allMeshes,
+        setFlash: function (on) {
+          var m = on ? FLASH_MATS : MATS;
+          for (var i = 0; i < allMeshes.length; i++) allMeshes[i].material = m;
+        },
+        dispose: function () {
+          for (var i = 0; i < ownedGeos.length; i++) ownedGeos[i].dispose();
+        }
+      };
+    }
+
+    var playerRig = null;
+    var playerColorIdx = 0, playerHatIdx = 0;
+    function rebuildPlayer(cIdx, hIdx) {
+      playerColorIdx = cIdx;
+      playerHatIdx = hIdx;
+      if (playerRig) {
+        scene.remove(playerRig.root);
+        playerRig.dispose();
+      }
+      playerRig = createDinoRig(D.COLORS[cIdx] || D.COLORS[0], (D.HATS[hIdx] || D.HATS[0]).id, 1.04);
+      scene.add(playerRig.root);
+    }
+    rebuildPlayer(0, 0);
+
+    // Expanding glowing 3D Sonic Roar Rings!
+    var roarGroup = new T.Group();
+    var roarRings = [];
+    var roarColors = [0xfff48f, 0xffae33, 0xff5e45];
+    for (var rr = 0; rr < 3; rr++) {
+      var rg = new T.TorusGeometry(0.65 + rr * 0.25, 0.085 - rr * 0.014, 7, 18);
+      rg.rotateY(Math.PI * 0.5);
+      var rm = new T.Mesh(rg, new T.MeshBasicMaterial({ color: roarColors[rr], transparent: true, opacity: 0.9 }));
+      roarGroup.add(rm);
+      roarRings.push(rm);
+    }
+    roarGroup.visible = false;
+    scene.add(roarGroup);
+
+    /* ----------------------------------------- Stylized Low-Poly Obstacles */
+    var obGeoCache = {};
+    function getObstacleGeo(worldIdx, kind, variant) {
+      var key = worldIdx + ':' + kind + ':' + (variant || 0);
+      if (obGeoCache[key]) return obGeoCache[key];
+      var b = new Builder();
+      var pal = PALETTES[worldIdx % PALETTES.length];
+
+      if (kind === 'crate') {
+        // Stylized chunky wooden crate with dark beams & glowing golden star emblem
+        b.add(P_BOX, 0, 0.62, 0, 1.12, 1.18, 1.12, 0, 0, 0, 0xe8a445, { flat: true, top: 0xffc66b, bot: 0xb87228 });
+        b.add(P_BOX, 0, 1.18, 0, 1.2, 0.14, 1.2, 0, 0, 0, 0x8f501e, { flat: true });
+        b.add(P_BOX, 0, 0.08, 0, 1.2, 0.14, 1.2, 0, 0, 0, 0x8f501e, { flat: true });
+        b.add(P_BOX, 0, 0.62, 0, 1.18, 0.14, 1.18, 0, 0, 0.65, 0xa86026, { flat: true });
+        b.add(P_OCT, 0, 0.64, 0.59, 0.34, 0.34, 0.12, 0, 0, 0, 0xffe84d, { glow: true, flat: true });
+        b.add(P_OCT, -0.59, 0.64, 0, 0.12, 0.34, 0.34, 0, 0, 0, 0xffe84d, { glow: true, flat: true });
+      } else if (kind === 'boulder') {
+        // Faceted cracked boulder with glowing amber/cyan energy core cracks!
+        var stoneCol = worldIdx === 2 ? 0x9ec6eb : worldIdx === 3 ? 0x4b4057 : worldIdx === 4 ? 0xd9a8ff : 0x9e8c7a;
+        var crackCol = worldIdx === 2 ? 0x57ffe6 : worldIdx === 3 ? 0xff7729 : 0xffe047;
+        b.add(P_ICO, 0, 0.7, 0, 1.46, 1.38, 1.38, 0.2, variant * 0.9, 0.15, stoneCol, { flat: true });
+        b.add(P_ICO, -0.34, 0.34, 0.26, 0.72, 0.62, 0.66, 0.4, 0.6, 0, shadeHex(stoneCol, 0.85), { flat: true });
+        b.add(P_OCT, 0.05, 0.76, 0.52, 0.36, 0.74, 0.28, 0.1, 0.2, 0.38, crackCol, { glow: true, flat: true });
+        b.add(P_OCT, -0.42, 0.74, 0.15, 0.26, 0.64, 0.36, 0.2, 0.5, -0.35, crackCol, { glow: true, flat: true });
+      } else if (kind === 'pad') {
+        // Bouncy bright spring mushroom!
+        var capCol = worldIdx === 2 ? 0x38d4ff : worldIdx === 3 ? 0xff7729 : 0xff4778;
+        b.add(P_CYL, 0, 0.18, 0, 0.52, 0.36, 0.52, 0, 0, 0, 0xfff0cc, { top: 0xfff8e6, bot: 0xd9be8c });
+        b.add(P_SPHERE_HI, 0, 0.42, 0, 1.46, 0.52, 1.38, 0, 0, 0, capCol, { top: shadeHex(capCol, 1.25), bot: shadeHex(capCol, 0.75) });
+        b.add(P_SPHERE_LO, 0.36, 0.58, 0.26, 0.24, 0.12, 0.24, 0, 0, -0.3, 0xfffbe0, { glow: true });
+        b.add(P_SPHERE_LO, -0.32, 0.59, -0.22, 0.26, 0.12, 0.26, 0, 0, 0.28, 0xfffbe0, { glow: true });
+        b.add(P_SPHERE_LO, 0, 0.66, 0.04, 0.28, 0.1, 0.28, 0, 0, 0, 0xfffbe0, { glow: true });
+      } else if (kind === 'arch') {
+        // High-contrast spanning low arch (clear tunnel y = 0..0.92 underneath!)
+        var pillarCol = worldIdx === 0 ? 0xd96b38 : worldIdx === 1 ? 0x6b8f5e : worldIdx === 2 ? 0x7bc8f5 : worldIdx === 3 ? 0x453452 : 0xff82c4;
+        var topCol = worldIdx === 0 ? 0xf29b4b : worldIdx === 1 ? 0x4cd158 : worldIdx === 2 ? 0xdbf4ff : worldIdx === 3 ? 0xff6229 : 0xffe45e;
+        // Front & back pillars straddling the path (outside z = +-1.15 so dino runs cleanly between!)
+        b.add(P_CYL, 0, 1.15, -1.28, 0.75, 2.3, 0.75, 0, 0, 0, pillarCol, { flat: true });
+        b.add(P_CYL, 0, 1.15, 1.28, 0.75, 2.3, 0.75, 0, 0, 0, pillarCol, { flat: true });
+        // Thick overhanging lintel spanning y = 1.05 .. 2.35 (visual clearance cleanly matches 0.88 hitbox!)
+        b.add(P_BOX, 0, 1.66, 0, 1.95, 1.22, 3.05, 0, 0, 0, pillarCol, { flat: true, top: topCol, bot: shadeHex(pillarCol, 0.72) });
+        // Bright warning stripe along bottom front edge so duck zone reads instantly!
+        b.add(P_BOX, 0, 1.1, 0, 2.02, 0.18, 2.95, 0, 0, 0, topCol, { glow: true });
+        // Cute top cap ornament (foliage/snow/lava crest/flowers)
+        b.add(P_SPHERE, 0, 2.36, 0, 1.6, 0.56, 2.4, 0, 0, 0, topCol);
+      } else if (kind === 'low' || kind === 'tall') {
+        var tall = kind === 'tall';
+        var h = tall ? 1.85 : 1.05;
+        if (worldIdx === 0) {
+          // Smooth fluted desert cactus with rosy flower crown!
+          var cg = 0x32bd58;
+          b.add(P_CYL, 0, h * 0.5, 0, 0.54, h, 0.54, 0, 0, 0, cg, { top: 0x5ae074, bot: 0x228c40 });
+          b.add(P_SPHERE, 0, h, 0, 0.54, 0.42, 0.54, 0, 0, 0, 0x52db6d);
+          b.add(P_SPHERE_LO, 0, h + 0.22, 0, 0.28, 0.22, 0.28, 0, 0, 0, 0xff629e, { glow: true });
+          // Smooth side arms
+          b.add(P_CYL, 0.36, h * 0.56, 0, 0.24, 0.36, 0.24, 0, 0, Math.PI * 0.5, cg);
+          b.add(P_CYL, 0.46, h * 0.56 + 0.24, 0, 0.24, 0.48, 0.24, 0, 0, 0, cg);
+          b.add(P_SPHERE_LO, 0.46, h * 0.56 + 0.48, 0, 0.24, 0.2, 0.24, 0, 0, 0, 0x52db6d);
+          if (tall) {
+            b.add(P_CYL, -0.36, h * 0.42, 0, 0.24, 0.36, 0.24, 0, 0, Math.PI * 0.5, cg);
+            b.add(P_CYL, -0.46, h * 0.42 + 0.28, 0, 0.24, 0.54, 0.24, 0, 0, 0, cg);
+            b.add(P_SPHERE_LO, -0.46, h * 0.42 + 0.54, 0, 0.24, 0.2, 0.24, 0, 0, 0, 0x52db6d);
+          }
+        } else if (worldIdx === 1) {
+          // Jungle mossy totem or blossoming stump
+          var wood = 0x8f5a30;
+          b.add(P_CYL, 0, h * 0.5, 0, 0.68, h, 0.68, 0, 0, 0, wood, { top: 0xb57745, bot: 0x633c1e });
+          b.add(P_SPHERE, 0, h, 0, 0.78, 0.36, 0.78, 0, 0, 0, 0x4cd158);
+          if (tall) {
+            // Glowing jungle totem eyes!
+            b.add(P_SPHERE_LO, -0.32, h * 0.65, 0.14, 0.14, 0.14, 0.14, 0, 0, 0, 0x4df5d8, { glow: true });
+            b.add(P_SPHERE_LO, -0.32, h * 0.65, -0.14, 0.14, 0.14, 0.14, 0, 0, 0, 0x4df5d8, { glow: true });
+          } else {
+            b.add(P_SPHERE_LO, 0.18, h + 0.14, 0.18, 0.26, 0.22, 0.26, 0, 0, 0, 0xff5e94);
+          }
+        } else if (worldIdx === 2) {
+          if (tall) {
+            // Faceted glowing crystal ice spire
+            b.add(P_CONE, 0, h * 0.5, 0, 0.76, h, 0.76, 0, 0, 0, 0x69d4ff, { flat: true, top: 0xe6fbff, bot: 0x3b96e0 });
+            b.add(P_CONE, 0.32, h * 0.26, 0.22, 0.42, h * 0.52, 0.42, 0.15, 0, -0.25, 0x9ee8ff, { flat: true });
+          } else {
+            // Cute smiling rounded Snowman!
+            b.add(P_SPHERE, 0, 0.36, 0, 0.76, 0.72, 0.76, 0, 0, 0, 0xf2f9ff);
+            b.add(P_SPHERE, 0, 0.86, 0, 0.52, 0.5, 0.52, 0, 0, 0, 0xffffff);
+            b.add(P_CONE, -0.28, 0.86, 0, 0.12, 0.28, 0.12, 0, 0, Math.PI * 0.5, 0xff7b29);
+            b.add(P_TORUS, 0, 0.64, 0, 0.46, 0.46, 0.46, Math.PI * 0.5, 0, 0, 0xff4b6e);
+          }
+        } else if (worldIdx === 3) {
+          // Jagged volcanic obsidian crystal spire with glowing magma core!
+          b.add(P_CONE, 0, h * 0.5, 0, 0.82, h, 0.82, 0, 0, 0, 0x382c45, { flat: true, top: 0x5c476e, bot: 0x22192e });
+          b.add(P_OCT, 0, h * 0.48, 0, 0.48, h * 0.65, 0.48, 0, 0.4, 0, 0xff6b29, { glow: true, flat: true });
+          if (tall) b.add(P_CONE, -0.34, h * 0.25, 0.22, 0.44, h * 0.55, 0.44, 0.2, 0, 0.3, 0x382c45, { flat: true });
+        } else {
+          // Royal Nest pastel crystal / candy cluster
+          var pCol = tall ? 0xb37aff : 0xff72b6;
+          b.add(P_CONE, 0, h * 0.5, 0, 0.74, h, 0.74, 0, 0, 0, pCol, { flat: true, top: 0xfff0ff, bot: shadeHex(pCol, 0.75) });
+          b.add(P_OCT, 0, h + 0.1, 0, 0.36, 0.36, 0.36, 0, 0, 0, 0xffe44d, { glow: true, flat: true });
+          b.add(P_SPHERE_LO, 0.34, 0.28, 0.22, 0.42, 0.38, 0.42, 0, 0, 0, pal.accent);
+        }
+      }
+      var geo = b.finish();
+      obGeoCache[key] = geo;
+      return geo;
+    }
+
+    // Swooping Animated Pterosaur (body + articulated flapping wings!).
+    var flyerBodyGeos = {}, flyerWingGeos = {};
+    function getFlyerRig(worldIdx) {
+      var bodyCol = worldIdx === 0 ? 0xff9f38 : worldIdx === 1 ? 0x38d48c : worldIdx === 2 ? 0x5cc8ff : worldIdx === 3 ? 0xff523b : 0xff72c6;
+      var wingCol = shadeHex(bodyCol, 1.18);
+      if (!flyerBodyGeos[worldIdx]) {
+        var bb = new Builder();
+        // Sleek aerodynamic body & beak pointing -X (toward dino!)
+        bb.add(P_SPHERE, 0, 0, 0, 0.86, 0.42, 0.44, 0, 0, 0, bodyCol);
+        bb.add(P_CONE, -0.58, 0.04, 0, 0.24, 0.58, 0.22, 0, 0, Math.PI * 0.52, 0xffd23f);
+        bb.add(P_CONE, 0.28, 0.24, 0, 0.22, 0.44, 0.16, 0, 0, -0.9, shadeHex(bodyCol, 0.75));
+        bb.add(P_SPHERE_LO, -0.24, 0.12, 0.16, 0.14, 0.14, 0.1, 0, 0, 0, 0x1e2140);
+        bb.add(P_SPHERE_LO, -0.24, 0.12, -0.16, 0.14, 0.14, 0.1, 0, 0, 0, 0x1e2140);
+        bb.add(P_SPHERE_LO, -0.28, 0.15, 0.19, 0.055, 0.055, 0.04, 0, 0, 0, 0xffffff, { glow: true });
+        bb.add(P_SPHERE_LO, -0.28, 0.15, -0.19, 0.055, 0.055, 0.04, 0, 0, 0, 0xffffff, { glow: true });
+        flyerBodyGeos[worldIdx] = bb.finish();
+
+        var bw = new Builder();
+        bw.add(P_BOX, 0, 0, 0.46, 0.56, 0.07, 0.92, 0, 0.2, 0, wingCol, { flat: true });
+        bw.add(P_CONE, 0.06, 0, 1.02, 0.36, 0.46, 0.08, Math.PI * 0.5, 0, 0, shadeHex(bodyCol, 0.85), { flat: true });
+        flyerWingGeos[worldIdx] = bw.finish();
+      }
+      var g = new T.Group();
+      var body = new T.Mesh(flyerBodyGeos[worldIdx], MATS);
+      var wL = new T.Mesh(flyerWingGeos[worldIdx], MATS);
+      var wR = new T.Mesh(flyerWingGeos[worldIdx], MATS);
+      wR.scale.z = -1;
+      g.add(body, wL, wR);
+      g.userData.wL = wL;
+      g.userData.wR = wR;
+      return g;
+    }
+
+    /* -------------------------------------- Curved-Horizon World Chunks */
+    var CHUNK_LEN = 18;
+    var activeChunks = new Map();
+    var chunkGroup = new T.Group();
+    scene.add(chunkGroup);
+
+    function addPalmTo(b, x, y, z, h, leanX, leanZ) {
+      for (var i = 0; i < 4; i++) {
+        var u = i / 4;
+        b.add(P_CYL, x + leanX * u * u, y + (i + 0.5) * (h / 4), z + leanZ * u * u, 0.44 - u * 0.14, h / 4 + 0.12, 0.44 - u * 0.14, 0, 0, -leanX * 0.08, i % 2 ? 0x9c6236 : 0xb37444);
+      }
+      var tx = x + leanX, ty = y + h, tz = z + leanZ;
+      for (var f = 0; f < 6; f++) {
+        var a = (f / 6) * Math.PI * 2;
+        b.add(P_SPHERE, tx + Math.cos(a) * 1.15, ty + 0.1, tz + Math.sin(a) * 1.15, 1.85, 0.24, 0.65, 0, -a, -0.35, f % 2 ? 0x3ec952 : 0x5be364);
+      }
+      b.add(P_SPHERE_LO, tx + 0.2, ty - 0.25, tz + 0.2, 0.34, 0.34, 0.34, 0, 0, 0, 0x6b3e1f);
+    }
+
+    function addPineTo(b, x, y, z, h) {
+      b.add(P_CYL, x, y + 0.6, z, 0.42, 1.2, 0.42, 0, 0, 0, 0x7d4f2c);
+      b.add(P_CONE, x, y + h * 0.38, z, h * 0.55, h * 0.46, h * 0.55, 0, 0, 0, 0x2d8a68);
+      b.add(P_CONE, x, y + h * 0.64, z, h * 0.42, h * 0.42, h * 0.42, 0, 0, 0, 0x3da37d);
+      b.add(P_CONE, x, y + h * 0.85, z, h * 0.28, h * 0.34, h * 0.28, 0, 0, 0, 0xf0f9ff);
+    }
+
+    function buildChunk(ci, worldIdx) {
+      var pal = PALETTES[worldIdx % PALETTES.length];
+      var rng = D.makeRng((ci * 73856093) ^ ((worldIdx + 1) * 19349663) ^ 991);
+      var b = new Builder();
+
+      // Main sculpted running road (beveled deck + warm side embankment + vibrant curbs).
+      b.add(P_BOX, 0, -0.55, 0, CHUNK_LEN, 1.1, 3.6, 0, 0, 0, pal.pathSide, { flat: true, top: pal.pathTop, bot: shadeHex(pal.pathSide, 0.72) });
+      b.add(P_BOX, 0, -0.02, -1.92, CHUNK_LEN, 0.22, 0.38, 0, 0, 0, pal.curb, { flat: true });
+      b.add(P_BOX, 0, -0.02, 1.92, CHUNK_LEN, 0.22, 0.38, 0, 0, 0, pal.curb, { flat: true });
+      // Wide gently sloped side apron (creates curved horizon feel on left & right of path).
+      b.add(P_BOX, 0, -1.0, -10.5, CHUNK_LEN, 1.3, 17.5, 0.05, 0, 0, pal.ground, { flat: true });
+      b.add(P_BOX, 0, -1.2, 6.2, CHUNK_LEN, 1.3, 8.6, -0.08, 0, 0, pal.ground, { flat: true });
+
+      // Stepping pebbles along the path for crisp speed sensation!
+      for (var st = 0; st < 6; st++) {
+        var sx = -CHUNK_LEN * 0.44 + st * (CHUNK_LEN / 6) + (rng() - 0.5) * 0.8;
+        var sz = (rng() - 0.5) * 2.2;
+        b.add(P_SPHERE_LO, sx, 0.01, sz, 0.58, 0.05, 0.42, 0, rng() * 3, 0, shadeHex(pal.pathTop, 0.9));
+      }
+
+      // Rolling background hills + world-specific hero props!
+      var hillX = (rng() - 0.5) * 6;
+      b.add(P_SPHERE, hillX, -1.6, -11.5 - rng() * 4, 15 + rng() * 6, 6.5 + rng() * 3.5, 11, 0, 0, 0, pal.hillA);
+
+      if (worldIdx === 0) {
+        // Golden Desert: sweeping dunes, stylized fluted cacti, flat-top mesas, dino fossils!
+        b.add(P_SPHERE, (rng() - 0.5) * 8, -1.3, -6.5, 9.5, 3.2, 6.5, 0, 0, 0, 0xf5be62);
+        // Flat-top desert mesa
+        var mx = -3 + rng() * 6;
+        b.add(P_CONE_TAPER, mx, 1.9, -12.5 - rng() * 3, 7.6, 5.2, 5.8, 0, rng(), 0, 0xd96b38, { flat: true, top: 0xf09648, bot: 0xb34b26 });
+        // Background saguaro cactus with connected elbows & blossom
+        var cx = (rng() - 0.5) * 12, cz = -4.2 - rng() * 2.6;
+        b.add(P_CYL, cx, 1.3, cz, 0.56, 2.6, 0.56, 0, 0, 0, 0x32bd58, { top: 0x5ae074, bot: 0x228c40 });
+        b.add(P_SPHERE_LO, cx, 2.6, cz, 0.56, 0.45, 0.56, 0, 0, 0, 0x52db6d);
+        b.add(P_SPHERE_LO, cx, 2.84, cz, 0.28, 0.22, 0.28, 0, 0, 0, 0xff629e, { glow: true });
+        b.add(P_CYL, cx + 0.36, 1.45, cz, 0.26, 0.44, 0.26, 0, 0, Math.PI * 0.5, 0x32bd58);
+        b.add(P_CYL, cx + 0.54, 1.76, cz, 0.26, 0.68, 0.26, 0, 0, 0, 0x32bd58);
+        b.add(P_SPHERE_LO, cx + 0.54, 2.1, cz, 0.26, 0.22, 0.26, 0, 0, 0, 0x52db6d);
+        b.add(P_CYL, cx - 0.34, 1.15, cz, 0.24, 0.4, 0.24, 0, 0, Math.PI * 0.5, 0x32bd58);
+        b.add(P_CYL, cx - 0.5, 1.44, cz, 0.24, 0.6, 0.24, 0, 0, 0, 0x32bd58);
+        b.add(P_SPHERE_LO, cx - 0.5, 1.74, cz, 0.24, 0.2, 0.24, 0, 0, 0, 0x52db6d);
+        // Dino ribcage fossil arch on alternate chunks!
+        if (Math.abs(ci) % 2 === 1) {
+          var fx = (rng() - 0.5) * 6;
+          for (var rib = 0; rib < 3; rib++) {
+            b.add(P_TORUS, fx + rib * 0.9, 0.1, -5.2, 1.7, 1.7, 1.2, 0, 0.2, 0, 0xfff4d9);
+          }
+        }
+      } else if (worldIdx === 1) {
+        // Lush Jungle: curved palms, giant ferns, mossy ruins, shimmering waterfalls!
+        addPalmTo(b, -5 + rng() * 4, -0.2, -4.6 - rng() * 2, 4.4 + rng() * 1.4, (rng() - 0.5) * 1.4, 0.5);
+        addPalmTo(b, 3 + rng() * 4, -0.2, -5.5 - rng() * 2, 4.0 + rng() * 1.4, (rng() - 0.5) * 1.4, -0.3);
+        // Giant fern bush near track edge
+        var fnx = (rng() - 0.5) * 10;
+        for (var fl = 0; fl < 4; fl++) {
+          var fa = fl * 1.57 + 0.4;
+          b.add(P_SPHERE, fnx + Math.cos(fa) * 0.6, 0.4, -3.2 + Math.sin(fa) * 0.5, 1.3, 0.24, 0.55, 0, -fa, 0.35, 0x3ed15c);
+        }
+        // Waterfall cliff or mossy stone ruin
+        if (Math.abs(ci) % 2 === 0) {
+          b.add(P_BOX, 1, 2.2, -13.5, 6.2, 6.2, 4.4, 0, 0.15, 0, 0x5c7a5e, { flat: true });
+          b.add(P_BOX, 1, 2.0, -11.1, 2.2, 5.8, 0.55, 0, 0.15, 0, 0x5ce8ff, { glow: true });
+          b.add(P_SPHERE, 1, -0.3, -10.5, 3.2, 0.9, 2.2, 0, 0, 0, 0xb8f8ff, { glow: true });
+        } else {
+          b.add(P_CYL, 2, 1.4, -7.8, 0.9, 2.8, 0.9, 0, 0, 0.12, 0x8ea38b, { flat: true });
+          b.add(P_CYL, 4.6, 1.2, -7.8, 0.9, 2.4, 0.9, 0, 0, -0.06, 0x8ea38b, { flat: true });
+          b.add(P_BOX, 3.3, 2.6, -7.8, 3.8, 0.65, 1.1, 0, 0, -0.06, 0x769473, { flat: true });
+        }
+      } else if (worldIdx === 2) {
+        // Snowy Peaks: snow-capped icy pines, aurora crystals, cozy glowing igloos!
+        addPineTo(b, -5 + rng() * 3, -0.2, -4.8 - rng() * 2.5, 4.2 + rng() * 1.5);
+        addPineTo(b, 4 + rng() * 3, -0.2, -5.8 - rng() * 2.5, 4.8 + rng() * 1.6);
+        // Glowing aurora crystal cluster
+        var ax = (rng() - 0.5) * 8;
+        b.add(P_CONE, ax, 0.9, -4.4, 0.72, 1.9, 0.72, 0.1, 0.4, 0.18, 0x58ffe6, { glow: true, flat: true });
+        b.add(P_CONE, ax + 0.45, 0.65, -4.1, 0.48, 1.3, 0.48, -0.1, 0.2, -0.25, 0xb08cff, { glow: true, flat: true });
+        // Cozy igloo with warm glowing doorway
+        if (Math.abs(ci) % 2 === 1) {
+          var ix = (rng() - 0.5) * 5;
+          b.add(P_SPHERE, ix, 0.2, -7.6, 3.8, 2.7, 3.8, 0, 0, 0, 0xedf7ff);
+          b.add(P_CYL, ix, 0.5, -5.8, 1.1, 1.1, 1.1, Math.PI * 0.5, 0, 0, 0xd4ebff);
+          b.add(P_SPHERE_LO, ix, 0.48, -5.3, 0.75, 0.75, 0.4, 0, 0, 0, 0xffc857, { glow: true });
+        }
+      } else if (worldIdx === 3) {
+        // Volcano Valley: glowing lava river beside track, obsidian arches, fiery cones!
+        b.add(P_BOX, 0, -0.32, -5.4, CHUNK_LEN, 0.22, 3.4, 0, 0, 0, 0xff6229, { glow: true });
+        b.add(P_BOX, 0, -0.28, -5.4, CHUNK_LEN, 0.24, 1.4, 0, 0, 0, 0xffd24d, { glow: true });
+        // Smoking volcanic peak in back
+        var vx = (rng() - 0.5) * 6;
+        b.add(P_CONE_TAPER, vx, 2.8, -13.5, 8.8, 6.8, 8.4, 0, 0, 0, 0x45314d, { flat: true, top: 0x6b4561, bot: 0x2b1e33 });
+        b.add(P_SPHERE_LO, vx, 6.1, -13.5, 2.2, 0.8, 2.2, 0, 0, 0, 0xff7729, { glow: true });
+        // Dramatic obsidian arch spanning the lava river
+        if (Math.abs(ci) % 2 === 0) {
+          b.add(P_TORUS, 2, 0.2, -5.5, 5.4, 5.4, 2.6, 0, 0.35, 0, 0x342640, { flat: true });
+        }
+      } else {
+        // Royal Nest / Rainbow Valley: pastel hills, giant crystal eggs, joyous starburst trees!
+        var treeCol = ci % 2 ? 0xff7ec6 : 0x6be8ff;
+        b.add(P_CYL, -4.5, 1.2, -5.2, 0.46, 2.4, 0.46, 0, 0, 0, 0xd48e66);
+        b.add(P_SPHERE, -4.5, 2.8, -5.2, 2.4, 2.2, 2.4, 0, 0, 0, treeCol);
+        b.add(P_SPHERE, 4.8, 1.1, -6.2, 2.2, 2.0, 2.2, 0, 0, 0, 0xffe46b);
+        // Giant sparkling pastel crystal egg landmark!
+        b.add(P_EGG, 1.2, 1.2, -5.4, 2.2, 2.3, 2.2, 0, 0.4, 0.08, ci % 2 ? 0x9bf5ff : 0xffb3e6, { glow: true });
+        // Festive pennant pole beside track
+        b.add(P_CYL, -1.5, 1.3, -2.5, 0.14, 2.6, 0.14, 0, 0, 0, 0xfff5d6);
+        b.add(P_CONE, -1.5, 2.4, -2.5, 0.72, 0.58, 0.12, 0, 0, -Math.PI * 0.5, 0xff5e94, { glow: true });
+      }
+
+      // Cute foreground edge detail (tiny rock/tuft passing in front of track for rich 3D depth)
+      var fgX = (rng() - 0.5) * 12;
+      b.add(P_SPHERE_LO, fgX, -0.05, 2.65, 0.75, 0.42, 0.65, 0, 0, 0, pal.accent);
+
+      var m = new T.Mesh(b.finish(), MATS);
+      m.position.x = ci * CHUNK_LEN;
+      return { mesh: m, ci: ci, worldIdx: worldIdx };
+    }
+
+    function syncChunks(camX, worldFn, forceAll) {
+      var minC = Math.floor((camX - 24) / CHUNK_LEN);
+      var maxC = Math.floor((camX + 66) / CHUNK_LEN);
+      activeChunks.forEach(function (ch, key) {
+        if (ch.ci < minC - 1 || ch.ci > maxC + 1) {
+          chunkGroup.remove(ch.mesh);
+          ch.mesh.geometry.dispose();
+          activeChunks.delete(key);
+        }
       });
-      family.visible = false; scene.add(family);
+      var built = 0;
+      for (var ci = minC; ci <= maxC; ci++) {
+        var wIdx = worldFn(ci * CHUNK_LEN);
+        var key = ci + ':' + wIdx;
+        if (!activeChunks.has(key)) {
+          var ch = buildChunk(ci, wIdx);
+          chunkGroup.add(ch.mesh);
+          activeChunks.set(key, ch);
+          built++;
+          if (!forceAll && built >= 1) break;
+        }
+      }
+    }
+
+    /* ------------------------------- Far Curved-Horizon Clouds & Silhouettes */
+    var cloudGroup = new T.Group();
+    scene.add(cloudGroup);
+    var cloudGeo = (function () {
+      var b = new Builder();
+      b.add(P_SPHERE, 0, 0.3, 0, 2.8, 1.6, 1.9, 0, 0, 0, 0xffffff, { top: 0xffffff, bot: 0xe6f0ff });
+      b.add(P_SPHERE, -1.2, 0, 0.1, 1.9, 1.2, 1.5, 0, 0, 0, 0xffffff, { top: 0xffffff, bot: 0xe6f0ff });
+      b.add(P_SPHERE, 1.25, -0.05, -0.1, 1.85, 1.15, 1.4, 0, 0, 0, 0xffffff, { top: 0xffffff, bot: 0xe6f0ff });
+      return b.finish();
     })();
+    var clouds = [];
+    for (var cl = 0; cl < 10; cl++) {
+      var cm = new T.Mesh(cloudGeo, MATS);
+      var cs = 1.1 + (cl % 3) * 0.55;
+      cm.scale.set(cs, cs * 0.82, cs);
+      cloudGroup.add(cm);
+      clouds.push({ mesh: cm, off: cl * 16 - 30, y: 11 + (cl % 4) * 2.8, z: -26 - (cl % 3) * 14, speed: 0.4 + (cl % 3) * 0.2 });
+    }
 
-    /* ------------------------------------------------- obstacle meshes */
-    var live = new Map(), pools = {};
-    function obstacleKey(o, b) { return o.kind + ':' + b + ':' + (o.form || '') + ':' + (o.kind === 'block' || o.kind === 'flyer' ? o.look : 0); }
-    function takeMesh(key, o, b) {
-      var list = pools[key] || (pools[key] = []), m = list.pop();
-      if (!m) {
-        if (o.kind === 'flyer') {
-          m = new T.Group();
-          m.add(mesh(model('fb:' + o.look, function () { return OB.flyerBody(b, o.look); })), mesh(model('fw:' + o.look, function () { return OB.flyerWings(b, o.look); })));
-        } else m = mesh(model(key, function () { return OB[o.kind](b, o.form, o.look); }));
-        m.userData.key = key;
-        scene.add(m);
+    /* ----------------------------------------- Family Reunion Finish Nest */
+    var nestGroup = new T.Group();
+    var nestBase = (function () {
+      var b = new Builder();
+      // Cozy woven circular giant nest
+      b.add(P_TORUS, 0, 0.34, 0, 3.4, 3.4, 2.2, Math.PI * 0.5, 0, 0, 0xc4813d, { top: 0xe8a85a, bot: 0x7d4b1e });
+      b.add(P_CYL, 0, 0.16, 0, 3.1, 0.32, 3.1, 0, 0, 0, 0xffe49e);
+      // Giant decorative celebration eggs inside the nest
+      b.add(P_EGG, 0.55, 0.52, -0.35, 0.85, 0.9, 0.85, 0.1, 0, -0.15, 0x78e8ff, { glow: true });
+      b.add(P_EGG, -0.45, 0.48, 0.45, 0.78, 0.82, 0.78, -0.1, 0, 0.15, 0xff8ed4, { glow: true });
+      // Celebratory finish gate banner poles
+      b.add(P_CYL, -1.5, 1.9, -1.85, 0.22, 3.8, 0.22, 0, 0, 0, 0xfff5d6);
+      b.add(P_CYL, -1.5, 1.9, 1.85, 0.22, 3.8, 0.22, 0, 0, 0, 0xfff5d6);
+      b.add(P_BOX, -1.5, 3.55, 0, 0.28, 0.56, 3.9, 0, 0, 0, 0xff5e8e, { glow: true });
+      return new T.Mesh(b.finish(), MATS);
+    })();
+    nestGroup.add(nestBase);
+
+    // Cheering Dino Family (Mama, Papa, and adorable Sibling!) waiting at the finish nest!
+    var familyRigs = [
+      createDinoRig(D.COLORS[2], 'crown', 1.28),    // Mama Dino (Berry Pink + Crown)
+      createDinoRig(D.COLORS[1], 'explorer', 1.32), // Papa Dino (Sky Blue + Explorer)
+      createDinoRig(D.COLORS[3], 'party', 0.78)     // Baby Sibling (Sun Gold + Party)
+    ];
+    familyRigs[0].root.position.set(1.3, 0.2, -0.95);
+    familyRigs[0].root.rotation.y = Math.PI - 0.35;
+    familyRigs[1].root.position.set(1.6, 0.2, 0.85);
+    familyRigs[1].root.rotation.y = Math.PI + 0.35;
+    familyRigs[2].root.position.set(0.3, 0.25, -0.05);
+    familyRigs[2].root.rotation.y = Math.PI;
+    for (var fr = 0; fr < familyRigs.length; fr++) nestGroup.add(familyRigs[fr].root);
+    nestGroup.visible = false;
+    scene.add(nestGroup);
+
+    /* ----------------------------------------- Pooled InstancedMesh Systems */
+    function makeEggInstGeo(baseHex, spotA, spotB, glow) {
+      var b = new Builder();
+      b.add(P_EGG, 0, 0, 0, 0.72, 0.76, 0.72, 0, 0, 0, baseHex, { glow: glow });
+      if (spotA != null) {
+        b.add(P_SPHERE_LO, 0.22, 0.08, 0.14, 0.16, 0.16, 0.16, 0, 0, 0, spotA);
+        b.add(P_SPHERE_LO, -0.2, -0.08, 0.18, 0.18, 0.18, 0.18, 0, 0, 0, spotB);
+        b.add(P_SPHERE_LO, 0.04, -0.1, -0.24, 0.17, 0.17, 0.17, 0, 0, 0, spotA);
       }
-      m.visible = true; m.rotation.set(0, 0, 0); m.scale.set(1, 1, 1);
-      return m;
+      return b.finish();
     }
-    function dropMesh(id) {
-      var e = live.get(id);
-      if (!e) return;
-      e.m.visible = false; (pools[e.m.userData.key] || []).push(e.m); live.delete(id);
+
+    var instEggs = new T.InstancedMesh(makeEggInstGeo(0xfff6db, 0x38b6ff, 0xff6ba9, false), MATS, 64);
+    var instGold = new T.InstancedMesh(makeEggInstGeo(0xffd23f, 0xfff8b2, 0xff9f29, true), MATS, 24);
+    var instRainbow = new T.InstancedMesh(P_EGG, new T.MeshLambertMaterial({ color: 0xffffff, emissive: 0x332244, emissiveIntensity: 0.35 }), 48);
+    var instHearts = new T.InstancedMesh(P_HEART, new T.MeshBasicMaterial({ color: 0xff4b7a }), 8);
+    var instShadows = new T.InstancedMesh(new T.CircleGeometry(0.55, 12).rotateX(-Math.PI * 0.5), MAT_SHADOW, 96);
+    var instParts = new T.InstancedMesh(P_ICO, MAT_INST_GLOW, 120);
+    var instMotes = new T.InstancedMesh(P_SPHERE_LO, MAT_INST_GLOW, 36);
+
+    [instEggs, instGold, instRainbow, instHearts, instShadows, instParts, instMotes].forEach(function (im) {
+      im.frustumCulled = false;
+      im.count = 0;
+      scene.add(im);
+    });
+    // Pre-allocate instanceColor buffers before compileRest() so shaders never hitch mid-run!
+    C1.setHex(0xffffff);
+    instRainbow.setColorAt(0, C1);
+    instParts.setColorAt(0, C1);
+    instMotes.setColorAt(0, C1);
+
+    function putInst(im, idx, x, y, z, sx, sy, sz, ry, rx) {
+      E1.set(rx || 0, ry || 0, 0);
+      Q1.setFromEuler(E1);
+      V1.set(x, y, z);
+      S1.set(sx, sy == null ? sx : sy, sz == null ? sx : sz);
+      M4.compose(V1, Q1, S1);
+      im.setMatrixAt(idx, M4);
     }
-    function syncObstacles(dt, t, camX, si) {
-      var seen = {};
-      if (world) for (var i = world.oi; i < world.obs.length; i++) {
-        var o = world.obs[i];
-        if (o.x > camX + 70) break;
-        if (o.kind === 'gap' || o.kind === 'mud' || o.x + o.w < camX - 16) continue;
-        var e = live.get(o.id);
-        if (o.smashed && !(e && e.out)) { if (e) dropMesh(o.id); continue; }
-        if (!e) { var b = biomeAt(o.x); e = { m: takeMesh(obstacleKey(o, b), o, b), out: 0 }; live.set(o.id, e); }
-        seen[o.id] = 1;
-        var m = e.m, cx = o.x + o.w / 2;
-        m.position.set(cx, 0, 0);
-        if (o.kind === 'roller') { m.position.y = 0.45; m.rotation.z = (o.x - (o.slot || 0)) / 0.45; }
-        else if (o.kind === 'vine') { m.position.y = 4.5; m.rotation.z = Math.sin(t * 2 + o.id) * 0.07; }
-        else if (o.kind === 'flyer') {
-          m.position.y = (o.form === 'low' ? 0.64 : 1.34) + Math.sin(t * 5 + o.id) * 0.05;
-          m.children[1].rotation.x = Math.sin(t * 12 + o.id) * 0.45;
-        }
-        if (o.hit) {
-          // Bonked: it tumbles away, comically and harmlessly.
-          e.out = Math.min(1.2, e.out + dt);
-          m.position.x += e.out * 4; m.position.y += e.out * 5 - e.out * e.out * 9; m.position.z -= e.out * 3;
-          m.rotation.z += e.out * 7; m.rotation.x = e.out * 3;
-          if (e.out >= 1.2) m.visible = false;
-        }
-        if (m.visible && o.kind !== 'vine') si = shadow(si, cx, o.kind === 'flyer' ? o.y0 : 0, 0, o.kind === 'flyer' ? 1.3 : o.w + 0.5);
+
+    var RAINBOW_HEX = [0xff5277, 0xffa62b, 0xffe44d, 0x45e373, 0x3bc8ff, 0xb873ff];
+
+    /* ---------------------------------------------------- 3D Particle Pool */
+    var particles = [];
+    for (var pi = 0; pi < 120; pi++) {
+      particles.push({ alive: false, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, life: 0, max: 1, size: 0.15, g: 12, color: new T.Color(0xffffff), spin: 0 });
+    }
+    var partCursor = 0;
+
+    function spawnBurst(x, y, z, opts) {
+      if (view.calm) return;
+      opts = opts || {};
+      var count = opts.count || 10;
+      var colors = opts.colors || [0xffe44d, 0xff6ba9, 0x4df5d8];
+      for (var i = 0; i < count; i++) {
+        var pt = particles[partCursor];
+        partCursor = (partCursor + 1) % particles.length;
+        var a = Math.random() * Math.PI * 2;
+        var sp = (opts.speed || 4.5) * (0.45 + Math.random() * 0.75);
+        pt.alive = true;
+        pt.x = x + (Math.random() - 0.5) * (opts.spread || 0.4);
+        pt.y = y + (Math.random() - 0.5) * 0.3;
+        pt.z = z + (Math.random() - 0.5) * (opts.spread || 0.5);
+        pt.vx = Math.cos(a) * sp + (opts.vx || 0);
+        pt.vy = (opts.up || 3.2) * (0.55 + Math.random() * 0.75);
+        pt.vz = Math.sin(a) * sp;
+        pt.max = (opts.life || 0.55) * (0.65 + Math.random() * 0.5);
+        pt.life = pt.max;
+        pt.size = (opts.size || 0.24) * (0.65 + Math.random() * 0.65);
+        pt.g = opts.gravity == null ? 14 : opts.gravity;
+        pt.spin = (Math.random() - 0.5) * 10;
+        pt.color.setHex(colors[i % colors.length]);
       }
-      live.forEach(function (e, id) { if (!seen[id]) dropMesh(id); });
-      return si;
-    }
-    view.resetCourse = function (w) {
-      world = w;
-      live.forEach(function (e, id) { dropMesh(id); });
-      clearChunks(); pn = 0;
-      family.visible = !!(w && !w.endless && isFinite(w.len));
-      if (family.visible) family.position.set(w.len + 3.2, 0, 0);
-    };
-    view.world = function () { return world; };
-
-    /* ------------------------------------------------------ dino animation */
-    var anim = { run: 0, sq: 0, sqv: 0, tumble: 0, stars: 0, blink: 0, blinkT: 2, look: 0, hop: 0, hopv: 0, lean: 0, duck: 0, roar: 0 };
-    view.kick = function (what, power) {
-      if (what === 'jump') { anim.sq = 0.28; anim.sqv = 0; }
-      else if (what === 'land') { anim.sq = -0.22 - 0.2 * (power || 0); anim.sqv = 0; }
-      else if (what === 'bump') { anim.tumble = 1; anim.stars = 1.8; }
-      else if (what === 'hop') { if (anim.hop <= 0.001) { anim.hopv = 4.2; anim.sq = 0.25; } }
-      else if (what === 'roar') anim.roar = 1;
-    };
-    function animateDino(d, s, dt, t, ctx) {
-      var a = anim, still = view.calm;
-      a.sqv += (-120 * a.sq - 11 * a.sqv) * dt; a.sq += a.sqv * dt;
-      if (Math.abs(a.sq) < 0.002 && Math.abs(a.sqv) < 0.01) a.sq = a.sqv = 0;
-      a.duck += ((s.duck ? 1 : 0) - a.duck) * Math.min(1, dt * 18);
-      a.lean += ((s.dash ? 1 : 0) - a.lean) * Math.min(1, dt * 10);
-      a.roar = Math.max(0, a.roar - dt * 1.6);
-      if (s.hop) { a.hopv -= 20 * dt; a.hop += a.hopv * dt; if (a.hop < 0) { if (a.hopv < -1) { a.sq = -0.25; a.sqv = 0; } a.hop = 0; a.hopv = 0; } }
-      var sq = still ? 0 : a.sq, sy = 1 + sq - a.duck * 0.38, sx = 1 - sq * 0.6 + a.duck * 0.22;
-      d.root.position.set(s.x, s.y + (s.hop ? a.hop : 0), s.z || 0);
-      d.pivot.scale.set(sx, sy, 1 - sq * 0.5);
-      if (a.tumble > 0) { a.tumble = Math.max(0, a.tumble - dt * 2.2); d.pivot.rotation.z = still ? 0 : (1 - a.tumble) * Math.PI * 2; d.pivot.position.y = Math.sin((1 - a.tumble) * Math.PI) * 0.6; }
-      else { d.pivot.rotation.z = -a.lean * 0.35 - a.duck * 0.15; d.pivot.position.y = 0; }
-      var air = !s.ground && !s.hop || (s.hop && a.hop > 0.01);
-      if (s.running && !air) a.run += dt * (6 + s.speed * 1.5); else if (!air) a.run += dt * 2;
-      var stride = s.running && !air ? Math.sin(a.run) : 0;
-      d.legA.rotation.z = air ? 0.7 : stride * 0.9; d.legB.rotation.z = air ? 0.3 : -stride * 0.9;
-      d.body.position.y = s.running && !air ? Math.abs(Math.sin(a.run)) * 0.06 : Math.sin(t * 2.2) * 0.012;
-      d.tail.rotation.y = Math.sin(t * (s.running ? 9 : 3)) * (s.running ? 0.35 : 0.22);
-      d.tail.rotation.z = air ? 0.3 : 0.05 + stride * 0.08;
-      d.head.rotation.z = a.duck * -0.25 + (air ? 0.15 : 0) + (ctx.idle ? Math.sin(t * 0.9) * 0.08 : 0) - a.roar * 0.3;
-      d.head.rotation.y = ctx.idle ? Math.sin(t * 0.5) * 0.35 : 0;
-      a.blinkT -= dt;
-      if (a.blinkT < 0) { a.blink = 0.14; a.blinkT = 2 + Math.random() * 3; }
-      a.blink = Math.max(0, a.blink - dt);
-      d.eyes.scale.y = a.blink > 0 ? 0.15 : 1;
-      d.root.visible = !(s.hurt > 0 && !still && Math.floor(t * 12) % 2 === 0);
-      var flash = a.roar > 0.05 || s.dash;
-      if (d.flash !== flash) { d.flash = flash; d.parts.forEach(function (m) { m.material = flash ? FLASHMATS : MATS; }); }
-      if (a.stars > 0) a.stars = Math.max(0, a.stars - dt);
     }
 
-    /* -------------------------------------------------------------- camera */
-    var cam = { x: 0, y: 3, z: 8, lx: 0, ly: 1, lz: 0, shake: 0, fov: 48 };
-    view.shake = function (p) { if (!view.calm) cam.shake = Math.max(cam.shake, p); };
-    view.project = function (x, y, z) {
-      V2.set(x, y, z).project(camera);
-      return { x: (V2.x + 1) / 2, y: (1 - V2.y) / 2 };
-    };
-    var rigs = {
-      // Faster runs look further ahead.
-      play: function (s) { var a = Math.max(0, Math.min(2.4, (s.speed - 6) * 0.3)); return [s.x - 1.1 + a, 3.2 + s.y * 0.35, 9.6 + a * 0.4, s.x + 3.9 + a, 1.05 + s.y * 0.3, 0]; },
-      menu: function (s) { return [s.x + 2.2, 1.45, 4.3, s.x + 0.1, 0.95, 0]; },
-      wardrobe: function (s) { return [s.x + 3.1, 1.7, 6.2, s.x - 1.55, 0.85, 0.6]; },
-      finish: function (s) { return [s.x + 3.4, 2.6, 10.5, s.x - 1.3, 1.5, 0]; }
-    };
+    function stepParticles(dt) {
+      var n = 0;
+      for (var i = 0; i < particles.length; i++) {
+        var pt = particles[i];
+        if (!pt.alive) continue;
+        pt.life -= dt;
+        if (pt.life <= 0) { pt.alive = false; continue; }
+        pt.vy -= pt.g * dt;
+        pt.x += pt.vx * dt;
+        pt.y += pt.vy * dt;
+        pt.z += pt.vz * dt;
+        if (pt.y < 0.05) { pt.y = 0.05; pt.vy *= -0.35; pt.vx *= 0.75; }
+        var sc = pt.size * Math.min(1, (pt.life / pt.max) * 1.6);
+        putInst(instParts, n, pt.x, pt.y, pt.z, sc, sc, sc, pt.life * pt.spin, pt.life * 4);
+        instParts.setColorAt(n, pt.color);
+        n++;
+      }
+      instParts.count = n;
+      instParts.visible = n > 0;
+      if (n > 0) {
+        instParts.instanceMatrix.needsUpdate = true;
+        if (instParts.instanceColor) instParts.instanceColor.needsUpdate = true;
+      }
+    }
 
-    /* ---------------------------------------------------------------- frame */
-    var fireT = 0, menuX = 0;
-    // ctx: { mode: 'menu'|'play'|'wardrobe'|'finish', dt, t, player, spin }
-    view.update = function (ctx) {
-      var dt = Math.min(0.1, ctx.dt), t = ctx.t, s = ctx.player;
-      if (!hero) return;
-      stepSky(dt);
-      animateDino(hero, s, dt, t, ctx);
-      hero.root.rotation.y = ctx.spin || 0;
-      // The family waits at the nest and bounces when the baby arrives.
-      if (family.visible) famDinos.forEach(function (f, i) {
-        var party = ctx.mode === 'finish';
-        f.root.position.y = party && !view.calm ? Math.abs(Math.sin(t * 6 + i)) * 0.5 : 0;
-        f.tail.rotation.y = Math.sin(t * (party ? 10 : 2.5) + i) * 0.35;
-        f.head.rotation.z = Math.sin(t * 1.3 + i) * 0.1;
-        f.eyes.scale.y = Math.sin(t * 0.7 + i * 2) > 0.98 ? 0.15 : 1;
+    /* -------------------------------------------- Live Obstacle Mesh Pool */
+    var obGroup = new T.Group();
+    scene.add(obGroup);
+    var activeObs = new Map();
+
+    function clearObstacles() {
+      activeObs.forEach(function (obj) { obGroup.remove(obj); });
+      activeObs.clear();
+    }
+
+    function syncObstacles(world, camX, t) {
+      var seen = new Set();
+      if (world) {
+        for (var i = world.oi; i < world.obs.length; i++) {
+          var ob = world.obs[i];
+          if (ob.x > camX + 58) break;
+          if (ob.smashed || ob.x < camX - 16) continue;
+          seen.add(ob.id);
+          var mesh = activeObs.get(ob.id);
+          var wIdx = D.worldAtDistance(world, ob.baseX || ob.x);
+          if (!mesh) {
+            if (ob.kind === 'flyer') {
+              mesh = getFlyerRig(wIdx);
+            } else {
+              mesh = new T.Mesh(getObstacleGeo(wIdx, ob.kind, ob.variant), MATS);
+            }
+            obGroup.add(mesh);
+            activeObs.set(ob.id, mesh);
+          }
+          if (ob.kind === 'flyer') {
+            var bob = view.calm ? 0 : Math.sin(ob.flyT) * 0.14;
+            mesh.position.set(ob.x, ob.y0 + 0.4 + bob, 0);
+            var flap = view.calm ? 0.15 : Math.sin(ob.flyT * 1.45) * 0.65;
+            mesh.userData.wL.rotation.x = flap;
+            mesh.userData.wR.rotation.x = -flap;
+          } else if (ob.kind === 'pad') {
+            var pulse = ob.cleared ? 1 + Math.sin(t * 24) * 0.14 : 1 + Math.sin(t * 4.5 + ob.id) * 0.04;
+            mesh.position.set(ob.x, 0, 0);
+            mesh.scale.set(pulse, 1 / Math.sqrt(pulse), pulse);
+          } else {
+            mesh.position.set(ob.x, 0, 0);
+          }
+        }
+      }
+      activeObs.forEach(function (obj, id) {
+        if (!seen.has(id)) {
+          obGroup.remove(obj);
+          activeObs.delete(id);
+        }
       });
-      // Camera rig with easing.
-      var r = (rigs[ctx.mode] || rigs.play)(s), k = 1 - Math.exp(-dt * (ctx.mode === 'play' ? 6 : 3)), kx = ctx.mode === 'play' ? 1 - Math.exp(-dt * 14) : k;
-      if (ctx.snap) kx = k = 1;
-      cam.x += (r[0] - cam.x) * kx; cam.y += (r[1] - cam.y) * k; cam.z += (r[2] - cam.z) * k;
-      cam.lx += (r[3] - cam.lx) * kx; cam.ly += (r[4] - cam.ly) * k; cam.lz += (r[5] - cam.lz) * k;
-      cam.shake = Math.max(0, cam.shake - dt * 3);
-      var sh = view.calm ? 0 : cam.shake * cam.shake;
-      camera.position.set(cam.x + (Math.random() - 0.5) * sh, cam.y + (Math.random() - 0.5) * sh, cam.z);
-      camera.lookAt(cam.lx, cam.ly, cam.lz);
-      var fov = 48 + (s.dash ? 7 : 0);
-      cam.fov += (fov - cam.fov) * Math.min(1, dt * 5);
-      var aspect = camera.aspect, vf = aspect < 16 / 9 ? 2 * Math.atan(Math.tan(cam.fov * Math.PI / 360) * (16 / 9) / aspect) * 180 / Math.PI : cam.fov;
-      if (Math.abs(camera.fov - vf) > 0.01) { camera.fov = vf; camera.updateProjectionMatrix(); }
-      sky.position.copy(camera.position);
-      var camX = cam.lx;
-      syncChunks(camX, ctx.snap || chunks.size < 3); syncFar(camX);
-      var si = shadow(0, s.x + 0.05, s.y + (s.hop ? anim.hop : 0), 0, 1.25 * (ctx.mode === 'wardrobe' ? 1.1 : 1));
-      si = syncObstacles(dt, t, camX, si);
-      // Eggs, fruit and hearts bob and spin.
-      var ne = 0, nf = [0, 0, 0, 0, 0], nh = 0;
-      if (world) for (var i = world.ii; i < world.items.length; i++) {
-        var it = world.items[i];
-        if (it.x > camX + 60) break;
-        if (it.got || it.x < camX - 14) continue;
-        var bob = view.calm ? 0 : Math.sin(t * 3 + it.id) * 0.08, spin = view.calm ? 0.6 : t * 2 + it.id;
-        if (it.k === 'egg' && ne < 64) put(eggs, ne++, it.x, it.y + bob, 0, 1.3, spin);
-        else if (it.k === 'fruit') { var fb = biomeAt(it.x); if (nf[fb] < 16) put(fruits[fb], nf[fb]++, it.x, it.y + bob, 0, 1.1, spin); }
-        else if (it.k === 'heart' && nh < 4) put(hearts, nh++, it.x, it.y + bob, 0, 1.2, spin);
-        if (it.y < 1) si = shadow(si, it.x, it.y, 0, 0.5);
+    }
+
+    /* -------------------------------------------------- Camera & Animation */
+    var cam = { x: -2, y: 3.4, z: 9.2, lx: 3.5, ly: 1.4, lz: 0, fov: 44, shake: 0 };
+    var anim = { sqY: 1, sqXZ: 1, blinkT: 2.2, blink: 0, hopY: 0, hopV: 0, flip: 0, dustT: 0, roarVisual: 0 };
+
+    function animateDino(rig, state, t, dt, isPlayer) {
+      var running = !!state.running;
+      var ground = state.ground !== false;
+      var duck = !!state.duck;
+      var roaring = !!state.roaring;
+      var superB = !!state.superBounce;
+      var stride = state.stride || (t * 10);
+
+      // Squash-and-stretch spring recovery
+      if (isPlayer) {
+        anim.sqY += (1 - anim.sqY) * Math.min(1, dt * 13);
+        anim.sqXZ += (1 - anim.sqXZ) * Math.min(1, dt * 13);
+        // Playful title/wardrobe click hop
+        if (anim.hopY > 0 || anim.hopV > 0) {
+          anim.hopV -= 28 * dt;
+          anim.hopY += anim.hopV * dt;
+          if (anim.hopY <= 0) { anim.hopY = 0; anim.hopV = 0; anim.sqY = 0.78; anim.sqXZ = 1.2; }
+        }
+        // Periodic cute eye blink
+        anim.blinkT -= dt;
+        if (anim.blinkT <= 0) {
+          anim.blink = 0.13;
+          anim.blinkT = 2.4 + Math.random() * 2.6;
+        }
+        if (anim.blink > 0) anim.blink = Math.max(0, anim.blink - dt);
+        rig.eyes.scale.y = anim.blink > 0.03 ? 0.14 : 1;
       }
-      eggs.count = ne; eggs.instanceMatrix.needsUpdate = true; eggs.visible = ne > 0;
-      fruits.forEach(function (f, j) { f.count = nf[j]; f.instanceMatrix.needsUpdate = true; f.visible = nf[j] > 0; });
-      hearts.count = nh; hearts.instanceMatrix.needsUpdate = true; hearts.visible = nh > 0;
-      if (family.visible) famDinos.forEach(function (f) { si = shadow(si, family.position.x + f.root.position.x, f.root.position.y, f.root.position.z, 1.25 * f.root.scale.x); });
-      shadows.count = si; shadows.instanceMatrix.needsUpdate = true;
-      // Spinning stars after a bump.
-      var ns = 0;
-      if (anim.stars > 0 && !view.calm) for (var j = 0; j < 3; j++) { var aa = t * 6 + j * 2.09; put(starsAround, ns++, s.x + Math.cos(aa) * 0.55, s.y + 1.75 + Math.sin(t * 9 + j) * 0.05, Math.sin(aa) * 0.55, 1.4, t * 4); }
-      starsAround.count = ns; starsAround.instanceMatrix.needsUpdate = true; starsAround.visible = ns > 0;
-      // Fireflies at night, drifting near the camera.
-      var nfl = 0;
-      if (look.night > 0.3) for (var f = 0; f < 40; f++) {
-        var fx = camX - 10 + ((f * 37.7 + t * 0.6) % 34), fy = 0.6 + (f * 13 % 30) / 10 + Math.sin(t * 1.3 + f) * 0.3, fz = -7 + (f * 7.3 % 10) + Math.cos(t + f) * 0.4;
-        put(flies, nfl++, fx, fy, fz, Math.sin(t * 4 + f * 1.7) > -0.3 ? 1 : 0.01);
+
+      var targetSY = duck ? 0.58 : (isPlayer ? anim.sqY : 1);
+      var targetSX = duck ? 1.28 : (isPlayer ? anim.sqXZ : 1);
+      var targetSZ = duck ? 1.18 : (isPlayer ? anim.sqXZ : 1);
+      rig.squash.scale.set(targetSX, targetSY, targetSZ);
+
+      // Bouncy running stride vs joyful idle bounce
+      var bob = 0, legSwing = 0, lean = 0;
+      if (running && ground && !duck) {
+        bob = Math.abs(Math.sin(stride)) * 0.14;
+        legSwing = Math.sin(stride) * 0.72;
+        lean = -0.14;
+      } else if (running && duck) {
+        bob = 0.03;
+        legSwing = Math.sin(stride * 1.4) * 0.4;
+        lean = -0.34;
+      } else if (!ground) {
+        legSwing = 0.52;
+        lean = D.clamp((state.vy || 0) * 0.025, -0.22, 0.25);
+      } else {
+        // Adorable breathing & idle sway
+        bob = view.calm ? 0 : Math.abs(Math.sin(t * 2.8)) * 0.05;
+        lean = view.calm ? 0 : Math.sin(t * 1.4) * 0.04;
       }
-      flies.count = nfl; flies.instanceMatrix.needsUpdate = true; flies.visible = nfl > 0;
-      // Running dust.
-      fireT -= dt;
-      if (ctx.mode === 'play' && s.running && s.ground && fireT <= 0) { fireT = s.dash ? 0.03 : 0.14; view.burst(s.x - 0.3, 0.05, (Math.random() - 0.5) * 0.4, { count: s.dash ? 3 : 1, colors: s.dash ? [0xffffff, 0xffd23f] : [shade(BIO[biomeAt(s.x)].path[0], 0.9)], speed: 1, up: 0.5, life: 0.35, size: s.dash ? 0.12 : 0.08, gravity: 1, vx: -1.2 }); }
-      stepParticles(dt); drawParticles();
+
+      if (isPlayer && superB && !ground && !view.calm) {
+        anim.flip -= dt * 9.5;
+      } else if (isPlayer) {
+        anim.flip += (0 - anim.flip) * Math.min(1, dt * 14);
+      }
+
+      rig.body.position.y = bob + (isPlayer ? anim.hopY : 0);
+      rig.body.rotation.z = lean + (isPlayer ? anim.flip : 0);
+      rig.legL.rotation.z = legSwing;
+      rig.legR.rotation.z = -legSwing;
+      rig.armL.rotation.z = -legSwing * 0.65 + (roaring ? 0.6 : 0);
+      rig.armR.rotation.z = legSwing * 0.65 + (roaring ? 0.6 : 0);
+
+      // Head curiosity tilt + wide jaw during Roar!
+      rig.head.rotation.z = roaring ? 0.22 : (duck ? 0.28 : (view.calm ? 0 : Math.sin(t * 2.2) * 0.05));
+      rig.head.rotation.y = (!running && !view.calm) ? Math.sin(t * 1.3) * 0.16 : 0;
+      rig.jaw.rotation.z = roaring ? -0.58 : -0.04;
+
+      // Joyful segmented tail wag!
+      var wagSpeed = running ? 11 : 4.2;
+      var wagAmp = view.calm ? 0 : (running ? 0.26 : 0.2);
+      rig.tail1.rotation.y = Math.sin(t * wagSpeed) * wagAmp;
+      rig.tail2.rotation.y = Math.sin(t * wagSpeed - 0.85) * wagAmp * 1.35;
+      rig.tail1.rotation.z = duck ? 0.28 : Math.sin(t * wagSpeed * 0.5) * 0.08;
+    }
+
+    var view = {
+      renderer: renderer,
+      scene: scene,
+      camera: camera,
+      software: software,
+      calm: false,
+
+      setDinoLook: function (colorIdx, hatIdx) {
+        if (colorIdx !== playerColorIdx || hatIdx !== playerHatIdx) {
+          rebuildPlayer(colorIdx, hatIdx);
+        }
+      },
+
+      triggerHop: function () {
+        anim.hopV = 7.4;
+        anim.sqY = 1.24;
+        anim.sqXZ = 0.86;
+      },
+
+      triggerSquash: function (amt) {
+        if (amt > 0) { anim.sqY = 1.26; anim.sqXZ = 0.85; }
+        else { anim.sqY = 0.72; anim.sqXZ = 1.22; }
+      },
+
+      triggerRoar: function () {
+        anim.roarVisual = 0.58;
+        if (!view.calm) cam.shake = Math.max(cam.shake, 0.34);
+      },
+
+      shake: function (power) {
+        if (!view.calm) cam.shake = Math.max(cam.shake, power || 0.3);
+      },
+
+      burst: spawnBurst,
+
+      resetWorld: function (worldIdx) {
+        clearObstacles();
+        activeChunks.forEach(function (ch) { chunkGroup.remove(ch.mesh); ch.mesh.geometry.dispose(); });
+        activeChunks.clear();
+        for (var i = 0; i < particles.length; i++) particles[i].alive = false;
+        instParts.count = 0; instParts.visible = false;
+        targetWorld = worldIdx || 0;
+        applyPalette(targetWorld, true, 1);
+      },
+
+      project: function (x, y, z) {
+        V1.set(x, y, z || 0).project(camera);
+        return { x: (V1.x + 1) * 0.5, y: (1 - V1.y) * 0.5 };
+      },
+
+      update: function (ctx) {
+        var dt = Math.min(0.05, Math.max(0, ctx.dt || 0));
+        var t = ctx.t || 0;
+        var w = ctx.world;
+        var p = ctx.player;
+        var camMode = ctx.mode || 'menu';
+
+        var worldIdx = w ? D.worldAtDistance(w, w.x) : (ctx.worldIndex || 0);
+        targetWorld = worldIdx;
+        applyPalette(targetWorld, !!ctx.snap, dt);
+
+        // Position & animate Player Dino
+        playerRig.root.position.set(p.x, p.y, 0);
+        if (camMode === 'wardrobe') {
+          playerRig.root.rotation.y = (ctx.spin || 0) - 0.62;
+        } else if (camMode === 'menu') {
+          playerRig.root.rotation.y = -0.62 + (view.calm ? 0 : Math.sin(t * 0.85) * 0.14);
+        } else {
+          playerRig.root.rotation.y = 0;
+        }
+        playerRig.setFlash(p.invuln > 0 && Math.floor(t * 18) % 2 === 0);
+        animateDino(playerRig, p, t, dt, true);
+
+        // Glowing Sonic Roar Rings expanding forward!
+        if (anim.roarVisual > 0) {
+          anim.roarVisual = Math.max(0, anim.roarVisual - dt);
+          var u = 1 - anim.roarVisual / 0.58;
+          roarGroup.visible = true;
+          roarGroup.position.set(p.x + 0.8 + u * 3.8, p.y + 0.95, 0);
+          for (var r = 0; r < roarRings.length; r++) {
+            var ru = D.clamp(u * 1.25 - r * 0.14, 0, 1);
+            roarRings[r].position.x = ru * 1.4 - r * 0.45;
+            var rs = 0.55 + ru * 1.65;
+            roarRings[r].scale.set(1, rs, rs);
+            roarRings[r].material.opacity = (1 - ru) * 0.88;
+          }
+        } else {
+          roarGroup.visible = false;
+        }
+
+        // Camera framing: hero 3/4 side-angled 3D perspective for play, intimate showcase for title/wardrobe!
+        var tx, ty, tz, lx, ly, lz, fov = 44;
+        if (camMode === 'play') {
+          tx = p.x + 2.2;
+          ty = 3.25 + p.y * 0.28;
+          tz = 10.6;
+          lx = p.x + 4.8;
+          ly = 1.45 + p.y * 0.24;
+          lz = -0.35;
+          fov = p.roaring ? 49 : 44;
+        } else if (camMode === 'wardrobe') {
+          tx = p.x + 1.55;
+          ty = 1.55;
+          tz = 4.45;
+          lx = p.x + 0.92;
+          ly = 1.02;
+          lz = 0;
+          fov = 38;
+        } else if (camMode === 'finish') {
+          tx = p.x + 1.2;
+          ty = 2.6;
+          tz = 7.4;
+          lx = p.x + 1.4;
+          ly = 1.2;
+          lz = 0;
+          fov = 42;
+        } else {
+          // Minimal Poki Title screen: adorable dino framed cleanly above the Play button!
+          tx = p.x + 0.35;
+          ty = 1.85;
+          tz = 5.95;
+          lx = p.x + 0.2;
+          ly = 0.88;
+          lz = -0.4;
+          fov = 42;
+        }
+
+        var k = ctx.snap ? 1 : Math.min(1, dt * 8.5);
+        var kx = ctx.snap ? 1 : Math.min(1, dt * 16);
+        cam.x += (tx - cam.x) * kx;
+        cam.y += (ty - cam.y) * k;
+        cam.z += (tz - cam.z) * k;
+        cam.lx += (lx - cam.lx) * kx;
+        cam.ly += (ly - cam.ly) * k;
+        cam.lz += (lz - cam.lz) * k;
+        cam.fov += (fov - cam.fov) * Math.min(1, dt * 6);
+        cam.shake = Math.max(0, cam.shake - dt * 2.6);
+
+        var sh = view.calm ? 0 : cam.shake * cam.shake * 0.85;
+        camera.position.set(cam.x + (Math.random() - 0.5) * sh, cam.y + (Math.random() - 0.5) * sh, cam.z);
+        camera.lookAt(cam.lx, cam.ly, cam.lz);
+        var asp = camera.aspect;
+        var vf = asp < 16 / 9 ? 2 * Math.atan(Math.tan(cam.fov * Math.PI / 360) * (16 / 9) / asp) * 180 / Math.PI : cam.fov;
+        if (Math.abs(camera.fov - vf) > 0.02) { camera.fov = vf; camera.updateProjectionMatrix(); }
+
+        skyMesh.position.copy(camera.position);
+        skyDecor.position.set(cam.x, 0, 0);
+
+        // Chunks & curved-horizon clouds
+        syncChunks(cam.lx, function (cx) {
+          return w ? D.worldAtDistance(w, cx) : targetWorld;
+        }, !!ctx.snap || activeChunks.size < 4);
+
+        for (var c = 0; c < clouds.length; c++) {
+          var cl = clouds[c];
+          var rel = ((cl.off - cam.lx * 0.22 - t * cl.speed) % 160 + 240) % 160 - 80;
+          // Subtle horizon drop curve so clouds rise gracefully over the horizon!
+          var curveDrop = rel * rel * 0.0012;
+          cl.mesh.position.set(cam.lx + rel, cl.y - curveDrop, cl.z);
+        }
+
+        // Family finish nest visibility & joyful hopping!
+        if (w && !w.endless && w.length - cam.lx < 68) {
+          nestGroup.visible = true;
+          nestGroup.position.set(w.length + 2.2, 0, 0);
+          for (var fi = 0; fi < familyRigs.length; fi++) {
+            var fHop = view.calm ? 0 : Math.abs(Math.sin(t * (4.6 + fi * 0.7) + fi * 1.4)) * (camMode === 'finish' ? 0.55 : 0.22);
+            familyRigs[fi].root.position.y = 0.2 + fHop;
+            animateDino(familyRigs[fi], { running: false, ground: fHop < 0.05 }, t + fi * 1.1, dt, false);
+          }
+        } else {
+          nestGroup.visible = false;
+        }
+
+        // Sync Obstacles & Collectibles & Blob Shadows
+        syncObstacles(w, cam.lx, t);
+
+        var si = 0;
+        var pShScale = D.clamp(1.28 - p.y * 0.14, 0.45, 1.35);
+        putInst(instShadows, si++, p.x, 0.02, 0, pShScale, 1, pShScale * 0.85, 0);
+
+        var ne = 0, ng = 0, nr = 0, nh = 0;
+        if (w) {
+          for (var oi = w.oi; oi < w.obs.length; oi++) {
+            var ob = w.obs[oi];
+            if (ob.x > cam.lx + 52) break;
+            if (ob.smashed || ob.x < cam.lx - 14 || ob.kind === 'arch') continue;
+            if (si < 96) {
+              var os = ob.kind === 'flyer' ? 0.85 : Math.max(0.95, ob.w * 1.15);
+              putInst(instShadows, si++, ob.x, 0.02, 0, os, 1, os * 0.85, 0);
+            }
+          }
+          for (var ii = w.ii; ii < w.items.length; ii++) {
+            var it = w.items[ii];
+            if (it.x > cam.lx + 52) break;
+            if (it.got || it.x < cam.lx - 12) continue;
+            var bobY = view.calm ? 0 : Math.sin(t * 3.8 + it.id) * 0.1;
+            var spinY = view.calm ? 0.4 : t * 2.4 + it.id * 0.7;
+            if (it.kind === 'egg' && ne < 64) {
+              putInst(instEggs, ne++, it.x, it.y + bobY, 0, 1.05, 1.05, 1.05, spinY);
+            } else if (it.kind === 'gold' && ng < 24) {
+              putInst(instGold, ng++, it.x, it.y + bobY, 0, 1.24, 1.24, 1.24, spinY * 1.3);
+            } else if (it.kind === 'rainbow' && nr < 48) {
+              putInst(instRainbow, nr, it.x, it.y + bobY, 0, 0.86, 0.92, 0.86, spinY * 1.2);
+              C1.setHex(RAINBOW_HEX[(it.chain + Math.floor(t * 4)) % RAINBOW_HEX.length]);
+              instRainbow.setColorAt(nr, C1);
+              nr++;
+            } else if (it.kind === 'heart' && nh < 8) {
+              putInst(instHearts, nh++, it.x, it.y + bobY, 0, 1.05, 1.05, 1.05, spinY);
+            }
+            if (it.y < 1.3 && si < 96) {
+              putInst(instShadows, si++, it.x, 0.02, 0, 0.45, 1, 0.4, 0);
+            }
+          }
+        }
+        instEggs.count = ne; instEggs.visible = ne > 0; if (ne > 0) instEggs.instanceMatrix.needsUpdate = true;
+        instGold.count = ng; instGold.visible = ng > 0; if (ng > 0) instGold.instanceMatrix.needsUpdate = true;
+        instRainbow.count = nr; instRainbow.visible = nr > 0;
+        if (nr > 0) { instRainbow.instanceMatrix.needsUpdate = true; if (instRainbow.instanceColor) instRainbow.instanceColor.needsUpdate = true; }
+        instHearts.count = nh; instHearts.visible = nh > 0; if (nh > 0) instHearts.instanceMatrix.needsUpdate = true;
+        instShadows.count = si; instShadows.visible = si > 0; instShadows.instanceMatrix.needsUpdate = true;
+
+        // Ambient world motes (snowflakes, volcanic embers, sparkles, pollen).
+        var nm = 0;
+        if (!view.calm) {
+          var mCol = PALETTES[targetWorld % PALETTES.length].mote;
+          C1.setHex(mCol);
+          for (var mi = 0; mi < 28; mi++) {
+            var mx = cam.lx - 10 + ((mi * 29.3 + t * (targetWorld === 2 ? -1.4 : 0.7)) % 34 + 34) % 34;
+            var my = targetWorld === 2
+              ? (7.5 - ((mi * 1.9 + t * 1.8) % 7.5))
+              : targetWorld === 3
+                ? ((mi * 1.3 + t * 2.1) % 7.5)
+                : (1.2 + (mi * 1.7 % 5.2) + Math.sin(t * 2 + mi) * 0.35);
+            var mz = -5.5 + (mi * 3.7 % 9.5);
+            var ms = targetWorld === 2 ? 0.13 : 0.1;
+            putInst(instMotes, nm, mx, my, mz, ms, ms, ms, t + mi);
+            instMotes.setColorAt(nm, C1);
+            nm++;
+          }
+        }
+        instMotes.count = nm; instMotes.visible = nm > 0;
+        if (nm > 0) { instMotes.instanceMatrix.needsUpdate = true; if (instMotes.instanceColor) instMotes.instanceColor.needsUpdate = true; }
+
+        // Soft running dust puffs under feet!
+        anim.dustT -= dt;
+        if (camMode === 'play' && p.running && p.ground && anim.dustT <= 0) {
+          anim.dustT = p.roaring ? 0.04 : (p.duck ? 0.07 : 0.15);
+          spawnBurst(p.x - 0.35, 0.1, (Math.random() - 0.5) * 0.35, {
+            count: p.roaring ? 2 : 1,
+            colors: p.roaring ? [0xffe857, 0xff8c2b] : [PALETTES[targetWorld].pathTop, 0xffffff],
+            speed: 1.4, up: 1.2, life: 0.34, size: p.roaring ? 0.2 : 0.14, gravity: 4, vx: -1.8
+          });
+        }
+        stepParticles(dt);
+      }
     };
-    // Frame pacing on a software renderer. There the processor draws every frame, and a game
-    // that hands over its next frame as soon as the last one is done keeps every core busy: on
-    // the Windows Edge test runner, where the graphics process runs at a raised priority, the
-    // test process itself could not run for 10 s while the title was up. So on the menus, after
-    // each frame a fence is set, no frame is drawn until it has passed, and the game then rests
-    // as long as the frame took. Play is not paced, and neither is a graphics card.
+
+    /* ---------------------------------- Software-WebGL Pacing & Fence Sync */
     var gl0 = renderer.getContext();
     var pace = software && typeof gl0.fenceSync === 'function' ? { sync: null, t0: 0, busy: 0 } : null;
+
     view.mayDraw = function (now, playing) {
       if (!pace || playing) return true;
       if (pace.sync) {
         var done = true;
-        try { done = gl0.isContextLost() || gl0.getSyncParameter(pace.sync, gl0.SYNC_STATUS) === gl0.SIGNALED; } catch (e) { done = true; }
+        try {
+          done = gl0.isContextLost() || gl0.getSyncParameter(pace.sync, gl0.SYNC_STATUS) === gl0.SIGNALED;
+        } catch (e) { done = true; }
         if (!done && now - pace.t0 < 1000) return false;
-        try { gl0.deleteSync(pace.sync); } catch (e) { /* lost with the context */ }
+        try { gl0.deleteSync(pace.sync); } catch (e) { /* ignore */ }
         pace.sync = null;
         pace.busy = Math.min(500, now - pace.t0);
       }
       return now - pace.t0 >= pace.busy * 2;
     };
+
     view.render = function () {
       renderer.render(scene, camera);
       if (!pace) return;
       try {
-        if (pace.sync) gl0.deleteSync(pace.sync); // a frame drawn during play, never waited for
-        pace.sync = gl0.fenceSync(gl0.SYNC_GPU_COMMANDS_COMPLETE, 0); gl0.flush(); pace.t0 = performance.now();
+        if (pace.sync) gl0.deleteSync(pace.sync);
+        pace.sync = gl0.fenceSync(gl0.SYNC_GPU_COMMANDS_COMPLETE, 0);
+        gl0.flush();
+        pace.t0 = performance.now();
       } catch (e) { pace = null; }
     };
+
     view.resize = function (w, h) {
       renderer.setSize(w, h, false);
-      camera.aspect = w / Math.max(1, h); camera.updateProjectionMatrix();
+      camera.aspect = w / Math.max(1, h);
+      camera.updateProjectionMatrix();
     };
-    // Weak PCs: render fewer pixels if frames come slowly (never more than 1.5 dpr).
-    var slow = 0;
+
+    // Adaptive pixel-ratio downscale on slow hardware GPUs.
+    var slowCount = 0;
     view.frameTime = function (ms) {
-      if (ms > 26) slow++; else slow = Math.max(0, slow - 0.5);
-      if (slow > 90 && ratio > 0.75) { ratio = Math.max(0.75, ratio - 0.25); renderer.setPixelRatio(ratio); slow = 0; return true; }
+      if (ms > 26) slowCount++; else slowCount = Math.max(0, slowCount - 0.5);
+      if (slowCount > 90 && ratio > 0.75) {
+        ratio = Math.max(0.75, ratio - 0.25);
+        renderer.setPixelRatio(ratio);
+        slowCount = 0;
+        return true;
+      }
       return false;
     };
-    view.ratio = function () { return ratio; };
 
-    /* ------------------------------------------------------------ start-up */
-    // Shaders. Where the browser builds them in the background (KHR_parallel_shader_compile),
-    // every material is built before the first frame, hidden ones included, and the page
-    // keeps answering meanwhile. Elsewhere the first frame builds the ones it shows and the
-    // rest (eggs, fruit, the night sky) are queued with it, before the game says it is ready,
-    // so the GPU process links them while the child looks at the title, not when the first
-    // egg comes or just after a test or a child presses Play.
+    // Pre-compile all shaders before calling Kit.ready() so Play never hitches!
     var parallel = false;
     try { parallel = renderer.extensions.has('KHR_parallel_shader_compile'); } catch (e) { parallel = false; }
+
     view.prepare = function (done) {
-      if (!parallel) { done(); return; }
-      var called = false, fin = function () { if (!called) { called = true; done(); } };
-      renderer.clear(); // the sky colour, not an empty canvas, while the shaders build
+      if (!parallel || typeof renderer.compileAsync !== 'function') { done(); return; }
+      var finished = false;
+      function fin() { if (!finished) { finished = true; done(); } }
+      renderer.clear();
       renderer.compileAsync(scene, camera).then(fin, fin);
       setTimeout(fin, 6000);
     };
-    view.compileRest = function () { if (!parallel) renderer.compile(scene, camera); };
-    // Calls done() once the graphics card has finished every frame drawn so far. A fence is
-    // polled between tasks, so the page answers clicks while a software renderer spends
-    // seconds on a cold browser's first frame. Without fences (WebGL 1), with the context
-    // lost, or after `limit` ms it goes on at once.
+
+    view.compileRest = function () {
+      // Briefly reveal hidden shader users so renderer.compile covers every program before fence!
+      if (parallel) return;
+      var vis = [instEggs.visible, instGold.visible, instRainbow.visible, instHearts.visible, instParts.visible, instMotes.visible, roarGroup.visible, rainbowGroup.visible];
+      instEggs.visible = instGold.visible = instRainbow.visible = instHearts.visible = instParts.visible = instMotes.visible = roarGroup.visible = rainbowGroup.visible = true;
+      renderer.compile(scene, camera);
+      instEggs.visible = vis[0]; instGold.visible = vis[1]; instRainbow.visible = vis[2]; instHearts.visible = vis[3];
+      instParts.visible = vis[4]; instMotes.visible = vis[5]; roarGroup.visible = vis[6]; rainbowGroup.visible = vis[7];
+    };
+
     view.whenDrawn = function (done, limit) {
       var gl = renderer.getContext(), t0 = performance.now(), sync = null;
-      try { if (gl.fenceSync) { sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0); gl.flush(); } } catch (e) { sync = null; }
+      try {
+        if (gl.fenceSync) { sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0); gl.flush(); }
+      } catch (e) { sync = null; }
       (function poll() {
-        var finished = !sync || gl.isContextLost() || performance.now() - t0 > limit;
-        if (!finished) { try { finished = gl.getSyncParameter(sync, gl.SYNC_STATUS) === gl.SIGNALED; } catch (e) { finished = true; } }
-        if (!finished) { setTimeout(poll, 16); return; }
+        var ready = !sync || gl.isContextLost() || performance.now() - t0 > (limit || 8000);
+        if (!ready) {
+          try { ready = gl.getSyncParameter(sync, gl.SYNC_STATUS) === gl.SIGNALED; } catch (e) { ready = true; }
+        }
+        if (!ready) { setTimeout(poll, 16); return; }
         if (sync) { try { gl.deleteSync(sync); } catch (e) { /* ignore */ } }
         done();
       })();
     };
-    view.calm = false;
-    view.dispose = function () { renderer.dispose(); };
-    view.setBiome(0, true);
+
+    applyPalette(0, true, 1);
     return view;
   };
 })();
