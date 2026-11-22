@@ -1,1311 +1,1282 @@
-/*
- * Chaos Island (جزيرة الفوضى) — Pure Party Disaster Brawl Engine.
- * Dual environment: CommonJS (Node tests) + window.CIEngine (browser).
- * Zero DOM, zero audio, zero telemetry calls.
- */
-(function () {
+/* Chaos Island (جزيرة الفوضى) — pure deterministic simulation engine.
+ * UMD export (window.ChaosEngine + module.exports for Node unit testing).
+ * Zero DOM, zero Kit, zero Math.random: all randomness flows through a seeded PRNG. */
+(function (root, factory) {
+  if (typeof module === 'object' && module.exports) module.exports = factory();
+  else root.ChaosEngine = factory();
+})(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
 
-  var W = 1280, H = 720;
-  var CARD_TIME = 1.2, ACTION_TIME = 14.0, INTER_TIME = 1.4, ROUNDS = 3;
-  var MOVE_SPEED = 320, JUMP_VY = -595, DJUMP_VY = -525, GRAVITY = 1520;
-  var DASH_SPEED = 590, DASH_DUR = 0.22, DASH_CD = 0.82;
+  var SAVE_VERSION = 4;
+  var MATCH_ROUNDS = 5;
+  var CARD_TIME = 2.0;
+  var ROUND_TIME = 10.8;
+  var CLEAR_TIME = 1.8;
+  var MAX_HEARTS = 3;
 
-  var DIFFICULTIES = {
-    easy: { id: 'easy', label: 'سهل', desc: '5 قلوب · إنذار مبكر · حواجز إنقاذ آمنة', hearts: 5, warn: 1.1, speed: 0.76, botSkill: 0.45, doubleAll: false, bumpers: true },
-    normal: { id: 'normal', label: 'متوسط', desc: '3 قلوب · منافسة حماسية · فوضى مزدوجة بالجولة 3', hearts: 3, warn: 0.84, speed: 1.0, botSkill: 0.74, doubleAll: false, bumpers: false },
-    hero: { id: 'hero', label: 'بطل', desc: 'قلبان · فوضى مزدوجة كل جولة · خصوم أشرس!', hearts: 2, warn: 0.62, speed: 1.22, botSkill: 0.95, doubleAll: true, bumpers: false }
-  };
+  var ISLAND_MIN_X = -10.0;
+  var ISLAND_MAX_X = 10.0;
+  var SEA_KILL_Y = -1.15;
+  var GROUND_Y = 0.3;
 
-  var ISLANDS = [
-    {
-      id: 'volcano', name: 'بركان القراصنة', sub: 'سفن غارقة وينابيع حمم فوارة',
-      waterY: 652, friction: 0.83, sky: ['#ff6b35', '#ffd166'], sea: '#ff3d00', seaHi: '#ffbe0b',
-      geysers: [465, 815], springs: [], bumpers: [], moving: false, gravZone: null,
-      plats: [
-        { id: 'deckL', x: 170, y: 560, w: 310, h: 38, oneWay: false },
-        { id: 'deckC', x: 480, y: 560, w: 320, h: 38, oneWay: false },
-        { id: 'deckR', x: 800, y: 560, w: 310, h: 38, oneWay: false },
-        { id: 'left', x: 205, y: 430, w: 225, h: 24, oneWay: true },
-        { id: 'right', x: 850, y: 430, w: 225, h: 24, oneWay: true },
-        { id: 'top', x: 485, y: 312, w: 310, h: 24, oneWay: true }
-      ]
-    },
-    {
-      id: 'dino', name: 'قلعة الديناصور', sub: 'أعمدة صخرية ونوابض قفز عملاقة',
-      waterY: 652, friction: 0.84, sky: ['#2ec4b6', '#cbf3f0'], sea: '#0f766e', seaHi: '#5eead4',
-      geysers: [], springs: [290, 990], bumpers: [], moving: false, gravZone: null,
-      plats: [
-        { id: 'deckL', x: 160, y: 560, w: 320, h: 38, oneWay: false },
-        { id: 'deckC', x: 480, y: 560, w: 320, h: 38, oneWay: false },
-        { id: 'deckR', x: 800, y: 560, w: 320, h: 38, oneWay: false },
-        { id: 'left', x: 195, y: 432, w: 215, h: 24, oneWay: true },
-        { id: 'right', x: 870, y: 432, w: 215, h: 24, oneWay: true },
-        { id: 'top', x: 470, y: 308, w: 340, h: 24, oneWay: true }
-      ]
-    },
-    {
-      id: 'alien', name: 'سفينة الفضاء', sub: 'منصات طائرة وحقل انعدام الجاذبية',
-      waterY: 652, friction: 0.85, sky: ['#1b103f', '#5a189a'], sea: '#7209b7', seaHi: '#f72585',
-      geysers: [], springs: [], bumpers: [], moving: true, gravZone: { x: 555, w: 170 },
-      plats: [
-        { id: 'deckL', x: 170, y: 560, w: 310, h: 38, oneWay: false },
-        { id: 'deckC', x: 480, y: 560, w: 320, h: 38, oneWay: false },
-        { id: 'deckR', x: 800, y: 560, w: 310, h: 38, oneWay: false },
-        { id: 'left', x: 200, y: 426, w: 220, h: 24, oneWay: true, moveAmp: 46, moveSpd: 1.5, phase: 0 },
-        { id: 'right', x: 860, y: 426, w: 220, h: 24, oneWay: true, moveAmp: 46, moveSpd: 1.5, phase: 3.14 },
-        { id: 'top', x: 485, y: 302, w: 310, h: 24, oneWay: true }
-      ]
-    },
-    {
-      id: 'glacier', name: 'جزيرة الجليد الآلي', sub: 'جليد متزحلق وقروش آلية ومصدات',
-      waterY: 652, friction: 0.93, sky: ['#0077b6', '#caf0f8'], sea: '#03045e', seaHi: '#00f5d4',
-      geysers: [], springs: [], bumpers: [182, 1098], moving: false, gravZone: null,
-      plats: [
-        { id: 'deckL', x: 165, y: 560, w: 315, h: 38, oneWay: false },
-        { id: 'deckC', x: 480, y: 560, w: 320, h: 38, oneWay: false },
-        { id: 'deckR', x: 800, y: 560, w: 315, h: 38, oneWay: false },
-        { id: 'left', x: 205, y: 430, w: 225, h: 24, oneWay: true },
-        { id: 'right', x: 850, y: 430, w: 225, h: 24, oneWay: true },
-        { id: 'top', x: 485, y: 310, w: 310, h: 24, oneWay: true }
-      ]
-    }
+  var GRAVITY = 30.0;
+  var MOVE_SPEED = 7.5;
+  var JUMP_V = 12.6;
+  var DRUM_BOUNCE_V = 15.8;
+  var COYOTE_TIME = 0.12;
+  var JUMP_BUFFER = 0.14;
+  var ACTOR_R = 0.44;
+  var ACTOR_H = 1.25;
+
+  // Climbable island platforms (ground is solid; upper decks/crates/bridges are one-way).
+  var PLATFORMS = [
+    { id: 'ground',         x1: -10.0, x2: 10.0, y: 0.30, solid: true,  tier: 0 },
+    { id: 'crate_w1',       x1: -9.2,  x2: -7.2, y: 1.65, solid: false, tier: 1 },
+    { id: 'crate_mid_l',    x1: -3.2,  x2: -1.7, y: 1.65, solid: false, tier: 1 },
+    { id: 'crate_e1',       x1:  4.0,  x2:  6.0, y: 1.75, solid: false, tier: 1 },
+    { id: 'west_deck',      x1: -7.7,  x2: -4.4, y: 3.00, solid: false, tier: 2 },
+    { id: 'bridge',         x1: -4.4,  x2: -1.6, y: 3.00, solid: false, tier: 2 },
+    { id: 'shelter_roof',   x1: -1.6,  x2:  1.6, y: 3.00, solid: false, tier: 2 },
+    { id: 'east_deck',      x1:  5.2,  x2:  9.0, y: 3.30, solid: false, tier: 2 },
+    { id: 'west_top',       x1: -7.0,  x2: -4.8, y: 4.65, solid: false, tier: 3 },
+    { id: 'lighthouse_top', x1: -1.4,  x2:  1.4, y: 4.95, solid: false, tier: 3 },
+    { id: 'east_top',       x1:  5.8,  x2:  8.4, y: 4.85, solid: false, tier: 3 }
   ];
 
-  var BASE_DISASTERS = ['meteors', 'shark', 'ufo', 'bombs', 'boulders', 'sinking'];
-  var DISASTERS = {
-    meteors: { id: 'meteors', name: 'نيازك البركان!', tip: 'راقب سهام الخطر واقفز بعيداً!' },
-    shark: { id: 'shark', name: 'موجة القرش!', tip: 'اصعد فوراً إلى المنصات العالية!' },
-    ufo: { id: 'ufo', name: 'صحن الاختطاف!', tip: 'اهرب من شعاع المركبة الفضائية!' },
-    bombs: { id: 'bombs', name: 'عاصفة القنابل!', tip: 'اندفع بقوة لقذف القنابل على الخصوم!' },
-    boulders: { id: 'boulders', name: 'الصخور العملاقة!', tip: 'اقفز فوق الصخور المتدحرجة!' },
-    sinking: { id: 'sinking', name: 'الأرض المتساقطة!', tip: 'ابتعد عن الرصيف المهتز قبل غرقه!' },
-    double: { id: 'double', name: 'فوضى مزدوجة!', tip: 'كارثتان في وقت واحد! افتح صناديق القوة!' }
-  };
+  // Central stone shelter shields players inside from tornado pull and lightning bolts.
+  var SHELTER = { x1: -1.5, x2: 1.5, y1: 0.3, y2: 2.92 };
+  // Bouncy tropical drum launches players straight onto the mid/upper decks.
+  var DRUM = { x: 2.75, y: 0.3, r: 0.95 };
 
-  var GADGET_IDS = ['jetpack', 'shield', 'hammer'];
-  var GADGETS = {
-    jetpack: { id: 'jetpack', name: 'حقيبة نفاثة!', dur: 5.5, color: '#ff7b00' },
-    shield: { id: 'shield', name: 'درع البرق!', dur: 8.5, color: '#00e5ff' },
-    hammer: { id: 'hammer', name: 'مطرقة عملاقة!', dur: 5.5, color: '#ffd000' }
-  };
+  var DISASTERS = [
+    { id: 'meteor',    name: 'وابل النيازك',    hint: 'اهرب من الدوائر!', color: '#ff5238' },
+    { id: 'flood',     name: 'طوفان الحمم',     hint: 'اصعد للأعلى!',     color: '#ff7a1a' },
+    { id: 'tornado',   name: 'الإعصار الدوّار', hint: 'اختبئ أو اركض!',   color: '#2ad4ff' },
+    { id: 'lightning', name: 'عاصفة البرق',     hint: 'تجنّب الصواعق!',   color: '#ffd22e' },
+    { id: 'coconuts',  name: 'جوز الهند العملاق', hint: 'اقفز فوقها!',    color: '#c97b38' },
+    { id: 'quake',     name: 'الزلزال الكبير',  hint: 'ابتعد عن الشقوق!', color: '#ff3b6b' }
+  ];
+  var DISASTER_MAP = {};
+  for (var di = 0; di < DISASTERS.length; di++) DISASTER_MAP[DISASTERS[di].id] = DISASTERS[di];
 
-  var BOTS = [
-    { name: 'القبطان رعد', color: '#ef476f', helm: 'h_pirate', trail: 't_fire' },
-    { name: 'الآلي زاب', color: '#00b4d8', helm: 'h_mech', trail: 't_bolt' },
-    { name: 'تيربو ريكس', color: '#38b000', helm: 'h_dino', trail: 't_spark' },
-    { name: 'النينجا ظل', color: '#8338ec', helm: 'h_bandana', trail: 't_plasma' }
+  var COLORS = [
+    { id: 'blue',    name: 'أزرق البحر',    hex: 0x2ea8ff, cost: 0 },
+    { id: 'coral',   name: 'مرجاني',        hex: 0xff5a7a, cost: 0 },
+    { id: 'sunny',   name: 'أصفر الشمس',    hex: 0xffc824, cost: 30 },
+    { id: 'mint',    name: 'أخضر الغابة',   hex: 0x38d878, cost: 45 },
+    { id: 'berry',   name: 'بنفسجي التوت',  hex: 0x9b5cff, cost: 60 },
+    { id: 'mango',   name: 'برتقالي المانجو', hex: 0xff8524, cost: 80 },
+    { id: 'pink',    name: 'فلامنغو',       hex: 0xff6ec7, cost: 100 },
+    { id: 'cyan',    name: 'فيروزي',        hex: 0x1ee3cf, cost: 130 }
   ];
 
-  var SHOP = {
-    helmets: [
-      { id: 'h_bandana', name: 'عصابة القبطان', price: 0, desc: 'عصابة قرصان حمراء سريعة' },
-      { id: 'h_pirate', name: 'قبعة القرصان', price: 35, desc: 'قبعة قبطان البحار الذهبية' },
-      { id: 'h_dino', name: 'خوذة ريكس', price: 60, desc: 'فك ديناصور مدرع ومخيف' },
-      { id: 'h_mech', name: 'قناع الآلي', price: 85, desc: 'منظار ليزر سيبراني مضيء' },
-      { id: 'h_astro', name: 'خوذة الفضاء', price: 115, desc: 'خوذة رائد المجرة المدرعة' },
-      { id: 'h_crown', name: 'تاج البركان', price: 150, desc: 'تاج أبطال الجزيرة الناري' }
-    ],
-    trails: [
-      { id: 't_spark', name: 'شرار أبيض', price: 0, desc: 'شرار اندفاع كلاسيكي' },
-      { id: 't_fire', name: 'لهب البركان', price: 45, desc: 'ذيل ناري متوهج عند الاندفاع' },
-      { id: 't_bolt', name: 'برق الرعد', price: 75, desc: 'صواعق كهربائية خاطفة' },
-      { id: 't_plasma', name: 'نجوم المجرة', price: 105, desc: 'حلقات طاقة فضائية مشعة' }
-    ]
-  };
+  var HATS = [
+    { id: 'none',    name: 'بلا قبعة',      cost: 0 },
+    { id: 'leaf',    name: 'ورقة نخيل',     cost: 25 },
+    { id: 'shades',  name: 'نظارة شمس',     cost: 40 },
+    { id: 'pirate',  name: 'قبعة قراصنة',   cost: 65 },
+    { id: 'party',   name: 'قبعة حفلة',     cost: 80 },
+    { id: 'viking',  name: 'خوذة الفايكنغ', cost: 105 },
+    { id: 'dino',    name: 'قبعة ديناصور',  cost: 135 },
+    { id: 'crown',   name: 'تاج الجزيرة',   cost: 180 }
+  ];
 
-  function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
-  function dist(ax, ay, bx, by) { var dx = bx - ax, dy = by - ay; return Math.sqrt(dx * dx + dy * dy); }
+  var BOT_LOOKS = [
+    { color: 2, hat: 1 },
+    { color: 3, hat: 4 },
+    { color: 4, hat: 2 },
+    { color: 5, hat: 3 }
+  ];
 
+  /* ---------------------------------------------------------- deterministic RNG */
   function makeRng(seed) {
-    var s = (seed == null ? ((Date.now() ^ 0x9e3779b9) >>> 0) : (seed >>> 0)) || 0x12345678;
+    var s = (seed >>> 0) || 0x9e3779b9;
     return function () {
-      s = (s + 0x6d2b79f5) | 0;
-      var t = Math.imul(s ^ (s >>> 15), 1 | s);
-      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      s ^= s << 13;
+      s ^= s >>> 17;
+      s ^= s << 5;
+      return ((s >>> 0) % 1000000) / 1000000;
+    };
+  }
+  function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+  function lerp(a, b, t) { return a + (b - a) * t; }
+
+  /* ---------------------------------------------------------- save helpers */
+  function defaultSave() {
+    return {
+      v: SAVE_VERSION,
+      coins: 0,
+      bestScore: 0,
+      bestStars: 0,
+      bestWaves: 0,
+      wins: 0,
+      color: 0,
+      hat: 0,
+      ownedColors: [1, 1, 0, 0, 0, 0, 0, 0],
+      ownedHats: [1, 0, 0, 0, 0, 0, 0, 0],
+      coachDone: false
     };
   }
 
-  function pickPlan(rng, diffCfg) {
-    var pool = BASE_DISASTERS.slice();
-    for (var i = pool.length - 1; i > 0; i--) {
-      var j = Math.floor(rng() * (i + 1));
-      var tmp = pool[i]; pool[i] = pool[j]; pool[j] = tmp;
+  function loadSave(raw) {
+    var s = defaultSave();
+    if (!raw || typeof raw !== 'object' || raw.v !== SAVE_VERSION) return s;
+    if (typeof raw.coins === 'number' && raw.coins >= 0 && isFinite(raw.coins)) s.coins = Math.floor(raw.coins);
+    if (typeof raw.bestScore === 'number' && raw.bestScore >= 0 && isFinite(raw.bestScore)) s.bestScore = Math.floor(raw.bestScore);
+    if (typeof raw.bestStars === 'number' && raw.bestStars >= 0 && isFinite(raw.bestStars)) s.bestStars = clamp(Math.floor(raw.bestStars), 0, 3);
+    if (typeof raw.bestWaves === 'number' && raw.bestWaves >= 0 && isFinite(raw.bestWaves)) s.bestWaves = Math.floor(raw.bestWaves);
+    if (typeof raw.wins === 'number' && raw.wins >= 0 && isFinite(raw.wins)) s.wins = Math.floor(raw.wins);
+    if (Array.isArray(raw.ownedColors)) {
+      for (var i = 0; i < COLORS.length; i++) if (raw.ownedColors[i]) s.ownedColors[i] = 1;
     }
-    var plan = [];
-    for (var r = 0; r < ROUNDS; r++) {
-      var isDouble = diffCfg.doubleAll || r === ROUNDS - 1;
-      var a = pool[(r * 2) % pool.length];
-      var b = pool[(r * 2 + 1) % pool.length];
-      if (b === a) b = pool[(r * 2 + 2) % pool.length];
-      plan.push(isDouble ? { id: 'double', sub: [a, b] } : { id: a, sub: [a] });
+    if (Array.isArray(raw.ownedHats)) {
+      for (var j = 0; j < HATS.length; j++) if (raw.ownedHats[j]) s.ownedHats[j] = 1;
     }
-    return plan;
+    var ci = typeof raw.color === 'number' ? Math.floor(raw.color) : 0;
+    if (ci >= 0 && ci < COLORS.length && s.ownedColors[ci]) s.color = ci;
+    var hi = typeof raw.hat === 'number' ? Math.floor(raw.hat) : 0;
+    if (hi >= 0 && hi < HATS.length && s.ownedHats[hi]) s.hat = hi;
+    s.coachDone = !!raw.coachDone;
+    return s;
   }
 
-  function makeActor(slot, opts) {
+  function buyOrEquip(save, kind, index) {
+    var list = kind === 'color' ? COLORS : HATS;
+    var owned = kind === 'color' ? save.ownedColors : save.ownedHats;
+    if (index < 0 || index >= list.length) return 'invalid';
+    if (owned[index]) {
+      if (kind === 'color') save.color = index; else save.hat = index;
+      return 'equip';
+    }
+    var cost = list[index].cost;
+    if (save.coins < cost) return 'poor';
+    save.coins -= cost;
+    owned[index] = 1;
+    if (kind === 'color') save.color = index; else save.hat = index;
+    return 'buy';
+  }
+
+  /* ---------------------------------------------------------- difficulty knobs */
+  function difficultyParams(tier, level, waveIndex) {
+    var t = clamp(typeof level === 'number' ? level : ((tier || 2) - 1) / 4, 0, 1);
+    var extra = Math.min(0.6, Math.max(0, (waveIndex || 0) - 4) * 0.08);
+    var d = clamp(t + extra, 0, 1.35);
     return {
-      slot: slot,
-      name: opts.name,
+      telegraph: lerp(1.38, 0.88, Math.min(1, d)),
+      meteorEvery: lerp(0.88, 0.44, Math.min(1, d)),
+      lightningEvery: lerp(0.98, 0.50, Math.min(1, d)),
+      coconutEvery: lerp(1.12, 0.62, Math.min(1, d)),
+      coconutSpeed: lerp(7.4, 11.4, Math.min(1, d)),
+      tornadoPull: lerp(21.0, 31.0, Math.min(1, d)),
+      tornadoSpeed: lerp(4.8, 7.2, Math.min(1, d)),
+      quakeEvery: lerp(1.65, 1.05, Math.min(1, d)),
+      floodPeak: lerp(2.38, 2.55, Math.min(1, d)),
+      botSkill: lerp(0.55, 0.82, Math.min(1, t))
+    };
+  }
+
+  /* ---------------------------------------------------------- helpers */
+  function inShelter(a) {
+    return a.x >= SHELTER.x1 && a.x <= SHELTER.x2 && a.y >= SHELTER.y1 - 0.1 && a.y <= SHELTER.y2;
+  }
+
+  function shuffleIds(rng) {
+    var list = DISASTERS.map(function (d) { return d.id; });
+    for (var i = list.length - 1; i > 0; i--) {
+      var j = Math.floor(rng() * (i + 1));
+      var tmp = list[i]; list[i] = list[j]; list[j] = tmp;
+    }
+    return list;
+  }
+
+  function makeActor(opts) {
+    return {
+      id: opts.id,
+      slot: opts.slot,
       isHuman: !!opts.isHuman,
-      isBot: !opts.isHuman,
-      color: opts.color,
-      helm: opts.helm || 'h_bandana',
-      trail: opts.trail || 't_spark',
+      humanIndex: opts.humanIndex != null ? opts.humanIndex : -1,
+      colorIndex: opts.colorIndex,
+      hatIndex: opts.hatIndex,
       x: opts.x,
       y: opts.y,
+      zOff: opts.zOff || 0,
       vx: 0,
       vy: 0,
-      r: 22,
-      facing: slot % 2 === 0 ? 1 : -1,
-      onGround: true,
-      groundId: 'deckC',
-      jumpsLeft: 2,
-      coyoteT: 0,
-      jumpBufT: 0,
+      facing: opts.facing || 1,
+      ground: true,
+      platId: 'ground',
+      coyote: 0,
+      jumpBuf: 0,
+      jumpHeld: false,
       dropT: 0,
-      dashT: 0,
-      dashCd: 0,
-      invulnT: 0,
-      stunT: 0,
-      flipT: 0,
-      hearts: opts.hearts,
-      maxHearts: opts.hearts,
-      state: 'alive', // 'alive' | 'drone' | 'out'
-      rescuedOnce: false,
-      droneOrbs: 0,
-      droneTimer: 0,
-      gadget: null,
-      gadgetT: 0,
-      coins: 0,
-      score: 0,
-      roundsWon: 0,
-      bonks: 0,
+      hearts: MAX_HEARTS,
+      maxHearts: MAX_HEARTS,
+      alive: true,
+      ghost: false,
+      invuln: 0,
+      hurtT: 0,
+      bumpCd: 0,
+      squash: 1,
+      runPhase: 0,
       walk: 0,
-      aiTimer: 0,
+      coins: 0,
+      survived: 0,
+      score: 0,
+      sheltered: false,
       aiTargetX: opts.x,
-      aiJump: false,
-      aiDash: false
+      aiDecideT: 0
     };
   }
 
-  function clonePlats(isl) {
-    return isl.plats.map(function (p) {
-      return {
-        id: p.id, baseX: p.x, x: p.x, y: p.y, w: p.w, h: p.h,
-        oneWay: !!p.oneWay, moveAmp: p.moveAmp || 0, moveSpd: p.moveSpd || 0,
-        phase: p.phase || 0, dx: 0, sinkWarn: 0, sunkT: 0
-      };
-    });
-  }
-
-  function createWorld(opts) {
+  /* ---------------------------------------------------------- create world */
+  function create(opts) {
     opts = opts || {};
-    var islIdx = typeof opts.island === 'number' ? clamp(opts.island | 0, 0, ISLANDS.length - 1) : 0;
-    if (typeof opts.island === 'string') {
-      for (var k = 0; k < ISLANDS.length; k++) if (ISLANDS[k].id === opts.island) islIdx = k;
-    }
-    var isl = ISLANDS[islIdx];
-    var diffCfg = DIFFICULTIES[opts.diff] || DIFFICULTIES.normal;
-    var ddaLevel = typeof opts.ddaLevel === 'number' ? clamp(opts.ddaLevel, 0, 1) : 0.35;
-    var rng = makeRng(opts.seed);
+    var seed = (opts.seed != null ? opts.seed : 1337) >>> 0;
+    var rng = makeRng(seed);
     var duo = !!opts.duo;
-    var duoMode = opts.duoMode === 'versus' ? 'versus' : 'coop';
+    var endless = !!opts.endless;
     var demo = !!opts.demo;
+    var tier = clamp(opts.tier || 2, 1, 5);
+    var level = typeof opts.level === 'number' ? clamp(opts.level, 0, 1) : (tier - 1) / 4;
+    var p1Color = opts.p1Color != null ? opts.p1Color : 0;
+    var p1Hat = opts.p1Hat != null ? opts.p1Hat : 0;
+    var p2Color = p1Color === 1 ? 0 : 1;
+    var p2Hat = opts.p2Hat != null ? opts.p2Hat : 0;
 
-    var p1Cosm = opts.p1Cosm || {};
-    var p2Cosm = opts.p2Cosm || {};
+    var schedule = Array.isArray(opts.schedule) && opts.schedule.length ? opts.schedule.slice() : shuffleIds(rng);
     var actors = [];
-    // Player 1 spawns at x=430 on flat main deck with clear runway right and left.
-    actors.push(makeActor(0, {
-      name: 'البطل 1', isHuman: !demo, color: '#ff9f1c',
-      helm: p1Cosm.helm || 'h_bandana', trail: p1Cosm.trail || 't_spark',
-      x: 430, y: 560 - 22, hearts: diffCfg.hearts
-    }));
 
-    if (duo && !demo) {
-      actors.push(makeActor(1, {
-        name: 'البطل 2', isHuman: true, color: '#2ec4b6',
-        helm: p2Cosm.helm || 'h_mech', trail: p2Cosm.trail || 't_bolt',
-        x: 540, y: 560 - 22, hearts: diffCfg.hearts
+    if (demo) {
+      var demoXs = [-6.2, -2.6, 0.2, 3.6, 6.8];
+      for (var d = 0; d < demoXs.length; d++) {
+        actors.push(makeActor({
+          id: 'b' + d, slot: d, isHuman: false,
+          colorIndex: d % COLORS.length, hatIndex: (d + 1) % HATS.length,
+          x: demoXs[d], y: GROUND_Y, zOff: ((d % 3) - 1) * 0.45,
+          facing: d < 2 ? 1 : -1
+        }));
+      }
+    } else {
+      // P1 spawns at x = -3.6 (open deck, NOT inside shelter!), P2 at x = +3.8.
+      actors.push(makeActor({
+        id: 'p1', slot: 0, isHuman: true, humanIndex: 0,
+        colorIndex: p1Color, hatIndex: p1Hat,
+        x: -3.6, y: GROUND_Y, zOff: 0.28, facing: 1
       }));
+      if (duo) {
+        actors.push(makeActor({
+          id: 'p2', slot: 1, isHuman: true, humanIndex: 1,
+          colorIndex: p2Color, hatIndex: p2Hat,
+          x: 3.8, y: GROUND_Y, zOff: -0.28, facing: -1
+        }));
+      }
+      var botCount = duo ? 3 : 4;
+      var botXs = duo ? [-7.8, 0.2, 7.6] : [-7.8, -0.5, 4.4, 7.8];
+      for (var b = 0; b < botCount; b++) {
+        var look = BOT_LOOKS[b % BOT_LOOKS.length];
+        actors.push(makeActor({
+          id: 'bot' + b, slot: actors.length, isHuman: false,
+          colorIndex: look.color === p1Color ? (look.color + 2) % COLORS.length : look.color,
+          hatIndex: look.hat,
+          x: botXs[b], y: GROUND_Y, zOff: ((b % 3) - 1) * 0.42,
+          facing: botXs[b] < 0 ? 1 : -1
+        }));
+      }
     }
-
-    var botCount = demo ? 4 : (duo ? (duoMode === 'versus' ? 2 : 3) : 4);
-    var botStarts = [740, 880, 300, 980];
-    for (var b = 0; b < botCount; b++) {
-      var bt = BOTS[b % BOTS.length];
-      actors.push(makeActor(actors.length, {
-        name: bt.name, isHuman: false, color: bt.color, helm: bt.helm, trail: bt.trail,
-        x: botStarts[b % botStarts.length], y: 560 - 22, hearts: Math.max(2, diffCfg.hearts)
-      }));
-    }
-
-    var bumpers = isl.bumpers.slice();
-    if (diffCfg.bumpers && !bumpers.length) bumpers = [178, 1102];
 
     var world = {
-      isl: isl,
-      islandIndex: islIdx,
-      diff: diffCfg.id,
-      diffCfg: diffCfg,
-      ddaLevel: ddaLevel,
-      speedMul: diffCfg.speed * (0.92 + ddaLevel * 0.18),
-      duo: duo,
-      duoMode: duoMode,
-      demo: demo,
+      seed: seed,
       rng: rng,
+      duo: duo,
+      endless: endless,
+      demo: demo,
+      tier: tier,
+      level: level,
+      maxRounds: endless ? 9999 : MATCH_ROUNDS,
       round: 0,
-      rounds: ROUNDS,
-      phase: demo ? 'action' : 'card', // 'card' | 'action' | 'inter' | 'done'
+      phase: demo ? 'demo' : 'card',
       t: 0,
       frames: 0,
-      waterY: isl.waterY,
-      baseWaterY: isl.waterY,
-      windX: 0,
-      plan: pickPlan(rng, diffCfg),
-      plats: clonePlats(isl),
-      bumpers: bumpers,
+      disaster: schedule[0],
+      schedule: schedule,
+      bag: schedule.slice(1),
       actors: actors,
-      hazards: [],
-      crates: [],
       coins: [],
-      orbs: [],
-      geysers: isl.geysers.map(function (gx, gi) { return { x: gx, timer: 2.2 + gi * 1.9, warnT: 0, activeT: 0 }; }),
-      events: [],
-      spawnTimers: { a: 0.45, b: 0.95, crate: 2.6, coin: 1.8 },
-      winnerSlot: 0,
-      won: false,
-      stars: 0,
-      p1Score: 0
+      meteors: [],
+      bolts: [],
+      coconuts: [],
+      cracks: [],
+      tornado: null,
+      lavaY: -1.65,
+      lavaTargetY: -1.65,
+      drumBounceT: 0,
+      quakeShake: 0,
+      spawnAcc: 0,
+      subAcc: 0,
+      coinAcc: 0,
+      humanMoved: false,
+      finished: false,
+      result: null,
+      events: []
     };
 
-    setupRound(world, 0, true);
-    if (demo) { world.phase = 'action'; world.t = 0.2; }
+    if (!demo) {
+      spawnRoundCoins(world);
+      world.events.push({ type: 'disasterCard', disaster: world.disaster, round: 0 });
+    }
     return world;
   }
 
-  function currentDisasterInfo(world) {
-    var entry = world.plan[world.round] || world.plan[0];
-    var meta = DISASTERS[entry.id] || DISASTERS.meteors;
-    var subText = meta.tip;
-    if (entry.id === 'double' && entry.sub.length >= 2) {
-      subText = DISASTERS[entry.sub[0]].name + ' + ' + DISASTERS[entry.sub[1]].name;
+  /* ---------------------------------------------------------- round management */
+  function nextDisasterId(world) {
+    if (!world.bag.length) world.bag = shuffleIds(world.rng);
+    // Avoid immediate repeat across bag boundaries.
+    if (world.bag[0] === world.disaster && world.bag.length > 1) {
+      var tmp = world.bag[0]; world.bag[0] = world.bag[1]; world.bag[1] = tmp;
     }
-    return { id: entry.id, sub: entry.sub, name: meta.name, tip: subText };
+    return world.bag.shift();
   }
 
-  function setupRound(world, r, initial) {
-    world.round = r;
-    world.phase = world.demo ? 'action' : 'card';
-    world.t = 0;
-    world.waterY = world.baseWaterY;
-    world.windX = 0;
-    world.hazards.length = 0;
-    world.crates.length = 0;
+  function clearHazards(world) {
+    world.meteors.length = 0;
+    world.bolts.length = 0;
+    world.coconuts.length = 0;
+    world.cracks.length = 0;
+    world.tornado = null;
+    world.lavaTargetY = -1.65;
+    world.quakeShake = 0;
+    world.spawnAcc = 0;
+    world.subAcc = 0;
+  }
+
+  function spawnRoundCoins(world) {
     world.coins.length = 0;
-    world.orbs.length = 0;
-    world.plats = clonePlats(world.isl);
-    world.spawnTimers = { a: 0.35, b: 0.85, crate: 2.2, coin: 1.4 };
-    for (var g = 0; g < world.geysers.length; g++) {
-      world.geysers[g].timer = 2.0 + g * 1.8;
-      world.geysers[g].warnT = 0;
-      world.geysers[g].activeT = 0;
+    var spots = [
+      [-8.2, 2.5], [-6.0, 3.9], [-5.9, 5.55], [-3.0, 3.9], [0.0, 3.9],
+      [0.0, 5.85], [2.75, 2.3], [5.0, 2.65], [7.0, 4.2], [7.1, 5.75],
+      [-5.2, 1.2], [5.2, 1.2]
+    ];
+    // Pick 6 deterministic coin locations per round.
+    var picked = [];
+    for (var i = 0; i < spots.length; i++) picked.push(i);
+    for (var k = picked.length - 1; k > 0; k--) {
+      var j = Math.floor(world.rng() * (k + 1));
+      var tmp = picked[k]; picked[k] = picked[j]; picked[j] = tmp;
     }
-    var starts = [430, 540, 740, 880, 300, 980];
+    for (var c = 0; c < 6; c++) {
+      var sp = spots[picked[c]];
+      world.coins.push({ id: world.round * 20 + c, x: sp[0], y: sp[1], taken: false, phase: c * 1.1 });
+    }
+  }
+
+  function resetActorsForNextRound(world) {
+    var spawns = world.duo ? [-3.6, 3.8, -7.8, 0.2, 7.6] : [-3.6, -7.8, -0.5, 4.4, 7.8];
     for (var i = 0; i < world.actors.length; i++) {
       var a = world.actors[i];
-      a.x = starts[i % starts.length];
-      a.y = 560 - a.r;
-      a.vx = 0; a.vy = 0;
-      a.onGround = true; a.groundId = 'deckC';
-      a.jumpsLeft = 2; a.coyoteT = 0; a.jumpBufT = 0; a.dropT = 0;
-      a.dashT = 0; a.dashCd = a.isBot ? 0.9 + (i * 0.35) : 0; a.stunT = 0; a.flipT = 0;
-      a.invulnT = initial ? 0 : 0.8;
-      a.hearts = a.maxHearts;
-      a.state = 'alive';
-      a.rescuedOnce = false;
-      a.droneOrbs = 0;
-      a.droneTimer = 0;
-      if (initial) { a.gadget = null; a.gadgetT = 0; }
-    }
-  }
-
-  function spawnRescueOrbs(world) {
-    var spots = [
-      { x: 320, y: 350 }, { x: 520, y: 245 },
-      { x: 760, y: 245 }, { x: 960, y: 350 }
-    ];
-    for (var i = 0; i < spots.length; i++) {
-      if (world.orbs.length < 6) {
-        world.orbs.push({
-          x: spots[i].x + (world.rng() - 0.5) * 40,
-          y: spots[i].y + (world.rng() - 0.5) * 30,
-          r: 18, bob: world.rng() * 6.28, life: 14
-        });
+      if (!world.endless) {
+        a.hearts = MAX_HEARTS;
+        a.alive = true;
+        a.ghost = false;
+      } else if (a.alive) {
+        a.hearts = Math.min(MAX_HEARTS, a.hearts + 1);
+      } else if (!a.isHuman) {
+        // Respawn bots in endless so the island stays lively.
+        a.hearts = MAX_HEARTS;
+        a.alive = true;
+        a.ghost = false;
+      }
+      if (a.alive) {
+        if (a.y < GROUND_Y) {
+          a.x = spawns[i % spawns.length];
+          a.y = GROUND_Y + 0.2;
+        }
+        a.vx = 0; a.vy = 0;
+        a.invuln = 0.8;
       }
     }
   }
 
-  function triggerKO(world, actor) {
-    var otherHumanAlive = false;
-    for (var i = 0; i < world.actors.length; i++) {
-      var o = world.actors[i];
-      if (o !== actor && o.isHuman && o.state === 'alive') otherHumanAlive = true;
-    }
-    var canDrone = actor.isHuman && (otherHumanAlive || !actor.rescuedOnce);
-    if (canDrone) {
-      actor.state = 'drone';
-      actor.rescuedOnce = true;
-      actor.droneOrbs = 0;
-      actor.droneTimer = world.duo ? 12.0 : 6.5;
-      actor.vx = 0;
-      actor.vy = -120;
-      actor.y = Math.min(actor.y, 410);
-      actor.x = clamp(actor.x, 220, W - 220);
-      actor.gadget = null;
-      actor.gadgetT = 0;
-      spawnRescueOrbs(world);
-      world.events.push({ type: 'droneStart', x: actor.x, y: actor.y, slot: actor.slot });
-    } else {
-      actor.state = 'out';
-      for (var c = 0; c < 2; c++) {
-        world.coins.push({
-          x: clamp(actor.x + (c === 0 ? -22 : 22), 190, W - 190),
-          y: Math.min(actor.y, 500),
-          vx: (c === 0 ? -95 : 95), vy: -250, r: 13, life: 9
-        });
-      }
-      world.events.push({ type: 'ko', x: actor.x, y: actor.y, slot: actor.slot, human: actor.isHuman });
-    }
-  }
+  /* ---------------------------------------------------------- damage & coins */
+  function damageActor(world, a, knockX, knockY, reason) {
+    if (!a.alive || a.invuln > 0) return false;
+    a.hearts = Math.max(0, a.hearts - 1);
+    a.invuln = 1.15;
+    a.hurtT = 0.45;
+    a.vx = clamp(knockX || 0, -9.5, 9.5);
+    a.vy = Math.max(5.5, knockY || 7.2);
+    a.ground = false;
+    a.squash = 0.62;
+    world.events.push({ type: 'hit', actorId: a.id, isHuman: a.isHuman, humanIndex: a.humanIndex, x: a.x, y: a.y, reason: reason, hearts: a.hearts });
 
-  function hurtActor(world, actor, kbX, kbY) {
-    if (actor.state !== 'alive' || actor.invulnT > 0) return false;
-    if (actor.gadget === 'shield') {
-      actor.gadget = null;
-      actor.gadgetT = 0;
-      actor.invulnT = 1.0;
-      actor.vx = kbX * 0.5;
-      actor.vy = Math.min(-220, kbY * 0.6);
-      world.events.push({ type: 'hurt', x: actor.x, y: actor.y, slot: actor.slot, human: actor.isHuman, shielded: true });
-      return false;
+    if (a.hearts <= 0) {
+      a.alive = false;
+      a.ghost = true;
+      a.vx = 0;
+      a.vy = 2.5;
+      world.events.push({ type: 'ko', actorId: a.id, isHuman: a.isHuman, humanIndex: a.humanIndex, x: a.x, y: a.y, reason: reason });
     }
-    actor.hearts = Math.max(0, actor.hearts - 1);
-    actor.invulnT = 1.15;
-    actor.stunT = 0.25;
-    actor.vx = kbX || 0;
-    actor.vy = kbY || -340;
-    actor.onGround = false;
-    world.events.push({ type: 'hurt', x: actor.x, y: actor.y, slot: actor.slot, human: actor.isHuman, shielded: false });
-    if (actor.hearts <= 0) triggerKO(world, actor);
     return true;
   }
 
-  function hammerSlam(world, actor) {
-    var reach = 155;
-    world.events.push({ type: 'boom', x: actor.x, y: actor.y + 10, power: 0.85, hammer: true });
+  function rescueFromSea(world, a) {
+    var ok = damageActor(world, a, -Math.sign(a.x || 1) * 4.0, 9.0, 'sea');
+    if (a.alive) {
+      a.x = clamp(a.x, -7.0, 7.0);
+      a.y = Math.max(3.6, world.lavaY + 1.8);
+      a.vx = 0;
+      a.vy = 3.5;
+      a.invuln = 1.6;
+    } else if (!ok) {
+      // Already invuln while falling into sea -> still teleport back safely.
+      a.x = clamp(a.x, -7.0, 7.0);
+      a.y = Math.max(3.6, world.lavaY + 1.8);
+      a.vx = 0;
+      a.vy = 3.5;
+    }
+  }
+
+  /* ---------------------------------------------------------- disasters */
+  function pickTargetX(world, preferOutsideShelter) {
+    var cands = [];
     for (var i = 0; i < world.actors.length; i++) {
-      var o = world.actors[i];
-      if (o === actor || o.state !== 'alive') continue;
-      if (world.duo && world.duoMode === 'coop' && actor.isHuman && o.isHuman) continue;
-      var d = dist(actor.x, actor.y, o.x, o.y);
-      if (d < reach) {
-        var dir = o.x >= actor.x ? 1 : -1;
-        o.vx = dir * 560;
-        o.vy = -440;
-        o.stunT = 0.7;
-        o.onGround = false;
-        actor.score += 35;
-        actor.bonks++;
-        world.coins.push({ x: o.x, y: o.y - 18, vx: dir * 80, vy: -240, r: 13, life: 9 });
-        world.events.push({ type: 'bonk', x: o.x, y: o.y, attacker: actor.slot, victim: o.slot, head: false });
-      }
+      var a = world.actors[i];
+      if (!a.alive) continue;
+      if (preferOutsideShelter && inShelter(a)) continue;
+      cands.push(a);
+      // Weight human players slightly higher so standing still is always challenged.
+      if (a.isHuman) cands.push(a);
     }
-    for (var h = world.hazards.length - 1; h >= 0; h--) {
-      var hz = world.hazards[h];
-      if ((hz.kind === 'bomb' || hz.kind === 'boulder') && dist(actor.x, actor.y, hz.x, hz.y) < reach + 25) {
-        if (hz.kind === 'bomb') {
-          var bdir = hz.x >= actor.x ? 1 : -1;
-          hz.vx = bdir * 620;
-          hz.vy = -380;
-          hz.owner = actor.slot;
-        } else {
-          world.hazards.splice(h, 1);
-          actor.score += 20;
+    if (!cands.length) return lerp(-8.8, 8.8, world.rng());
+    var picked = cands[Math.floor(world.rng() * cands.length)];
+    return clamp(picked.x + (world.rng() - 0.5) * 0.9, -9.2, 9.2);
+  }
+
+  function surfaceYAt(x, nearY) {
+    var best = GROUND_Y;
+    var bestDist = Infinity;
+    for (var i = 0; i < PLATFORMS.length; i++) {
+      var p = PLATFORMS[i];
+      if (x >= p.x1 && x <= p.x2) {
+        if (nearY != null) {
+          var d = Math.abs(p.y - nearY);
+          if (d < bestDist) { bestDist = d; best = p.y; }
+        } else if (p.y > best) {
+          best = p.y;
         }
       }
     }
+    return best;
   }
 
-  function stepDrone(world, actor, inp, dt) {
-    actor.droneTimer -= dt;
-    var mx = inp ? clamp(inp.moveX || 0, -1, 1) : 0;
-    var my = inp ? ((inp.down ? 1 : 0) - ((inp.up || inp.jump) ? 1 : 0)) : 0;
-    if (actor.slot === 0 && actor.isHuman && mx !== 0) {
-      actor.walk += Math.abs(mx) * MOVE_SPEED * dt;
-    }
-    if (mx !== 0) actor.facing = mx > 0 ? 1 : -1;
-    var boost = inp && inp.dash ? 1.45 : 1.0;
-    var spd = 370 * boost;
-    actor.vx += (mx * spd - actor.vx) * Math.min(1, dt * 10);
-    actor.vy += (my * spd - actor.vy) * Math.min(1, dt * 10);
-    actor.x = clamp(actor.x + actor.vx * dt, 90, W - 90);
-    actor.y = clamp(actor.y + actor.vy * dt, 95, world.waterY - 50);
-
-    for (var i = world.orbs.length - 1; i >= 0; i--) {
-      var orb = world.orbs[i];
-      if (dist(actor.x, actor.y, orb.x, orb.y) < actor.r + orb.r + 10) {
-        world.orbs.splice(i, 1);
-        actor.droneOrbs++;
-        actor.score += 15;
-        world.events.push({ type: 'orb', x: orb.x, y: orb.y, slot: actor.slot, count: actor.droneOrbs });
+  function spawnMeteor(world, params) {
+    var targeted = world.rng() < 0.62;
+    var tx = targeted ? pickTargetX(world, false) : lerp(-9.2, 9.2, world.rng());
+    var ty = GROUND_Y;
+    if (targeted) {
+      // Match the height of the nearest alive actor around tx.
+      var near = null, nd = 2.5;
+      for (var i = 0; i < world.actors.length; i++) {
+        var a = world.actors[i];
+        if (a.alive && Math.abs(a.x - tx) < nd) { nd = Math.abs(a.x - tx); near = a; }
       }
-    }
-
-    if (world.duo && world.duoMode === 'coop') {
-      for (var p = 0; p < world.actors.length; p++) {
-        var ally = world.actors[p];
-        if (ally !== actor && ally.isHuman && ally.state === 'alive' && dist(actor.x, actor.y, ally.x, ally.y) < 54) {
-          actor.droneOrbs = 3;
-        }
-      }
-    }
-
-    if (actor.droneOrbs >= 3) {
-      actor.state = 'alive';
-      actor.hearts = Math.min(actor.maxHearts, world.diff === 'easy' ? 3 : 2);
-      actor.invulnT = 1.7;
-      actor.vx = 0;
-      actor.vy = -260;
-      actor.jumpsLeft = 2;
-      actor.score += 50;
-      world.events.push({ type: 'revive', x: actor.x, y: actor.y, slot: actor.slot });
-      return;
-    }
-
-    if (actor.droneTimer <= 0) {
-      var otherAlive = false;
-      for (var j = 0; j < world.actors.length; j++) {
-        if (world.actors[j] !== actor && world.actors[j].isHuman && world.actors[j].state === 'alive') otherAlive = true;
-      }
-      if (world.duo && otherAlive) {
-        actor.droneTimer = 8.0;
-        if (world.orbs.length < 3) spawnRescueOrbs(world);
-      } else {
-        actor.state = 'out';
-        world.events.push({ type: 'ko', x: actor.x, y: actor.y, slot: actor.slot, human: actor.isHuman });
-      }
-    }
-  }
-
-  function stepActor(world, actor, inp, dt) {
-    inp = inp || {};
-    var rawMx = clamp(inp.moveX || 0, -1, 1);
-    if (actor.state === 'out') {
-      if (actor.slot === 0 && actor.isHuman && rawMx !== 0) actor.walk += Math.abs(rawMx) * MOVE_SPEED * dt;
-      return;
-    }
-    if (actor.state === 'drone') { stepDrone(world, actor, inp, dt); return; }
-
-    if (actor.invulnT > 0) actor.invulnT = Math.max(0, actor.invulnT - dt);
-    if (actor.stunT > 0) actor.stunT = Math.max(0, actor.stunT - dt * (rawMx !== 0 ? 2.5 : 1));
-    if (actor.dashCd > 0) actor.dashCd = Math.max(0, actor.dashCd - dt);
-    if (actor.dropT > 0) actor.dropT = Math.max(0, actor.dropT - dt);
-    if (actor.flipT > 0) actor.flipT = Math.max(0, actor.flipT - dt);
-    if (actor.gadgetT > 0) {
-      actor.gadgetT -= dt;
-      if (actor.gadgetT <= 0) { actor.gadget = null; actor.gadgetT = 0; }
-    }
-
-    var mx = actor.stunT > 0 ? rawMx * 0.45 : rawMx;
-    // CRITICAL CONTRACT: player.walk ONLY increments from Player 1's own intentional horizontal input!
-    if (actor.slot === 0 && actor.isHuman && rawMx !== 0) {
-      actor.walk += Math.abs(rawMx) * MOVE_SPEED * dt;
-    }
-    if (rawMx !== 0) actor.facing = rawMx > 0 ? 1 : -1;
-
-    if (inp.down && actor.onGround) {
-      actor.dropT = 0.22;
-      actor.onGround = false;
-    } else if (inp.down && !actor.onGround && actor.vy < 460) {
-      actor.vy += 900 * dt;
-    }
-
-    if (actor.onGround) {
-      actor.coyoteT = 0.11;
-      actor.jumpsLeft = 2;
-    } else if (actor.coyoteT > 0) {
-      actor.coyoteT = Math.max(0, actor.coyoteT - dt);
-    }
-
-    if (inp.jumpPressed) actor.jumpBufT = 0.11;
-    else if (actor.jumpBufT > 0) actor.jumpBufT = Math.max(0, actor.jumpBufT - dt);
-
-    var inGrav = world.isl.gravZone && actor.x >= world.isl.gravZone.x && actor.x <= world.isl.gravZone.x + world.isl.gravZone.w;
-    var jumpBoost = inGrav ? 1.18 : 1.0;
-
-    if (actor.jumpBufT > 0 && actor.stunT <= 0) {
-      if (actor.coyoteT > 0) {
-        actor.vy = JUMP_VY * jumpBoost;
-        actor.onGround = false;
-        actor.coyoteT = 0;
-        actor.jumpsLeft = 1;
-        actor.jumpBufT = 0;
-        world.events.push({ type: 'jump', x: actor.x, y: actor.y + actor.r, double: false, human: actor.isHuman });
-      } else if (actor.jumpsLeft > 0) {
-        actor.vy = DJUMP_VY * jumpBoost;
-        actor.jumpsLeft--;
-        actor.jumpBufT = 0;
-        actor.flipT = 0.36;
-        world.events.push({ type: 'jump', x: actor.x, y: actor.y + actor.r, double: true, human: actor.isHuman });
-      }
-    }
-
-    if (actor.gadget === 'jetpack' && (inp.jump || inp.up) && actor.stunT <= 0) {
-      actor.vy = Math.max(-390, actor.vy - 2200 * dt);
-      actor.onGround = false;
-    }
-
-    if (inp.dashPressed && actor.dashCd <= 0 && actor.stunT <= 0) {
-      actor.dashT = DASH_DUR;
-      actor.dashCd = DASH_CD;
-      actor.vx = actor.facing * DASH_SPEED;
-      actor.vy = Math.min(actor.vy, -40);
-      if (actor.invulnT < 0.18) actor.invulnT = 0.18;
-      var hasHammer = actor.gadget === 'hammer';
-      world.events.push({ type: 'dash', x: actor.x, y: actor.y, dir: actor.facing, trail: actor.trail, hammer: hasHammer, human: actor.isHuman });
-      if (hasHammer) hammerSlam(world, actor);
-    }
-
-    if (actor.dashT > 0) {
-      actor.dashT = Math.max(0, actor.dashT - dt);
-      actor.vx = actor.facing * DASH_SPEED;
-      actor.vy *= 0.86;
+      ty = near ? surfaceYAt(tx, near.y) : surfaceYAt(tx, null);
     } else {
-      var targetVx = mx * MOVE_SPEED + world.windX;
-      var accel = mx !== 0 ? 14 : (actor.onGround ? (1 - world.isl.friction) * 48 : 5);
-      actor.vx += (targetVx - actor.vx) * Math.min(1, accel * dt);
-      var gMul = inGrav ? 0.68 : 1.0;
-      actor.vy = Math.min(860, actor.vy + GRAVITY * gMul * dt);
+      ty = world.rng() < 0.45 ? surfaceYAt(tx, null) : GROUND_Y;
     }
+    var tel = params.telegraph;
+    world.meteors.push({
+      x: tx, y: ty + 16.0, tx: tx, ty: ty,
+      t: 0, telegraph: tel, hit: false, fade: 0, r: 1.48
+    });
+    world.events.push({ type: 'telegraph', kind: 'meteor', x: tx, y: ty });
+  }
 
-    var prevBottom = actor.y + actor.r;
-    actor.x += actor.vx * dt;
-    actor.y += actor.vy * dt;
-    actor.x = clamp(actor.x, 70, W - 70);
+  function spawnLightning(world, params) {
+    var targeted = world.rng() < 0.65;
+    var tx = targeted ? pickTargetX(world, false) : lerp(-9.2, 9.2, world.rng());
+    var ty = GROUND_Y;
+    // Lightning stops on shelter roof if targeting above the shelter.
+    if (tx >= SHELTER.x1 && tx <= SHELTER.x2) ty = 3.0;
+    else ty = surfaceYAt(tx, null);
+    world.bolts.push({
+      x: tx, y: ty, t: 0, telegraph: params.telegraph * 0.92,
+      struck: false, fade: 0, r: 1.38
+    });
+    world.events.push({ type: 'telegraph', kind: 'lightning', x: tx, y: ty });
+  }
 
-    // Side rescue / glacier bumpers
-    for (var b = 0; b < world.bumpers.length; b++) {
-      var bx = world.bumpers[b];
-      if (Math.abs(actor.x - bx) < actor.r + 18 && Math.abs(actor.y - 525) < 48) {
-        var pushDir = bx < W / 2 ? 1 : -1;
-        actor.vx = pushDir * 460;
-        actor.vy = -340;
-        actor.onGround = false;
-        world.events.push({ type: 'jump', x: bx, y: 525, double: false, human: actor.isHuman });
+  function spawnCoconut(world, params) {
+    var dir = world.rng() < 0.5 ? 1 : -1;
+    var startX = dir > 0 ? -10.4 : 10.4;
+    // Mostly roll along the ground deck; occasionally drop on the upper bridge!
+    var high = world.rng() < 0.24;
+    var startY = high ? 3.0 + 0.85 : GROUND_Y + 0.92;
+    if (high) startX = dir > 0 ? -7.4 : 8.6;
+    world.coconuts.push({
+      x: startX, y: startY, vx: dir * params.coconutSpeed, vy: 0,
+      r: 0.92, rot: 0, warnT: 0.72, dir: dir, alive: true
+    });
+    world.events.push({ type: 'telegraph', kind: 'coconuts', x: startX, y: startY, dir: dir });
+  }
+
+  function spawnQuakeWave(world, params) {
+    // Place 3 glowing magma fissures; always place one right under an alive human!
+    var centers = [];
+    for (var i = 0; i < world.actors.length; i++) {
+      var a = world.actors[i];
+      if (a.isHuman && a.alive && a.y < 3.6) centers.push(clamp(a.x, -8.5, 8.5));
+    }
+    while (centers.length < 3) {
+      var cx = lerp(-8.4, 8.4, world.rng());
+      var ok = true;
+      for (var j = 0; j < centers.length; j++) if (Math.abs(centers[j] - cx) < 2.6) ok = false;
+      if (ok) centers.push(cx);
+    }
+    for (var k = 0; k < centers.length; k++) {
+      var x = centers[k];
+      var y = k === 0 && world.actors[0] && world.actors[0].alive && world.actors[0].y > 2.4 && world.actors[0].y < 3.6
+        ? surfaceYAt(x, world.actors[0].y) : GROUND_Y;
+      world.cracks.push({
+        x: x, y: y, w: 2.75, t: 0,
+        telegraph: params.telegraph * 0.95, eruptDur: 1.15,
+        erupted: false, done: false
+      });
+    }
+    world.quakeShake = 0.55;
+    world.events.push({ type: 'telegraph', kind: 'quake', x: centers[0], y: GROUND_Y });
+  }
+
+  function stepDisaster(world, dt, params) {
+    var d = world.disaster;
+
+    if (d === 'meteor') {
+      world.spawnAcc -= dt;
+      if (world.spawnAcc <= 0 && world.t < ROUND_TIME - 1.2) {
+        world.spawnAcc = params.meteorEvery * (0.85 + world.rng() * 0.3);
+        spawnMeteor(world, params);
+      }
+    } else if (d === 'flood') {
+      // Rise smoothly from t = 0.3 to t = 2.4, hold high until t = 8.8, then recede.
+      if (world.t < 2.4) {
+        var u = clamp((world.t - 0.2) / 2.2, 0, 1);
+        world.lavaTargetY = lerp(-1.65, params.floodPeak, u * u * (3 - 2 * u));
+      } else if (world.t < ROUND_TIME - 1.8) {
+        world.lavaTargetY = params.floodPeak + Math.sin(world.t * 3.5) * 0.12;
+      } else {
+        var r = clamp((world.t - (ROUND_TIME - 1.8)) / 1.8, 0, 1);
+        world.lavaTargetY = lerp(params.floodPeak, -1.65, r);
+      }
+      // Sizzle any actor submerged in lava!
+      for (var fi = 0; fi < world.actors.length; fi++) {
+        var fa = world.actors[fi];
+        if (fa.alive && fa.y < world.lavaY - 0.08) {
+          damageActor(world, fa, (world.rng() - 0.5) * 3.0, 9.8, 'flood');
+        }
+      }
+    } else if (d === 'tornado') {
+      if (!world.tornado) {
+        var startDir = world.rng() < 0.5 ? 1 : -1;
+        world.tornado = {
+          x: startDir > 0 ? -9.4 : 9.4,
+          vx: startDir * params.tornadoSpeed,
+          r: 1.55,
+          t: 0,
+          active: false
+        };
+        world.events.push({ type: 'telegraph', kind: 'tornado', x: world.tornado.x, y: GROUND_Y });
+      }
+      var tor = world.tornado;
+      tor.t += dt;
+      tor.active = tor.t > 0.75;
+      if (tor.active) {
+        tor.x += tor.vx * dt;
+        if (tor.x > 8.6) { tor.x = 8.6; tor.vx = -Math.abs(params.tornadoSpeed); }
+        if (tor.x < -8.6) { tor.x = -8.6; tor.vx = Math.abs(params.tornadoSpeed); }
+        for (var ti = 0; ti < world.actors.length; ti++) {
+          var ta = world.actors[ti];
+          if (!ta.alive) continue;
+          if (inShelter(ta)) continue; // Stone shelter protects from tornado pull!
+          var dx = tor.x - ta.x;
+          var adx = Math.abs(dx);
+          if (adx < 8.5) {
+            var pull = (1 - adx / 8.5) * params.tornadoPull;
+            ta.vx += Math.sign(dx || 1) * pull * dt;
+          }
+          if (adx < tor.r && ta.y < 4.5) {
+            damageActor(world, ta, Math.sign(ta.x - tor.x || tor.vx || 1) * 7.8, 10.2, 'tornado');
+          }
+        }
+      }
+    } else if (d === 'lightning') {
+      world.spawnAcc -= dt;
+      if (world.spawnAcc <= 0 && world.t < ROUND_TIME - 1.2) {
+        world.spawnAcc = params.lightningEvery * (0.85 + world.rng() * 0.3);
+        spawnLightning(world, params);
+      }
+    } else if (d === 'coconuts') {
+      world.spawnAcc -= dt;
+      if (world.spawnAcc <= 0 && world.t < ROUND_TIME - 1.0) {
+        world.spawnAcc = params.coconutEvery * (0.85 + world.rng() * 0.3);
+        spawnCoconut(world, params);
+      }
+    } else if (d === 'quake') {
+      world.spawnAcc -= dt;
+      if (world.spawnAcc <= 0 && world.t < ROUND_TIME - 1.5) {
+        world.spawnAcc = params.quakeEvery;
+        spawnQuakeWave(world, params);
       }
     }
 
-    // Island springs (Dino Ruins)
-    for (var s = 0; s < world.isl.springs.length; s++) {
-      var sx = world.isl.springs[s];
-      if (actor.vy >= 0 && Math.abs(actor.x - sx) < 30 && actor.y + actor.r >= 538 && actor.y + actor.r <= 572) {
-        actor.vy = -760;
-        actor.onGround = false;
-        actor.jumpsLeft = 2;
-        actor.flipT = 0.4;
-        world.events.push({ type: 'jump', x: sx, y: 550, double: true, human: actor.isHuman });
+    // Endless high-wave twist: bonus stray meteors on waves >= 5 (round index >= 5).
+    if (world.endless && world.round >= 5 && d !== 'meteor') {
+      world.subAcc -= dt;
+      if (world.subAcc <= 0 && world.t < ROUND_TIME - 1.5) {
+        world.subAcc = 2.4;
+        spawnMeteor(world, params);
+      }
+    }
+  }
+
+  function updateHazards(world, dt) {
+    // Smooth lava level
+    world.lavaY = lerp(world.lavaY, world.lavaTargetY, Math.min(1, dt * 7));
+    if (world.quakeShake > 0) world.quakeShake = Math.max(0, world.quakeShake - dt * 1.1);
+
+    // Meteors
+    for (var mi = world.meteors.length - 1; mi >= 0; mi--) {
+      var m = world.meteors[mi];
+      m.t += dt;
+      if (!m.hit) {
+        var prog = clamp(m.t / m.telegraph, 0, 1);
+        // Drop smoothly from sky once past 45% of telegraph
+        var fallU = prog < 0.45 ? 0 : (prog - 0.45) / 0.55;
+        m.y = lerp(m.ty + 17.0, m.ty + 0.5, fallU * fallU);
+        if (m.t >= m.telegraph) {
+          m.hit = true;
+          m.y = m.ty + 0.4;
+          world.events.push({ type: 'impact', kind: 'meteor', x: m.tx, y: m.ty });
+          for (var ai = 0; ai < world.actors.length; ai++) {
+            var a = world.actors[ai];
+            if (!a.alive) continue;
+            var dx = a.x - m.tx;
+            var dy = (a.y + 0.5) - (m.ty + 0.5);
+            if (Math.hypot(dx, dy) < m.r + ACTOR_R * 0.7) {
+              damageActor(world, a, Math.sign(dx || (world.rng() - 0.5)) * 7.2, 8.6, 'meteor');
+            }
+          }
+        }
+      } else {
+        m.fade += dt;
+        if (m.fade > 0.42) world.meteors.splice(mi, 1);
       }
     }
 
-    // Platform landing + carrying (moving platforms move actor.x directly, NEVER actor.walk!)
-    var landed = false;
-    var newBottom = actor.y + actor.r;
-    if (actor.vy >= 0) {
-      for (var p = 0; p < world.plats.length; p++) {
-        var pl = world.plats[p];
-        if (pl.sunkT > 0) continue;
-        if (pl.oneWay && actor.dropT > 0) continue;
-        if (actor.x + 13 > pl.x && actor.x - 13 < pl.x + pl.w) {
-          if (prevBottom <= pl.y + 10 && newBottom >= pl.y) {
-            var wasAir = !actor.onGround && actor.vy > 180;
-            actor.y = pl.y - actor.r;
-            actor.vy = 0;
-            actor.onGround = true;
-            actor.groundId = pl.id;
-            actor.x = clamp(actor.x + pl.dx, 70, W - 70);
-            landed = true;
-            if (wasAir) world.events.push({ type: 'land', x: actor.x, y: pl.y, human: actor.isHuman });
+    // Lightning bolts
+    for (var bi = world.bolts.length - 1; bi >= 0; bi--) {
+      var b = world.bolts[bi];
+      b.t += dt;
+      if (!b.struck) {
+        if (b.t >= b.telegraph) {
+          b.struck = true;
+          world.events.push({ type: 'impact', kind: 'lightning', x: b.x, y: b.y });
+          for (var aj = 0; aj < world.actors.length; aj++) {
+            var a2 = world.actors[aj];
+            if (!a2.alive) continue;
+            if (inShelter(a2) && b.y >= 2.8) continue; // Shelter roof absorbs bolt!
+            if (Math.abs(a2.x - b.x) < b.r && a2.y >= b.y - 0.5) {
+              damageActor(world, a2, Math.sign(a2.x - b.x || 1) * 6.5, 8.2, 'lightning');
+            }
+          }
+        }
+      } else {
+        b.fade += dt;
+        if (b.fade > 0.36) world.bolts.splice(bi, 1);
+      }
+    }
+
+    // Giant rolling coconuts
+    for (var ci = world.coconuts.length - 1; ci >= 0; ci--) {
+      var c = world.coconuts[ci];
+      if (c.warnT > 0) {
+        c.warnT -= dt;
+        continue;
+      }
+      c.vy -= GRAVITY * dt;
+      c.x += c.vx * dt;
+      c.y += c.vy * dt;
+      c.rot -= (c.vx * dt) / c.r;
+      // Support on platforms & ground
+      for (var pi = 0; pi < PLATFORMS.length; pi++) {
+        var pl = PLATFORMS[pi];
+        if (c.x >= pl.x1 - 0.2 && c.x <= pl.x2 + 0.2 && c.vy <= 0) {
+          var surf = pl.y + c.r;
+          if (c.y <= surf && c.y >= surf - 0.75) {
+            c.y = surf;
+            c.vy = Math.abs(c.vy) > 4.0 ? Math.abs(c.vy) * 0.42 : 0;
+          }
+        }
+      }
+      // Hit actors
+      for (var ak = 0; ak < world.actors.length; ak++) {
+        var a3 = world.actors[ak];
+        if (!a3.alive) continue;
+        var cdx = a3.x - c.x;
+        var cdy = (a3.y + 0.55) - c.y;
+        if (Math.hypot(cdx, cdy) < c.r + ACTOR_R * 0.72) {
+          damageActor(world, a3, Math.sign(c.vx || cdx || 1) * 8.4, 8.4, 'coconuts');
+        }
+      }
+      if (c.x < -12.8 || c.x > 12.8 || c.y < -3.0) world.coconuts.splice(ci, 1);
+    }
+
+    // Earthquake magma cracks
+    for (var qi = world.cracks.length - 1; qi >= 0; qi--) {
+      var q = world.cracks[qi];
+      q.t += dt;
+      if (!q.erupted && q.t >= q.telegraph) {
+        q.erupted = true;
+        world.quakeShake = Math.max(world.quakeShake, 0.85);
+        world.events.push({ type: 'impact', kind: 'quake', x: q.x, y: q.y });
+      }
+      if (q.erupted) {
+        var et = q.t - q.telegraph;
+        if (et < q.eruptDur) {
+          for (var al = 0; al < world.actors.length; al++) {
+            var a4 = world.actors[al];
+            if (!a4.alive) continue;
+            if (Math.abs(a4.x - q.x) < q.w * 0.5 + 0.15 && Math.abs(a4.y - q.y) < 1.35) {
+              damageActor(world, a4, Math.sign(a4.x - q.x || 1) * 5.8, 9.5, 'quake');
+            }
+          }
+        } else {
+          world.cracks.splice(qi, 1);
+        }
+      }
+    }
+  }
+
+  /* ---------------------------------------------------------- actor physics */
+  function stepActor(world, a, dt, input) {
+    if (a.invuln > 0) a.invuln = Math.max(0, a.invuln - dt);
+    if (a.hurtT > 0) a.hurtT = Math.max(0, a.hurtT - dt);
+    if (a.bumpCd > 0) a.bumpCd = Math.max(0, a.bumpCd - dt);
+    if (a.dropT > 0) a.dropT = Math.max(0, a.dropT - dt);
+    a.squash = lerp(a.squash, 1, Math.min(1, dt * 14));
+
+    if (!a.alive) {
+      // Cute cheering ghost bobbing gently over the island!
+      a.x += Math.sin(world.frames * 0.03 + a.slot * 1.7) * 0.8 * dt;
+      a.x = clamp(a.x, -8.5, 8.5);
+      a.y = lerp(a.y, 6.2 + Math.sin(world.frames * 0.06 + a.slot) * 0.45, Math.min(1, dt * 3));
+      a.sheltered = false;
+      return;
+    }
+
+    var mx = clamp(input.moveX || 0, -1, 1);
+    var jumpPressed = !!input.jumpPressed;
+    var jumpDown = !!input.jumpDown;
+    var downPressed = !!input.downPressed;
+
+    // Record intentional human movement/jump ONLY (never external forces!).
+    if (a.isHuman) {
+      if (Math.abs(mx) > 0.05) {
+        a.walk += Math.abs(mx) * 60 * dt;
+        world.humanMoved = true;
+      }
+      if (jumpPressed) {
+        a.walk += 12;
+        world.humanMoved = true;
+      }
+    }
+
+    if (mx !== 0) a.facing = mx > 0 ? 1 : -1;
+
+    var targetVx = mx * MOVE_SPEED;
+    var accel = a.ground ? (mx !== 0 ? 58 : 44) : (mx !== 0 ? 34 : 7);
+    var dv = targetVx - a.vx;
+    var maxDv = accel * dt;
+    a.vx += clamp(dv, -maxDv, maxDv);
+    a.vx = clamp(a.vx, -12.0, 12.0);
+
+    // Coyote time & jump buffer
+    if (a.ground) a.coyote = COYOTE_TIME;
+    else a.coyote = Math.max(0, a.coyote - dt);
+
+    if (jumpPressed) a.jumpBuf = JUMP_BUFFER;
+    else a.jumpBuf = Math.max(0, a.jumpBuf - dt);
+
+    // Drop through one-way platforms
+    if (downPressed && a.ground && a.platId !== 'ground') {
+      a.dropT = 0.24;
+      a.ground = false;
+      a.coyote = 0;
+      a.y -= 0.08;
+      a.vy = -2.2;
+    }
+
+    // Execute buffered/coyote jump
+    if (a.jumpBuf > 0 && a.coyote > 0) {
+      a.vy = JUMP_V;
+      a.ground = false;
+      a.coyote = 0;
+      a.jumpBuf = 0;
+      a.squash = 1.28;
+      world.events.push({ type: 'jump', actorId: a.id, isHuman: a.isHuman, x: a.x, y: a.y });
+    }
+
+    // Variable jump height cut when button released early
+    if (!jumpDown && a.jumpHeld && a.vy > 5.0) {
+      a.vy *= 0.58;
+    }
+    a.jumpHeld = jumpDown;
+
+    // Gravity & integrate
+    var prevY = a.y;
+    a.vy = Math.max(-22.0, a.vy - GRAVITY * dt);
+    a.x += a.vx * dt;
+    a.y += a.vy * dt;
+
+    // Platform landing collision (one-way & solid ground)
+    var wasGround = a.ground;
+    a.ground = false;
+    a.platId = '';
+    if (a.vy <= 0) {
+      for (var i = 0; i < PLATFORMS.length; i++) {
+        var p = PLATFORMS[i];
+        if (!p.solid && a.dropT > 0) continue;
+        if (a.x + ACTOR_R * 0.65 >= p.x1 && a.x - ACTOR_R * 0.65 <= p.x2) {
+          if (prevY >= p.y - 0.12 && a.y <= p.y + 0.02) {
+            a.y = p.y;
+            a.vy = 0;
+            a.ground = true;
+            a.platId = p.id;
+            if (!wasGround) {
+              a.squash = 0.78;
+              world.events.push({ type: 'land', actorId: a.id, isHuman: a.isHuman, x: a.x, y: a.y });
+            }
             break;
           }
         }
       }
     }
-    if (!landed) actor.onGround = false;
 
-    // Water / Magma hazard check
-    if (actor.y + actor.r > world.waterY + 6) {
-      var centerDir = actor.x < W / 2 ? 1 : -1;
-      actor.vy = -700;
-      actor.vx = centerDir * 290;
-      actor.y = world.waterY - actor.r - 4;
-      actor.jumpsLeft = 2;
-      hurtActor(world, actor, centerDir * 290, -700);
+    // Bouncy Tiki Drum
+    if (a.vy <= 0.5 && Math.abs(a.x - DRUM.x) <= DRUM.r && a.y >= DRUM.y - 0.15 && a.y <= DRUM.y + 0.65) {
+      a.vy = DRUM_BOUNCE_V;
+      a.ground = false;
+      a.coyote = 0;
+      a.squash = 1.38;
+      world.drumBounceT = 0.35;
+      world.events.push({ type: 'bounce', actorId: a.id, isHuman: a.isHuman, x: DRUM.x, y: DRUM.y });
+    }
+
+    // Keep characters near island bounds softly unless knocked off
+    if (a.x < -12.5) a.x = -12.5;
+    if (a.x > 12.5) a.x = 12.5;
+
+    // Sea fall rescue
+    if (a.y < SEA_KILL_Y) {
+      rescueFromSea(world, a);
+    }
+
+    // Shelter indicator
+    a.sheltered = inShelter(a);
+
+    // Run cycle animation
+    if (a.ground && Math.abs(a.vx) > 0.6) a.runPhase += Math.abs(a.vx) * dt * 2.1;
+    else a.runPhase *= 0.85;
+
+    // Collect coins
+    for (var ci = 0; ci < world.coins.length; ci++) {
+      var c = world.coins[ci];
+      if (c.taken) continue;
+      if (Math.hypot(a.x - c.x, (a.y + 0.6) - c.y) < 1.05) {
+        c.taken = true;
+        a.coins += 1;
+        a.score += 15;
+        world.events.push({ type: 'coin', actorId: a.id, isHuman: a.isHuman, x: c.x, y: c.y });
+      }
     }
   }
 
-  function resolveBrawl(world) {
+  /* ---------------------------------------------------------- playful bumping */
+  function resolveBumps(world) {
     var list = world.actors;
     for (var i = 0; i < list.length; i++) {
       var a = list[i];
-      if (a.state !== 'alive') continue;
-
-      // Crates pickup / smash
-      for (var c = world.crates.length - 1; c >= 0; c--) {
-        var cr = world.crates[c];
-        if (dist(a.x, a.y, cr.x, cr.y) < a.r + cr.r + 6) {
-          world.crates.splice(c, 1);
-          a.gadget = cr.gadget;
-          a.gadgetT = GADGETS[cr.gadget].dur;
-          a.score += 30;
-          world.events.push({ type: 'crate', x: cr.x, y: cr.y, gadget: cr.gadget, name: GADGETS[cr.gadget].name, slot: a.slot, human: a.isHuman });
-        }
-      }
-
-      // Coins pickup (stunned rivals cannot vacuum up coins knocked out of them!)
-      if (a.stunT <= 0) {
-        for (var k = world.coins.length - 1; k >= 0; k--) {
-          var cn = world.coins[k];
-          if (cn.grace > 0) continue;
-          if (dist(a.x, a.y, cn.x, cn.y) < a.r + cn.r + 6) {
-            world.coins.splice(k, 1);
-            a.coins++;
-            a.score += 10;
-            world.events.push({ type: 'coin', x: cn.x, y: cn.y, slot: a.slot, human: a.isHuman });
-          }
-        }
-      }
-
-      // Belly-Dash instantly punts ticking bombs on the exact frame of contact!
-      if (a.dashT > 0) {
-        for (var bh = 0; bh < world.hazards.length; bh++) {
-          var bhz = world.hazards[bh];
-          if (bhz.kind === 'bomb' && bhz.owner !== a.slot && dist(a.x, a.y, bhz.x, bhz.y) < a.r + bhz.r + 16) {
-            bhz.vx = a.facing * 640;
-            bhz.vy = -340;
-            bhz.fuse = Math.max(bhz.fuse, 0.75);
-            bhz.owner = a.slot;
-            a.score += 15;
-            world.events.push({ type: 'bonk', x: bhz.x, y: bhz.y, attacker: a.slot, victim: -1, head: false });
-          }
-        }
-      }
-
-      // Actor vs Actor active brawl (Belly-Dash, Electric Shield Zap, Head-Bonk)
+      if (!a.alive) continue;
       for (var j = i + 1; j < list.length; j++) {
         var b = list[j];
-        if (b.state !== 'alive') continue;
-        var dx = b.x - a.x, dy = b.y - a.y;
-        var d = Math.sqrt(dx * dx + dy * dy);
-        var minD = a.r + b.r;
-        if (d >= minD || d === 0) continue;
-
-        var coopPair = world.duo && world.duoMode === 'coop' && a.isHuman && b.isHuman;
-        if (coopPair) continue;
-
-        var nx = dx / d;
-        var overlap = (minD - d) * 0.5;
-        a.x -= nx * overlap;
-        b.x += nx * overlap;
-
-        // Head-bonk check (falling onto rival's head)
-        if (a.vy > 80 && a.y < b.y - 12 && b.stunT <= 0) {
-          a.vy = -490; a.jumpsLeft = 2;
-          b.vx = (dx >= 0 ? 1 : -1) * 260; b.vy = 120; b.stunT = 0.65;
-          a.score += 30; a.bonks++;
-          world.coins.push({ x: b.x, y: b.y - 20, vx: (dx >= 0 ? 90 : -90), vy: -240, r: 13, life: 9 });
-          world.events.push({ type: 'bonk', x: b.x, y: b.y - 10, attacker: a.slot, victim: b.slot, head: true });
-          continue;
-        }
-        if (b.vy > 80 && b.y < a.y - 12 && a.stunT <= 0) {
-          b.vy = -490; b.jumpsLeft = 2;
-          a.vx = (dx >= 0 ? -1 : 1) * 260; a.vy = 120; a.stunT = 0.65;
-          b.score += 30; b.bonks++;
-          world.coins.push({ x: a.x, y: a.y - 20, vx: (dx >= 0 ? -90 : 90), vy: -240, r: 13, life: 9 });
-          world.events.push({ type: 'bonk', x: a.x, y: a.y - 10, attacker: b.slot, victim: a.slot, head: true });
-          continue;
-        }
-
-        // Belly-Dash or Shield Zap! (Human hero wins mutual dash clashes against bots!)
-        var aAttack = a.dashT > 0 || a.gadget === 'shield';
-        var bAttack = b.dashT > 0 || b.gadget === 'shield';
-        if (aAttack && (!bAttack || (a.isHuman && b.isBot)) && b.stunT <= 0) {
-          var dirA = dx >= 0 ? 1 : -1;
-          b.vx = dirA * 510; b.vy = -320; b.stunT = 0.55; b.onGround = false;
-          a.vx = -dirA * 140; a.dashT = 0;
-          a.score += 25; a.bonks++;
-          world.coins.push({ x: b.x, y: b.y - 18, vx: -dirA * 95, vy: -260, r: 13, life: 9, grace: 0.22 });
-          world.events.push({ type: 'bonk', x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, attacker: a.slot, victim: b.slot, head: false });
-        } else if (bAttack && !aAttack && a.stunT <= 0) {
-          var dirB = dx >= 0 ? -1 : 1;
-          a.vx = dirB * 510; a.vy = -320; a.stunT = 0.55; a.onGround = false;
-          b.vx = -dirB * 140; b.dashT = 0;
-          b.score += 25; b.bonks++;
-          world.coins.push({ x: a.x, y: a.y - 18, vx: -dirB * 95, vy: -260, r: 13, life: 9, grace: 0.22 });
-          world.events.push({ type: 'bonk', x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, attacker: b.slot, victim: a.slot, head: false });
-        } else {
-          a.vx -= nx * 130;
-          b.vx += nx * 130;
+        if (!b.alive) continue;
+        var dx = b.x - a.x;
+        var dy = b.y - a.y;
+        var adx = Math.abs(dx);
+        var ady = Math.abs(dy);
+        if (adx < ACTOR_R * 1.95 && ady < ACTOR_H * 0.78) {
+          // Head bounce!
+          if (dy > 0.45 && b.vy < -1.0) {
+            b.vy = 8.4;
+            b.squash = 1.22;
+            a.squash = 0.74;
+            if (b.bumpCd <= 0) {
+              b.bumpCd = 0.35;
+              world.events.push({ type: 'bump', x: (a.x + b.x) * 0.5, y: b.y, human: a.isHuman || b.isHuman });
+            }
+            continue;
+          }
+          if (dy < -0.45 && a.vy < -1.0) {
+            a.vy = 8.4;
+            a.squash = 1.22;
+            b.squash = 0.74;
+            if (a.bumpCd <= 0) {
+              a.bumpCd = 0.35;
+              world.events.push({ type: 'bump', x: (a.x + b.x) * 0.5, y: a.y, human: a.isHuman || b.isHuman });
+            }
+            continue;
+          }
+          // Gentle horizontal boing (never shove a sheltered player out of cover!)
+          var dir = dx >= 0 ? 1 : -1;
+          var overlap = ACTOR_R * 1.95 - adx;
+          var aShel = inShelter(a), bShel = inShelter(b);
+          if (aShel && !bShel) {
+            b.x += dir * overlap * 0.8;
+          } else if (bShel && !aShel) {
+            a.x -= dir * overlap * 0.8;
+          } else {
+            a.x -= dir * overlap * 0.45;
+            b.x += dir * overlap * 0.45;
+            if (aShel) a.x = clamp(a.x, SHELTER.x1 + 0.12, SHELTER.x2 - 0.12);
+            if (bShel) b.x = clamp(b.x, SHELTER.x1 + 0.12, SHELTER.x2 - 0.12);
+          }
+          if (a.bumpCd <= 0 && b.bumpCd <= 0 && !aShel && !bShel && Math.abs(a.vx - b.vx) > 2.2) {
+            var impulse = clamp(Math.abs(a.vx - b.vx) * 0.42, 1.8, 4.6);
+            a.vx -= dir * impulse;
+            b.vx += dir * impulse;
+            a.squash = 0.82;
+            b.squash = 0.82;
+            a.bumpCd = 0.35;
+            b.bumpCd = 0.35;
+            world.events.push({ type: 'bump', x: (a.x + b.x) * 0.5, y: (a.y + b.y) * 0.5 + 0.5, human: a.isHuman || b.isHuman });
+          }
         }
       }
     }
   }
 
-  function spawnDisasterBeat(world, kind) {
-    var rng = world.rng, warn = world.diffCfg.warn, sp = world.speedMul;
-    if (kind === 'meteors') {
-      var tx = 210 + rng() * (W - 420);
-      world.hazards.push({
-        kind: 'meteor', x: tx + (rng() - 0.5) * 140, y: -40,
-        tx: tx, ty: 556, vx: 0, vy: 560 * sp, warnT: warn, r: 26, active: false
-      });
-    } else if (kind === 'bombs') {
-      var bx = 230 + rng() * (W - 460);
-      world.hazards.push({
-        kind: 'bomb', x: bx, y: -30, vx: (rng() - 0.5) * 140, vy: 80,
-        r: 20, fuse: 2.5 / Math.sqrt(sp), owner: -1
-      });
-    } else if (kind === 'boulders') {
-      var fromLeft = rng() < 0.5;
-      world.hazards.push({
-        kind: 'boulder', x: fromLeft ? 95 : W - 95, y: 520,
-        vx: (fromLeft ? 1 : -1) * 310 * sp, vy: -120,
-        warnT: warn, r: 30, rot: 0, bounces: 0
-      });
-    } else if (kind === 'ufo') {
-      var hasUfo = world.hazards.some(function (h) { return h.kind === 'ufo'; });
-      if (!hasUfo) {
-        world.hazards.push({
-          kind: 'ufo', x: 260 + rng() * (W - 520), y: 125,
-          vx: (rng() < 0.5 ? 1 : -1) * 210 * sp,
-          beamWarn: warn, beamOn: 0, cycle: 0.4, r: 44
-        });
+  /* ---------------------------------------------------------- bot & coach AI */
+  function planActorAI(world, a, skill) {
+    skill = skill == null ? 0.75 : skill;
+    var out = { moveX: 0, jumpPressed: false, jumpDown: false, downPressed: false };
+    if (!a.alive) return out;
+
+    // Title demo: playful island exploration
+    if (world.demo) {
+      if (Math.abs(a.aiTargetX - a.x) < 0.8 || world.frames % 120 === (a.slot * 23) % 120) {
+        a.aiTargetX = lerp(-8.0, 8.0, world.rng());
       }
-    } else if (kind === 'shark') {
-      var dir = rng() < 0.5 ? 1 : -1;
-      world.hazards.push({
-        kind: 'shark', x: dir > 0 ? 80 : W - 80, y: world.waterY + 10,
-        vx: dir * 430 * sp, vy: -520, warnT: warn * 0.85, r: 28
-      });
-    } else if (kind === 'sinking') {
-      var candidates = world.plats.filter(function (p) { return p.sunkT <= 0 && p.sinkWarn <= 0; });
-      var safeDeckCount = world.plats.filter(function (p) { return !p.oneWay && p.sunkT <= 0 && p.sinkWarn <= 0; }).length;
-      if (candidates.length > 2) {
-        var pick = candidates[Math.floor(rng() * candidates.length)];
-        if (pick.oneWay || safeDeckCount >= 2) {
-          pick.sinkWarn = warn + 0.35;
-        }
-      }
-    }
-  }
-
-  function stepDisasters(world, dt) {
-    var entry = world.plan[world.round] || world.plan[0];
-    var subs = entry.sub;
-    var sp = world.speedMul;
-
-    // Periodic crate & coin drops
-    world.spawnTimers.crate -= dt;
-    if (world.spawnTimers.crate <= 0 && world.crates.length < 2) {
-      world.spawnTimers.crate = 4.2 + world.rng() * 1.6;
-      var gId = GADGET_IDS[Math.floor(world.rng() * GADGET_IDS.length)];
-      world.crates.push({
-        x: 240 + world.rng() * (W - 480), y: -30, vy: 135, r: 22, gadget: gId
-      });
-    }
-    world.spawnTimers.coin -= dt;
-    if (world.spawnTimers.coin <= 0 && world.coins.length < 6) {
-      world.spawnTimers.coin = 2.0 + world.rng() * 1.2;
-      world.coins.push({
-        x: 220 + world.rng() * (W - 440), y: -20, vx: 0, vy: 150, r: 13, life: 10
-      });
-    }
-
-    // Shark surge water level & sinking wind
-    var hasShark = subs.indexOf('shark') !== -1;
-    var targetWater = hasShark ? (world.baseWaterY - 108 * (0.5 + 0.5 * Math.sin(world.t * 0.55))) : world.baseWaterY;
-    world.waterY += (targetWater - world.waterY) * Math.min(1, dt * 2.6);
-
-    var hasSink = subs.indexOf('sinking') !== -1;
-    world.windX = hasSink ? Math.sin(world.t * 1.4) * 85 * sp : 0;
-
-    // Spawn cadence for primary (and secondary in double-disaster)
-    var rateA = subs.length > 1 ? 1.45 / sp : 1.05 / sp;
-    world.spawnTimers.a -= dt;
-    if (world.spawnTimers.a <= 0) {
-      world.spawnTimers.a = rateA;
-      spawnDisasterBeat(world, subs[0]);
-    }
-    if (subs.length > 1) {
-      world.spawnTimers.b -= dt;
-      if (world.spawnTimers.b <= 0) {
-        world.spawnTimers.b = 1.65 / sp;
-        spawnDisasterBeat(world, subs[1]);
-      }
-    }
-
-    // Island Volcano Geysers
-    for (var g = 0; g < world.geysers.length; g++) {
-      var gy = world.geysers[g];
-      if (gy.activeT > 0) {
-        gy.activeT = Math.max(0, gy.activeT - dt);
-        for (var ai = 0; ai < world.actors.length; ai++) {
-          var ac = world.actors[ai];
-          if (ac.state === 'alive' && Math.abs(ac.x - gy.x) < 28 && ac.y > 350) {
-            hurtActor(world, ac, (ac.x >= gy.x ? 1 : -1) * 220, -560);
-          }
-        }
-      } else if (gy.warnT > 0) {
-        gy.warnT -= dt;
-        if (gy.warnT <= 0) gy.activeT = 1.1;
-      } else {
-        gy.timer -= dt;
-        if (gy.timer <= 0) {
-          gy.warnT = world.diffCfg.warn;
-          gy.timer = 4.5 / sp;
-        }
-      }
-    }
-
-    stepItems(world, dt);
-
-    // Step hazards
-    for (var i = world.hazards.length - 1; i >= 0; i--) {
-      var h = world.hazards[i];
-      if (h.kind === 'meteor') {
-        if (h.warnT > 0) {
-          h.warnT -= dt;
-          if (h.warnT <= 0) {
-            h.active = true;
-            var flight = (h.ty - h.y) / h.vy;
-            h.vx = flight > 0.05 ? (h.tx - h.x) / flight : 0;
-          }
-        } else {
-          h.x += h.vx * dt;
-          h.y += h.vy * dt;
-          for (var ma = 0; ma < world.actors.length; ma++) {
-            var mAct = world.actors[ma];
-            if (mAct.state === 'alive' && dist(h.x, h.y, mAct.x, mAct.y) < h.r + mAct.r) {
-              hurtActor(world, mAct, (mAct.x >= h.x ? 1 : -1) * 320, -390);
-              h.y = h.ty + 10;
-            }
-          }
-          if (h.y >= h.ty) {
-            world.events.push({ type: 'boom', x: h.x, y: h.ty, power: 0.7 });
-            if (world.rng() < 0.45 && world.coins.length < 7) {
-              world.coins.push({ x: clamp(h.x, 190, W - 190), y: h.ty - 24, vx: (world.rng() - 0.5) * 90, vy: -210, r: 13, life: 9 });
-            }
-            world.hazards.splice(i, 1);
-          }
-        }
-      } else if (h.kind === 'bomb') {
-        h.fuse -= dt;
-        h.vy = Math.min(620, h.vy + 980 * dt);
-        h.x += h.vx * dt;
-        h.y += h.vy * dt;
-        for (var bp = 0; bp < world.plats.length; bp++) {
-          var bpl = world.plats[bp];
-          if (bpl.sunkT <= 0 && h.vy >= 0 && h.x > bpl.x && h.x < bpl.x + bpl.w && h.y + h.r >= bpl.y && h.y - h.r < bpl.y + 10) {
-            h.y = bpl.y - h.r;
-            h.vy = -Math.max(180, Math.abs(h.vy) * 0.55);
-            h.vx *= 0.88;
-            break;
-          }
-        }
-        // Players can Belly-Dash bombs to punt them across the island!
-        for (var ba = 0; ba < world.actors.length; ba++) {
-          var bAct = world.actors[ba];
-          if (bAct.state === 'alive' && bAct.dashT > 0 && dist(bAct.x, bAct.y, h.x, h.y) < bAct.r + h.r + 14) {
-            h.vx = bAct.facing * 640;
-            h.vy = -340;
-            h.fuse = Math.max(h.fuse, 0.75);
-            h.owner = bAct.slot;
-            bAct.score += 15;
-            world.events.push({ type: 'bonk', x: h.x, y: h.y, attacker: bAct.slot, victim: -1, head: false });
-          }
-        }
-        if (h.fuse <= 0 || h.y > world.waterY + 20) {
-          world.events.push({ type: 'boom', x: h.x, y: h.y, power: 0.9 });
-          for (var ex = 0; ex < world.actors.length; ex++) {
-            var eAct = world.actors[ex];
-            if (eAct.state === 'alive' && dist(h.x, h.y, eAct.x, eAct.y) < 105) {
-              var kdir = eAct.x >= h.x ? 1 : -1;
-              hurtActor(world, eAct, kdir * 420, -430);
-            }
-          }
-          world.hazards.splice(i, 1);
-        }
-      } else if (h.kind === 'boulder') {
-        if (h.warnT > 0) {
-          h.warnT -= dt;
-        } else {
-          h.vy = Math.min(720, h.vy + 1150 * dt);
-          h.x += h.vx * dt;
-          h.y += h.vy * dt;
-          h.rot += (h.vx > 0 ? 1 : -1) * dt * 7;
-          for (var rp = 0; rp < world.plats.length; rp++) {
-            var rpl = world.plats[rp];
-            if (!rpl.oneWay && rpl.sunkT <= 0 && h.vy >= 0 && h.x > rpl.x - 10 && h.x < rpl.x + rpl.w + 10 && h.y + h.r >= rpl.y && h.y - h.r < rpl.y + 16) {
-              h.y = rpl.y - h.r;
-              h.vy = -270;
-              break;
-            }
-          }
-          for (var ra = 0; ra < world.actors.length; ra++) {
-            var rAct = world.actors[ra];
-            if (rAct.state === 'alive' && dist(h.x, h.y, rAct.x, rAct.y) < h.r + rAct.r - 4) {
-              hurtActor(world, rAct, (h.vx >= 0 ? 1 : -1) * 380, -380);
-            }
-          }
-          if (h.x < -60 || h.x > W + 60 || h.y > H + 80) world.hazards.splice(i, 1);
-        }
-      } else if (h.kind === 'ufo') {
-        h.x += h.vx * dt;
-        if (h.x < 220 || h.x > W - 220) h.vx = -h.vx;
-        if (h.beamOn > 0) {
-          h.beamOn -= dt;
-          for (var ua = 0; ua < world.actors.length; ua++) {
-            var uAct = world.actors[ua];
-            if (uAct.state === 'alive' && Math.abs(uAct.x - h.x) < 46 && uAct.y > h.y) {
-              hurtActor(world, uAct, (uAct.x >= h.x ? 1 : -1) * 260, -480);
-            }
-          }
-          if (h.beamOn <= 0) h.cycle = 1.15;
-        } else if (h.beamWarn > 0) {
-          h.beamWarn -= dt;
-          if (h.beamWarn <= 0) h.beamOn = 1.25;
-        } else {
-          h.cycle -= dt;
-          if (h.cycle <= 0) h.beamWarn = world.diffCfg.warn;
-        }
-      } else if (h.kind === 'shark') {
-        if (h.warnT > 0) {
-          h.warnT -= dt;
-        } else {
-          h.vy += 680 * dt;
-          h.x += h.vx * dt;
-          h.y += h.vy * dt;
-          for (var sa = 0; sa < world.actors.length; sa++) {
-            var sAct = world.actors[sa];
-            if (sAct.state === 'alive' && dist(h.x, h.y, sAct.x, sAct.y) < h.r + sAct.r) {
-              hurtActor(world, sAct, (h.vx >= 0 ? 1 : -1) * 360, -440);
-            }
-          }
-          if (h.x < -80 || h.x > W + 80 || h.y > H + 90) world.hazards.splice(i, 1);
-        }
-      }
-    }
-  }
-
-  function stepItems(world, dt) {
-    for (var c = world.crates.length - 1; c >= 0; c--) {
-      var cr = world.crates[c];
-      cr.y += cr.vy * dt;
-      for (var cp = 0; cp < world.plats.length; cp++) {
-        var pl = world.plats[cp];
-        if (pl.sunkT <= 0 && cr.x > pl.x && cr.x < pl.x + pl.w && cr.y + cr.r >= pl.y && cr.y - cr.r < pl.y) {
-          cr.y = pl.y - cr.r; cr.vy = 0; break;
-        }
-      }
-      if (cr.y > world.waterY + 30) world.crates.splice(c, 1);
-    }
-    for (var k = world.coins.length - 1; k >= 0; k--) {
-      var cn = world.coins[k];
-      if (cn.grace > 0) cn.grace = Math.max(0, cn.grace - dt);
-      cn.life -= dt;
-      if (cn.life <= 0 || cn.y > world.waterY + 25) { world.coins.splice(k, 1); continue; }
-      cn.vy = Math.min(480, cn.vy + 780 * dt);
-      cn.x = clamp(cn.x + cn.vx * dt, 90, W - 90);
-      cn.y += cn.vy * dt;
-      for (var kp = 0; kp < world.plats.length; kp++) {
-        var kpl = world.plats[kp];
-        if (kpl.sunkT <= 0 && cn.vy >= 0 && cn.x > kpl.x && cn.x < kpl.x + kpl.w && cn.y + cn.r >= kpl.y && cn.y - cn.r < kpl.y + 8) {
-          cn.y = kpl.y - cn.r; cn.vy = -cn.vy * 0.35; cn.vx *= 0.7;
-          if (Math.abs(cn.vy) < 40) cn.vy = 0;
-          break;
-        }
-      }
-    }
-    for (var oi = world.orbs.length - 1; oi >= 0; oi--) {
-      world.orbs[oi].bob += dt * 3.5;
-      world.orbs[oi].life -= dt;
-      if (world.orbs[oi].life <= 0) world.orbs.splice(oi, 1);
-    }
-  }
-
-  function stepPlatforms(world, dt) {
-    for (var i = 0; i < world.plats.length; i++) {
-      var pl = world.plats[i];
-      var prevX = pl.x;
-      if (pl.moveAmp) {
-        pl.x = pl.baseX + Math.sin(world.t * pl.moveSpd + pl.phase) * pl.moveAmp;
-      }
-      pl.dx = pl.x - prevX;
-      if (pl.sinkWarn > 0) {
-        pl.sinkWarn -= dt;
-        if (pl.sinkWarn <= 0) pl.sunkT = 3.0;
-      } else if (pl.sunkT > 0) {
-        pl.sunkT = Math.max(0, pl.sunkT - dt);
-      }
-    }
-  }
-
-  function planCoach(world, actor, skill) {
-    skill = skill == null ? 1.0 : skill;
-    var out = { moveX: 0, up: false, down: false, jump: false, jumpPressed: false, dash: false, dashPressed: false };
-    if (!actor || actor.state === 'out') return out;
-
-    if (actor.state === 'drone') {
-      var target = world.orbs[0] || null;
-      var bestD = 1e9;
-      for (var oi = 0; oi < world.orbs.length; oi++) {
-        var od = dist(actor.x, actor.y, world.orbs[oi].x, world.orbs[oi].y);
-        if (od < bestD) { bestD = od; target = world.orbs[oi]; }
-      }
-      if (target) {
-        out.moveX = target.x > actor.x + 10 ? 1 : target.x < actor.x - 10 ? -1 : 0;
-        out.up = target.y < actor.y - 10;
-        out.jump = out.up;
-        out.down = target.y > actor.y + 10;
-        out.dash = bestD > 140;
+      out.moveX = Math.abs(a.aiTargetX - a.x) > 0.35 ? Math.sign(a.aiTargetX - a.x) : 0;
+      if (a.ground && (Math.abs(a.x - DRUM.x) < 1.0 || (world.frames + a.slot * 37) % 95 === 0)) {
+        out.jumpPressed = true; out.jumpDown = true;
       }
       return out;
     }
 
-    // Evaluate danger around actor
-    var dangerX = null, needHigh = world.waterY < 585, jumpNow = false, dashNow = false;
-    for (var i = 0; i < world.hazards.length; i++) {
-      var h = world.hazards[i];
-      if (h.kind === 'meteor' && Math.abs(actor.x - h.tx) < 85) dangerX = h.tx;
-      else if (h.kind === 'ufo' && (h.beamWarn > 0 || h.beamOn > 0) && Math.abs(actor.x - h.x) < 75) dangerX = h.x;
-      else if (h.kind === 'bomb' && Math.abs(actor.x - h.x) < 115 && Math.abs(actor.y - h.y) < 95) {
-        if (skill > 0.65 && actor.dashCd <= 0 && Math.abs(actor.x - h.x) < 68 && h.fuse > 0.45) {
-          out.moveX = h.x >= actor.x ? 1 : -1;
-          dashNow = true;
-        } else dangerX = h.x;
-      } else if (h.kind === 'boulder' && h.warnT <= 0 && Math.abs(actor.x - h.x) < 120 && Math.abs(actor.y - h.y) < 70) {
-        if ((h.vx > 0 && h.x < actor.x) || (h.vx < 0 && h.x > actor.x)) jumpNow = true;
-      } else if (h.kind === 'shark' && h.warnT <= 0 && Math.abs(actor.x - h.x) < 110 && actor.y > 460) {
-        jumpNow = true; needHigh = true;
-      }
-    }
+    var d = world.disaster;
+    var goalX = a.x;
+    var wantHigh = false;
+    var urgentJump = false;
 
-    for (var g = 0; g < world.geysers.length; g++) {
-      var gy = world.geysers[g];
-      if ((gy.warnT > 0 || gy.activeT > 0) && Math.abs(actor.x - gy.x) < 62) dangerX = gy.x;
-    }
-
-    // Check if standing on a warning/sunk platform
-    for (var p = 0; p < world.plats.length; p++) {
-      var pl = world.plats[p];
-      if ((pl.sinkWarn > 0 || pl.sunkT > 0) && actor.x > pl.x - 10 && actor.x < pl.x + pl.w + 10 && Math.abs(actor.y + actor.r - pl.y) < 28) {
-        dangerX = pl.x + pl.w / 2;
-        jumpNow = true;
+    if (d === 'flood') {
+      wantHigh = true;
+      // Climb toward nearest upper deck (West, Center, or East)
+      if (a.y < 2.9) {
+        if (a.x < -4.2) goalX = a.y < 1.5 ? -8.2 : -5.8;
+        else if (a.x < 1.5) goalX = a.y < 1.5 ? -2.6 : 0.0;
+        else goalX = a.y < 1.5 ? 2.75 : 6.8;
+        if (a.ground && Math.abs(goalX - a.x) < 1.9) urgentJump = true;
+      } else {
+        // Safe on upper deck; collect nearby upper coin or center on deck
+        goalX = a.x < -1.6 ? -5.8 : (a.x > 4.0 ? 7.0 : 0.0);
       }
-    }
-
-    var goalX = 640;
-    if (dangerX != null) {
-      goalX = dangerX < 640 ? Math.min(980, dangerX + 210) : Math.max(300, dangerX - 210);
-    } else if (needHigh) {
-      goalX = actor.x < 640 ? 315 : 960;
-      if (actor.y > 440) jumpNow = true;
-    } else {
-      // Seek nearest crate or coin
-      var bestItem = null, itemDist = 360;
-      for (var c = 0; c < world.crates.length; c++) {
-        var cd = Math.abs(world.crates[c].x - actor.x);
-        if (cd < itemDist) { itemDist = cd; bestItem = world.crates[c]; }
+    } else if (d === 'tornado') {
+      // Shelter inside central stone pillars if close, else run opposite tornado!
+      if (Math.abs(a.x) < 5.5 && a.y < 3.5) {
+        goalX = 0.0;
+        if (a.y > 2.6 && a.ground) out.downPressed = true;
+      } else if (world.tornado) {
+        var away = a.x >= world.tornado.x ? 1 : -1;
+        goalX = clamp(a.x + away * 4.5, -8.5, 8.5);
+        if (Math.abs(a.x - world.tornado.x) < 2.8 && a.ground) urgentJump = true;
       }
-      if (!bestItem) {
-        for (var k = 0; k < world.coins.length; k++) {
-          var kd = Math.abs(world.coins[k].x - actor.x);
-          if (kd < itemDist) { itemDist = kd; bestItem = world.coins[k]; }
+    } else if (d === 'coconuts') {
+      // Jump over oncoming coconuts or hop onto crates!
+      var closest = null, bestDist = 4.2;
+      for (var ci = 0; ci < world.coconuts.length; ci++) {
+        var c = world.coconuts[ci];
+        if (c.warnT > 0.25) continue;
+        var approaching = (c.vx > 0 && c.x < a.x + 0.5) || (c.vx < 0 && c.x > a.x - 0.5);
+        var dist = Math.abs(c.x - a.x);
+        if (approaching && Math.abs(c.y - (a.y + 0.8)) < 1.6 && dist < bestDist) {
+          bestDist = dist; closest = c;
         }
       }
-      if (bestItem) {
-        goalX = bestItem.x;
-        if (bestItem.y < actor.y - 55) jumpNow = true;
-      } else {
-        goalX = 640 + Math.sin(world.t * 1.3 + actor.slot * 1.7) * 230;
+      if (closest && bestDist < 2.6 && a.ground) {
+        urgentJump = true;
+        goalX = a.x - Math.sign(closest.vx || 1) * 1.5;
+      } else if (a.y < 2.8) {
+        goalX = a.x < 0 ? -2.6 : 2.75;
+        if (a.ground && Math.abs(goalX - a.x) < 1.4) urgentJump = true;
       }
-
-      // Active bot brawl: dash into rival when close!
-      if (skill > 0.55 && actor.dashCd <= 0) {
-        for (var r = 0; r < world.actors.length; r++) {
-          var rv = world.actors[r];
-          if (rv !== actor && rv.state === 'alive' && Math.abs(rv.y - actor.y) < 34 && Math.abs(rv.x - actor.x) < 88) {
-            if (!(world.duo && world.duoMode === 'coop' && actor.isHuman && rv.isHuman)) {
-              goalX = rv.x;
-              dashNow = true;
-              break;
-            }
+    } else {
+      // Meteor, Lightning, Quake: step away from active telegraphs!
+      var danger = 0;
+      for (var mi = 0; mi < world.meteors.length; mi++) {
+        var m = world.meteors[mi];
+        if (!m.hit && Math.abs(a.x - m.tx) < 2.1 && Math.abs(a.y - m.ty) < 2.0) {
+          danger += Math.sign(a.x - m.tx || (a.x > 0 ? -1 : 1));
+        }
+      }
+      for (var bi = 0; bi < world.bolts.length; bi++) {
+        var b = world.bolts[bi];
+        if (!b.struck && !inShelter(a) && Math.abs(a.x - b.x) < 2.0) {
+          danger += Math.sign(a.x - b.x || (a.x > 0 ? -1 : 1));
+        }
+      }
+      for (var qi = 0; qi < world.cracks.length; qi++) {
+        var q = world.cracks[qi];
+        if (Math.abs(a.x - q.x) < q.w * 0.65 && Math.abs(a.y - q.y) < 1.5) {
+          danger += Math.sign(a.x - q.x || (a.x > 0 ? -1 : 1));
+          if (a.ground && q.t > q.telegraph * 0.6) urgentJump = true;
+        }
+      }
+      if (d === 'lightning' && danger === 0 && Math.abs(a.x) < 4.0) {
+        goalX = 0.0;
+        if (a.y > 2.6 && a.ground) out.downPressed = true;
+      } else if (danger !== 0) {
+        goalX = clamp(a.x + Math.sign(danger) * 3.8, -8.8, 8.8);
+      } else {
+        // Chase nearest untaken coin gently
+        var nearC = null, cd = 5.5;
+        for (var k = 0; k < world.coins.length; k++) {
+          var coin = world.coins[k];
+          if (!coin.taken && Math.abs(coin.x - a.x) < cd && Math.abs(coin.y - a.y) < 2.6) {
+            cd = Math.abs(coin.x - a.x); nearC = coin;
           }
         }
+        if (nearC) {
+          goalX = nearC.x;
+          if (nearC.y > a.y + 0.9 && a.ground && Math.abs(nearC.x - a.x) < 1.8) urgentJump = true;
+        } else {
+          goalX = clamp(a.x + Math.sin(world.t * 1.4 + a.slot * 2.1) * 1.6, -8.5, 8.5);
+        }
       }
     }
 
-    if (actor.x < 225) { goalX = 520; if (!actor.onGround) jumpNow = true; }
-    if (actor.x > W - 225) { goalX = W - 520; if (!actor.onGround) jumpNow = true; }
-    if (actor.y > world.waterY - 75) jumpNow = true;
+    // Keep away from island cliffs
+    if (a.x < -8.6) goalX = Math.max(goalX, -6.5);
+    if (a.x > 8.6) goalX = Math.min(goalX, 6.5);
 
-    if (!dashNow) {
-      if (goalX > actor.x + 18) out.moveX = 1;
-      else if (goalX < actor.x - 18) out.moveX = -1;
-    }
-    if (actor.gadget === 'jetpack' && (needHigh || actor.y > 430)) { out.up = true; out.jump = true; }
-    if (jumpNow && (actor.onGround || (actor.vy > 40 && actor.jumpsLeft > 0))) {
-      out.jump = true;
+    var diff = goalX - a.x;
+    if (Math.abs(diff) > 0.25) out.moveX = Math.sign(diff) * (skill < 0.9 ? (0.72 + 0.28 * skill) : 1);
+    if (urgentJump && (skill >= 0.95 || world.rng() < skill)) {
       out.jumpPressed = true;
+      out.jumpDown = true;
     }
-    if (dashNow) {
-      out.dash = true;
-      out.dashPressed = true;
+    if (wantHigh && a.y < 3.0 && a.ground && Math.abs(a.vx) > 2.0 && (Math.abs(a.x + 8.0) < 1.2 || Math.abs(a.x + 2.6) < 1.2 || Math.abs(a.x - 5.0) < 1.2)) {
+      out.jumpPressed = true;
+      out.jumpDown = true;
     }
     return out;
   }
 
-  function finishRound(world) {
-    var humanSurvived = false;
-    for (var i = 0; i < world.actors.length; i++) {
-      var a = world.actors[i];
-      if (a.state === 'alive') {
-        a.roundsWon++;
-        a.score += 60 + a.hearts * 15;
-        a.coins += 2;
-        if (a.isHuman) humanSurvived = true;
+  /* ---------------------------------------------------------- match evaluation */
+  function buildResult(world) {
+    var p1 = world.actors[0];
+    var p2 = world.duo ? world.actors[1] : null;
+    var bestSurvived = p2 ? Math.max(p1.survived, p2.survived) : p1.survived;
+    var totalCoins = p2 ? (p1.coins + p2.coins) : p1.coins;
+    var totalScore = p2 ? Math.max(p1.score, p2.score) : p1.score;
+
+    var stars = 0;
+    var won = false;
+    var bonusCoins = 0;
+
+    if (world.endless) {
+      won = world.humanMoved && bestSurvived >= 1;
+      stars = !world.humanMoved ? 0 : (bestSurvived >= 8 ? 3 : bestSurvived >= 4 ? 2 : bestSurvived >= 1 ? 1 : 0);
+      bonusCoins = world.humanMoved ? bestSurvived * 8 : 0;
+    } else {
+      // Strict anti-AFK rule: never award stars or win if the player never moved!
+      if (world.humanMoved) {
+        if (bestSurvived >= MATCH_ROUNDS) stars = 3;
+        else if (bestSurvived >= 3) stars = 2;
+        else if (bestSurvived >= 1) stars = 1;
+        won = stars >= 1;
+        bonusCoins = bestSurvived * 10 + stars * 10;
       }
     }
-    world.events.push({ type: 'roundClear', round: world.round, survivedHumans: humanSurvived });
-    if (world.round + 1 >= world.rounds) {
-      finishMatch(world);
-    } else {
-      world.phase = 'inter';
-      world.t = 0;
+
+    var earnedCoins = world.humanMoved ? (totalCoins + bonusCoins) : 0;
+    var ddaOutcome = !world.humanMoved ? 0 :
+      (world.endless ? clamp(bestSurvived / 6, 0, 1) : clamp(p1.survived / MATCH_ROUNDS, 0, 1));
+
+    var winner = null;
+    if (world.duo && p2) {
+      if (p1.survived > p2.survived || (p1.survived === p2.survived && p1.score > p2.score)) winner = 'p1';
+      else if (p2.survived > p1.survived || (p2.survived === p1.survived && p2.score > p1.score)) winner = 'p2';
+      else winner = 'tie';
     }
+
+    return {
+      won: won,
+      stars: stars,
+      roundsSurvived: bestSurvived,
+      p1Survived: p1.survived,
+      p2Survived: p2 ? p2.survived : 0,
+      score: world.humanMoved ? totalScore : 0,
+      coins: earnedCoins,
+      humanMoved: world.humanMoved,
+      ddaOutcome: ddaOutcome,
+      endless: world.endless,
+      duo: world.duo,
+      winner: winner
+    };
   }
 
-  function finishMatch(world) {
-    world.phase = 'done';
-    world.t = 0;
-    var bestSlot = 0, bestScore = -1;
-    for (var i = 0; i < world.actors.length; i++) {
-      var a = world.actors[i];
-      if (a.score > bestScore) { bestScore = a.score; bestSlot = a.slot; }
-    }
-    world.winnerSlot = bestSlot;
-    var p1 = world.actors[0];
-    world.p1Score = p1.score;
-
-    var humanRounds = p1.roundsWon;
-    if (world.duo && world.duoMode === 'coop' && world.actors[1] && world.actors[1].isHuman) {
-      humanRounds = Math.max(p1.roundsWon, world.actors[1].roundsWon);
-    }
-    var humanTop = world.actors[bestSlot] && world.actors[bestSlot].isHuman;
-    world.won = humanRounds >= 2 || (humanRounds >= 1 && humanTop);
-    world.stars = !world.won ? 0 : (humanRounds >= 3 ? 3 : humanRounds >= 2 ? 2 : 1);
-    world.events.push({ type: 'matchEnd', won: world.won, stars: world.stars, p1Score: world.p1Score, winnerSlot: bestSlot });
-  }
-
-  function stepWorld(world, humanInputs, dt) {
-    if (world.phase === 'done') return world;
-    dt = clamp(dt || 1 / 60, 0.001, 0.05);
+  /* ---------------------------------------------------------- main step */
+  function step(world, dt, inputs) {
+    world.events.length = 0;
+    if (world.finished) return world.events;
+    dt = clamp(dt || 1 / 60, 0, 0.05);
     world.frames++;
     world.t += dt;
+    if (world.drumBounceT > 0) world.drumBounceT = Math.max(0, world.drumBounceT - dt);
 
-    if (world.phase === 'inter') {
-      if (world.t >= INTER_TIME) setupRound(world, world.round + 1, false);
-      return world;
-    }
+    var params = difficultyParams(world.tier, world.level, world.round);
 
-    stepPlatforms(world, dt);
-
-    if (world.phase === 'card') {
-      stepItems(world, dt);
-      if (world.t >= CARD_TIME) {
-        world.phase = 'action';
-        world.t = 0;
-      }
-    } else if (world.phase === 'action') {
-      stepDisasters(world, dt);
-    }
-
-    // Step all actors (players CAN move, jump, and dash immediately even during 'card'!)
+    // Step actors (human inputs or AI)
     for (var i = 0; i < world.actors.length; i++) {
       var a = world.actors[i];
       var inp;
       if (a.isHuman) {
-        inp = (humanInputs && humanInputs[a.slot]) || null;
+        inp = (inputs && inputs[a.humanIndex]) || { moveX: 0, jumpPressed: false, jumpDown: false, downPressed: false };
       } else {
-        a.aiTimer -= dt;
-        if (a.aiTimer <= 0) {
-          a.aiTimer = 0.08 + (1 - world.diffCfg.botSkill) * 0.14;
-          a.lastAi = planCoach(world, a, world.diffCfg.botSkill);
-        } else if (a.lastAi) {
-          a.lastAi.jumpPressed = false;
-          a.lastAi.dashPressed = false;
-        }
-        inp = a.lastAi || planCoach(world, a, world.diffCfg.botSkill);
+        inp = planActorAI(world, a, params.botSkill);
       }
-      stepActor(world, a, inp, dt);
+      stepActor(world, a, dt, inp);
     }
-
-    resolveBrawl(world);
+    resolveBumps(world);
 
     if (world.demo) {
-      if (world.t >= 16) setupRound(world, (world.round + 1) % ROUNDS, false);
-      return world;
+      world.lavaY = -1.65;
+      return world.events;
     }
 
-    // ZERO BORING GHOST WAIT: if 0 humans are alive or piloting a rescue drone, end round immediately!
-    var activeHumans = 0;
-    for (var h = 0; h < world.actors.length; h++) {
-      if (world.actors[h].isHuman && (world.actors[h].state === 'alive' || world.actors[h].state === 'drone')) {
-        activeHumans++;
+    if (world.phase === 'card') {
+      world.lavaY = lerp(world.lavaY, -1.65, Math.min(1, dt * 6));
+      if (world.t >= CARD_TIME) {
+        world.phase = 'active';
+        world.t = 0;
+        world.spawnAcc = 0.12;
+        world.subAcc = 1.6;
+        world.events.push({ type: 'disasterStart', disaster: world.disaster, round: world.round });
+      }
+      return world.events;
+    }
+
+    if (world.phase === 'active') {
+      stepDisaster(world, dt, params);
+      updateHazards(world, dt);
+
+      // Check if all human players are eliminated in this round
+      var anyHumanAlive = false;
+      for (var h = 0; h < world.actors.length; h++) {
+        if (world.actors[h].isHuman && world.actors[h].alive) anyHumanAlive = true;
+      }
+
+      // In endless, if all humans KO, end immediately!
+      if (world.endless && !anyHumanAlive) {
+        clearHazards(world);
+        world.phase = 'over';
+        world.finished = true;
+        world.result = buildResult(world);
+        world.events.push({ type: 'matchEnd', result: world.result });
+        return world.events;
+      }
+
+      // In match mode, if all humans KO early, shorten remaining wait so kids aren't bored!
+      var earlyEnd = !world.endless && !anyHumanAlive && world.t > 2.2;
+      if (world.t >= ROUND_TIME || earlyEnd) {
+        clearHazards(world);
+        // Award survival points to every alive actor!
+        for (var s = 0; s < world.actors.length; s++) {
+          var sa = world.actors[s];
+          if (sa.alive) {
+            sa.survived += 1;
+            var perfect = sa.hearts === MAX_HEARTS ? 25 : 0;
+            sa.score += 100 + perfect;
+            sa.coins += 5;
+          }
+        }
+        world.phase = 'clear';
+        world.t = 0;
+        world.events.push({
+          type: 'roundClear',
+          round: world.round,
+          p1Alive: world.actors[0].alive,
+          p2Alive: world.duo ? world.actors[1].alive : false
+        });
+      }
+      return world.events;
+    }
+
+    if (world.phase === 'clear') {
+      world.lavaY = lerp(world.lavaY, -1.65, Math.min(1, dt * 7));
+      if (world.t >= CLEAR_TIME) {
+        if (!world.endless && world.round + 1 >= MATCH_ROUNDS) {
+          world.phase = 'over';
+          world.finished = true;
+          world.result = buildResult(world);
+          world.events.push({ type: 'matchEnd', result: world.result });
+          return world.events;
+        }
+        world.round += 1;
+        world.disaster = nextDisasterId(world);
+        world.phase = 'card';
+        world.t = 0;
+        resetActorsForNextRound(world);
+        spawnRoundCoins(world);
+        world.events.push({ type: 'disasterCard', disaster: world.disaster, round: world.round });
       }
     }
-    if (activeHumans === 0) {
-      finishRound(world);
-      return world;
-    }
 
-    if (world.phase === 'action' && world.t >= ACTION_TIME) {
-      finishRound(world);
-    }
-    return world;
+    return world.events;
   }
 
-  var CIEngine = {
-    W: W, H: H,
-    CARD_TIME: CARD_TIME, ACTION_TIME: ACTION_TIME, INTER_TIME: INTER_TIME, ROUNDS: ROUNDS,
-    MOVE_SPEED: MOVE_SPEED, JUMP_VY: JUMP_VY, DJUMP_VY: DJUMP_VY, DASH_SPEED: DASH_SPEED,
-    DIFFICULTIES: DIFFICULTIES,
-    ISLANDS: ISLANDS,
+  return {
+    SAVE_VERSION: SAVE_VERSION,
+    MATCH_ROUNDS: MATCH_ROUNDS,
+    CARD_TIME: CARD_TIME,
+    ROUND_TIME: ROUND_TIME,
+    CLEAR_TIME: CLEAR_TIME,
+    MAX_HEARTS: MAX_HEARTS,
+    GROUND_Y: GROUND_Y,
+    ISLAND_MIN_X: ISLAND_MIN_X,
+    ISLAND_MAX_X: ISLAND_MAX_X,
+    PLATFORMS: PLATFORMS,
+    SHELTER: SHELTER,
+    DRUM: DRUM,
     DISASTERS: DISASTERS,
-    BASE_DISASTERS: BASE_DISASTERS,
-    GADGETS: GADGETS,
-    BOTS: BOTS,
-    SHOP: SHOP,
-    createWorld: createWorld,
-    stepWorld: stepWorld,
-    planCoach: planCoach,
-    currentDisasterInfo: currentDisasterInfo,
-    hurtActor: hurtActor,
-    spawnDisasterBeat: spawnDisasterBeat
+    DISASTER_MAP: DISASTER_MAP,
+    COLORS: COLORS,
+    HATS: HATS,
+    defaultSave: defaultSave,
+    loadSave: loadSave,
+    buyOrEquip: buyOrEquip,
+    difficultyParams: difficultyParams,
+    inShelter: inShelter,
+    create: create,
+    step: step,
+    planCoach: planActorAI
   };
-
-  if (typeof module !== 'undefined' && module.exports) module.exports = CIEngine;
-  if (typeof window !== 'undefined') window.CIEngine = CIEngine;
-})();
+});

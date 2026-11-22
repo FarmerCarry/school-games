@@ -1,87 +1,85 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">
   <defs>
     <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#ff4800"/>
-      <stop offset="55%" stop-color="#ff9e00"/>
-      <stop offset="100%" stop-color="#ffee32"/>
+      <stop offset="0" stop-color="#2ea8ff"/>
+      <stop offset="0.65" stop-color="#8ce3ff"/>
+      <stop offset="1" stop-color="#1cc4ec"/>
+    </linearGradient>
+    <linearGradient id="sea" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#19c6ee"/>
+      <stop offset="1" stop-color="#0b77c4"/>
     </linearGradient>
     <linearGradient id="lava" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#ffbe0b"/>
-      <stop offset="40%" stop-color="#ff5400"/>
-      <stop offset="100%" stop-color="#9d0208"/>
+      <stop offset="0" stop-color="#ffcf2e"/>
+      <stop offset="1" stop-color="#ff4820"/>
     </linearGradient>
   </defs>
-
-  <!-- Sky & radial action burst -->
+  <!-- Sunny tropical sky -->
   <rect width="400" height="400" fill="url(#sky)"/>
-  <g fill="#fff" opacity="0.16">
-    <polygon points="200,200 0,30 70,0"/>
-    <polygon points="200,200 175,0 235,0"/>
-    <polygon points="200,200 335,0 400,40"/>
-    <polygon points="200,200 400,170 400,235"/>
-    <polygon points="200,200 0,175 0,240"/>
+  <!-- Puffy clouds -->
+  <g fill="#ffffff" opacity="0.92">
+    <circle cx="72" cy="74" r="24"/><circle cx="96" cy="68" r="28"/><circle cx="122" cy="76" r="20"/>
+    <circle cx="318" cy="86" r="22"/><circle cx="342" cy="80" r="26"/><circle cx="364" cy="88" r="18"/>
+  </g>
+  <!-- Ocean & glowing lava wave -->
+  <rect y="286" width="400" height="114" fill="url(#sea)"/>
+  <path d="M0 320 Q50 302 100 320 T200 320 T300 320 T400 320 V400 H0 Z" fill="url(#lava)" opacity="0.92"/>
+  <path d="M0 336 Q55 322 110 336 T220 336 T330 336 T400 332" fill="none" stroke="#ffe973" stroke-width="6" stroke-linecap="round"/>
+
+  <!-- Floating 3D Tropical Island -->
+  <polygon points="58,284 342,284 306,336 94,336" fill="#9c623d" stroke="#1e2547" stroke-width="5" stroke-linejoin="round"/>
+  <ellipse cx="200" cy="284" rx="154" ry="30" fill="#f7d57c" stroke="#1e2547" stroke-width="5"/>
+  <ellipse cx="200" cy="274" rx="134" ry="24" fill="#52d14b" stroke="#1e2547" stroke-width="5"/>
+
+  <!-- Background volcano -->
+  <polygon points="74,264 114,174 146,174 186,264" fill="#6b566d" stroke="#1e2547" stroke-width="5" stroke-linejoin="round"/>
+  <ellipse cx="130" cy="174" rx="16" ry="5" fill="#ff7426" stroke="#1e2547" stroke-width="4"/>
+
+  <!-- Central Striped Lighthouse & Stone Shelter -->
+  <rect x="166" y="182" width="68" height="86" rx="8" fill="#eceaf2" stroke="#1e2547" stroke-width="5"/>
+  <rect x="178" y="218" width="44" height="50" rx="6" fill="#35e6ff" stroke="#1e2547" stroke-width="4"/>
+  <rect x="162" y="170" width="76" height="16" rx="6" fill="#ff5468" stroke="#1e2547" stroke-width="5"/>
+  <rect x="178" y="132" width="44" height="38" fill="#ffffff" stroke="#1e2547" stroke-width="5"/>
+  <rect x="178" y="148" width="44" height="14" fill="#ff4b5c"/>
+  <rect x="184" y="106" width="32" height="26" fill="#ffe45c" stroke="#1e2547" stroke-width="5"/>
+  <polygon points="178,108 200,82 222,108" fill="#ff4b5c" stroke="#1e2547" stroke-width="5" stroke-linejoin="round"/>
+
+  <!-- Palm Tree right -->
+  <path d="M300 264 Q316 218 308 176" fill="none" stroke="#9e6238" stroke-width="14" stroke-linecap="round"/>
+  <g fill="#42cc4c" stroke="#1e2547" stroke-width="4" stroke-linejoin="round">
+    <path d="M308 176 Q348 158 366 184 Q336 184 308 176 Z"/>
+    <path d="M308 176 Q268 154 252 178 Q280 182 308 176 Z"/>
+    <path d="M308 176 Q326 138 352 146 Q332 162 308 176 Z"/>
+    <path d="M308 176 Q290 138 268 148 Q286 164 308 176 Z"/>
   </g>
 
-  <!-- Erupting Pirate Volcano -->
-  <path d="M55 325 L148 105 L252 105 L345 325 Z" fill="#4a251d" stroke="#1b1640" stroke-width="8" stroke-linejoin="round"/>
-  <path d="M148 105 L172 152 L200 124 L228 156 L252 105 Z" fill="#ff5400" stroke="#1b1640" stroke-width="6" stroke-linejoin="round"/>
-  <!-- Lava plume -->
-  <path d="M168 105 Q150 42 112 34 Q165 24 200 62 Q235 20 286 36 Q250 48 232 105 Z" fill="#ffd000" stroke="#1b1640" stroke-width="6" stroke-linejoin="round"/>
-  <!-- Skull cavern -->
-  <circle cx="200" cy="212" r="32" fill="#e5e7eb" stroke="#1b1640" stroke-width="6"/>
-  <circle cx="188" cy="208" r="8" fill="#ff4800"/>
-  <circle cx="212" cy="208" r="8" fill="#ff4800"/>
-  <rect x="188" y="228" width="24" height="12" rx="4" fill="#e5e7eb" stroke="#1b1640" stroke-width="5"/>
-
-  <!-- Streaking Volcano Meteor -->
-  <g transform="translate(76 82) rotate(-32)">
-    <path d="M-18 -8 L38 -22 L28 22 L-18 14 Z" fill="#ffee32"/>
-    <circle cx="0" cy="3" r="22" fill="#ff5400" stroke="#1b1640" stroke-width="6"/>
-    <circle cx="-4" cy="3" r="12" fill="#7f1d1d" stroke="#1b1640" stroke-width="4"/>
+  <!-- Swirling mini tornado left -->
+  <g stroke="#1e2547" stroke-width="4">
+    <ellipse cx="86" cy="212" rx="28" ry="8" fill="#8ceeff"/>
+    <ellipse cx="89" cy="228" rx="21" ry="6" fill="#c9f8ff"/>
+    <ellipse cx="84" cy="242" rx="14" ry="5" fill="#8ceeff"/>
+    <ellipse cx="88" cy="254" rx="8" ry="3.5" fill="#c9f8ff"/>
   </g>
 
-  <!-- Main Pirate Battle Deck -->
-  <rect x="42" y="284" width="316" height="40" rx="14" fill="#78350f" stroke="#1b1640" stroke-width="8"/>
-  <rect x="50" y="288" width="300" height="13" rx="6" fill="#d97706"/>
+  <!-- Falling fiery meteor top-right -->
+  <path d="M332 94 L276 144 L292 160 L348 110 Z" fill="#ff9f24"/>
+  <circle cx="274" cy="154" r="22" fill="#ff4620" stroke="#1e2547" stroke-width="5"/>
+  <circle cx="268" cy="148" r="7" fill="#ffe14d"/>
 
-  <!-- Ticking Fuse Bomb Punched Away -->
-  <g transform="translate(314 176) rotate(18)">
-    <path d="M0 -24 Q14 -40 26 -30" fill="none" stroke="#ffd166" stroke-width="6" stroke-linecap="round"/>
-    <circle cx="27" cy="-29" r="8" fill="#ff0054"/>
-    <circle cx="0" cy="0" r="26" fill="#1e293b" stroke="#1b1640" stroke-width="7"/>
-    <circle cx="-8" cy="-8" r="6" fill="#64748b"/>
+  <!-- Cute Chunky Islander Hero jumping joyfully with Crown! -->
+  <g transform="translate(200,210)">
+    <rect x="-18" y="4" width="36" height="30" rx="9" fill="#2ea8ff" stroke="#1e2547" stroke-width="5"/>
+    <rect x="-26" y="8" width="10" height="20" rx="5" fill="#2ea8ff" stroke="#1e2547" stroke-width="4" transform="rotate(24 -20 12)"/>
+    <rect x="16" y="8" width="10" height="20" rx="5" fill="#2ea8ff" stroke="#1e2547" stroke-width="4" transform="rotate(-24 20 12)"/>
+    <rect x="-20" y="-32" width="40" height="38" rx="12" fill="#ffe2be" stroke="#1e2547" stroke-width="5"/>
+    <circle cx="-8" cy="-14" r="4.5" fill="#1e2547"/><circle cx="8" cy="-14" r="4.5" fill="#1e2547"/>
+    <circle cx="-6.5" cy="-16" r="1.8" fill="#fff"/><circle cx="9.5" cy="-16" r="1.8" fill="#fff"/>
+    <ellipse cx="-13" cy="-6" rx="4" ry="2.4" fill="#ff85a8"/><ellipse cx="13" cy="-6" rx="4" ry="2.4" fill="#ff85a8"/>
+    <path d="M-6 -6 Q0 0 6 -6" fill="none" stroke="#1e2547" stroke-width="3.5" stroke-linecap="round"/>
+    <!-- Golden Crown -->
+    <polygon points="-16,-32 -18,-50 -6,-40 0,-54 6,-40 18,-50 16,-32" fill="#ffcf2e" stroke="#1e2547" stroke-width="4" stroke-linejoin="round"/>
   </g>
 
-  <!-- Comic Impact Burst -->
-  <polygon points="262,175 276,154 285,176 308,170 292,190 308,208 284,204 274,225 264,202 242,205 256,188 244,170" fill="#ffee32" stroke="#1b1640" stroke-width="5" stroke-linejoin="round"/>
-
-  <!-- Leaping Pirate Brawler Hero -->
-  <g transform="translate(168 205) rotate(-8)">
-    <!-- Electric Shield Aura -->
-    <circle cx="0" cy="0" r="56" fill="none" stroke="#00f5d4" stroke-width="6" stroke-dasharray="18 10"/>
-    <!-- Boots -->
-    <rect x="-26" y="30" width="20" height="15" rx="7" fill="#1e293b" stroke="#1b1640" stroke-width="6"/>
-    <rect x="6" y="26" width="20" height="15" rx="7" fill="#1e293b" stroke="#1b1640" stroke-width="6"/>
-    <!-- Hero Body -->
-    <rect x="-32" y="-26" width="64" height="60" rx="26" fill="#ff9f1c" stroke="#1b1640" stroke-width="7"/>
-    <rect x="-31" y="12" width="62" height="10" fill="#1b1640"/>
-    <rect x="-8" y="9" width="16" height="15" rx="3" fill="#ffd166" stroke="#1b1640" stroke-width="4"/>
-    <!-- Eyes -->
-    <ellipse cx="-6" cy="-4" rx="7" ry="9" fill="#fff" stroke="#1b1640" stroke-width="4"/>
-    <ellipse cx="14" cy="-4" rx="7" ry="9" fill="#fff" stroke="#1b1640" stroke-width="4"/>
-    <circle cx="-4" cy="-4" r="4" fill="#1b1640"/>
-    <circle cx="16" cy="-4" r="4" fill="#1b1640"/>
-    <!-- Pirate Bandana -->
-    <path d="M-34 -18 Q0 -34 34 -18 L32 -6 L-32 -6 Z" fill="#ef233c" stroke="#1b1640" stroke-width="6" stroke-linejoin="round"/>
-    <path d="M-34 -14 L-56 -24 L-48 -4 Z" fill="#ef233c" stroke="#1b1640" stroke-width="5" stroke-linejoin="round"/>
-    <!-- Giant Mech Shockwave Hammer -->
-    <g transform="translate(46 -12) rotate(28)">
-      <rect x="-5" y="-28" width="10" height="52" rx="4" fill="#78350f" stroke="#1b1640" stroke-width="5"/>
-      <rect x="-24" y="-48" width="48" height="28" rx="8" fill="#ffd000" stroke="#1b1640" stroke-width="6"/>
-    </g>
-  </g>
-
-  <!-- Mecha-Shark Fin in Rising Magma Sea -->
-  <path d="M68 342 L94 298 L124 344 Z" fill="#00b4d8" stroke="#1b1640" stroke-width="7" stroke-linejoin="round"/>
-  <path d="M0 342 Q50 326 100 342 T200 342 T300 342 T400 342 L400 400 L0 400 Z" fill="url(#lava)" stroke="#1b1640" stroke-width="7"/>
+  <!-- Bold Arabic Logo -->
+  <text x="200" y="64" text-anchor="middle" direction="rtl" font-family="Fredoka, 'Baloo Bhaijaan 2', sans-serif" font-size="46" font-weight="700" fill="#ffe84d" stroke="#1e2547" stroke-width="10" paint-order="stroke fill">جزيرة الفوضى</text>
 </svg>

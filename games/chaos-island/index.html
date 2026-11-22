@@ -1,110 +1,149 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>جزيرة الفوضى</title>
-<link rel="icon" type="image/svg+xml" href="../../favicon.svg">
-<link rel="stylesheet" href="../../shared/game.css">
-<link rel="stylesheet" href="style.css">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>جزيرة الفوضى</title>
+  <link rel="stylesheet" href="../../shared/game.css">
+  <link rel="stylesheet" href="style.css">
 </head>
-<body>
-<canvas id="game" tabindex="0" aria-label="جزيرة الفوضى"></canvas>
+<body data-mode="title">
+  <canvas id="scene" tabindex="0" aria-label="جزيرة الفوضى"></canvas>
 
-<div id="ui">
-  <!-- الشاشة الرئيسية -->
-  <section id="scrTitle" class="screen title-layout" aria-label="جزيرة الفوضى">
-    <header class="top-stats">
-      <div class="stat-pill gold" id="titleCoins" aria-label="العملات">🪙 <b>0</b></div>
-      <div class="stat-pill star" id="titleStars" aria-label="النجوم">⭐ <b>0</b></div>
-    </header>
-
-    <div class="hero-card sg-panel">
-      <div class="kicker">معركة البراكين والقراصنة والكوارث!</div>
-      <h1 class="sg-title logo-title">جزيرة الفوضى</h1>
-
-      <div class="diff-bar" id="diffBar" role="group" aria-label="مستوى الصعوبة">
-        <button type="button" class="diff-btn" data-diff="easy">سهل</button>
-        <button type="button" class="diff-btn on" data-diff="normal">متوسط</button>
-        <button type="button" class="diff-btn" data-diff="hero">بطل</button>
-      </div>
-      <p class="diff-desc" id="diffDesc">3 قلوب · منافسة حماسية · فوضى مزدوجة بالجولة 3</p>
-
-      <div class="islands-grid" id="islandBar" role="group" aria-label="اختر الجزيرة"></div>
-
-      <div class="cta-grid">
-        <button type="button" id="btnPlay" class="sg-btn good btn-main">ابدأ المعركة! <small>لاعب ضد 4 أبطال</small></button>
-        <button type="button" id="btnDuoCoop" class="sg-btn btn-duo">لاعبان: تعاون <small>فريق واحد للنجاة</small></button>
-        <button type="button" id="btnDuoVersus" class="sg-btn btn-versus">لاعبان: تحدي التاج <small>منافسة مباشرة</small></button>
-        <button type="button" id="btnShop" class="sg-btn secondary btn-shop">متجر الجزيرة <small id="shopHint">الخوذات وآثار الاندفاع</small></button>
+  <!-- In-game HUD -->
+  <div id="hud" hidden>
+    <div class="hud-top">
+      <div class="hud-left">
+        <div class="chip chip-round" id="hudRound" aria-label="الجولة">🏝️ <b>1/5</b></div>
+        <div class="chip chip-p1" id="hudP1" aria-label="قلوب اللاعب الأول"><span class="p-tag">1</span><span id="hudP1Hearts">❤️❤️❤️</span></div>
+        <div class="chip chip-p2" id="hudP2" hidden aria-label="قلوب اللاعب الثاني"><span class="p-tag">2</span><span id="hudP2Hearts">❤️❤️❤️</span></div>
+        <div class="chip chip-coin" id="hudCoins" aria-label="العملات">🪙 <b>0</b></div>
+        <div class="chip chip-score" id="hudScore" aria-label="النقاط">⭐ <b>0</b></div>
       </div>
 
-      <div class="controls-bar">
-        <span>الحركة والقفز المزدوج: <span class="sg-key" dir="ltr">WASD</span> أو <span class="sg-key" dir="ltr">←↑↓→</span></span>
-        <span>اندفاع وصدم: <span class="sg-key" dir="ltr">Space</span></span>
-        <span>اللاعب 2: <span class="sg-key" dir="ltr">←↑↓→</span> + <span class="sg-key" dir="ltr">Enter</span></span>
-        <span>إيقاف: <span class="sg-key" dir="ltr">P</span></span>
+      <div class="disaster-pill" id="disasterPill" hidden>
+        <span class="pill-ico" id="pillIcon"></span>
+        <span class="pill-name" id="pillName"></span>
+        <span class="pill-track"><span class="pill-fill" id="pillFill"></span></span>
+      </div>
+
+      <button type="button" class="ico-btn pause-btn" id="btnPause" aria-label="إيقاف مؤقت" title="استراحة (P / Esc)">⏸</button>
+    </div>
+
+    <!-- Big visual disaster announcement card -->
+    <div class="disaster-card" id="disasterCard" hidden role="status" aria-live="polite">
+      <div class="card-ico" id="cardIcon"></div>
+      <div class="card-txt">
+        <div class="card-round" id="cardRound">الجولة 1 من 5</div>
+        <div class="card-name" id="cardName">وابل النيازك</div>
+        <div class="card-hint" id="cardHint">اهرب من الدوائر!</div>
       </div>
     </div>
-  </section>
 
-  <!-- أزرار اللعب -->
-  <div id="hud" hidden>
-    <button type="button" id="btnPause" class="hud-pause" aria-label="إيقاف مؤقت" title="إيقاف مؤقت (P)">❚❚</button>
+    <!-- Quick round-clear toast -->
+    <div class="round-toast" id="roundToast" hidden></div>
+
+    <!-- First-time / idle animated control hint -->
+    <div class="ghost-hint" id="ghostHint" hidden>
+      <span dir="ltr"><span class="sg-key">←</span><span class="sg-key">→</span><span class="sg-key">مسافة</span></span>
+      <span class="ghost-lbl">تحرّك واقفز!</span>
+    </div>
   </div>
 
-  <!-- متجر الجزيرة -->
-  <section id="scrShop" class="screen modal-bg" aria-label="متجر الجزيرة" hidden>
-    <div class="sg-panel shop-panel">
+  <!-- Minimal floating Title Screen over live 3D island -->
+  <div class="screen scr-title" id="scrTitle">
+    <div class="title-stats">
+      <span class="mini-pill" id="titleCoins">🪙 <b>0</b></span>
+      <span class="mini-pill" id="titleBest">🏆 <b>0</b></span>
+      <span class="mini-pill" id="titleStars">⭐ <b>0/3</b></span>
+    </div>
+
+    <div class="logo-wrap">
+      <h1 class="game-logo">جزيرة الفوضى</h1>
+    </div>
+
+    <div class="title-actions">
+      <button type="button" class="play-btn" id="btnPlay">▶ العب!</button>
+      <div class="sub-btns">
+        <button type="button" class="pill-btn" id="btnDuo" aria-pressed="false">👤 لاعب واحد</button>
+        <button type="button" class="pill-btn pill-endless" id="btnEndless">∞ بلا نهاية</button>
+        <button type="button" class="pill-btn pill-shop" id="btnShop">👑 المظهر</button>
+      </div>
+      <div class="controls-bar" id="controlsBar">
+        <span dir="ltr"><span class="sg-key">←</span><span class="sg-key">→</span> / <span class="sg-key">A</span><span class="sg-key">D</span></span> حركة
+        <span class="sep">·</span>
+        <span dir="ltr"><span class="sg-key">مسافة</span> / <span class="sg-key">↑</span></span> قفز
+      </div>
+    </div>
+  </div>
+
+  <!-- Wardrobe / Skins Drawer -->
+  <div class="screen scr-shop" id="scrShop" hidden>
+    <div class="shop-drawer">
       <div class="shop-head">
-        <h2>متجر الجزيرة</h2>
-        <div class="stat-pill gold" id="shopCoins">🪙 <b>0</b></div>
+        <h2>👑 المظهر</h2>
+        <span class="mini-pill" id="shopCoins">🪙 <b>0</b></span>
       </div>
-      <p class="shop-sub">افتح خوذات المحاربين وآثار الاندفاع النارية بالعملات الذهبية!</p>
-      <h3 class="shelf-title">الخوذات القتالية</h3>
-      <div class="shop-grid" id="helmGrid" role="group" aria-label="الخوذات"></div>
-      <h3 class="shelf-title">أثر الاندفاع</h3>
-      <div class="shop-grid trails" id="trailGrid" role="group" aria-label="أثر الاندفاع"></div>
-      <div class="modal-actions">
-        <button type="button" id="shopBack" class="sg-btn secondary">رجوع للقائمة</button>
+      <div class="shop-sec">الألوان</div>
+      <div class="shop-grid" id="colorGrid"></div>
+      <div class="shop-sec">القبعات</div>
+      <div class="shop-grid" id="hatGrid"></div>
+      <button type="button" class="sg-btn good shop-done" id="btnShopBack">تم ✓</button>
+    </div>
+  </div>
+
+  <!-- Pause Overlay -->
+  <div class="sg-overlay" id="scrPause" hidden>
+    <div class="sg-panel ci-panel">
+      <h2 class="panel-title">استراحة</h2>
+      <div class="panel-btns">
+        <button type="button" class="sg-btn good" id="btnResume">متابعة</button>
+        <button type="button" class="sg-btn" id="btnRestart">إعادة</button>
+        <button type="button" class="sg-btn secondary" id="btnHome">الرئيسية</button>
       </div>
     </div>
-  </section>
+  </div>
 
-  <!-- شاشة الاستراحة -->
-  <section id="scrPause" class="screen modal-bg" aria-label="إيقاف مؤقت" hidden>
-    <div class="sg-panel pause-panel">
-      <h2>استراحة المحاربين</h2>
-      <p class="pause-sub">اضغط <span class="sg-key" dir="ltr">P</span> أو <span class="sg-key" dir="ltr">Esc</span> للمتابعة</p>
-      <div class="pause-stack">
-        <button type="button" id="btnResume" class="sg-btn good">متابعة اللعب</button>
-        <button type="button" id="btnRestart" class="sg-btn">إعادة المعركة</button>
-        <button type="button" id="btnMenu" class="sg-btn secondary">القائمة الرئيسية</button>
+  <!-- Result Overlay -->
+  <div class="sg-overlay" id="scrResult" hidden>
+    <div class="sg-panel ci-panel res-panel">
+      <div class="new-best" id="resNewBest" hidden>🎉 رقم قياسي جديد!</div>
+      <h2 class="panel-title" id="resTitle">بطل الجزيرة!</h2>
+      <div class="res-stars" id="resStars" aria-label="النجوم">
+        <span class="star" data-i="1">★</span>
+        <span class="star" data-i="2">★</span>
+        <span class="star" data-i="3">★</span>
+      </div>
+      <div class="res-sub" id="resSub"></div>
+      <div class="res-stats">
+        <div class="res-stat"><span class="lbl">الجولات</span><b id="resRounds">0/5</b></div>
+        <div class="res-stat"><span class="lbl">النقاط</span><b id="resScore">0</b></div>
+        <div class="res-stat"><span class="lbl">العملات</span><b id="resCoins">+0</b></div>
+      </div>
+      <div class="panel-btns">
+        <button type="button" class="sg-btn good" id="btnAgain">العب مجددًا</button>
+        <button type="button" class="sg-btn" id="btnResShop">👑 المظهر</button>
+        <button type="button" class="sg-btn secondary" id="btnResHome">الرئيسية</button>
       </div>
     </div>
-  </section>
+  </div>
 
-  <!-- شاشة النتيجة -->
-  <section id="scrResult" class="screen modal-bg" aria-label="نتيجة المعركة" hidden>
-    <div class="sg-panel result-panel">
-      <div class="res-kicker" id="resKicker">نهاية الجولات الثلاث!</div>
-      <h2 id="resTitle">انتصار ساحق!</h2>
-      <div class="res-stars" id="resStars" aria-label="النجوم"></div>
-      <div class="res-board" id="resBoard"></div>
-      <p class="res-reward" id="resReward"></p>
-      <div class="modal-actions">
-        <button type="button" id="resAgain" class="sg-btn good">العب مجدداً</button>
-        <button type="button" id="resNext" class="sg-btn">الجزيرة التالية</button>
-        <button type="button" id="resMenu" class="sg-btn secondary">القائمة</button>
-      </div>
+  <!-- WebGL Error / Context Loss Fallback -->
+  <div class="sg-overlay" id="scrError" hidden>
+    <div class="sg-panel ci-panel">
+      <h2 class="panel-title">تعذّر تشغيل الرسوم ثلاثية الأبعاد</h2>
+      <p class="sg-sub">يحتاج هذا المتصفح إلى دعم WebGL لتشغيل جزيرة الفوضى.</p>
+      <button type="button" class="sg-btn" onclick="location.reload()">أعد المحاولة</button>
     </div>
-  </section>
-</div>
+  </div>
+  <div class="ctx-notice" id="ctxNotice" hidden role="status">جارٍ استعادة الرسوم…</div>
+  <div class="sr-only" id="live" aria-live="polite"></div>
 
-<script src="../../shared/kit.js"></script>
-<script src="../../shared/artkit.js"></script>
-<script src="../../shared/juice.js"></script>
-<script src="engine.js"></script>
-<script src="game.js"></script>
+  <script src="../../lib/three/three.min.js"></script>
+  <script src="../../shared/kit.js"></script>
+  <script src="../../shared/juice.js"></script>
+  <script src="engine.js"></script>
+  <script src="art.js"></script>
+  <script src="game.js"></script>
 </body>
 </html>
