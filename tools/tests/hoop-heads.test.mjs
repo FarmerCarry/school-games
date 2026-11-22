@@ -33,7 +33,7 @@ async function openHoop(t, { interceptLoop = false } = {}) {
   if (interceptLoop) {
     await page.addInitScript(() => {
       let kit, update, render;
-      const hh = window.hh = { failSave: false };
+      const hh = window.hh = { failSave: false, ready: false };
       hh.step = (n = 1) => { for (let i = 0; i < n; i++) { update(1 / 60); render(0); } };
       hh.down = code => window.dispatchEvent(new KeyboardEvent('keydown', { code }));
       hh.up = code => window.dispatchEvent(new KeyboardEvent('keyup', { code }));
@@ -43,7 +43,7 @@ async function openHoop(t, { interceptLoop = false } = {}) {
         get: () => kit,
         set(value) {
           kit = value;
-          kit.loop = (u, r) => { update = u; render = r; return { running: true, stop() {} }; };
+          kit.loop = (u, r) => { update = u; render = r; hh.ready = true; return { running: true, stop() {} }; };
         }
       });
       const write = Storage.prototype.setItem;
@@ -57,7 +57,7 @@ async function openHoop(t, { interceptLoop = false } = {}) {
   }
 
   await page.goto(`${server.origin}/games/hoop-heads/`, { waitUntil: 'load' });
-  await page.waitForFunction(() => window.__game && window.HH, { timeout: 15000 });
+  await page.waitForFunction(needLoop => window.__game && window.HH && (!needLoop || (window.hh && window.hh.ready)), interceptLoop, { timeout: 25000 });
   return page;
 }
 

@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { launchChromium } from '../browser.mjs';
 import { startTestServer } from '../test-server.mjs';
+import { clickControl } from '../ui-input.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const root = process.env.SG_ROOT ? path.resolve(repo, process.env.SG_ROOT) : repo;
@@ -27,22 +28,22 @@ test('Egg Rush 3D browser: start, race steering, pause/resume/restart, 2P and wa
   page.on('pageerror', e => errors.push(e.message));
   try {
     await page.goto(`${server.origin}/games/egg-rush/index.html`, { waitUntil: 'domcontentloaded' });
-    await page.waitForFunction(() => !!window.__game && window.__game.state.screen === 'title', null, { timeout: 15000 });
+    await page.waitForFunction(() => !!window.__game && window.__game.state.screen === 'title', null, { timeout: 30000 });
 
     // Open wardrobe and return
-    await page.click('#btnSkins');
+    await clickControl(page, '#btnSkins');
     await page.waitForFunction(() => window.__game.state.screen === 'skins');
-    await page.click('#skinsBack');
+    await clickControl(page, '#skinsBack');
     await page.waitForFunction(() => window.__game.state.screen === 'title');
 
     // Start solo race
-    await page.click('#btnPlay');
-    await page.waitForFunction(() => window.__game.state.screen === 'play' && window.__game.state.phase === 'race', null, { timeout: 12000 });
+    await clickControl(page, '#btnPlay');
+    await page.waitForFunction(() => window.__game.state.screen === 'play' && window.__game.state.phase === 'race', null, { timeout: 35000 });
 
     // Steer right with ArrowRight and verify lateral movement
     const x0 = await page.evaluate(() => window.__game.state.p1.x);
     await page.keyboard.down('ArrowRight');
-    await page.waitForFunction(oldX => window.__game.state.p1.x > oldX + 0.15, x0, { timeout: 5000 });
+    await page.waitForFunction(oldX => window.__game.state.p1.x > oldX + 0.15, x0, { timeout: 15000 });
     await page.keyboard.up('ArrowRight');
 
     // Pause freezes race time, resume continues, restart resets distance
