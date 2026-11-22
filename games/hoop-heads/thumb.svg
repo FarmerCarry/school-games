@@ -1,97 +1,116 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
   <defs>
     <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#1e1b4b"/>
-      <stop offset="55%" stop-color="#3b0764"/>
-      <stop offset="100%" stop-color="#fb7185"/>
+      <stop offset="0%" stop-color="#2299ff"/>
+      <stop offset="65%" stop-color="#7cd6ff"/>
+      <stop offset="100%" stop-color="#ffe7a8"/>
     </linearGradient>
     <linearGradient id="court" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#e8984c"/>
-      <stop offset="100%" stop-color="#b85d19"/>
+      <stop offset="0%" stop-color="#f2b254"/>
+      <stop offset="100%" stop-color="#c97926"/>
     </linearGradient>
-    <radialGradient id="fireGlow" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="#fff3b0"/>
-      <stop offset="45%" stop-color="#ff6d00"/>
-      <stop offset="100%" stop-color="#ff3d00" stop-opacity="0"/>
+    <radialGradient id="ballGrad" cx="35%" cy="30%" r="65%">
+      <stop offset="0%" stop-color="#ffd166"/>
+      <stop offset="45%" stop-color="#ff7a18"/>
+      <stop offset="100%" stop-color="#c23b00"/>
     </radialGradient>
-    <radialGradient id="ball" cx="35%" cy="32%" r="65%">
-      <stop offset="0%" stop-color="#ffbe0b"/>
-      <stop offset="55%" stop-color="#ff5400"/>
-      <stop offset="100%" stop-color="#9d0208"/>
+    <radialGradient id="headGrad" cx="38%" cy="32%" r="68%">
+      <stop offset="0%" stop-color="#ffe5c8"/>
+      <stop offset="70%" stop-color="#ffbe8f"/>
+      <stop offset="100%" stop-color="#e39260"/>
     </radialGradient>
+    <linearGradient id="fireGrad" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0%" stop-color="#ff2a55"/>
+      <stop offset="55%" stop-color="#ff8c00"/>
+      <stop offset="100%" stop-color="#fff066"/>
+    </linearGradient>
+    <linearGradient id="titleGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#fff9c4"/>
+      <stop offset="100%" stop-color="#ffbe26"/>
+    </linearGradient>
   </defs>
 
-  <!-- Vibrant twilight streetball sky -->
+  <!-- Sunlit Sky & Stadium Rays -->
   <rect width="400" height="400" fill="url(#sky)"/>
-  <circle cx="90" cy="82" r="46" fill="#ffd23f" opacity="0.28"/>
-  <g fill="#ffffff" opacity="0.6">
-    <circle cx="52" cy="48" r="2.5"/><circle cx="150" cy="36" r="2"/>
-    <circle cx="240" cy="54" r="3"/><circle cx="332" cy="42" r="2"/>
+  <circle cx="88" cy="76" r="56" fill="#fff7c2" opacity="0.55"/>
+  <circle cx="88" cy="76" r="34" fill="#fffbe0" opacity="0.85"/>
+  <!-- Fluffy Clouds -->
+  <g fill="#ffffff" opacity="0.88">
+    <ellipse cx="170" cy="64" rx="44" ry="16"/>
+    <ellipse cx="195" cy="56" rx="28" ry="15"/>
+    <ellipse cx="320" cy="82" rx="38" ry="14"/>
   </g>
 
-  <!-- City silhouette -->
-  <path d="M0 285V205h48v80zm54 0V172h56v113zm62 0V214h52v71zm58 0V184h64v101zm70 0V210h54v75zm60 0V165h96v120z" fill="#140d30" opacity="0.72"/>
+  <!-- Stadium Bleachers & Court Floor -->
+  <rect x="0" y="250" width="400" height="48" fill="#2b3a6e"/>
+  <rect x="0" y="274" width="400" height="24" fill="#1e2952"/>
+  <rect x="0" y="295" width="400" height="105" fill="url(#court)"/>
+  <line x1="0" y1="298" x2="400" y2="298" stroke="#ffffff" stroke-width="5"/>
+  <ellipse cx="185" cy="346" rx="110" ry="26" fill="none" stroke="#ffffff" stroke-width="5" opacity="0.85"/>
 
-  <!-- Hardwood Street Court -->
-  <rect x="0" y="285" width="400" height="115" fill="url(#court)" stroke="#1b1640" stroke-width="5"/>
-  <ellipse cx="200" cy="342" rx="95" ry="24" fill="#2b7fff" fill-opacity="0.45" stroke="#fff7e6" stroke-width="4"/>
-  <line x1="200" y1="285" x2="200" y2="400" stroke="#fff7e6" stroke-width="4"/>
+  <!-- 3D Hoop & Transparent Glass Backboard (Right) -->
+  <rect x="348" y="138" width="22" height="195" rx="6" fill="#1d4ed8"/>
+  <rect x="328" y="128" width="48" height="94" rx="8" fill="#d9f4ff" fill-opacity="0.52" stroke="#ffffff" stroke-width="5"/>
+  <rect x="334" y="160" width="26" height="36" rx="3" fill="none" stroke="#ff5a5f" stroke-width="4"/>
+  <!-- Swaying Net -->
+  <path d="M276 202 L288 266 L322 266 L332 202 Z" fill="none" stroke="#ffffff" stroke-width="3.5" stroke-linejoin="round"/>
+  <path d="M284 202 L308 264 M304 202 L322 264 M322 202 L292 264 M304 202 L286 244 M282 224 L328 224 M286 246 L324 246" stroke="#ffffff" stroke-width="2.6" opacity="0.9"/>
+  <!-- Orange Rim -->
+  <ellipse cx="304" cy="202" rx="32" ry="9" fill="none" stroke="#ff5400" stroke-width="9"/>
+  <ellipse cx="304" cy="200" rx="30" ry="7" fill="none" stroke="#ffa447" stroke-width="3"/>
 
-  <!-- Right Backboard & Spring Hoop -->
-  <path d="M376 315V138l-34 18" fill="none" stroke="#1b1640" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M376 315V138l-34 18" fill="none" stroke="#94a3b8" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
-  <rect x="334" y="88" width="14" height="98" rx="6" fill="#f8fafc" stroke="#1b1640" stroke-width="4"/>
-  <rect x="337" y="132" width="8" height="32" fill="#ff5420"/>
+  <!-- Flaming Dunk Trail -->
+  <path d="M108 232 Q186 105 268 158 Q210 156 146 248 Z" fill="url(#fireGrad)" opacity="0.85"/>
+  <circle cx="195" cy="128" r="8" fill="#fff066"/>
+  <circle cx="235" cy="118" r="6" fill="#ff9f1c"/>
+  <circle cx="152" cy="166" r="5" fill="#fff066"/>
 
-  <!-- Swishing Net -->
-  <path d="M274 166l10 46h36l12-46" fill="none" stroke="#ffffff" stroke-width="3.5" stroke-linejoin="round"/>
-  <path d="M286 166l8 46M303 166v46M320 166l-8 46M279 188h47" fill="none" stroke="#ffffff" stroke-width="2.5"/>
-  <line x1="270" y1="165" x2="334" y2="165" stroke="#1b1640" stroke-width="11" stroke-linecap="round"/>
-  <line x1="270" y1="165" x2="334" y2="165" stroke="#ff5420" stroke-width="6" stroke-linecap="round"/>
-
-  <!-- Meteor Super-Dunk Flame Trail -->
-  <path d="M62 248Q145 92 268 134" fill="none" stroke="#ff5400" stroke-width="28" stroke-linecap="round" opacity="0.55"/>
-  <path d="M74 242Q150 104 268 134" fill="none" stroke="#ffd23f" stroke-width="14" stroke-linecap="round" opacity="0.85"/>
-  <circle cx="272" cy="134" r="52" fill="url(#fireGlow)"/>
-
-  <!-- Flying Big-Head Athlete (Robo-Dunker!) -->
-  <g transform="translate(182, 188) rotate(-14)">
-    <!-- Fluttering headband tail -->
-    <path d="M-42 -58Q-74 -64 -88 -46" fill="none" stroke="#1b1640" stroke-width="11" stroke-linecap="round"/>
-    <path d="M-42 -58Q-74 -64 -88 -46" fill="none" stroke="#ff477e" stroke-width="6" stroke-linecap="round"/>
-    <!-- Sneakers with rocket flames -->
-    <path d="M-26 36l-16 20 18-6zM14 32l-12 22 18-8z" fill="#ff6d00"/>
-    <rect x="-32" y="18" width="28" height="15" rx="7" fill="#00d4ff" stroke="#1b1640" stroke-width="4"/>
-    <rect x="4" y="14" width="28" height="15" rx="7" fill="#00d4ff" stroke="#1b1640" stroke-width="4"/>
-    <!-- Jersey -->
-    <rect x="-24" y="-24" width="48" height="40" rx="14" fill="#1f6feb" stroke="#1b1640" stroke-width="4.5"/>
-    <rect x="-19" y="6" width="38" height="5" fill="#00f2fe"/>
-    <!-- Dunking Arm -->
-    <path d="M18 -14L68 -48" stroke="#1b1640" stroke-width="13" stroke-linecap="round"/>
-    <path d="M18 -14L68 -48" stroke="#b8c8de" stroke-width="7" stroke-linecap="round"/>
-    <!-- Antenna -->
-    <line x1="0" y1="-108" x2="0" y2="-124" stroke="#1b1640" stroke-width="5" stroke-linecap="round"/>
-    <circle cx="0" cy="-127" r="7" fill="#00f2fe" stroke="#1b1640" stroke-width="3.5"/>
-    <!-- Big Cartoon Head -->
-    <circle cx="0" cy="-64" r="46" fill="#b8c8de" stroke="#1b1640" stroke-width="5"/>
-    <rect x="-43" y="-88" width="86" height="14" rx="7" fill="#ff477e" stroke="#1b1640" stroke-width="3.5"/>
-    <!-- Glowing Visor -->
-    <rect x="-10" y="-72" width="44" height="21" rx="9" fill="#0b132b" stroke="#1b1640" stroke-width="3.5"/>
-    <circle cx="6" cy="-61" r="5.5" fill="#ffd23f"/>
-    <circle cx="24" cy="-61" r="5.5" fill="#ffd23f"/>
-    <path d="M4 -42a9 9 0 0 0 18 0z" fill="#ef476f" stroke="#1b1640" stroke-width="3"/>
+  <!-- Soaring Big-Head Cartoon Star Player -->
+  <g transform="translate(152, 206) rotate(-14)">
+    <!-- Shadow -->
+    <ellipse cx="14" cy="122" rx="46" ry="12" fill="#0d1b3e" opacity="0.28"/>
+    <!-- Sneakers -->
+    <rect x="-38" y="68" width="42" height="22" rx="10" fill="#2563eb" stroke="#10255a" stroke-width="3"/>
+    <rect x="-38" y="84" width="42" height="7" rx="3" fill="#ffffff"/>
+    <rect x="6" y="76" width="42" height="22" rx="10" fill="#2563eb" stroke="#10255a" stroke-width="3"/>
+    <rect x="6" y="92" width="42" height="7" rx="3" fill="#ffffff"/>
+    <!-- Chunky Jersey -->
+    <rect x="-28" y="24" width="56" height="52" rx="16" fill="#2563eb" stroke="#10255a" stroke-width="4"/>
+    <rect x="-28" y="44" width="56" height="12" fill="#ffe066"/>
+    <!-- Reaching Dunk Arm -->
+    <path d="M22 30 Q62 -10 88 -36" stroke="#ffbe8f" stroke-width="18" stroke-linecap="round" fill="none"/>
+    <circle cx="92" cy="-38" r="11" fill="#ffbe8f"/>
+    <!-- Oversized Big Head -->
+    <circle cx="0" cy="-22" r="56" fill="url(#headGrad)" stroke="#7c3a14" stroke-width="4.5"/>
+    <!-- Headband -->
+    <path d="M-54 -40 Q0 -58 54 -40 L52 -24 Q0 -40 -52 -24 Z" fill="#ffcf26" stroke="#8a4b00" stroke-width="3"/>
+    <path d="M-53 -34 Q0 -50 53 -34" stroke="#ffffff" stroke-width="4" fill="none"/>
+    <!-- Expressive Eyes & Big Grin -->
+    <ellipse cx="12" cy="-16" rx="12" ry="14" fill="#ffffff" stroke="#1a1f3c" stroke-width="2.5"/>
+    <circle cx="16" cy="-16" r="6.5" fill="#111827"/>
+    <circle cx="18" cy="-20" r="2.6" fill="#ffffff"/>
+    <ellipse cx="40" cy="-16" rx="11" ry="13" fill="#ffffff" stroke="#1a1f3c" stroke-width="2.5"/>
+    <circle cx="43" cy="-16" r="6" fill="#111827"/>
+    <circle cx="45" cy="-20" r="2.4" fill="#ffffff"/>
+    <!-- Fierce Happy Brows -->
+    <path d="M2 -32 L24 -26 M32 -26 L50 -32" stroke="#1a1f3c" stroke-width="4.5" stroke-linecap="round"/>
+    <!-- Rosy Cheek & Grin -->
+    <ellipse cx="2" cy="0" rx="8" ry="5" fill="#ff7b9c" opacity="0.65"/>
+    <path d="M12 6 Q28 22 44 4 Z" fill="#1a1f3c"/>
+    <path d="M16 7 Q28 13 40 6" fill="#ffffff"/>
   </g>
 
-  <!-- Blazing Basketball Above Rim -->
-  <g transform="translate(274, 132)">
-    <circle r="24" fill="url(#ball)" stroke="#1b1640" stroke-width="4"/>
-    <path d="M-23 0h46M0 -23v46M-16 -17q14 17 0 34M16 -17q-14 17 0 34" fill="none" stroke="#2b0900" stroke-width="2.6"/>
-    <ellipse cx="-8" cy="-9" rx="7" ry="4" transform="rotate(-28 -8 -9)" fill="#ffffff" opacity="0.45"/>
+  <!-- Flaming 3D Basketball Slamming into Rim -->
+  <g transform="translate(274, 152)">
+    <circle r="38" fill="#ffcf26" opacity="0.38"/>
+    <circle r="30" fill="url(#ballGrad)" stroke="#4a1800" stroke-width="4"/>
+    <path d="M-29 0 Q0 -8 29 0 M0 -29 Q8 0 0 29 M-21 -21 Q-4 0 -21 21 M21 -21 Q4 0 21 21" fill="none" stroke="#361400" stroke-width="3.2"/>
+    <ellipse cx="-10" cy="-11" rx="8" ry="5" fill="#ffffff" opacity="0.45" transform="rotate(-25 -10 -11)"/>
   </g>
 
-  <!-- Impact Stars -->
-  <g fill="#ffd23f" stroke="#1b1640" stroke-width="2.5">
-    <polygon points="318,86 323,98 336,99 326,107 329,120 318,113 307,120 310,107 300,99 313,98"/>
-    <polygon points="228,82 232,91 241,92 234,98 236,107 228,102 220,107 222,98 215,92 224,91"/>
+  <!-- Bold Arabic Logo Banner -->
+  <g transform="translate(200, 356)">
+    <rect x="-170" y="-34" width="340" height="58" rx="22" fill="#141d42" fill-opacity="0.88" stroke="#ffcf26" stroke-width="4"/>
+    <text x="0" y="7" text-anchor="middle" direction="rtl" font-family="Fredoka, 'Baloo Bhaijaan 2', sans-serif" font-weight="700" font-size="33" fill="url(#titleGrad)" stroke="#6e2600" stroke-width="1.5">سلة الرؤوس الكبيرة</text>
   </g>
 </svg>

@@ -1,924 +1,780 @@
-/* Hoop Heads: Turbo Super-Dunk Brawl — UI controller, Kit.art + Kit.juice glue, cups, shop & telemetry. */
+/* Hoop Heads 3D (سلة الرؤوس الكبيرة) — UI controller, keyboard input, HUD, Locker, Kit DDA/stats/juice.
+ * Pure deterministic physics lives in engine.js; 3D Three.js renderer lives in art.js. Zero BGM! */
 (function () {
   'use strict';
-  var HH = window.HH = window.HH || {};
-  var $ = function (id) { return document.getElementById(id); };
+
+  var E = window.HoopHeadsEngine;
+  var A = window.HoopHeadsArt;
+  var J = Kit.juice;
+  function $(id) { return document.getElementById(id); }
 
   var canvas = $('game');
-  var ui = $('ui');
-  var dirty = true;
+  var body = document.body;
 
-  // MANDATORY ORDER: Kit.art.init BEFORE Kit.fit!
-  Kit.art.init({ canvas: canvas, mode: '2d', theme: 'day' });
-  function placeUI(v) {
-    ui.style.transform = 'translate(' + canvas.style.left + ',' + canvas.style.top + ') scale(' + v.scale + ')';
-    dirty = true;
+  /* --------------------------------------------------------------- Save & DDA */
+  var store = Kit.store('hoop-heads');
+  var saveStatus = Kit.saveStatus({ retry: persist });
+  var save = E.loadSave(store.get('save_v3', null));
+  function persist() {
+    if (store.set('save_v3', save) === false) { saveStatus.failed(); return false; }
+    saveStatus.saved();
+    return true;
   }
-  var view = Kit.fit(canvas, 1280, 720, { onResize: placeUI });
-  placeUI(view);
-  HH.initArt();
-  Kit.muteButton();
 
-  var dda = Kit.dda('hoop-heads', { id: 'main', target: 0.7, tiers: 5 });
+  var dda = Kit.dda('hoop-heads', { id: 'main', target: 0.72, tiers: 5 });
 
-  var state = 'title';
+  /* --------------------------------------------------------------- App State */
+  var state = 'title'; // 'title' | 'shop' | 'play' | 'pause' | 'result'
+  var selectedStage = save.unlocked;
   var match = null;
-  var demo = HH.newMatch({ mode: 'demo', p1: 'robo', p2: 'titan', court: HH.save.court });
-  var selMode = 'cpu';
-  var selIdx = [0, 1];
-  var shopTab = 'balls';
-  var resultLockT = 0;
-  var confirmAct = null;
-  var returnState = 'pause';
-  var tourState = null;
+  var demo = null;
+  var view = null;
+  var loop = null;
+  var contextLost = false;
+  var dirty = true;
+  var snapCam = true;
+  var drawCount = 0;
 
-  /* --------------------------------------------------- Procedural SFX (Zero BGM!) */
-  function canPlayMatchSfx() {
-    return state === 'play' && match && match.mode !== 'demo';
-  }
-  function tone(freq, dur, type, vol, slide) {
-    if (!Kit.audio || Kit.audio.muted) return;
-    var ac = Kit.audio.unlock();
-    if (!ac || !Kit.audio.master) return;
-    try {
-      var t = ac.currentTime;
-      var osc = ac.createOscillator();
-      var g = ac.createGain();
-      osc.type = type || 'triangle';
-      osc.frequency.setValueAtTime(freq, t);
-      if (slide) osc.frequency.exponentialRampToValueAtTime(Math.max(30, slide), t + dur);
-      g.gain.setValueAtTime(vol || 0.16, t);
-      g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-      osc.connect(g);
-      g.connect(Kit.audio.master);
-      osc.start(t);
-      osc.stop(t + dur + 0.01);
-    } catch (e) { /* ignore */ }
-  }
+  var roundOpen = false;
+  var resultLock = 0;
+  var calloutT = 0;
+  var idleT = 0;
+  var hasPlayerActed = false;
+  var tutorialStarted = false;
+  var tutorialDone = false;
 
-  HH.sfx = {
-    click: function () { if (Kit.juice) Kit.juice.tap(); },
-    move: function () { if (Kit.juice) Kit.juice.select(); },
-    jump: function () { if (canPlayMatchSfx() && Kit.juice) Kit.juice.whoosh(0.55); },
-    land: function () { if (canPlayMatchSfx() && Kit.juice) Kit.juice.pop(0.32); },
-    bounce: function () { if (canPlayMatchSfx()) tone(165, 0.07, 'sine', 0.14, 88); },
-    shoot: function () { if (canPlayMatchSfx() && Kit.juice) Kit.juice.whoosh(0.8); },
-    swish: function () {
-      if (!canPlayMatchSfx()) return;
-      if (Kit.juice) { Kit.juice.chime(1.1); Kit.juice.pop(0.7); }
-    },
-    dunk: function () {
-      if (!canPlayMatchSfx()) return;
-      tone(140, 0.22, 'sawtooth', 0.22, 48);
-      if (Kit.juice) Kit.juice.star(2);
-    },
-    superDunk: function () {
-      if (!canPlayMatchSfx()) return;
-      tone(220, 0.34, 'sawtooth', 0.26, 52);
-      if (Kit.juice) { Kit.juice.streak(3); Kit.juice.star(3); }
-    },
-    clank: function () { if (canPlayMatchSfx()) tone(420, 0.08, 'square', 0.11, 210); },
-    board: function () { if (canPlayMatchSfx()) tone(240, 0.06, 'triangle', 0.12, 130); },
-    steal: function () { if (canPlayMatchSfx() && Kit.juice) Kit.juice.chime(0.85); },
-    block: function () {
-      if (!canPlayMatchSfx()) return;
-      tone(310, 0.14, 'square', 0.18, 110);
-      if (Kit.juice) Kit.juice.pop(0.95);
-    },
-    dash: function () { if (canPlayMatchSfx() && Kit.juice) Kit.juice.whoosh(0.65); },
-    power: function () { if (canPlayMatchSfx() && Kit.juice) Kit.juice.coin(); },
-    ice: function () { if (canPlayMatchSfx() && Kit.juice) Kit.juice.chime(1.3); },
-    fire: function () { if (canPlayMatchSfx() && Kit.juice) Kit.juice.streak(2); },
-    whistle: function () { if (canPlayMatchSfx()) tone(1480, 0.16, 'sine', 0.12, 1320); },
-    buzzer: function () { if (canPlayMatchSfx()) tone(180, 0.35, 'sawtooth', 0.18, 115); },
-    tick: function () { if (canPlayMatchSfx()) tone(780, 0.05, 'sine', 0.09, 760); },
-    win: function () { if (Kit.juice) Kit.juice.levelUp(); },
-    lose: function () { if (Kit.juice) Kit.juice.fail(); },
-    buy: function () { if (Kit.juice) Kit.juice.coin(); },
-    error: function () { if (Kit.juice) Kit.juice.miss(); }
-  };
+  // Track edge-triggered shoot release & jump taps across frames
+  var prevS = [false, false];
+  var prevJ = [false, false];
+  var hudCache = { s1: -1, s2: -1, sup1: -1, sup2: -1, clock: '', ot: false, urgent: false };
 
-  /* --------------------------------------------------- Screen Management */
-  var SCREENS = {
-    title: 'scrTitle',
-    select: 'scrSelect',
-    cups: 'scrCups',
-    ladder: 'scrLadder',
-    shop: 'scrShop',
-    pause: 'scrPause',
-    confirm: 'scrConfirm',
-    result: 'scrResult',
-    trophy: 'scrTrophy'
-  };
+  function say(txt) { $('live').textContent = txt; }
+  function focusCanvas() { try { canvas.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }
 
-  function isTouchDevice() {
-    return !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
-  }
-
-  function setScreen(next) {
+  /* --------------------------------------------------------------- Screens */
+  var SCREENS = { title: 'scrTitle', shop: 'scrShop', pause: 'scrPause', result: 'scrResult' };
+  function setState(next) {
     state = next;
+    body.dataset.mode = next;
+    for (var k in SCREENS) $(SCREENS[k]).hidden = k !== next;
+    $('hud').hidden = !(next === 'play' || next === 'pause');
+    if (next !== 'play') {
+      $('shotGauge').hidden = true;
+      $('ghostHint').hidden = true;
+      $('callout').hidden = true;
+    }
     dirty = true;
-    for (var k in SCREENS) {
-      var el = $(SCREENS[k]);
-      if (el) el.hidden = (k !== next);
+    if (next === 'play') focusCanvas();
+  }
+
+  function showCallout(text, kind, dur) {
+    var el = $('callout');
+    el.textContent = text;
+    el.className = kind || '';
+    el.hidden = false;
+    calloutT = dur || 1.3;
+  }
+
+  function refreshTitleUI() {
+    selectedStage = E.clamp(selectedStage, 0, save.unlocked);
+    $('titleStars').querySelector('b').textContent = E.totalStars(save) + '/' + (E.OPPONENTS.length * 3);
+    $('titleCoins').querySelector('b').textContent = Kit.fmt(save.coins);
+    $('titleBest').querySelector('b').textContent = Kit.fmt(save.bestScore);
+
+    var opp = E.OPPONENTS[selectedStage];
+    $('stageText').textContent = (selectedStage + 1) + '/' + E.OPPONENTS.length + ' · ' + opp.name;
+    var dots = $('stageDots');
+    dots.innerHTML = '';
+    for (var i = 0; i < E.OPPONENTS.length; i++) {
+      var dot = document.createElement('span');
+      dot.className = 'stage-dot' + (i <= save.unlocked ? ' unlocked' : '') + (i === selectedStage ? ' active' : '');
+      dots.appendChild(dot);
     }
-    $('pauseBtn').hidden = (next !== 'play');
-    $('touchPad').hidden = !(next === 'play' && match && match.mode !== 'duo' && isTouchDevice());
-    if (next === 'title') refreshTitle();
-    if (next === 'play') canvas.focus();
+    $('stagePrev').disabled = selectedStage <= 0;
+    $('stageNext').disabled = selectedStage >= save.unlocked;
   }
 
-  function syncTheme(courtId) {
-    var ct = HH.findById(HH.COURTS, courtId || HH.save.court);
-    if (Kit.art) Kit.art.theme = ct.theme || 'day';
-  }
+  function buildShopUI() {
+    $('shopCoins').querySelector('b').textContent = Kit.fmt(save.coins);
 
-  function refreshTitle() {
-    var s = HH.save;
-    $('coinBadge').textContent = String(s.coins);
-    $('streakBadge').textContent = String(s.streak);
-    var cupCount = (s.cups.b ? 1 : 0) + (s.cups.s ? 1 : 0) + (s.cups.g ? 1 : 0);
-    $('cupBadges').textContent = '🏆 الكؤوس: ' + cupCount + '/3';
-    var ch = HH.charById(s.p1);
-    var ct = HH.findById(HH.COURTS, s.court);
-    $('quickSub').textContent = ch.name + ' • ' + ct.name + ' • ' + HH.DIFF_NAMES[s.diff];
-    var bl = HH.findById(HH.BALLS, s.ball);
-    $('shopSub').textContent = bl.name + ' • 🪙 ' + s.coins;
-    if (demo) demo.court = s.court;
-  }
-
-  /* --------------------------------------------------- Fighter & Arena Select */
-  function charIndex(id) {
-    for (var i = 0; i < HH.CHARS.length; i++) if (HH.CHARS[i].id === id) return i;
-    return 0;
-  }
-
-  function openSelect(mode) {
-    selMode = mode;
-    selIdx[0] = charIndex(HH.save.p1);
-    selIdx[1] = charIndex(HH.save.p2);
-    if (selIdx[1] === selIdx[0]) selIdx[1] = (selIdx[0] + 1) % HH.CHARS.length;
-
-    $('selTitle').textContent = mode === 'duo' ? 'طور اللاعبين — اختارا البطل والملعب'
-      : mode === 'tour' ? 'اختر بطلك للبطولة 🏆'
-      : 'مباراة فردية — اختر البطل والملعب';
-    $('diffRow').hidden = (mode !== 'cpu');
-    $('duoHint').hidden = (mode !== 'duo');
-    renderSelectUI();
-    setScreen('select');
-  }
-
-  function renderSelectUI() {
-    var diffBtns = $('diffRow').querySelectorAll('[data-diff]');
-    for (var d = 0; d < diffBtns.length; d++) {
-      diffBtns[d].classList.toggle('on', +diffBtns[d].dataset.diff === HH.save.diff);
-    }
-
-    var grid = $('charGrid');
-    grid.innerHTML = '';
-    HH.CHARS.forEach(function (ch, idx) {
+    var bGrid = $('ballGrid');
+    bGrid.innerHTML = '';
+    for (var bi = 0; bi < E.BALLS.length; bi++) {
+      var b = E.BALLS[bi];
+      var bOwned = !!save.ownedBalls[b.id];
+      var bActive = save.ball === b.id;
       var btn = document.createElement('button');
       btn.type = 'button';
-      var isP1 = selIdx[0] === idx;
-      var isP2 = selMode === 'duo' && selIdx[1] === idx;
-      btn.className = 'cc' + (isP1 ? ' p1' : '') + (isP2 ? ' p2' : '');
-      var tag = isP1 && isP2 ? '<span class="cc-tag">لاعب 1 و 2</span>'
-        : isP1 ? '<span class="cc-tag">اللاعب 1</span>'
-        : isP2 ? '<span class="cc-tag t2">اللاعب 2</span>' : '';
-      btn.innerHTML = tag +
-        '<div class="cc-ava" style="background:' + ch.skin + ';border-color:#1b1640">' + ch.num + '</div>' +
-        '<div class="cc-name">' + ch.name + '</div>' +
-        '<div class="cc-desc">' + ch.desc + '</div>' +
-        '<div class="cc-bars">⚡' + ch.spd + ' • 🦘' + ch.jmp + ' • 🎯' + ch.sht + '</div>';
-      btn.addEventListener('click', function (e) {
-        HH.sfx.move();
-        if (selMode === 'duo' && e.shiftKey) selIdx[1] = idx;
-        else selIdx[0] = idx;
-        HH.save.p1 = HH.CHARS[selIdx[0]].id;
-        HH.persist();
-        renderSelectUI();
-      });
-      grid.appendChild(btn);
-    });
-
-    var crow = $('courtRow');
-    crow.innerHTML = '';
-    HH.COURTS.forEach(function (ct) {
-      var b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'court-btn' + (HH.save.court === ct.id ? ' on' : '');
-      b.textContent = ct.name;
-      b.addEventListener('click', function () {
-        HH.sfx.move();
-        HH.save.court = ct.id;
-        syncTheme(ct.id);
-        HH.persist();
-        renderSelectUI();
-      });
-      crow.appendChild(b);
-    });
-  }
-
-  /* --------------------------------------------------- Tournament Cups & Ladder */
-  function buildOpponents(cup, heroId) {
-    var pool = HH.CHARS.map(function (c) { return c.id; }).filter(function (id) { return id !== heroId && id !== cup.boss; });
-    var out = [];
-    for (var i = 0; i < 4; i++) out.push(pool[i % pool.length] || 'shark');
-    out.push(cup.boss);
-    return out;
-  }
-
-  function openCups() {
-    var row = $('cupRow');
-    row.innerHTML = '';
-    HH.CUPS.forEach(function (cp, idx) {
-      var won = !!HH.save.cups[cp.id];
-      var card = document.createElement('button');
-      card.type = 'button';
-      card.className = 'cupc';
-      card.innerHTML =
-        '<div class="cup-ico" style="filter:drop-shadow(0 4px 0 #1b1640)">🏆</div>' +
-        '<div class="cup-name" style="color:' + cp.color + '">' + cp.name + '</div>' +
-        '<div class="cup-rew">الجائزة الكبرى: 🪙 +' + cp.reward + '</div>' +
-        (won ? '<div class="cup-won">✓ فزت بهذه الكأس!</div>' : '<div class="cup-rew" style="color:#7dd3fc;margin-top:6px">5 جولات حماسية</div>');
-      card.addEventListener('click', function () {
-        HH.sfx.click();
-        setupTour(idx, 0, HH.save.p1);
-      });
-      row.appendChild(card);
-    });
-    setScreen('cups');
-  }
-
-  function setupTour(cupIdx, roundIdx, p1Id, fixedOpp) {
-    var cIdx = Math.max(0, Math.min(HH.CUPS.length - 1, cupIdx | 0));
-    var rIdx = Math.max(0, Math.min(4, roundIdx | 0));
-    var hero = p1Id ? HH.charById(p1Id).id : HH.save.p1;
-    var cup = HH.CUPS[cIdx];
-    var opps = buildOpponents(cup, hero);
-    if (fixedOpp) opps[rIdx] = HH.charById(fixedOpp).id;
-    tourState = {
-      cup: cIdx,
-      round: rIdx,
-      p1: hero,
-      opps: opps
-    };
-    renderLadder();
-    setScreen('ladder');
-  }
-
-  function renderLadder() {
-    if (!tourState) return;
-    var cup = HH.CUPS[tourState.cup];
-    $('ladTitle').textContent = cup.name + ' 🏆';
-    $('ladSub').textContent = 'المباراة ' + (tourState.round + 1) + ' من 5 • جائزة الكأس 🪙 +' + cup.reward;
-    var list = $('ladder');
-    list.innerHTML = '';
-    for (var i = 0; i < 5; i++) {
-      var opp = HH.charById(tourState.opps[i]);
-      var div = document.createElement('div');
-      div.className = 'lslot' + (i < tourState.round ? ' done' : (i === tourState.round ? ' cur' : ''));
-      var badge = i < tourState.round ? '✓ فوز' : (i === 4 ? '👑 الزعيم النهائي' : 'الجولة ' + (i + 1));
-      div.innerHTML = '<span>' + (i + 1) + '. ' + opp.name + '</span><span>' + badge + '</span>';
-      list.appendChild(div);
-    }
-  }
-
-  function startTourRound() {
-    if (!tourState) return;
-    var cup = HH.CUPS[tourState.cup];
-    var r = tourState.round;
-    startMatch({
-      mode: 'tour',
-      p1: tourState.p1,
-      p2: tourState.opps[r],
-      lv: cup.lv[r],
-      court: cup.court
-    });
-  }
-
-  /* --------------------------------------------------- Locker Shop */
-  function openShop() {
-    renderShop();
-    setScreen('shop');
-  }
-
-  function renderShop() {
-    var s = HH.save;
-    $('shopCoins').textContent = String(s.coins);
-    var tabBtns = $('shopTabs').querySelectorAll('[data-tab]');
-    for (var t = 0; t < tabBtns.length; t++) {
-      tabBtns[t].classList.toggle('on', tabBtns[t].dataset.tab === shopTab);
-    }
-
-    var list = shopTab === 'balls' ? HH.BALLS : HH.TRAILS;
-    var owned = shopTab === 'balls' ? s.ownBalls : s.ownTrails;
-    var eqId = shopTab === 'balls' ? s.ball : s.trail;
-
-    var grid = $('shopGrid');
-    grid.innerHTML = '';
-    list.forEach(function (item) {
-      var has = owned.indexOf(item.id) >= 0;
-      var eq = eqId === item.id;
-      var btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'sh-item' + (eq ? ' eq' : '');
-      var bg = shopTab === 'balls'
-        ? 'radial-gradient(circle at 35% 35%,' + item.c1 + ',' + item.c2 + ')'
-        : 'linear-gradient(135deg,' + item.colors[0] + ',' + item.colors[1] + ')';
-      var lbl = eq ? '✓ مجهّز حالياً' : has ? 'اضغط للتجهيز' : '🪙 ' + item.price;
+      btn.className = 'shop-item' + (bActive ? ' active' : '') + (!bOwned ? ' locked' : '');
+      btn.dataset.ball = b.id;
       btn.innerHTML =
-        '<div class="sh-swatch" style="background:' + bg + '"></div>' +
-        '<div class="sh-name">' + item.name + '</div>' +
-        '<div class="sh-price">' + lbl + '</div>';
-      btn.addEventListener('click', function () {
-        if (has) {
-          if (shopTab === 'balls') s.ball = item.id;
-          else s.trail = item.id;
-          HH.sfx.move();
-          HH.persist();
-          renderShop();
-        } else if (s.coins >= item.price) {
-          s.coins -= item.price;
-          owned.push(item.id);
-          if (shopTab === 'balls') s.ball = item.id;
-          else s.trail = item.id;
-          HH.sfx.buy();
-          HH.persist();
-          renderShop();
-        } else {
-          HH.sfx.error();
-        }
-      });
-      grid.appendChild(btn);
-    });
+        '<span class="shop-ico">' + b.icon + '</span>' +
+        '<span class="shop-name">' + b.name + '</span>' +
+        '<span class="shop-tag">' + (bActive ? 'مُختار ✓' : (bOwned ? 'اختيار' : '🪙 ' + b.cost)) + '</span>';
+      btn.addEventListener('click', (function (id) {
+        return function () {
+          var res = E.buyOrEquipBall(save, id);
+          if (res.ok) {
+            if (res.bought) J.chime(2); else J.select();
+            persist();
+            initDemo();
+            buildShopUI();
+            refreshTitleUI();
+          } else {
+            J.error();
+          }
+        };
+      })(b.id));
+      bGrid.appendChild(btn);
+    }
+
+    var hGrid = $('headGrid');
+    hGrid.innerHTML = '';
+    for (var hi = 0; hi < E.HEADS.length; hi++) {
+      var h = E.HEADS[hi];
+      var hOwned = !!save.ownedHeads[h.id];
+      var hActive = save.head === h.id;
+      var hbtn = document.createElement('button');
+      hbtn.type = 'button';
+      hbtn.className = 'shop-item' + (hActive ? ' active' : '') + (!hOwned ? ' locked' : '');
+      hbtn.dataset.head = h.id;
+      hbtn.innerHTML =
+        '<span class="shop-ico">' + h.icon + '</span>' +
+        '<span class="shop-name">' + h.name + '</span>' +
+        '<span class="shop-tag">' + (hActive ? 'مُختار ✓' : (hOwned ? 'اختيار' : '🪙 ' + h.cost)) + '</span>';
+      hbtn.addEventListener('click', (function (id) {
+        return function () {
+          var res = E.buyOrEquipHead(save, id);
+          if (res.ok) {
+            if (res.bought) J.chime(2); else J.select();
+            persist();
+            initDemo();
+            buildShopUI();
+            refreshTitleUI();
+          } else {
+            J.error();
+          }
+        };
+      })(h.id));
+      hGrid.appendChild(hbtn);
+    }
   }
 
-  /* --------------------------------------------------- Match Start, Rewards & End */
-  function matchHUDInfo(m) {
-    if (!m) return { mode: '', tags: ['', ''] };
-    if (m.mode === 'tour' && tourState) {
-      var cp = HH.CUPS[tourState.cup];
-      return {
-        mode: cp.name + ' • المباراة ' + (tourState.round + 1) + ' من 5',
-        tags: ['أنت', 'الخصم ' + (tourState.round + 1) + ' من 5']
-      };
+  /* --------------------------------------------------------------- Demo & Match Lifecycle */
+  function initDemo() {
+    demo = E.createMatch({
+      mode: 'demo',
+      stage: selectedStage,
+      head: save.head,
+      ball: save.ball,
+      seed: 4242 + selectedStage * 31
+    });
+    demo.phase = 'play';
+    demo.time = 9999;
+    demo.players[0].x = 290;
+    demo.players[1].x = 990;
+    demo.ball.holder = demo.players[0];
+    demo.ball.state = 'held';
+    snapCam = true;
+    dirty = true;
+  }
+
+  function closeOpenRoundAsQuit() {
+    if (roundOpen) {
+      Kit.stats.end('quit');
+      roundOpen = false;
     }
-    if (m.mode === 'duo') return { mode: 'لاعبان وجهاً لوجه • أول من يصل 15', tags: ['اللاعب 1', 'اللاعب 2'] };
-    return { mode: 'ضد الحاسوب (' + HH.DIFF_NAMES[m.diff || 0] + ') • أول من يصل 15', tags: ['أنت', 'الحاسوب'] };
   }
 
   function startMatch(opts) {
     opts = opts || {};
-    var s = HH.save;
-    var mode = opts.mode || 'cpu';
-    var diff = opts.diff !== undefined ? opts.diff : s.diff;
-    var lv = opts.lv;
-    if (lv === undefined) {
-      var baseLv = diff === 0 ? 0.28 : diff === 1 ? 1.05 : 1.85;
-      lv = Math.max(0, baseLv + dda.value(-0.22, 0.32));
-    } else {
-      // Touch dda.tier so telemetry captures current adaptive tier
-      void dda.tier;
-    }
+    var mMode = opts.mode === 'duo' ? 'duo' : 'cpu';
+    var stage = opts.stage != null ? E.clamp(opts.stage | 0, 0, E.OPPONENTS.length - 1) : selectedStage;
+    selectedStage = stage;
 
-    var p1 = opts.p1 || s.p1;
-    var p2 = opts.p2;
-    if (!p2) {
-      if (mode === 'duo') {
-        p2 = s.p2 !== p1 ? s.p2 : HH.CHARS[(charIndex(p1) + 1) % HH.CHARS.length].id;
-      } else {
-        var pool = HH.CHARS.filter(function (c) { return c.id !== p1; });
-        p2 = pool[Math.floor(Math.random() * pool.length)].id;
-      }
-    }
-    var court = opts.court || s.court;
-    syncTheme(court);
-    HH.resetBg();
+    closeOpenRoundAsQuit();
 
-    match = HH.newMatch({
-      mode: mode,
-      p1: p1,
-      p2: p2,
-      lv: lv,
-      diff: diff,
-      court: court,
-      ball: s.ball,
-      trail: s.trail,
-      len: opts.len || s.len || 60,
-      target: opts.target || 15
+    var ddaVal = mMode === 'cpu' ? dda.level : 0.35;
+    match = E.createMatch({
+      mode: mMode,
+      stage: stage,
+      head: save.head,
+      ball: save.ball,
+      dda: ddaVal,
+      aiSkill: opts.aiSkill,
+      target: opts.target || 0,
+      duration: opts.duration || E.MATCH_SECONDS,
+      seed: opts.seed || ((Date.now() & 0xffff) + stage * 131)
     });
-    match.settled = false;
 
-    var roundKey = mode === 'tour' && tourState
-      ? 'tour-' + HH.CUPS[tourState.cup].id + '-' + (tourState.round + 1)
-      : mode === 'duo' ? 'duo' : 'cpu-' + diff;
-    Kit.stats.round(roundKey);
+    prevS[0] = prevS[1] = false;
+    prevJ[0] = prevJ[1] = false;
+    Kit.keys.reset();
 
-    setScreen('play');
-    return match;
+    hudCache.s1 = hudCache.s2 = hudCache.sup1 = hudCache.sup2 = -1;
+    hudCache.clock = '';
+    $('hudP1Name').textContent = match.players[0].name;
+    $('hudP2Name').textContent = match.players[1].name;
+
+    idleT = 0;
+    hasPlayerActed = false;
+    tutorialStarted = false;
+    tutorialDone = false;
+    snapCam = true;
+
+    Kit.stats.round(mMode === 'duo' ? 'duo' : ('stage-' + (stage + 1)));
+    roundOpen = true;
+
+    setState('play');
+    showCallout(mMode === 'duo' ? 'لاعب 1 ضد لاعب 2! 🏀' : ('تحدّي ' + match.players[1].name + '! 🏀'), 'blue', 1.1);
+    updateHUD();
+    say('بدأت المباراة');
   }
 
-  function recordOutcome(m) {
-    if (!m || m.settled) return null;
-    m.settled = true;
-    var s = HH.save;
-    var p0 = m.players[0], p1 = m.players[1];
-    var won = m.winner === 0;
-
-    s.stats.games = (s.stats.games || 0) + 1;
-    if (won) s.stats.wins = (s.stats.wins || 0) + 1;
-    s.stats.points = (s.stats.points || 0) + p0.score;
-    s.stats.dunks = (s.stats.dunks || 0) + p0.st.dunks;
-    s.stats.threes = (s.stats.threes || 0) + p0.st.threes;
-    s.stats.blocks = (s.stats.blocks || 0) + p0.st.blocks;
-    s.stats.steals = (s.stats.steals || 0) + p0.st.steals;
-
-    // Exact reward contract verified by regressions-hoop.mjs (testHoopRewards):
-    var earned = p0.score + (won ? 15 : 5);
-    s.coins = (s.coins || 0) + earned;
-
-    if (m.mode === 'cpu') {
-      s.streak = won ? (s.streak || 0) + 1 : 0;
-      if (s.streak > (s.bestStreak || 0)) s.bestStreak = s.streak;
-      dda.result(won);
-    }
-
-    var wonCup = null;
-    if (m.mode === 'tour' && tourState && won) {
-      if (tourState.round >= 4) {
-        wonCup = HH.CUPS[tourState.cup];
-        s.cups[wonCup.id] = true;
-        s.coins += wonCup.reward;
-      } else {
-        tourState.round += 1;
-      }
-    }
-
-    Kit.stats.end(m.mode === 'duo' ? 'end' : (won ? 'win' : 'lose'), p0.score);
-    HH.persist();
-
-    return { won: won, earned: earned, wonCup: wonCup, s0: p0.score, s1: p1.score };
-  }
-
-  function showMatchEndScreen(m) {
-    var res = m.outcome || recordOutcome(m);
-    m.outcome = res;
-    resultLockT = 0.45;
-
-    if (res.wonCup) {
-      HH.sfx.win();
-      $('trText').textContent = 'فزت بـ' + res.wonCup.name + '! 🪙 +' + (res.earned + res.wonCup.reward);
-      setScreen('trophy');
-      return;
-    }
-
-    var banner = $('resBanner');
-    banner.classList.remove('win', 'lose');
-    if (m.mode === 'duo') {
-      banner.classList.add('win');
-      banner.textContent = m.winner === 0 ? 'فاز اللاعب 1! 🎉' : 'فاز اللاعب 2! 🎉';
-      HH.sfx.win();
-    } else if (res.won) {
-      banner.classList.add('win');
-      banner.textContent = 'انتصار ساحق! 🎉';
-      HH.sfx.win();
-    } else {
-      banner.classList.add('lose');
-      banner.textContent = 'حاول مجدداً! 💪';
-      HH.sfx.lose();
-    }
-
-    $('resScore').textContent = res.s0 + ' - ' + res.s1;
-    var p0 = m.players[0];
-    $('resSummary').textContent = 'دانك: ' + p0.st.dunks + ' • ثلاثيات: ' + p0.st.threes + ' • خطف وتصدٍّ: ' + (p0.st.steals + p0.st.blocks);
-    $('resCoins').textContent = '🪙 +' + res.earned + ' عملة';
-
-    if (m.mode === 'tour' && tourState) {
-      $('rAgain').textContent = res.won ? 'المباراة التالية ▶' : 'إعادة المحاولة 🔥';
-    } else {
-      $('rAgain').textContent = 'العب مجدداً! 🔥';
-    }
-    setScreen('result');
-  }
-
-  /* --------------------------------------------------- Pause & Lifecycle */
   function pauseGame() {
-    if (state !== 'play' || !match) return;
-    setScreen('pause');
+    if (state !== 'play') return;
+    setState('pause');
+    dirty = true;
+    say('إيقاف مؤقت');
   }
 
   function resumeGame() {
-    if (state !== 'pause' || !match) return;
-    setScreen('play');
+    if (state !== 'pause') return;
+    prevS[0] = prevS[1] = false;
+    prevJ[0] = prevJ[1] = false;
+    Kit.keys.reset();
+    setState('play');
+    say('متابعة اللعب');
   }
 
-  function restartMatch() {
-    if (!match) return;
-    if (match.ended && !match.settled) {
-      match.outcome = recordOutcome(match);
-      if (match.mode === 'tour') {
-        showMatchEndScreen(match);
-        return;
-      }
-    } else if (!match.ended) {
-      Kit.stats.end('quit', match.players[0].score);
-    }
-
-    if (match.mode === 'tour' && tourState) {
-      startTourRound();
-    } else {
-      startMatch({
-        mode: match.mode,
-        p1: match.players[0].ch.id,
-        p2: match.players[1].ch.id,
-        lv: match.lv,
-        diff: match.diff,
-        court: match.court
-      });
-    }
-  }
-
-  function leaveToMenu() {
-    if (match) {
-      if (match.ended && !match.settled) recordOutcome(match);
-      else if (!match.settled) Kit.stats.end('quit', match.players[0].score);
-    }
+  function goHome() {
+    closeOpenRoundAsQuit();
     match = null;
-    tourState = null;
-    syncTheme(HH.save.court);
-    setScreen('title');
+    initDemo();
+    refreshTitleUI();
+    setState('title');
   }
 
-  Kit.lifecycle({
-    pause: function () {
-      if (state === 'play') pauseGame();
-    }
-  });
+  function showResult(m) {
+    var rew = E.applyMatchResult(save, m);
+    if (m.mode === 'cpu') persist();
 
-  canvas.addEventListener('contextrestored', function () {
-    view.resize();
-    HH.resetBg();
-    dirty = true;
-  });
-
-  if (Kit.motion && typeof Kit.motion.onChange === 'function') {
-    Kit.motion.onChange(function () { dirty = true; });
-  }
-
-  /* --------------------------------------------------- Input Wiring (Guarded!) */
-  window.addEventListener('keydown', function (e) {
-    // CRITICAL: Guard ALL custom keydown handlers so native focused buttons (e.g. [data-act="shop"] + Space) work cleanly!
-    if (!Kit.isGameKeyEvent(e)) return;
-
-    var c = e.code;
-    if (state === 'play' && match) {
-      if (c === 'Escape' || c === 'KeyP') {
-        e.preventDefault();
-        pauseGame();
-        return;
-      }
-      if (c === 'KeyR') {
-        e.preventDefault();
-        restartMatch();
-        return;
-      }
-      HH.latchKey(match, c, true);
-      return;
-    }
-
-    if (state === 'pause') {
-      if (c === 'Escape' || c === 'KeyP') {
-        e.preventDefault();
-        resumeGame();
-      } else if (c === 'KeyR') {
-        e.preventDefault();
-        restartMatch();
-      }
-      return;
-    }
-
-    if (state === 'result' && resultLockT <= 0) {
-      if (c === 'Enter') {
-        e.preventDefault();
-        $('rAgain').click();
-      } else if (c === 'Escape') {
-        e.preventDefault();
-        $('rMenu').click();
-      }
-      return;
-    }
-
-    if (state === 'select' && selMode === 'duo') {
-      if (c === 'KeyA') { selIdx[0] = (selIdx[0] + HH.CHARS.length - 1) % HH.CHARS.length; renderSelectUI(); }
-      else if (c === 'KeyD') { selIdx[0] = (selIdx[0] + 1) % HH.CHARS.length; renderSelectUI(); }
-      else if (c === 'ArrowLeft') { selIdx[1] = (selIdx[1] + HH.CHARS.length - 1) % HH.CHARS.length; renderSelectUI(); }
-      else if (c === 'ArrowRight') { selIdx[1] = (selIdx[1] + 1) % HH.CHARS.length; renderSelectUI(); }
-    }
-  });
-
-  window.addEventListener('keyup', function (e) {
-    if (state === 'play' && match) {
-      HH.latchKey(match, e.code, false);
-    }
-  });
-
-  // Canvas pointer click/tap shoots, dunks, steals or blocks!
-  canvas.addEventListener('pointerdown', function (e) {
-    if (state !== 'play' || !match || match.mode === 'duo') return;
-    if (e.button === 2) return;
-    var pt = view.toLogical(e.clientX, e.clientY);
-    // Tap upper court to jump + action, or regular click to shoot / dunk / steal!
-    if (pt.y < 360 && match.players[0].onGround) {
-      match.players[0].latch.j = true;
-    }
-    match.players[0].latch.sDown = true;
-  });
-  window.addEventListener('pointerup', function () {
-    if (state === 'play' && match && match.mode !== 'duo') {
-      match.players[0].latch.sUp = true;
-    }
-  });
-
-  // Touch buttons for mobile/tablet Chromebooks
-  var touchBtns = $('touchPad').querySelectorAll('[data-tkey]');
-  for (var tb = 0; tb < touchBtns.length; tb++) {
-    (function (btn) {
-      var act = btn.dataset.tkey;
-      btn.addEventListener('pointerdown', function (e) {
-        e.preventDefault();
-        if (!match) return;
-        var p0 = match.players[0];
-        if (act === 'left') p0.inp.l = true;
-        else if (act === 'right') p0.inp.r = true;
-        else if (act === 'jump') p0.latch.j = true;
-        else if (act === 'shoot') { p0.latch.sDown = true; p0.inp.s = true; }
-      });
-      var upFn = function () {
-        if (!match) return;
-        var p0 = match.players[0];
-        if (act === 'left') p0.inp.l = false;
-        else if (act === 'right') p0.inp.r = false;
-        else if (act === 'shoot') { p0.latch.sUp = true; p0.inp.s = false; }
-      };
-      btn.addEventListener('pointerup', upFn);
-      btn.addEventListener('pointercancel', upFn);
-    })(touchBtns[tb]);
-  }
-
-  /* --------------------------------------------------- UI Button Bindings */
-  $('quickPlay').addEventListener('click', function () {
-    HH.sfx.click();
-    startMatch({ mode: 'cpu' });
-  });
-
-  $('mainMenu').addEventListener('click', function (e) {
-    var btn = e.target.closest('[data-act]');
-    if (!btn) return;
-    HH.sfx.click();
-    var act = btn.dataset.act;
-    if (act === 'cpu') openSelect('cpu');
-    else if (act === 'duo') openSelect('duo');
-    else if (act === 'tour') openCups();
-    else if (act === 'shop') openShop();
-  });
-
-  $('diffRow').addEventListener('click', function (e) {
-    var b = e.target.closest('[data-diff]');
-    if (!b) return;
-    HH.sfx.move();
-    HH.save.diff = +b.dataset.diff || 0;
-    HH.persist();
-    renderSelectUI();
-  });
-
-  $('selBack').addEventListener('click', function () {
-    HH.sfx.click();
-    setScreen('title');
-  });
-
-  $('selGo').addEventListener('click', function () {
-    HH.sfx.click();
-    HH.save.p1 = HH.CHARS[selIdx[0]].id;
-    if (selMode === 'duo') HH.save.p2 = HH.CHARS[selIdx[1]].id;
-    HH.persist();
-    if (selMode === 'tour') {
-      openCups();
-    } else {
-      startMatch({
-        mode: selMode,
-        p1: HH.CHARS[selIdx[0]].id,
-        p2: selMode === 'duo' ? HH.CHARS[selIdx[1]].id : undefined,
-        diff: HH.save.diff,
-        court: HH.save.court
-      });
-    }
-  });
-
-  $('cupsBack').addEventListener('click', function () {
-    HH.sfx.click();
-    setScreen('title');
-  });
-
-  $('ladGo').addEventListener('click', function () {
-    HH.sfx.click();
-    startTourRound();
-  });
-
-  $('ladBack').addEventListener('click', function () {
-    HH.sfx.click();
-    returnState = 'ladder';
-    confirmAct = function () {
-      tourState = null;
-      match = null;
-      openCups();
-    };
-    $('cfTitle').textContent = 'الانسحاب من الكأس؟';
-    $('cfSub').textContent = 'سيتم إلغاء تقدمك في هذه البطولة.';
-    setScreen('confirm');
-  });
-
-  $('shopTabs').addEventListener('click', function (e) {
-    var b = e.target.closest('[data-tab]');
-    if (!b) return;
-    HH.sfx.move();
-    shopTab = b.dataset.tab;
-    renderShop();
-  });
-
-  $('shopBack').addEventListener('click', function () {
-    HH.sfx.click();
-    setScreen('title');
-  });
-
-  $('pauseBtn').addEventListener('click', function () {
-    HH.sfx.click();
-    pauseGame();
-  });
-
-  $('pResume').addEventListener('click', function () {
-    HH.sfx.click();
-    resumeGame();
-  });
-
-  $('pRestart').addEventListener('click', function () {
-    HH.sfx.click();
-    restartMatch();
-  });
-
-  $('pMenu').addEventListener('click', function () {
-    HH.sfx.click();
-    returnState = 'pause';
-    confirmAct = leaveToMenu;
-    $('cfTitle').textContent = 'مغادرة المباراة؟';
-    $('cfSub').textContent = 'هل تريد إنهاء المباراة والعودة للقائمة؟';
-    setScreen('confirm');
-  });
-
-  $('cfNo').addEventListener('click', function () {
-    HH.sfx.click();
-    setScreen(returnState);
-  });
-
-  $('cfYes').addEventListener('click', function () {
-    HH.sfx.click();
-    var fn = confirmAct;
-    confirmAct = null;
-    if (fn) fn();
-  });
-
-  $('rAgain').addEventListener('click', function () {
-    HH.sfx.click();
-    if (match && match.mode === 'tour' && tourState) {
-      if (match.outcome && match.outcome.won) {
-        renderLadder();
-        setScreen('ladder');
+    if (roundOpen) {
+      if (m.mode === 'duo') {
+        Kit.stats.end(m.winner === -1 ? 'draw' : 'end');
       } else {
-        startTourRound();
+        Kit.stats.end(rew.won ? 'win' : 'lose', rew.score);
+        // Report smooth 0..1 performance outcome to Kit.dda
+        var ddaOut = rew.won ? (rew.margin >= 6 ? 1.0 : 0.78) : (rew.margin >= -4 ? 0.35 : 0.10);
+        dda.result(ddaOut);
       }
-      return;
+      roundOpen = false;
     }
-    var prev = match;
-    startMatch({
-      mode: prev ? prev.mode : 'cpu',
-      p1: prev ? prev.players[0].ch.id : HH.save.p1,
-      p2: prev && prev.mode === 'duo' ? prev.players[1].ch.id : undefined,
-      diff: prev ? prev.diff : HH.save.diff,
-      court: prev ? prev.court : HH.save.court
-    });
-  });
 
-  $('rMenu').addEventListener('click', function () {
-    HH.sfx.click();
-    leaveToMenu();
-  });
+    var banner = $('resBanner');
+    if (m.mode === 'duo') {
+      banner.textContent = m.winner === 0 ? '🏆 فاز اللاعب 1!' : '🏆 فاز اللاعب 2!';
+      banner.classList.remove('lose');
+    } else if (rew.won) {
+      banner.textContent = m.stage === E.OPPONENTS.length - 1 ? '👑 بطل السلة الأعظم!' : '🏆 فوز رائع!';
+      banner.classList.remove('lose');
+    } else {
+      banner.textContent = '💪 حاول مجدداً!';
+      banner.classList.add('lose');
+    }
 
-  $('trDone').addEventListener('click', function () {
-    HH.sfx.click();
-    leaveToMenu();
-  });
+    var starsWrap = $('resStars');
+    starsWrap.hidden = m.mode === 'duo';
+    var stEls = starsWrap.querySelectorAll('.st');
+    for (var i = 0; i < 3; i++) stEls[i].classList.toggle('on', i < rew.stars);
 
-  /* --------------------------------------------------- Main Loop */
-  function inspectTelemetryEvents(m) {
-    if (!m || !m.events) return;
-    for (var i = 0; i < m.events.length; i++) {
-      var ev = m.events[i];
-      if (ev.type === 'score') {
-        if (ev.who === 0) Kit.track.hit();
-        else Kit.track.miss();
-      } else if ((ev.type === 'steal' || ev.type === 'block') && ev.who === 0) {
-        Kit.track.hit();
+    $('resS1').textContent = String(m.players[0].score);
+    $('resS2').textContent = String(m.players[1].score);
+    $('resBestBadge').hidden = !rew.isNewBest;
+
+    var rewWrap = $('resRewards');
+    rewWrap.innerHTML = '';
+    if (m.mode === 'cpu') {
+      var cPill = document.createElement('span');
+      cPill.className = 'pill coin-pill';
+      cPill.innerHTML = '🪙 <b dir="ltr">+' + rew.coins + '</b>';
+      rewWrap.appendChild(cPill);
+      if (rew.unlockedNext) {
+        var uPill = document.createElement('span');
+        uPill.className = 'pill best-pill';
+        uPill.textContent = '🔓 فُتح الخصم التالي!';
+        rewWrap.appendChild(uPill);
+      }
+    }
+
+    var hasNext = m.mode === 'cpu' && rew.won && m.stage < E.OPPONENTS.length - 1;
+    $('rNext').hidden = !hasNext;
+
+    if (rew.won || m.mode === 'duo') {
+      J.levelUp();
+      if (rew.stars >= 1) J.star(rew.stars);
+      if (view) view.burst(640, 260, 42, [0xffcf26, 0x4ade80, 0x38bdf8, 0xff5a5f, 0xffffff], 9, 5);
+    } else {
+      J.fail();
+    }
+
+    resultLock = 0.55;
+    setState('result');
+    refreshTitleUI();
+    say(banner.textContent);
+  }
+
+  /* --------------------------------------------------------------- Input Reading */
+  function readPlayerInputs(m) {
+    var k = Kit.keys;
+    var isDuo = m.mode === 'duo';
+
+    var p0L = k.down('KeyA') || (!isDuo && k.down('ArrowLeft'));
+    var p0R = k.down('KeyD') || (!isDuo && k.down('ArrowRight'));
+    var p0J = k.down('KeyW') || (!isDuo && k.down('ArrowUp'));
+    var p0S = k.down('KeyS') || k.down('Space') || (!isDuo && k.down('ArrowDown'));
+
+    var j0Pressed = (p0J && !prevJ[0]) || k.pressed('KeyW') || (!isDuo && k.pressed('ArrowUp'));
+    var s0Pressed = (p0S && !prevS[0]) || k.pressed('KeyS') || k.pressed('Space') || (!isDuo && k.pressed('ArrowDown'));
+    var s0Released = !p0S && prevS[0];
+    prevJ[0] = p0J;
+    prevS[0] = p0S;
+
+    if (p0L || p0R || p0J || p0S || j0Pressed || s0Pressed) {
+      hasPlayerActed = true;
+      idleT = 0;
+      if (tutorialStarted && !tutorialDone) {
+        tutorialDone = true;
+        $('ghostHint').hidden = true;
+        Kit.stats.tutorial('done');
+      }
+    }
+
+    var p1L = isDuo && k.down('ArrowLeft');
+    var p1R = isDuo && k.down('ArrowRight');
+    var p1J = isDuo && k.down('ArrowUp');
+    var p1S = isDuo && (k.down('ArrowDown') || k.down('Enter') || k.down('Numpad0'));
+
+    var j1Pressed = isDuo && ((p1J && !prevJ[1]) || k.pressed('ArrowUp'));
+    var s1Pressed = isDuo && ((p1S && !prevS[1]) || k.pressed('ArrowDown') || k.pressed('Enter') || k.pressed('Numpad0'));
+    var s1Released = isDuo && !p1S && prevS[1];
+    prevJ[1] = p1J;
+    prevS[1] = p1S;
+
+    return [
+      { l: p0L, r: p0R, j: p0J, jPressed: j0Pressed, s: p0S, sPressed: s0Pressed, sReleased: s0Released },
+      { l: p1L, r: p1R, j: p1J, jPressed: j1Pressed, s: p1S, sPressed: s1Pressed, sReleased: s1Released }
+    ];
+  }
+
+  /* --------------------------------------------------------------- Events -> Juice & FX */
+  function handleEvents(m, events) {
+    for (var i = 0; i < events.length; i++) {
+      var ev = events[i];
+      if (ev.type === 'jump') {
+        J.jump(0.7);
+        if (view) view.burst(ev.x, ev.y, 7, [0xffffff, 0xffe8b6], 3.2, 1.8);
+      } else if (ev.type === 'land') {
+        J.land(ev.power * 0.6);
+        if (view) view.burst(ev.x, ev.y, 6, [0xffe8b6, 0xffffff], 2.5, 1.2);
+      } else if (ev.type === 'dribble') {
+        J.tap();
+      } else if (ev.type === 'bounce') {
+        J.impact(ev.power * 0.45);
+      } else if (ev.type === 'rim') {
+        J.impact(ev.power * 0.65);
+        if (view) view.burst(ev.x, ev.y, 6, [0xff9f1c, 0xffffff], 4, 2.2);
+      } else if (ev.type === 'board') {
+        J.impact(ev.power * 0.55);
+      } else if (ev.type === 'shoot') {
+        J.whoosh(ev.swishAim ? 0.85 : 0.55);
+        if (ev.swishAim && view) view.burst(ev.x, ev.y, 10, [0x4ade80, 0xffe066], 4.5, 2.5);
+      } else if (ev.type === 'dunk_launch') {
+        J.whoosh(0.95);
+        if (view) view.burst(ev.x, ev.y, 14, [0x38bdf8, 0xffe066, 0xffffff], 5.5, 3.5);
+      } else if (ev.type === 'super_dunk') {
+        J.whoosh(1.0);
+        J.chime(3);
+        showCallout('☄️ دانك النيزك الناري!', 'fire', 1.35);
+        if (view) {
+          view.shake(0.35, 0.25);
+          view.burst(ev.x, ev.y, 26, [0xff6b00, 0xffe066, 0xff2a55, 0xffffff], 8, 4.5);
+        }
+      } else if (ev.type === 'lunge') {
+        J.whoosh(0.45);
+      } else if (ev.type === 'steal') {
+        J.pop(0.85);
+        J.impact(0.6);
+        if (ev.player === 0) Kit.track.hit(); else Kit.track.miss();
+        showCallout('⚡ خطف ذكي!', 'blue', 0.95);
+        if (view) {
+          view.shake(0.20, 0.16);
+          view.burst(ev.x, ev.y, 16, [0x38bdf8, 0xffe066, 0xffffff], 6, 3.2);
+        }
+      } else if (ev.type === 'block') {
+        J.impact(0.9);
+        J.pop(0.9);
+        if (ev.player === 0) Kit.track.hit();
+        showCallout('🛡️ صدّ رائع!', 'blue', 1.0);
+        if (view) {
+          view.shake(0.28, 0.20);
+          view.burst(ev.x, ev.y, 20, [0x22d3ee, 0xffffff, 0xffe066], 7, 3.8);
+        }
+      } else if (ev.type === 'miss') {
+        if (ev.player === 0) Kit.track.miss();
+      } else if (ev.type === 'score') {
+        if (ev.scorer === 0) Kit.track.hit();
+        if (ev.isSuper) {
+          J.impact(1.0);
+          J.chime(3);
+          showCallout('🔥 +3 دانك النيزك!', 'fire', 1.3);
+          if (view) {
+            view.shake(0.55, 0.35);
+            view.burst(ev.x, ev.y, 38, [0xff6b00, 0xffe066, 0xff3d00, 0xffffff], 10, 5);
+          }
+        } else if (ev.dunk) {
+          J.impact(0.95);
+          J.chime(2);
+          showCallout('💥 سلام دانك! +' + ev.pts, '', 1.15);
+          if (view) {
+            view.shake(0.40, 0.26);
+            view.burst(ev.x, ev.y, 28, [0xffcf26, 0x38bdf8, 0x4ade80, 0xffffff], 8.5, 4.2);
+          }
+        } else if (ev.swish) {
+          J.chime(ev.pts === 3 ? 3 : 2);
+          J.streak(ev.pts === 3 ? 5 : 3);
+          showCallout(ev.pts === 3 ? '✨ ثلاثية مثالية! +3' : '✨ تسديدة مثالية! +2', '', 1.2);
+          if (view) {
+            view.shake(0.22, 0.16);
+            view.burst(ev.x, ev.y, 26, [0x4ade80, 0xffe066, 0xffffff], 7.5, 4.0);
+          }
+        } else {
+          J.chime(1);
+          showCallout(ev.pts === 3 ? '🔥 ثلاثية! +3' : '🏀 سلة! +2', ev.scorer === 0 ? 'blue' : '', 1.0);
+          if (view) view.burst(ev.x, ev.y, 18, [0xffe066, 0x38bdf8, 0xff7a18], 6.5, 3.2);
+        }
+      } else if (ev.type === 'overtime') {
+        J.countdown(0);
+        showCallout('🔥 وقت إضافي! أول سلة تفوز!', 'fire', 1.6);
+      } else if (ev.type === 'buzzer') {
+        J.countdown(0);
+      } else if (ev.type === 'end') {
+        showResult(m);
       }
     }
   }
 
+  /* --------------------------------------------------------------- HUD Sync */
+  function updateHUD() {
+    if (!match) return;
+    var p0 = match.players[0];
+    var p1 = match.players[1];
+    if (hudCache.s1 !== p0.score) { hudCache.s1 = p0.score; $('hudS1').textContent = String(p0.score); }
+    if (hudCache.s2 !== p1.score) { hudCache.s2 = p1.score; $('hudS2').textContent = String(p1.score); }
+
+    var sup1 = Math.round(p0.super);
+    if (hudCache.sup1 !== sup1) {
+      hudCache.sup1 = sup1;
+      var f1 = $('hudSup1');
+      f1.style.width = sup1 + '%';
+      f1.classList.toggle('ready', sup1 >= 100);
+    }
+    var sup2 = Math.round(p1.super);
+    if (hudCache.sup2 !== sup2) {
+      hudCache.sup2 = sup2;
+      var f2 = $('hudSup2');
+      f2.style.width = sup2 + '%';
+      f2.classList.toggle('ready', sup2 >= 100);
+    }
+
+    var clkText = match.overtime ? 'إضافي!' : String(Math.ceil(match.time));
+    var isUrgent = !match.overtime && match.time <= 10;
+    if (hudCache.clock !== clkText || hudCache.ot !== match.overtime || hudCache.urgent !== isUrgent) {
+      hudCache.clock = clkText;
+      hudCache.ot = match.overtime;
+      hudCache.urgent = isUrgent;
+      $('hudClock').textContent = clkText;
+      var cw = $('hudClockWrap');
+      cw.classList.toggle('overtime', match.overtime);
+      cw.classList.toggle('urgent', isUrgent);
+    }
+
+    // Live Shot Timing Sweet-Spot Gauge
+    var charger = null;
+    if (state === 'play' && match.phase === 'play') {
+      if (p0.ctrl === 'human' && p0.charging) charger = p0;
+      else if (p1.ctrl === 'human' && p1.charging) charger = p1;
+    }
+    var gauge = $('shotGauge');
+    if (charger) {
+      gauge.hidden = false;
+      var pct = Math.round(charger.charge * 100);
+      $('gaugeFill').style.width = pct + '%';
+      $('gaugePin').style.left = pct + '%';
+      var inSweet = charger.charge >= E.SWEET_MIN && charger.charge <= E.SWEET_MAX;
+      $('gaugeLbl').textContent = inSweet ? '✨ أطلق الآن — مثالية!' : 'اضغط ثم أطلق في المنطقة الذهبية!';
+    } else {
+      gauge.hidden = true;
+    }
+  }
+
+  /* --------------------------------------------------------------- Main Loop */
   function update(dt) {
-    if (resultLockT > 0) resultLockT = Math.max(0, resultLockT - dt);
+    if (resultLock > 0) resultLock = Math.max(0, resultLock - dt);
+    if (calloutT > 0) {
+      calloutT = Math.max(0, calloutT - dt);
+      if (calloutT <= 0) $('callout').hidden = true;
+    }
 
-    if (state === 'play' && match) {
-      if (!match.done) {
-        HH.stepMatch(match, dt);
-      }
-      inspectTelemetryEvents(match);
-      HH.consumeVisualEvents(match);
-      HH.updateArt(match, dt);
+    if (state === 'title' || state === 'shop') {
+      if (!demo) initDemo();
+      E.stepMatch(demo, dt);
+      if (demo.done || demo.time < 50) { demo.time = 9999; demo.done = false; }
       dirty = true;
+    } else if (state === 'play' && match) {
+      var inputs = readPlayerInputs(match);
+      var evs = E.stepMatch(match, dt, inputs);
+      handleEvents(match, evs);
+      updateHUD();
 
-      if (match.done && state === 'play') {
-        showMatchEndScreen(match);
+      // Gentle ghost keycap hint if child sits idle during first 10 seconds
+      if (match.phase === 'play' && !hasPlayerActed && match.mode === 'cpu') {
+        idleT += dt;
+        if (idleT >= 2.8 && !tutorialStarted) {
+          tutorialStarted = true;
+          $('ghostHint').hidden = false;
+          Kit.stats.tutorial('start');
+        }
       }
-    } else if (state === 'title' || state === 'select' || state === 'cups' || state === 'shop') {
-      HH.stepMatch(demo, dt);
-      demo.events.length = 0;
-      HH.updateArt(demo, dt);
       dirty = true;
     }
-    // Note: during 'pause' / 'confirm' / 'result' / 'trophy' / 'ladder', simulation stays frozen and redraws only when dirty!
-    if (Kit.keys && typeof Kit.keys.endFrame === 'function') Kit.keys.endFrame();
+    Kit.keys.endFrame();
   }
 
   function render() {
-    if (!dirty) return;
+    if (!view || contextLost) return;
+    var active = state === 'play' || state === 'pause' || state === 'result' ? (match || demo) : demo;
+    if (!active) return;
+
+    // Paused matches draw once then rest until dirty (resize / restore / motion / resume)!
+    if (state === 'pause' && !dirty) return;
+
+    var bypassPace = state === 'play' || (state === 'pause' && dirty);
+    if (!view.mayDraw(performance.now(), bypassPace)) return;
+
+    view.sync(active, E.FIXED_DT, snapCam);
+    snapCam = false;
+    view.render();
+    drawCount++;
     dirty = false;
-    var activeScene = match || demo;
-    var info = match ? matchHUDInfo(match) : { mode: '', tags: ['', ''] };
-    HH.render(view.ctx, view, activeScene, info);
   }
 
-  /* --------------------------------------------------- Public __game API */
+  /* --------------------------------------------------------------- DOM Events */
+  $('playBtn').addEventListener('click', function () {
+    J.select();
+    startMatch({ mode: 'cpu', stage: selectedStage });
+  });
+  $('duoBtn').addEventListener('click', function () {
+    J.select();
+    startMatch({ mode: 'duo', stage: selectedStage });
+  });
+  $('shopBtn').addEventListener('click', function () {
+    J.select();
+    buildShopUI();
+    setState('shop');
+  });
+  $('shopBack').addEventListener('click', function () {
+    J.back();
+    setState('title');
+  });
+  $('stagePrev').addEventListener('click', function () {
+    if (selectedStage > 0) {
+      selectedStage--;
+      J.tap();
+      refreshTitleUI();
+      initDemo();
+    }
+  });
+  $('stageNext').addEventListener('click', function () {
+    if (selectedStage < save.unlocked) {
+      selectedStage++;
+      J.tap();
+      refreshTitleUI();
+      initDemo();
+    }
+  });
+
+  $('pauseBtn').addEventListener('click', function () { J.tap(); pauseGame(); });
+  $('pResume').addEventListener('click', function () { J.select(); resumeGame(); });
+  $('pRestart').addEventListener('click', function () {
+    J.select();
+    startMatch({ mode: match ? match.mode : 'cpu', stage: selectedStage });
+  });
+  $('pHome').addEventListener('click', function () { J.back(); goHome(); });
+
+  $('rNext').addEventListener('click', function () {
+    J.select();
+    selectedStage = Math.min(E.OPPONENTS.length - 1, selectedStage + 1);
+    startMatch({ mode: 'cpu', stage: selectedStage });
+  });
+  $('rAgain').addEventListener('click', function () {
+    J.select();
+    startMatch({ mode: match ? match.mode : 'cpu', stage: selectedStage });
+  });
+  $('rHome').addEventListener('click', function () { J.back(); goHome(); });
+
+  window.addEventListener('keydown', function (e) {
+    if (e.repeat || !Kit.isGameKeyEvent(e)) return;
+    if (state === 'title') {
+      if (e.code === 'Enter' || e.code === 'Space') {
+        e.preventDefault();
+        J.select();
+        startMatch({ mode: 'cpu', stage: selectedStage });
+      }
+    } else if (state === 'shop') {
+      if (e.code === 'Escape') {
+        e.preventDefault();
+        J.back();
+        setState('title');
+      }
+    } else if (state === 'play') {
+      if (e.code === 'Escape' || e.code === 'KeyP') {
+        e.preventDefault();
+        pauseGame();
+      }
+    } else if (state === 'pause') {
+      if (e.code === 'Escape' || e.code === 'KeyP') {
+        e.preventDefault();
+        resumeGame();
+      } else if (e.code === 'KeyR') {
+        e.preventDefault();
+        J.select();
+        startMatch({ mode: match ? match.mode : 'cpu', stage: selectedStage });
+      }
+    } else if (state === 'result') {
+      if (resultLock <= 0 && (e.code === 'Enter' || e.code === 'Space' || e.code === 'KeyR')) {
+        e.preventDefault();
+        J.select();
+        startMatch({ mode: match ? match.mode : 'cpu', stage: selectedStage });
+      }
+    }
+  });
+
+  /* --------------------------------------------------------------- Resize, Motion & Lifecycle */
+  function resize() {
+    if (!view) return;
+    view.resize(Math.max(1, window.innerWidth), Math.max(1, window.innerHeight));
+    dirty = true;
+    if (state === 'pause') render();
+  }
+  window.addEventListener('resize', resize);
+
+  Kit.motion.onChange(function (reduced) {
+    if (view) view.calm = reduced;
+    dirty = true;
+    if (state === 'pause') render();
+  });
+
+  Kit.muteButton();
+  Kit.lifecycle({
+    pause: function () { if (state === 'play') pauseGame(); },
+    reset: function () { prevS[0] = prevS[1] = false; prevJ[0] = prevJ[1] = false; }
+  });
+
+  canvas.addEventListener('webglcontextlost', function (e) {
+    e.preventDefault();
+    contextLost = true;
+    $('ctxNotice').hidden = false;
+  });
+  canvas.addEventListener('webglcontextrestored', function () {
+    contextLost = false;
+    $('ctxNotice').hidden = true;
+    dirty = true;
+    if (state === 'pause') render();
+  });
+
+  /* --------------------------------------------------------------- Compatibility & Test Handle */
+  function getInfo() {
+    var m = match || demo;
+    return {
+      state: state,
+      mode: m ? m.mode : 'demo',
+      stage: m ? m.stage : selectedStage,
+      time: m ? Math.round(m.time * 100) / 100 : 0,
+      overtime: !!(m && m.overtime),
+      score: m ? [m.players[0].score, m.players[1].score] : [0, 0],
+      ball: m ? { x: Math.round(m.ball.x * 10) / 10, y: Math.round(m.ball.y * 10) / 10, state: m.ball.state } : null,
+      p: m ? m.players.map(function (pl) {
+        return {
+          x: Math.round(pl.x * 10) / 10,
+          y: Math.round(pl.y * 10) / 10,
+          vx: Math.round(pl.vx * 10) / 10,
+          score: pl.score,
+          super: Math.round(pl.super)
+        };
+      }) : [],
+      draws: drawCount
+    };
+  }
+
   window.__game = {
     get state() { return state; },
     get match() { return match; },
-    get demo() { return demo; },
-    get save() { return HH.save; },
-    start: function (opts) { return startMatch(opts); },
-    tour: function (cupIdx, roundIdx, oppId) {
-      setupTour(cupIdx, roundIdx, HH.save.p1, oppId);
-    },
-    info: function () {
-      var m = match || demo;
-      return {
-        state: state,
-        time: m ? m.time : 0,
-        score: m ? [m.players[0].score, m.players[1].score] : [0, 0],
-        ball: m ? [m.ball.x, m.ball.y] : [640, 360],
-        p: m ? [
-          { x: m.players[0].x, y: m.players[0].y },
-          { x: m.players[1].x, y: m.players[1].y }
-        ] : [{ x: 320, y: 590 }, { x: 960, y: 590 }]
-      };
-    },
-    skipIntro: function () {
-      if (match && match.phase === 'intro') {
-        match.phase = 'play';
-        match.phaseT = 0;
-      }
-    },
-    give: function (who, x) {
+    get save() { return save; },
+    get draws() { return drawCount; },
+    info: getInfo,
+    start: startMatch,
+    pause: pauseGame,
+    resume: resumeGame,
+    skipIntro: function () { if (match && match.phase === 'intro') { match.phase = 'play'; match.phaseT = 0; } },
+    give: function (idx, x) {
       if (!match) return;
-      var p = match.players[who | 0];
+      var p = match.players[idx | 0];
       if (!p) return;
-      if (typeof x === 'number') {
-        p.x = x;
-        p.vx = 0;
-      }
-      HH.giveBall(match, p, true);
+      if (typeof x === 'number') p.x = x;
+      p.y = E.FLOOR_Y; p.onGround = true; p.vx = 0; p.vy = 0; p.dunk = null; p.stunT = 0;
+      match.ball.holder = p; match.ball.state = 'held'; match.ball.scoredT = 0;
+      p.protect = 0;
     },
-    endNow: function (winnerIdx) {
+    endNow: function (winner) {
       if (!match) return;
-      var w = winnerIdx === 1 ? 1 : 0;
-      match.players[w].score = Math.max(match.players[w].score, 5);
-      match.players[1 - w].score = Math.min(match.players[1 - w].score, match.players[w].score - 1);
-      match.ended = true;
-      match.winner = w;
-      match.phase = 'end';
-      match.phaseT = 0.5;
+      var w = winner === 1 ? 1 : 0;
+      match.players[w].score = Math.max(match.players[w].score, match.players[1 - w].score + 2);
+      match.time = 0; match.timeUp = true; match.ended = true; match.winner = w;
+      match.phase = 'goal'; match.phaseT = 0.02;
     }
   };
 
-  syncTheme(HH.save.court);
-  refreshTitle();
-  setScreen('title');
-  Kit.loop(update, render);
-  Kit.ready();
+  // Light namespace helper for persistence/regression tests
+  window.HH = {
+    engine: E,
+    store: store,
+    get save() { return save; },
+    persist: persist,
+    stepMatch: E.stepMatch
+  };
+
+  /* --------------------------------------------------------------- Boot */
+  refreshTitleUI();
+  initDemo();
+
+  try {
+    view = A.createView(canvas);
+    view.calm = Kit.motion.reduced();
+    resize();
+    view.sync(demo, E.FIXED_DT, true);
+    view.prepare(function () {
+      view.render();
+      drawCount++;
+      dirty = false;
+      view.whenDrawn(function () {
+        loop = Kit.loop(update, render);
+        Kit.ready();
+      });
+    });
+  } catch (err) {
+    $('scrTitle').hidden = true;
+    $('scrError').hidden = false;
+    Kit.ready();
+  }
 })();

@@ -1,33 +1,19 @@
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
 import path from 'node:path';
-import vm from 'node:vm';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const noop = () => {};
+const require = createRequire(import.meta.url);
 
 function loadEngine(root) {
-  const HH = {
-    sfx: new Proxy({}, { get: () => noop }),
-    save: { tips: {} },
-    charById: () => ({ spd: 3, jmp: 3, sht: 3, headR: 42 })
-  };
-  const Kit = {
-    keys: { down: () => false, pressed: () => false },
-    particles: () => ({ burst: noop, update: noop }),
-    shake: () => ({ add: noop, update: noop }),
-    rand: (a, b) => (a + b) / 2
-  };
-  const deterministicMath = Object.create(Math);
-  deterministicMath.random = () => 0.5;
-  vm.runInNewContext(fs.readFileSync(path.join(root, 'games/hoop-heads/engine.js'), 'utf8'),
-    { window: { HH }, Kit, Math: deterministicMath }, { filename: 'hoop-heads/engine.js' });
-  return HH;
+  const full = path.join(root, 'games/hoop-heads/engine.js');
+  delete require.cache[full];
+  return require(full);
 }
 
-function makeMatch(HH, scores, opts = {}) {
-  const m = HH.newMatch({ mode: 'duo', p1: 'test', p2: 'test', target: 21 });
+function makeMatch(E, scores, opts = {}) {
+  const m = E.createMatch({ mode: 'duo', target: opts.target ?? 21, seed: 777 });
   m.phase = 'play';
   m.time = opts.buzzer ? 1 / 120 : 60;
   m.overtime = !!opts.overtime;
@@ -36,49 +22,62 @@ function makeMatch(HH, scores, opts = {}) {
   return m;
 }
 
-function landBasket(HH, m, scorer, pts = 2) {
+function landBasket(E, m, scorer, pts = 2) {
   const hoop = m.hoops[1 - scorer];
   Object.assign(m.ball, {
-    hidden: false, holder: null, x: hoop.x, y: hoop.y - 1,
-    vx: 0, vy: 300, state: 'shot', shooter: m.players[scorer], pts,
-    touched: false, scoredT: 0
+    holder: null,
+    x: hoop.x,
+    y: hoop.y - 2,
+    prevX: hoop.x,
+    prevY: hoop.y - 10,
+    vx: 0,
+    vy: 380,
+    state: 'shot',
+    shooter: m.players[scorer],
+    pts,
+    isSuper: false,
+    touchedRim: false,
+    touchedBoard: false,
+    scoredT: 0
   });
-  HH.stepMatch(m, 1 / 60);
+  E.stepMatch(m, 1 / 60);
 }
 
-function stepUntil(HH, m, predicate, label) {
-  for (let i = 0; i < 600 && !predicate(m); i++) HH.stepMatch(m, 1 / 60);
+function stepUntil(E, m, predicate, label) {
+  for (let i = 0; i < 600 && !predicate(m); i++) E.stepMatch(m, 1 / 60);
   assert.ok(predicate(m), label);
 }
 
-// Run the real engine, including buzzer detection, basket collision, celebration,
-// overtime and the final end event consumed by the rewards/tournament UI.
+// Run the pure engine across buzzer beaters, 2pt/3pt baskets, overtime, target score,
+// ordinary celebrations, and missed final shots.
 export function testHoop({ root = REPO } = {}) {
-  const HH = loadEngine(root);
+  const E = loadEngine(root);
   let checks = 0;
+
   for (const scorer of [0, 1]) {
     for (const pts of [2, 3]) {
       for (const outcome of ['trailing', 'tying', 'winning']) {
         const scores = [10, 10];
         scores[scorer] = outcome === 'trailing' ? 0 : 10 - pts + (outcome === 'winning' ? 1 : 0);
-        const m = makeMatch(HH, scores, { buzzer: true });
-        landBasket(HH, m, scorer, pts);
+        const m = makeMatch(E, scores, { buzzer: true });
+        landBasket(E, m, scorer, pts);
         assert.ok(m.timeUp, 'the timer must expire before this in-flight shot lands');
         assert.equal(m.players[scorer].score, scores[scorer] + pts);
         assert.equal(m.events.filter(e => e.type === 'buzzer').length, 1);
         assert.equal(m.events.filter(e => e.type === 'score').length, 1);
+
         if (outcome === 'tying') {
           assert.equal(m.ended, false, 'a tying buzzer basket must go to overtime');
-          stepUntil(HH, m, game => game.overtime, 'overtime must follow the tying celebration');
+          stepUntil(E, m, game => game.overtime, 'overtime must follow the tying celebration');
           assert.equal(m.winner, -1);
-          assert.equal(m.done, undefined);
-          assert.equal(m.events.filter(e => e.type === 'end').length, 0, 'no result/reward event for a tie');
+          assert.equal(m.done, false);
+          assert.equal(m.events.filter(e => e.type === 'end').length, 0, 'no end event for a tie');
         } else {
           const winner = outcome === 'trailing' ? 1 - scorer : scorer;
           assert.equal(m.winner, winner, `${outcome} buzzer shot by player ${scorer} (${pts} points)`);
-          stepUntil(HH, m, game => game.done, 'the final result must complete');
+          stepUntil(E, m, game => game.done, 'the final result must complete');
           assert.equal(m.winner, winner);
-          assert.equal(m.events.filter(e => e.type === 'end').length, 1, 'one result/reward event');
+          assert.equal(m.events.filter(e => e.type === 'end').length, 1, 'one final end event');
         }
         checks++;
       }
@@ -87,87 +86,115 @@ export function testHoop({ root = REPO } = {}) {
     for (const overtime of [false, true]) {
       const scores = [10, 10];
       if (!overtime) scores[scorer] = 19;
-      const m = makeMatch(HH, scores, { overtime });
-      landBasket(HH, m, scorer);
+      const m = makeMatch(E, scores, { overtime });
+      landBasket(E, m, scorer);
       assert.equal(m.ended, true, overtime ? 'the first overtime basket wins' : 'reaching the target wins');
       assert.equal(m.winner, scorer);
-      stepUntil(HH, m, game => game.done, 'the target/overtime result must complete');
+      stepUntil(E, m, game => game.done, 'the target/overtime result must complete');
       assert.equal(m.events.filter(e => e.type === 'end').length, 1);
       checks++;
     }
   }
 
-  const ordinary = makeMatch(HH, [0, 0]);
-  landBasket(HH, ordinary, 0);
+  const ordinary = makeMatch(E, [0, 0]);
+  landBasket(E, ordinary, 0);
   assert.equal(ordinary.ended, false, 'an ordinary basket must not end the match');
-  stepUntil(HH, ordinary, m => m.phase === 'play', 'ordinary play must resume after celebration');
+  stepUntil(E, ordinary, m => m.phase === 'play', 'ordinary play must resume after celebration');
   assert.equal(ordinary.winner, -1);
   checks++;
 
-  const miss = makeMatch(HH, [5, 10], { buzzer: true });
+  const miss = makeMatch(E, [5, 10], { buzzer: true });
   Object.assign(miss.ball, {
-    hidden: false, x: 640, y: HH.FLOOR - HH.BALL_R - 1,
-    vx: 0, vy: 200, state: 'shot', touched: false, shooter: miss.players[0]
+    holder: null,
+    x: 640,
+    y: E.FLOOR_Y - E.BALL_R - 1,
+    prevX: 640,
+    prevY: E.FLOOR_Y - E.BALL_R - 6,
+    vx: 0,
+    vy: 220,
+    state: 'shot',
+    touchedRim: false,
+    touchedBoard: false,
+    shooter: miss.players[0],
+    scoredT: 0
   });
-  stepUntil(HH, miss, m => m.done, 'a missed final shot must finish the match');
+  stepUntil(E, miss, m => m.done, 'a missed final shot must finish the match');
   assert.equal(miss.winner, 1);
   assert.equal(miss.players[0].score, 5);
   assert.equal(miss.events.filter(e => e.type === 'end').length, 1);
   checks++;
+
   return { checks };
 }
 
-// Optional integration check for a caller that already has a browser and server.
-// This exercises the unchanged result UI and its persisted rewards, including
-// the final tournament match, using baskets scored by the real engine.
+// Browser integration check exercising the result UI and persisted stars, coins,
+// stage unlocks, and win streak for both losing and winning CPU ladder matches.
 export async function testHoopRewards({ page, baseURL }) {
   let checks = 0;
-  for (const mode of ['cpu', 'tour']) {
+  for (const stage of [0, 4]) {
     for (const winning of [false, true]) {
       await page.goto(new URL('games/hoop-heads/', baseURL).href);
       await page.waitForFunction(() => window.__game && window.HH);
-      const game = await page.evaluate(({ mode, winning }) => {
+      const result = await page.evaluate(({ stage, winning }) => {
         const save = window.HH.save;
-        save.coins = 0; save.stats.games = 0; save.stats.wins = 0;
-        save.streak = 2; save.bestStreak = 2; save.cups.b = false;
-        if (mode === 'tour') {
-          window.__game.tour(0, 4, 'robo');
-          document.getElementById('ladGo').click();
-        } else window.__game.start({ mode: 'cpu', lv: 0 });
+        save.coins = 0;
+        save.bestScore = 0;
+        save.streak = 2;
+        save.bestStreak = 2;
+        save.unlocked = stage;
+        save.stars = [0, 0, 0, 0, 0];
+        save.ownedHeads = { classic: true };
+        save.stats = { games: 0, wins: 0, baskets: 0, dunks: 0, swishes: 0 };
+
+        window.__game.start({ mode: 'cpu', stage });
         const m = window.__game.match;
-        // Hold the opponents still so this isolates the pending final basket.
-        m.players.forEach(p => { p.ctrl = 'human'; p.ai = null; });
-        m.phase = 'play'; m.time = 1 / 120;
-        m.players[0].score = winning ? 9 : 0; m.players[1].score = 10;
+        m.players.forEach(p => { p.ctrl = 'human'; });
+        m.phase = 'play';
+        m.time = 1 / 120;
+        m.players[0].score = winning ? 10 : 0;
+        m.players[1].score = 10;
         Object.assign(m.ball, {
-          hidden: false, holder: null, x: m.hoops[1].x, y: m.hoops[1].y - 1,
-          vx: 0, vy: 300, state: 'shot', shooter: m.players[0], pts: 2,
-          touched: false, scoredT: 0
+          holder: null,
+          x: m.hoops[1].x,
+          y: m.hoops[1].y - 2,
+          prevX: m.hoops[1].x,
+          prevY: m.hoops[1].y - 10,
+          vx: 0,
+          vy: 380,
+          state: 'shot',
+          shooter: m.players[0],
+          pts: 2,
+          touchedRim: false,
+          touchedBoard: false,
+          scoredT: 0
         });
-        for (let i = 0; i < 600 && !m.done; i++) window.HH.stepMatch(m, 1 / 60);
-        return { winner: m.winner, score: m.players.map(p => p.score), done: m.done };
-      }, { mode, winning });
-      assert.equal(game.winner, winning ? 0 : 1);
-      assert.deepEqual(game.score, [winning ? 11 : 2, 10]);
-      assert.equal(game.done, true);
-      const expectedState = mode === 'tour' && winning ? 'trophy' : 'result';
-      await page.waitForFunction(state => window.__game.state === state, expectedState);
-      const result = await page.evaluate(() => ({
+        return { startStage: stage };
+      }, { stage, winning });
+
+      assert.equal(result.startStage, stage);
+      await page.waitForFunction(() => window.__game.state === 'result', { timeout: 10000 });
+      const check = await page.evaluate(() => ({
         state: window.__game.state,
+        winner: window.__game.match.winner,
+        scores: window.__game.match.players.map(p => p.score),
         loseBanner: document.getElementById('resBanner').classList.contains('lose'),
-        save: window.HH.store.get('save', null)
+        save: window.HH.store.get('save_v3', null)
       }));
-      assert.equal(result.save.stats.games, 1, 'the result is saved once');
-      assert.equal(result.save.stats.wins, winning ? 1 : 0);
-      if (!winning) {
-        assert.equal(result.loseBanner, true);
-        assert.equal(result.save.coins, 7, 'two points and the loss reward, with no win bonus');
-      } else if (mode === 'cpu') assert.equal(result.save.coins, 26, 'eleven points and the CPU win reward');
-      if (mode === 'cpu') assert.equal(result.save.streak, winning ? 3 : 0);
-      else assert.equal(result.save.cups.b, winning, 'a losing final must not award the cup');
-      if (mode === 'tour' && !winning) {
-        await page.evaluate(() => document.getElementById('rAgain').click());
-        assert.equal(await page.evaluate(() => window.__game.state), 'play', 'loss retries the same match');
+
+      assert.equal(check.winner, winning ? 0 : 1);
+      assert.deepEqual(check.scores, [winning ? 12 : 2, 10]);
+      assert.equal(check.loseBanner, !winning);
+      assert.equal(check.save.stats.games, 1, 'result is saved once');
+      assert.equal(check.save.stats.wins, winning ? 1 : 0);
+      assert.equal(check.save.streak, winning ? 3 : 0);
+      assert.ok(check.save.coins > 0, 'coins awarded on both win and loss');
+      if (winning) {
+        assert.ok(check.save.stars[stage] >= 1, 'winning earns at least 1 star');
+        if (stage === 0) assert.equal(check.save.unlocked, 1, 'winning stage 1 unlocks stage 2');
+        if (stage === 4) assert.equal(check.save.ownedHeads.crown, true, 'beating stage 5 awards crown');
+      } else {
+        assert.equal(check.save.stars[stage], 0, 'loss awards 0 stars');
+        if (stage === 4) assert.ok(!check.save.ownedHeads.crown, 'loss must not award crown');
       }
       checks++;
     }

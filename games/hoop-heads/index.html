@@ -8,213 +8,171 @@
 <link rel="stylesheet" href="../../shared/game.css">
 <link rel="stylesheet" href="style.css">
 </head>
-<body>
-<canvas id="game" tabindex="0" aria-label="ملعب سلة الرؤوس الكبيرة"></canvas>
+<body data-mode="title">
+<canvas id="game" tabindex="0" aria-label="ملعب سلة الرؤوس الكبيرة ثلاثي الأبعاد"></canvas>
+<div id="live" class="sr-only" aria-live="polite"></div>
 
-<div id="ui">
-  <!-- Title Screen -->
-  <section id="scrTitle" class="scr">
-    <div class="title-layout">
-      <div class="sg-panel hero-card">
-        <div class="badge-top">🏀 كرة شوارع خارقة • دانك النيزك!</div>
-        <h1 class="sg-title game-logo">سلة الرؤوس الكبيرة</h1>
-        <p class="hero-sub">تحرك بحرية 100% أثناء التصويب، اقفز للسلام دانك، وأطلق رمية النيزك الخارقة!</p>
+<!-- In-game HUD -->
+<div id="hud" hidden>
+  <button type="button" id="pauseBtn" class="icon-hud-btn" aria-label="إيقاف مؤقت" title="إيقاف مؤقت (P)">⏸</button>
 
-        <div class="stats-strip">
-          <span class="stat-pill gold">🪙 <b id="coinBadge">0</b></span>
-          <span class="stat-pill cyan">🔥 سلسلة الفوز: <b id="streakBadge">0</b></span>
-          <span class="stat-pill cups" id="cupBadges">🏆 0/3</span>
-        </div>
-
-        <div id="mainMenu" class="menu-grid">
-          <button type="button" id="quickPlay" class="sg-btn btn-quick">
-            <span class="btn-ico">⚡</span>
-            <span>لعب سريع فوري!<small id="quickSub">ابدأ المباراة مباشرة بضغطة واحدة</small></span>
-          </button>
-          <button type="button" data-act="cpu" class="sg-btn btn-cpu">
-            <span class="btn-ico">🏀</span>
-            <span>مباراة فردية<small>اختر البطل والملعب والصعوبة</small></span>
-          </button>
-          <button type="button" data-act="tour" class="sg-btn btn-tour">
-            <span class="btn-ico">🏆</span>
-            <span>بطولة الكؤوس<small>3 كؤوس مفتوحة وزعماء أقوياء</small></span>
-          </button>
-          <button type="button" data-act="duo" class="sg-btn btn-duo">
-            <span class="btn-ico">🤜🤛</span>
-            <span>لاعبان<small>تحدي الأصدقاء على نفس الجهاز</small></span>
-          </button>
-          <button type="button" data-act="shop" class="sg-btn btn-shop">
-            <span class="btn-ico">🎒</span>
-            <span>خزانة الكرات<small id="shopSub">كرات نارية وآثار شهاب</small></span>
-          </button>
-        </div>
+  <div class="scoreboard" dir="ltr">
+    <div class="team-box p1-box">
+      <div class="team-row">
+        <span class="team-name" id="hudP1Name" dir="rtl">اللاعب 1</span>
+        <span class="team-score" id="hudS1">0</span>
       </div>
-
-      <div class="sg-panel howto-card">
-        <h2>طريقة اللعب السريعة</h2>
-        <div class="ctrl-block">
-          <div class="ctrl-row"><span>الحركة والقفز</span><span dir="ltr"><kbd class="sg-key">WASD</kbd> / <kbd class="sg-key">←↑→</kbd></span></div>
-          <div class="ctrl-row"><span>تسديد / دانك / خطف</span><span><kbd class="sg-key" dir="ltr">Space</kbd> أو نقر الفأرة</span></div>
-          <div class="ctrl-row"><span>اللاعب 2 (طور لاعبان)</span><span dir="ltr"><kbd class="sg-key">←↑→</kbd> + <kbd class="sg-key">Enter</kbd></span></div>
-          <div class="ctrl-row"><span>إيقاف مؤقت</span><span dir="ltr"><kbd class="sg-key">P</kbd> / <kbd class="sg-key">Esc</kbd></span></div>
-        </div>
-        <div class="power-preview">
-          <div class="pw-title">مفاجآت وسط الملعب!</div>
-          <div class="pw-chips">
-            <span>🏀 كرة عملاقة +1</span>
-            <span>❄️ تجميد السلة</span>
-            <span>🚀 حذاء الصاروخ</span>
-            <span>🧲 مغناطيس السلة</span>
-          </div>
-        </div>
-      </div>
+      <div class="super-track"><div class="super-fill p1-fill" id="hudSup1"></div></div>
     </div>
-  </section>
 
-  <!-- Fighter, Arena & Difficulty Select Screen -->
-  <section id="scrSelect" class="scr modal" hidden>
-    <div class="sg-panel sheet select-sheet">
-      <div class="sheet-head">
-        <h2 id="selTitle">اختر بطلك والملعب</h2>
-        <div id="diffRow" class="seg-row" role="group" aria-label="مستوى الصعوبة">
-          <button type="button" data-diff="0" class="seg on">سهل</button>
-          <button type="button" data-diff="1" class="seg">متوسط</button>
-          <button type="button" data-diff="2" class="seg">بطل</button>
-        </div>
-      </div>
-
-      <div id="duoHint" class="duo-banner" hidden>
-        اللاعب 1 يختار بالنقر أو <kbd class="sg-key" dir="ltr">A/D + Space</kbd> • اللاعب 2 يختار بـ <kbd class="sg-key" dir="ltr">←/→ + Enter</kbd>
-      </div>
-
-      <div id="charGrid" class="char-grid"></div>
-
-      <div class="arena-bar">
-        <span class="arena-lbl">الملعب المفتوح:</span>
-        <div id="courtRow" class="court-pills"></div>
-      </div>
-
-      <div class="sheet-foot">
-        <button type="button" id="selBack" class="sg-btn secondary">رجوع</button>
-        <button type="button" id="selGo" class="sg-btn good">ابدأ المباراة! 🏀</button>
-      </div>
+    <div class="clock-pill" id="hudClockWrap">
+      <span id="hudClock">60</span>
     </div>
-  </section>
 
-  <!-- Tournament Cups Screen (All 3 Unlocked!) -->
-  <section id="scrCups" class="scr modal" hidden>
-    <div class="sg-panel sheet">
-      <div class="sheet-head">
-        <h2>بطولة الكؤوس الثلاثة 🏆</h2>
-        <span class="sub-pill">جميع الكؤوس مفتوحة للعب فوراً!</span>
+    <div class="team-box p2-box">
+      <div class="team-row">
+        <span class="team-score" id="hudS2">0</span>
+        <span class="team-name" id="hudP2Name" dir="rtl">رامي السريع</span>
       </div>
-      <div id="cupRow" class="cup-grid"></div>
-      <div class="sheet-foot">
-        <button type="button" id="cupsBack" class="sg-btn secondary">رجوع</button>
-      </div>
-    </div>
-  </section>
-
-  <!-- Tournament Ladder Screen -->
-  <section id="scrLadder" class="scr modal" hidden>
-    <div class="sg-panel sheet narrow-sheet">
-      <h2 id="ladTitle">كأس البرونز</h2>
-      <p id="ladSub" class="sheet-sub">اهزم 5 منافسين للفوز بالكأس والمكافأة الكبرى!</p>
-      <div id="ladder" class="ladder-list"></div>
-      <div class="sheet-foot">
-        <button type="button" id="ladBack" class="sg-btn secondary">انسحاب</button>
-        <button type="button" id="ladGo" class="sg-btn good">خض المباراة! 🔥</button>
-      </div>
-    </div>
-  </section>
-
-  <!-- Locker Shop Screen -->
-  <section id="scrShop" class="scr modal" hidden>
-    <div class="sg-panel sheet">
-      <div class="sheet-head">
-        <h2>خزانة الكرات والآثار 🎒</h2>
-        <div class="stat-pill gold">🪙 عملاتك: <b id="shopCoins">0</b></div>
-      </div>
-      <div class="seg-row" id="shopTabs">
-        <button type="button" data-tab="balls" class="seg on">🏀 الكرات</button>
-        <button type="button" data-tab="trails" class="seg">☄️ آثار الشهاب</button>
-      </div>
-      <div id="shopGrid" class="shop-grid"></div>
-      <div class="sheet-foot">
-        <button type="button" id="shopBack" class="sg-btn secondary">رجوع</button>
-      </div>
-    </div>
-  </section>
-
-  <!-- Active Match Pause & Touch Controls -->
-  <button type="button" id="pauseBtn" class="hud-pause" hidden aria-label="إيقاف مؤقت">❚❚</button>
-
-  <div id="touchPad" class="touch-pad" hidden>
-    <div class="touch-left">
-      <button type="button" data-tkey="left" class="tbtn">▶</button>
-      <button type="button" data-tkey="right" class="tbtn">◀</button>
-    </div>
-    <div class="touch-right">
-      <button type="button" data-tkey="jump" class="tbtn jump">قفز ⬆️</button>
-      <button type="button" data-tkey="shoot" class="tbtn fire">تسديد / دانك 🔥</button>
+      <div class="super-track"><div class="super-fill p2-fill" id="hudSup2"></div></div>
     </div>
   </div>
 
-  <!-- Pause Modal -->
-  <section id="scrPause" class="scr modal" hidden>
-    <div class="sg-panel sheet tiny-sheet">
-      <h2>إيقاف مؤقت ⏸️</h2>
-      <div class="pause-stack">
-        <button type="button" id="pResume" class="sg-btn good">متابعة اللعب ▶</button>
-        <button type="button" id="pRestart" class="sg-btn btn-cpu">إعادة المباراة 🔄</button>
-        <button type="button" id="pMenu" class="sg-btn secondary">القائمة الرئيسية</button>
-      </div>
+  <!-- Shot Timing Sweet-Spot Meter (appears cleanly when charging a shot) -->
+  <div id="shotGauge" hidden>
+    <div class="gauge-bar">
+      <div class="gauge-sweet"></div>
+      <div class="gauge-fill" id="gaugeFill"></div>
+      <div class="gauge-pin" id="gaugePin"></div>
     </div>
-  </section>
+    <span class="gauge-lbl" id="gaugeLbl">تسديدة مثالية!</span>
+  </div>
 
-  <!-- Confirm Modal -->
-  <section id="scrConfirm" class="scr modal" hidden>
-    <div class="sg-panel sheet tiny-sheet">
-      <h2 id="cfTitle">مغادرة المباراة؟</h2>
-      <p id="cfSub" class="sheet-sub">هل تريد العودة إلى القائمة؟</p>
-      <div class="sheet-foot">
-        <button type="button" id="cfNo" class="sg-btn secondary">لا، تراجع</button>
-        <button type="button" id="cfYes" class="sg-btn btn-tour">نعم، متأكد</button>
-      </div>
-    </div>
-  </section>
+  <div id="callout" hidden></div>
 
-  <!-- Match Result Modal -->
-  <section id="scrResult" class="scr modal" hidden>
-    <div class="sg-panel sheet narrow-sheet">
-      <div id="resBanner" class="res-banner win">فوز ساحق! 🎉</div>
-      <div id="resScore" class="res-score" dir="ltr">15 - 8</div>
-      <div id="resSummary" class="res-summary"></div>
-      <div id="resCoins" class="res-coins">🪙 +30 عملة</div>
-      <div class="sheet-foot">
-        <button type="button" id="rMenu" class="sg-btn secondary">القائمة</button>
-        <button type="button" id="rAgain" class="sg-btn good">العب مجدداً! 🔥</button>
-      </div>
-    </div>
-  </section>
-
-  <!-- Cup Trophy Celebration Modal -->
-  <section id="scrTrophy" class="scr modal" hidden>
-    <div class="sg-panel sheet narrow-sheet trophy-card">
-      <div class="trophy-big">🏆</div>
-      <h2>بطل البطولة!</h2>
-      <p id="trText" class="trophy-text">فزت بكأس البرونز!</p>
-      <div class="sheet-foot center-foot">
-        <button type="button" id="trDone" class="sg-btn good">رائع! احتفل بالكأس 🎉</button>
-      </div>
-    </div>
-  </section>
+  <!-- Animated idle ghost hint (first 10 seconds if child hasn't moved/shot) -->
+  <div id="ghostHint" hidden>
+    <span dir="ltr"><span class="sg-key">←</span><span class="sg-key">→</span></span> تحرّك
+    <span class="sep">·</span>
+    <span dir="ltr"><span class="sg-key">↑</span></span> اقفز
+    <span class="sep">·</span>
+    <span class="sg-key">مسافة</span> رمية ودانك!
+  </div>
 </div>
 
+<!-- Minimal Poki-style Title Screen floating cleanly over live 3D court demo -->
+<section id="scrTitle" class="overlay title-overlay">
+  <div class="top-pills">
+    <span class="pill star-pill" id="titleStars">⭐ <b>0/15</b></span>
+    <span class="pill coin-pill" id="titleCoins">🪙 <b>0</b></span>
+    <span class="pill best-pill" id="titleBest">🏆 <b>0</b></span>
+  </div>
+
+  <div class="title-center">
+    <h1 class="hero-logo">سلة الرؤوس الكبيرة</h1>
+
+    <div class="stage-strip" id="stageStrip" aria-label="سلم الأبطال">
+      <button type="button" id="stagePrev" class="stage-nav" aria-label="الخصم السابق">‹</button>
+      <div class="stage-badge" id="stageBadge">
+        <span class="stage-dots" id="stageDots"></span>
+        <span class="stage-text" id="stageText">1/5 · رامي السريع</span>
+      </div>
+      <button type="button" id="stageNext" class="stage-nav" aria-label="الخصم التالي">›</button>
+    </div>
+
+    <div class="title-actions">
+      <button type="button" data-act="cpu" id="playBtn" class="play-mega">
+        <span class="play-tri">▶</span>
+        <span>العب الآن!</span>
+      </button>
+      <div class="sub-actions">
+        <button type="button" data-act="duo" id="duoBtn" class="icon-pill-btn">👥 لاعبان</button>
+        <button type="button" data-act="shop" id="shopBtn" class="icon-pill-btn">🎒 الخزانة</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="controls-strip">
+    <span dir="ltr"><span class="sg-key">A</span><span class="sg-key">D</span> / <span class="sg-key">←</span><span class="sg-key">→</span></span> حركة
+    <span class="sep">·</span>
+    <span dir="ltr"><span class="sg-key">W</span> / <span class="sg-key">↑</span></span> قفز
+    <span class="sep">·</span>
+    <span class="sg-key">مسافة</span> رمية ودانك
+  </div>
+</section>
+
+<!-- Locker / Shop Overlay (3D Heads & 3D Basketballs) -->
+<section id="scrShop" class="overlay modal-overlay" hidden>
+  <div class="card locker-card">
+    <div class="card-head">
+      <h2>🎒 خزانة الأبطال</h2>
+      <span class="pill coin-pill" id="shopCoins">🪙 <b>0</b></span>
+    </div>
+
+    <div class="locker-sec">
+      <h3>🏀 الكرات الثلاثية</h3>
+      <div id="ballGrid" class="locker-grid"></div>
+    </div>
+
+    <div class="locker-sec">
+      <h3>👑 الرؤوس والقبعات</h3>
+      <div id="headGrid" class="locker-grid"></div>
+    </div>
+
+    <div class="card-foot">
+      <button type="button" id="shopBack" class="sg-btn good">تم ✓</button>
+    </div>
+  </div>
+</section>
+
+<!-- Pause Overlay -->
+<section id="scrPause" class="overlay modal-overlay" hidden>
+  <div class="card pause-card">
+    <h2>⏸ إيقاف مؤقت</h2>
+    <div class="btn-stack">
+      <button type="button" id="pResume" class="sg-btn good">متابعة اللعب ▶</button>
+      <button type="button" id="pRestart" class="sg-btn">إعادة المباراة ↻</button>
+      <button type="button" id="pHome" class="sg-btn secondary">القائمة الرئيسية</button>
+    </div>
+  </div>
+</section>
+
+<!-- Match Result Overlay -->
+<section id="scrResult" class="overlay modal-overlay" hidden>
+  <div class="card result-card">
+    <div id="resBanner" class="res-banner">🏆 فوز رائع!</div>
+    <div id="resStars" class="res-stars" aria-label="النجوم">
+      <span class="st">★</span><span class="st">★</span><span class="st">★</span>
+    </div>
+    <div class="res-score" dir="ltr">
+      <span class="rs-p1" id="resS1">0</span>
+      <span class="rs-sep">-</span>
+      <span class="rs-p2" id="resS2">0</span>
+    </div>
+    <div id="resBestBadge" class="best-burst" hidden>🎉 رقم قياسي جديد!</div>
+    <div id="resRewards" class="res-rewards"></div>
+    <div class="res-actions">
+      <button type="button" id="rNext" class="sg-btn good" hidden>الخصم التالي ▶</button>
+      <button type="button" id="rAgain" class="sg-btn">العب مجدداً ↻</button>
+      <button type="button" id="rHome" class="sg-btn secondary">القائمة</button>
+    </div>
+  </div>
+</section>
+
+<!-- Context Lost Notice -->
+<div id="ctxNotice" class="ctx-toast" hidden>جاري استعادة العرض ثلاثي الأبعاد...</div>
+
+<!-- WebGL Unavailable Fallback -->
+<section id="scrError" class="overlay modal-overlay" hidden>
+  <div class="card error-card">
+    <h2>🏀 العرض ثلاثي الأبعاد غير متاح</h2>
+    <p>لا يدعم هذا المتصفح رسومات WebGL حالياً. جرّب تحديث المتصفح أو فتح اللعبة في نافذة جديدة.</p>
+  </div>
+</section>
+
+<script src="../../lib/three/three.min.js"></script>
 <script src="../../shared/kit.js"></script>
-<script src="../../shared/artkit.js"></script>
 <script src="../../shared/juice.js"></script>
-<script src="data.js"></script>
 <script src="engine.js"></script>
 <script src="art.js"></script>
 <script src="game.js"></script>
