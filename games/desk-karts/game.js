@@ -1,660 +1,721 @@
-/* سباق المكاتب — Canvas Renderer, Kit.art Sprites, Dynamic Chase Camera, Audio & UI */
+/* Desk Karts 3D (سباق المكاتب) — UI controller, keyboard input, HUD, minimap, Kit DDA/stats/juice.
+ * Pure racing simulation lives in engine.js; 3D Three.js renderer lives in art.js. */
 (function () {
   'use strict';
 
-  var E = window.DKEngine, SAVE_KEY = 'sg:desk-karts:save';
-  var canvas = document.getElementById('game');
-  Kit.art.init({ canvas: canvas, mode: '2d', theme: 'day' });
-  var view = Kit.fit(canvas, E.VIEW_W, E.VIEW_H);
-  var ctx = view.ctx || canvas.getContext('2d');
-  Kit.muteButton();
+  var E = window.DeskKartsEngine;
+  var A = window.DeskKartsArt;
+  var J = Kit.juice;
+  function $(id) { return document.getElementById(id); }
 
-  var save = loadStoredSave();
-  var saveBanner = Kit.saveStatus({ retry: function () { return persistSave(); } });
-  var dda = Kit.dda('desk-karts', { start: 0.35, stepUp: 0.08, stepDown: 0.10 });
+  var canvas = $('scene');
+  var mapCanvas = $('minimap');
+  var mapCtx = mapCanvas.getContext('2d');
+  var body = document.body;
 
-  var screen = 'title', modeHumans = 1, selectedTrack = 0, roundOpen = false, pausedDrawn = false;
-  var bannerText = '', bannerT = 0, shakeT = 0, shakeMag = 0, particles = [], roadCache = null;
-
-  var demoWorld = makeDemoWorld();
-  var world = E.create(0, { humans: 1, diff: save.diff, dda: dda.level, kart: save.kart, flame: save.flame });
-
-  var keys = Object.create(null), itemQueued = [false, false];
-  var ptr = { down: false, id: -1, lx: E.VIEW_W * 0.5, ly: E.VIEW_H * 0.5 };
-
-  function clearInputs() {
-    for (var k in keys) keys[k] = false;
-    itemQueued[0] = false; itemQueued[1] = false; ptr.down = false; ptr.id = -1;
+  /* --------------------------------------------------------------- Save & DDA */
+  var store = Kit.store('desk-karts');
+  var saveStatus = Kit.saveStatus({ retry: persist });
+  var save = E.loadSave(store.get('save3', null));
+  function persist() {
+    if (store.set('save3', save) === false) { saveStatus.failed(); return false; }
+    saveStatus.saved();
+    return true;
   }
 
-  window.addEventListener('keydown', function (e) {
-    if (!Kit.isGameKeyEvent(e)) return;
-    var code = e.code;
-    if (code === 'Escape' || code === 'KeyP') {
-      if (screen === 'play') { e.preventDefault(); setPause(true); return; }
-      if (screen === 'pause') { e.preventDefault(); setPause(false); return; }
-    }
-    if (screen !== 'play') return;
-    if (code === 'ArrowUp' || code === 'ArrowDown' || code === 'ArrowLeft' || code === 'ArrowRight' || code === 'Space') e.preventDefault();
-    if (!e.repeat) {
-      if (code === 'Space' || code === 'ShiftRight' || (modeHumans === 1 && (code === 'KeyE' || code === 'ShiftLeft'))) itemQueued[0] = true;
-      if (modeHumans === 2 && (code === 'Enter' || code === 'ShiftLeft' || code === 'KeyQ')) itemQueued[1] = true;
-    }
-    keys[code] = true;
-  });
-  window.addEventListener('keyup', function (e) { keys[e.code] = false; });
-  window.addEventListener('blur', clearInputs);
+  var dda = Kit.dda('desk-karts', { id: 'main', target: 0.72, tiers: 5 });
 
-  canvas.addEventListener('pointerdown', function (e) {
-    if (screen !== 'play' || e.button > 0) return;
-    var lp = view.toLogical(e.clientX, e.clientY);
-    ptr.down = true; ptr.id = e.pointerId; ptr.lx = lp.x; ptr.ly = lp.y;
-    try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
-  });
-  canvas.addEventListener('pointermove', function (e) {
-    if (!ptr.down || e.pointerId !== ptr.id) return;
-    var lp = view.toLogical(e.clientX, e.clientY); ptr.lx = lp.x; ptr.ly = lp.y;
-  });
-  function releasePtr(e) { if (ptr.down && (!e || e.pointerId === ptr.id)) { ptr.down = false; ptr.id = -1; } }
-  canvas.addEventListener('pointerup', releasePtr);
-  canvas.addEventListener('pointercancel', releasePtr);
+  /* --------------------------------------------------------------- App State */
+  var mode = 'title';
+  var duo = false;
+  var selectedTrack = 0;
+  var world = null;
+  var demo = null;
+  var view = null;
+  var loop = null;
+  var live = false;
+  var contextLost = false;
+  var dirty = true;
+  var snapCam = true;
+  var drawCount = 0;
 
-  function gatherInputs() {
-    var out = [];
-    if (world.humans === 1) {
-      var up = keys.ArrowUp || keys.KeyW ? 1 : 0, dn = keys.ArrowDown || keys.KeyS ? 1 : 0;
-      var lf = keys.ArrowLeft || keys.KeyA ? 1 : 0, rt = keys.ArrowRight || keys.KeyD ? 1 : 0;
-      var p1 = world.karts[0], raw = {
-        gas: up, brake: dn, steer: rt - lf, dirX: rt - lf, dirY: dn - up,
-        drift: !!(keys.Space || keys.ShiftLeft || keys.ShiftRight), item: itemQueued[0],
-        active: !!(up || dn || lf || rt || keys.Space || itemQueued[0] || ptr.down)
-      };
-      if (ptr.down) {
-        var wx = (ptr.lx - E.VIEW_W * 0.5) / world.cam.zoom + world.cam.x;
-        var wy = (ptr.ly - E.VIEW_H * 0.5) / world.cam.zoom + world.cam.y;
-        if (Math.hypot(wx - p1.x, wy - p1.y) > 16) { raw.targetAngle = Math.atan2(wy - p1.y, wx - p1.x); raw.gas = 1; raw.brake = 0; }
-      }
-      out.push(raw);
-    } else {
-      var u1 = keys.ArrowUp ? 1 : 0, d1 = keys.ArrowDown ? 1 : 0, l1 = keys.ArrowLeft ? 1 : 0, r1 = keys.ArrowRight ? 1 : 0;
-      var u2 = keys.KeyW ? 1 : 0, d2 = keys.KeyS ? 1 : 0, l2 = keys.KeyA ? 1 : 0, r2 = keys.KeyD ? 1 : 0;
-      out.push({ gas: u1, brake: d1, steer: r1 - l1, dirX: r1 - l1, dirY: d1 - u1, drift: !!(keys.Space || keys.ShiftRight), item: itemQueued[0], active: !!(u1 || d1 || l1 || r1 || keys.Space || itemQueued[0]) });
-      out.push({ gas: u2, brake: d2, steer: r2 - l2, dirX: r2 - l2, dirY: d2 - u2, drift: !!(keys.Enter || keys.ShiftLeft), item: itemQueued[1], active: !!(u2 || d2 || l2 || r2 || keys.Enter || itemQueued[1]) });
-    }
-    itemQueued[0] = false; itemQueued[1] = false;
-    return out;
+  var roundOpen = false;
+  var resultData = null;
+  var resultLock = 0;
+  var bannerT = 0;
+  var idleT = 0;
+  var tutorialStarted = false;
+  var tutorialDone = false;
+
+  var prevP1Item = false;
+  var prevP2Item = false;
+
+  var hudCache = { place: -1, lap: -1, coins: -1, speed: -1, boost: false, p1Item: '-', p2Item: '-', trackId: '' };
+  var BODY_ICONS = ['🏎️', '🚀', '🚌', '🚙'];
+  var ITEM_ICONS = { rocket: '🚀', shield: '🛡️', ink: '💧' };
+
+  function say(txt) { $('live').textContent = txt; }
+  function focusCanvas() { try { canvas.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }
+
+  /* --------------------------------------------------------------- Screens */
+  var SCREENS = { title: 'scrTitle', tracks: 'scrTracks', garage: 'scrGarage', pause: 'scrPause', result: 'scrResult' };
+  function setMode(next) {
+    mode = next;
+    body.dataset.mode = next;
+    for (var k in SCREENS) $(SCREENS[k]).hidden = k !== next;
+    $('hud').hidden = !(next === 'play' || next === 'pause');
+    if (next !== 'play') $('ghostHint').hidden = true;
+    dirty = true;
+    if (next === 'play') focusCanvas();
   }
 
-  function loadStoredSave() {
-    try { var raw = localStorage.getItem(SAVE_KEY); return raw ? E.loadSave(JSON.parse(raw)) : E.freshSave(); }
-    catch (_) { return E.freshSave(); }
-  }
-  function persistSave() {
-    try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); if (saveBanner) saveBanner.saved(); return true; }
-    catch (_) { if (saveBanner) saveBanner.failed(); return false; }
-  }
-
-  var els = {
-    hud: document.getElementById('hud'), btnPause: document.getElementById('btnPause'), btnItemUse: document.getElementById('btnItemUse'),
-    scrTitle: document.getElementById('scrTitle'), scrMap: document.getElementById('scrMap'), scrShop: document.getElementById('scrShop'),
-    scrPause: document.getElementById('scrPause'), scrResult: document.getElementById('scrResult'),
-    titleStars: document.querySelector('#titleStars b'), titleCoins: document.querySelector('#titleCoins b'),
-    diffRow: document.getElementById('diffRow'), diffDesc: document.getElementById('diffDesc'),
-    cupGrid: document.getElementById('cupGrid'), btnMapMode: document.getElementById('btnMapMode'), btnMapDiff: document.getElementById('btnMapDiff'),
-    shopCoins: document.querySelector('#shopCoins b'), shelfKarts: document.getElementById('shelfKarts'), shelfFlames: document.getElementById('shelfFlames'),
-    pauseTrackLabel: document.getElementById('pauseTrackLabel'),
-    resBadge: document.getElementById('resBadge'), resTitle: document.getElementById('resTitle'), resStars: document.getElementById('resStars'), resSummary: document.getElementById('resSummary')
-  };
-
-  function showScreen(next) {
-    screen = next;
-    els.hud.hidden = next !== 'play';
-    els.scrTitle.hidden = next !== 'title'; els.scrMap.hidden = next !== 'map'; els.scrShop.hidden = next !== 'shop';
-    els.scrPause.hidden = next !== 'pause'; els.scrResult.hidden = next !== 'result';
-    if (next === 'title') refreshTitleUI();
-    else if (next === 'map') renderMapUI();
-    else if (next === 'shop') renderShopUI();
+  function showBanner(text, dur) {
+    var el = $('banner');
+    el.textContent = text;
+    el.hidden = false;
+    bannerT = dur || 1.4;
   }
 
   function refreshTitleUI() {
-    els.titleStars.textContent = E.totalStars(save) + '/' + (E.TRACKS.length * 3);
-    els.titleCoins.textContent = String(save.coins);
-    var btns = els.diffRow.querySelectorAll('.diff-btn');
-    for (var i = 0; i < btns.length; i++) btns[i].classList.toggle('is-on', btns[i].getAttribute('data-diff') === save.diff);
-    els.diffDesc.textContent = E.DIFFS[save.diff].desc;
+    $('titleStars').querySelector('b').textContent = E.totalStars(save) + '/' + (E.TRACKS.length * 3);
+    $('titleCoins').querySelector('b').textContent = Kit.fmt(save.coins);
+    $('titleBest').querySelector('b').textContent = Kit.fmt(save.bestScore);
+    var btnDuo = $('btnDuo');
+    btnDuo.setAttribute('aria-pressed', String(duo));
+    btnDuo.textContent = duo ? '👥 لاعبان (محلي)' : '👤 لاعب واحد';
+    $('controlsBar').innerHTML = duo
+      ? 'اللاعب 1: <span dir="ltr"><span class="sg-key">W</span><span class="sg-key">A</span><span class="sg-key">S</span><span class="sg-key">D</span> + <span class="sg-key">مسافة</span></span> <span class="sep">·</span> اللاعب 2: <span dir="ltr"><span class="sg-key">↑</span><span class="sg-key">←</span><span class="sg-key">↓</span><span class="sg-key">→</span> + <span class="sg-key">Enter</span></span>'
+      : '<span dir="ltr"><span class="sg-key">↑</span><span class="sg-key">↓</span><span class="sg-key">←</span><span class="sg-key">→</span> / <span class="sg-key">WASD</span></span> قيادة <span class="sep">·</span> <span dir="ltr"><span class="sg-key">مسافة</span> / <span class="sg-key">Shift</span></span> دريفت وسلاح';
   }
 
-  function startRace(trackIdx, humans) {
-    if (roundOpen) { Kit.stats.end('quit', 0); roundOpen = false; }
-    selectedTrack = E.clamp(trackIdx | 0, 0, E.TRACKS.length - 1);
-    modeHumans = humans === 2 ? 2 : 1;
-    clearInputs(); particles.length = 0; shakeT = 0; bannerT = 0; bannerText = '';
-    world = E.create(selectedTrack, { humans: modeHumans, diff: save.diff, dda: dda.level, kart: save.kart, flame: save.flame });
-    buildRoadCache(world.L);
-    var rk = 'dk_' + world.id.replace('-', '_');
-    Kit.stats.round(rk); roundOpen = true;
-    els.pauseTrackLabel.textContent = world.R.name + ' · ' + world.id;
-    showScreen('play'); canvas.focus();
-  }
-
-  function setPause(pauseNow) {
-    if (pauseNow && screen === 'play') { clearInputs(); pausedDrawn = false; showScreen('pause'); }
-    else if (!pauseNow && screen === 'pause') { clearInputs(); showScreen('play'); canvas.focus(); }
-  }
-
-  function finishRace() {
-    var p1 = world.karts[0], bestRank = world.humans === 2 ? Math.min(p1.rank, world.karts[1].rank) : p1.rank;
-    var bestCoins = world.humans === 2 ? Math.max(p1.coins, world.karts[1].coins) : p1.coins;
-    var res = E.applyResult(save, world.trackIdx, bestRank, world.time, bestCoins, save.diff);
-    persistSave();
-    var won = bestRank <= 3, score = Math.max(0, (5 - bestRank) * 250 + bestCoins * 25);
-    if (roundOpen) { Kit.stats.end(won ? 'win' : 'lose', score); roundOpen = false; }
-    dda.result(bestRank === 1 ? 1 : bestRank === 2 ? 0.75 : bestRank === 3 ? 0.4 : 0);
-    if (won) Kit.juice.levelUp(); else Kit.juice.fail();
-
-    var rankNames = ['المركز الأول! 🏆', 'المركز الثاني! 🥈', 'المركز الثالث! 🥉', 'المركز الرابع — حاول مجدداً!'];
-    els.resBadge.textContent = world.R.name + ' · ' + world.id;
-    els.resTitle.textContent = rankNames[E.clamp(bestRank - 1, 0, 3)];
-    els.resStars.textContent = (res.stars >= 1 ? '★' : '☆') + ' ' + (res.stars >= 2 ? '★' : '☆') + ' ' + (res.stars >= 3 ? '★' : '☆');
-    els.resSummary.innerHTML = '<div><b>' + world.time.toFixed(1) + ' ث</b><span>زمن السباق</span></div><div><b>+' + res.earned + ' 🪙</b><span>عملات مكتسبة' + (res.bestNew ? ' · رقم قياسي!' : '') + '</span></div>';
-    selectedTrack = res.nextIdx;
-    showScreen('result');
-  }
-
-  function renderMapUI() {
-    els.btnMapMode.textContent = 'الطور: ' + (modeHumans === 2 ? 'لاعبان 👥' : 'لاعب 1');
-    els.btnMapDiff.textContent = 'المستوى: ' + E.DIFFS[save.diff].name;
-    var html = '';
+  function buildTracksUI() {
+    $('tracksStars').querySelector('b').textContent = E.totalStars(save) + '/' + (E.TRACKS.length * 3);
+    var wrap = $('tracksGrid');
+    wrap.innerHTML = '';
     for (var c = 0; c < E.CUPS.length; c++) {
       var cup = E.CUPS[c];
-      html += '<div class="cup-card"><div class="cup-head"><h3>' + (c + 1) + '. ' + cup.name + '</h3><span>' + cup.sub + '</span></div><div class="track-row">';
-      for (var t = 0; t < E.TRACKS.length; t++) {
-        var tr = E.TRACKS[t]; if (tr.cup !== c) continue;
-        var st = save.tracks[t].s, stars = (st >= 1 ? '★' : '☆') + (st >= 2 ? '★' : '☆') + (st >= 3 ? '★' : '☆');
-        html += '<button type="button" class="track-btn" data-track="' + t + '"><span class="track-id">' + tr.id + '</span><span class="track-name">' + tr.name + '</span><span class="track-stars">' + stars + '</span></button>';
+      var sec = document.createElement('div');
+      sec.className = 'cup-block';
+      sec.innerHTML = '<div class="cup-title"><span class="cup-dot" style="background:' + cup.accent + '"></span>' + cup.name + '</div>';
+      var row = document.createElement('div');
+      row.className = 'track-row';
+      for (var i = 0; i < E.TRACKS.length; i++) {
+        var tr = E.TRACKS[i];
+        if (tr.cup !== cup.id) continue;
+        var st = save.tracks[i] || { stars: 0 };
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'track-card' + (i === selectedTrack ? ' selected' : '');
+        btn.dataset.idx = String(i);
+        var starsHtml = '';
+        for (var s = 1; s <= 3; s++) starsHtml += '<span class="' + (s <= st.stars ? 'on' : '') + '">★</span>';
+        btn.innerHTML = '<span class="track-id" dir="ltr">' + tr.id + '</span><span class="track-name">' + tr.name + '</span><span class="track-stars">' + starsHtml + '</span>';
+        btn.addEventListener('click', (function (idx) {
+          return function () {
+            J.select();
+            selectedTrack = idx;
+            startRace(idx);
+          };
+        })(i));
+        row.appendChild(btn);
       }
-      html += '</div></div>';
-    }
-    els.cupGrid.innerHTML = html;
-  }
-
-  function renderShopUI() {
-    els.shopCoins.textContent = String(save.coins);
-    var kh = '', fh = '';
-    for (var i = 0; i < E.KARTS.length; i++) {
-      var k = E.KARTS[i], owned = !!save.karts[i], worn = save.kart === i;
-      kh += '<button type="button" class="shop-item' + (worn ? ' is-worn' : '') + '" data-shelf="kart" data-idx="' + i + '"' + (!owned && save.coins < k.price ? ' disabled' : '') + '>' +
-        '<span class="swatch" style="background:linear-gradient(135deg,' + k.body + ' 58%,' + k.trim + ' 58%)"></span><span class="shop-name">' + k.name + '</span><span class="shop-tag">' + (worn ? 'مجهّز ✓' : owned ? 'اختر' : (k.price + ' 🪙')) + '</span></button>';
-    }
-    for (var j = 0; j < E.FLAMES.length; j++) {
-      var f = E.FLAMES[j], fOwned = !!save.flames[j], fWorn = save.flame === j;
-      fh += '<button type="button" class="shop-item' + (fWorn ? ' is-worn' : '') + '" data-shelf="flame" data-idx="' + j + '"' + (!fOwned && save.coins < f.price ? ' disabled' : '') + '>' +
-        '<span class="swatch" style="background:linear-gradient(90deg,' + f.c0 + ',' + f.c1 + ')"></span><span class="shop-name">' + f.name + '</span><span class="shop-tag">' + (fWorn ? 'مجهّز ✓' : fOwned ? 'اختر' : (f.price + ' 🪙')) + '</span></button>';
-    }
-    els.shelfKarts.innerHTML = kh; els.shelfFlames.innerHTML = fh;
-  }
-
-  document.getElementById('btnPlay').addEventListener('click', function () { Kit.juice.select(); startRace(0, 1); });
-  document.getElementById('btnTwo').addEventListener('click', function () { Kit.juice.select(); startRace(0, 2); });
-  document.getElementById('btnLevels').addEventListener('click', function () { Kit.juice.tap(); showScreen('map'); });
-  document.getElementById('btnShop').addEventListener('click', function () { Kit.juice.tap(); showScreen('shop'); });
-  els.diffRow.addEventListener('click', function (e) {
-    var b = e.target.closest('[data-diff]'); if (!b) return;
-    var dk = b.getAttribute('data-diff');
-    if (E.DIFFS[dk]) { save.diff = dk; persistSave(); Kit.juice.tap(); refreshTitleUI(); }
-  });
-  els.btnMapMode.addEventListener('click', function () { modeHumans = modeHumans === 1 ? 2 : 1; Kit.juice.tap(); renderMapUI(); });
-  els.btnMapDiff.addEventListener('click', function () {
-    var order = ['easy', 'normal', 'hero'];
-    save.diff = order[(order.indexOf(save.diff) + 1) % order.length]; persistSave(); Kit.juice.tap(); renderMapUI();
-  });
-  document.getElementById('btnMapBack').addEventListener('click', function () { Kit.juice.tap(); showScreen('title'); });
-  els.cupGrid.addEventListener('click', function (e) {
-    var b = e.target.closest('[data-track]'); if (!b) return;
-    Kit.juice.select(); startRace(parseInt(b.getAttribute('data-track'), 10), modeHumans);
-  });
-  document.getElementById('btnShopBack').addEventListener('click', function () { Kit.juice.tap(); showScreen('title'); });
-  function onShelfClick(e) {
-    var b = e.target.closest('[data-shelf]'); if (!b || b.disabled) return;
-    var act = E.buy(save, b.getAttribute('data-shelf'), parseInt(b.getAttribute('data-idx'), 10));
-    if (act) { persistSave(); if (act === 'bought') Kit.juice.coin(); else Kit.juice.tap(); renderShopUI(); }
-  }
-  els.shelfKarts.addEventListener('click', onShelfClick);
-  els.shelfFlames.addEventListener('click', onShelfClick);
-  els.btnPause.addEventListener('click', function () { Kit.juice.tap(); setPause(true); });
-  els.btnItemUse.addEventListener('click', function () { if (screen === 'play') itemQueued[0] = true; });
-  document.getElementById('btnResume').addEventListener('click', function () { Kit.juice.tap(); setPause(false); });
-  document.getElementById('btnRestart').addEventListener('click', function () { Kit.juice.select(); startRace(world.trackIdx, world.humans); });
-  document.getElementById('btnPauseMap').addEventListener('click', function () { if (roundOpen) { Kit.stats.end('quit', 0); roundOpen = false; } Kit.juice.tap(); showScreen('map'); });
-  document.getElementById('btnPauseHome').addEventListener('click', function () { if (roundOpen) { Kit.stats.end('quit', 0); roundOpen = false; } Kit.juice.tap(); showScreen('title'); });
-  document.getElementById('resNext').addEventListener('click', function () { Kit.juice.select(); startRace(selectedTrack, modeHumans); });
-  document.getElementById('resAgain').addEventListener('click', function () { Kit.juice.select(); startRace(world.trackIdx, modeHumans); });
-  document.getElementById('resMap').addEventListener('click', function () { Kit.juice.tap(); showScreen('map'); });
-  document.getElementById('resShop').addEventListener('click', function () { Kit.juice.tap(); showScreen('shop'); });
-  Kit.lifecycle({ pause: function () { if (screen === 'play') setPause(true); } });
-
-  function makeDemoWorld() {
-    var dw = E.create(0, { humans: 1, diff: 'normal', dda: 0.45, seed: 7 });
-    dw.karts[0].human = false; dw.karts[0].started = true; dw.karts[0].aiSkill = 1.02;
-    return dw;
-  }
-
-  /* ---------------- Kit.art Cached Sprite Getters (Static Keys) ---------------- */
-  function drawKartArt(c, w, h, body, trim, cockpit, style) {
-    c.save(); c.translate(w * 0.5, h * 0.5);
-    var wheels = [[-17, -19], [16, -19], [-17, 13], [16, 13]];
-    for (var i = 0; i < 4; i++) {
-      Kit.art.round(c, wheels[i][0], wheels[i][1], 14, 7, 3);
-      c.fillStyle = '#1e2436'; c.fill(); c.lineWidth = 2; c.strokeStyle = '#0f1220'; c.stroke();
-      c.fillStyle = '#94a3b8'; c.fillRect(wheels[i][0] + 4, wheels[i][1] + 2, 6, 2);
-    }
-    c.fillStyle = '#cbd5e1'; c.fillRect(-30, -9, 7, 5); c.fillRect(-30, 4, 7, 5);
-    Kit.art.round(c, -26, -15, 52, 30, 11);
-    var g = c.createLinearGradient(0, -15, 0, 15);
-    g.addColorStop(0, Kit.art.shade(body, 0.24)); g.addColorStop(0.55, body); g.addColorStop(1, Kit.art.shade(body, -0.24));
-    c.fillStyle = g; c.fill(); c.lineWidth = 3; c.strokeStyle = '#1b1640'; c.stroke();
-    c.fillStyle = trim;
-    if (style === 1) { Kit.art.round(c, 4, -13, 20, 26, 8); c.fill(); }
-    else if (style === 2) { Kit.art.round(c, 10, -14, 16, 28, 5); c.fill(); }
-    else if (style === 3) { c.beginPath(); c.moveTo(-22, -21); c.lineTo(18, 0); c.lineTo(-22, 21); c.closePath(); c.fill(); c.lineWidth = 2; c.stroke(); }
-    else c.fillRect(-20, -5, 44, 10);
-    Kit.art.round(c, -27, -16, 9, 32, 4);
-    c.fillStyle = trim; c.fill(); c.lineWidth = 2.4; c.strokeStyle = '#1b1640'; c.stroke();
-    Kit.art.round(c, -9, -10, 20, 20, 8); c.fillStyle = cockpit; c.fill();
-    c.beginPath(); c.arc(0, 0, 8.5, 0, Math.PI * 2); c.fillStyle = '#fff'; c.fill(); c.lineWidth = 2.2; c.strokeStyle = '#1b1640'; c.stroke();
-    Kit.art.round(c, 1, -6, 7, 12, 3); c.fillStyle = '#38bdf8'; c.fill();
-    c.fillStyle = 'rgba(255,255,255,0.45)'; c.fillRect(12, -10, 9, 4);
-    c.restore();
-  }
-
-  var KART_KEYS = ['kart_p1_0', 'kart_p1_1', 'kart_p1_2', 'kart_p1_3', 'kart_p1_4'];
-  var RIVAL_KEYS = ['kart_rv_0', 'kart_rv_1', 'kart_rv_2'];
-  function getKartSprite(k) {
-    if (k.human && k.id === 0) {
-      var idx = E.clamp(k.kartIdx | 0, 0, 4), kd = E.KARTS[idx];
-      return Kit.art.sprite(KART_KEYS[idx], 68, 52, function (c, bw, bh) { drawKartArt(c, bw, bh, kd.body, kd.trim, kd.cockpit, idx); }, { pad: 6 });
-    }
-    if (k.human) return Kit.art.sprite('kart_p2', 68, 52, function (c, bw, bh) { drawKartArt(c, bw, bh, '#00d2ff', '#a8ff78', '#1b1640', 0); }, { pad: 6 });
-    var rIdx = (k.rivalStyle - 1 + 3) % 3, rv = E.RIVALS[rIdx];
-    return Kit.art.sprite(RIVAL_KEYS[rIdx], 68, 52, function (c, bw, bh) { drawKartArt(c, bw, bh, rv.body, rv.trim, '#1b1640', 0); }, { pad: 6 });
-  }
-
-  function getItemSprite(kind) {
-    if (kind === 'box') return Kit.art.sprite('box_up', 48, 48, function (c, bw, bh) {
-      Kit.art.round(c, 6, 6, bw - 12, bh - 12, 10);
-      var g = c.createLinearGradient(6, 6, bw - 6, bh - 6);
-      g.addColorStop(0, '#ff5964'); g.addColorStop(0.5, '#ffd23f'); g.addColorStop(1, '#38bdf8');
-      c.fillStyle = g; c.fill(); c.lineWidth = 3; c.strokeStyle = '#1b1640'; c.stroke();
-      c.fillStyle = '#1b1640'; c.font = '900 22px Fredoka, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('؟', bw * 0.5, bh * 0.54);
-    }, { pad: 4 });
-    if (kind === 'coin') return Kit.art.sprite('coin_gold', 32, 32, function (c, bw, bh) {
-      c.beginPath(); c.arc(bw * 0.5, bh * 0.5, 12, 0, Math.PI * 2); c.fillStyle = '#ffd23f'; c.fill(); c.lineWidth = 2.6; c.strokeStyle = '#1b1640'; c.stroke();
-      c.beginPath(); c.arc(bw * 0.5, bh * 0.5, 7, 0, Math.PI * 2); c.strokeStyle = '#f59e0b'; c.lineWidth = 2; c.stroke();
-    }, { pad: 4 });
-    if (kind === 'glue') return Kit.art.sprite('glue_blob', 68, 68, function (c, bw, bh) {
-      Kit.art.blob(c, bw * 0.5, bh * 0.5, 24, 0.16, 1.2);
-      c.fillStyle = '#fef3c7'; c.fill(); c.lineWidth = 3; c.strokeStyle = '#1b1640'; c.stroke();
-      c.fillStyle = '#f59e0b'; c.beginPath(); c.arc(bw * 0.45, bh * 0.45, 7, 0, Math.PI * 2); c.fill();
-    }, { pad: 4 });
-    if (kind === 'rocket') return Kit.art.sprite('ink_rocket', 52, 26, function (c, bw, bh) {
-      c.save(); c.translate(bw * 0.5, bh * 0.5);
-      Kit.art.round(c, -18, -7, 30, 14, 6); c.fillStyle = '#3b82f6'; c.fill(); c.lineWidth = 2.5; c.strokeStyle = '#1b1640'; c.stroke();
-      c.beginPath(); c.moveTo(12, -7); c.lineTo(23, 0); c.lineTo(12, 7); c.closePath(); c.fillStyle = '#1e1b4b'; c.fill(); c.stroke();
-      c.fillStyle = '#f43f5e'; c.fillRect(-22, -10, 7, 20); c.restore();
-    }, { pad: 4 });
-    return Kit.art.sprite('pad_boost', 76, 52, function (c, bw, bh) {
-      Kit.art.round(c, 5, 6, bw - 10, bh - 12, 10); c.fillStyle = '#0ea5e9'; c.fill(); c.lineWidth = 3; c.strokeStyle = '#1b1640'; c.stroke();
-      c.strokeStyle = '#fef08a'; c.lineWidth = 4.5;
-      for (var o = -14; o <= 14; o += 14) { c.beginPath(); c.moveTo(bw * 0.5 + o - 7, 14); c.lineTo(bw * 0.5 + o + 6, bh * 0.5); c.lineTo(bw * 0.5 + o - 7, bh - 14); c.stroke(); }
-    }, { pad: 4 });
-  }
-
-  function getHazardSprite(hk) {
-    var key = hk === 'slime' ? 'hz_slime' : hk === 'juice' ? 'hz_juice' : 'hz_paint';
-    var col = hk === 'slime' ? '#84cc16' : hk === 'juice' ? '#fb923c' : '#ec4899';
-    return Kit.art.sprite(key, 82, 74, function (c, bw, bh) {
-      Kit.art.blob(c, bw * 0.5, bh * 0.5, 28, 0.18, 0.5);
-      c.fillStyle = col; c.fill(); c.lineWidth = 3; c.strokeStyle = '#1b1640'; c.stroke();
-      c.fillStyle = 'rgba(255,255,255,0.4)'; c.beginPath(); c.arc(bw * 0.42, bh * 0.4, 6, 0, Math.PI * 2); c.fill();
-    }, { pad: 4 });
-  }
-
-  function getBumperSprite(bk) {
-    if (bk === 'keycap') return Kit.art.sprite('bmp_keycap', 68, 68, function (c) {
-      Kit.art.round(c, 8, 8, 52, 52, 12); c.fillStyle = '#a855f7'; c.fill(); c.lineWidth = 3.5; c.strokeStyle = '#1b1640'; c.stroke();
-      Kit.art.round(c, 15, 14, 38, 36, 8); c.fillStyle = '#f8fafc'; c.fill();
-      c.fillStyle = '#1b1640'; c.font = '900 18px Fredoka, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('⚡', 34, 33);
-    }, { pad: 4 });
-    return Kit.art.sprite('bmp_eraser', 68, 68, function (c, bw, bh) {
-      c.beginPath(); c.arc(bw * 0.5, bh * 0.5, 27, 0, Math.PI * 2); c.fillStyle = '#fb7185'; c.fill(); c.lineWidth = 3.5; c.strokeStyle = '#1b1640'; c.stroke();
-      c.beginPath(); c.arc(bw * 0.5, bh * 0.5, 17, 0, Math.PI * 2); c.fillStyle = '#38bdf8'; c.fill(); c.stroke();
-    }, { pad: 4 });
-  }
-
-  var PROP_DEFS = {
-    crayon_r: ['prop_cr_r', 132, 34, '#ef4444'], crayon_b: ['prop_cr_b', 132, 34, '#3b82f6'],
-    ruler: ['prop_ruler', 156, 42, '#fbbf24'], eraser: ['prop_eraser', 88, 52, '#fb7185'],
-    notebook: ['prop_note', 114, 88, '#fef9c3'], beaker: ['prop_beak', 76, 80, '#a3e635'],
-    magnet_prop: ['prop_mag', 76, 72, '#ef4444'], keyboard: ['prop_kbd', 136, 58, '#334155'],
-    mouse: ['prop_mse', 72, 50, '#e2e8f0'], pizza: ['prop_pza', 98, 88, '#fde047'],
-    juice_box: ['prop_jce', 68, 82, '#fb923c'], stapler_prop: ['prop_stp', 118, 46, '#6366f1']
-  };
-  function getPropSprite(kind) {
-    var d = PROP_DEFS[kind] || PROP_DEFS.ruler;
-    return Kit.art.sprite(d[0], d[1], d[2], function (c, bw, bh) {
-      Kit.art.round(c, 8, 6, bw - 16, bh - 12, 9);
-      c.fillStyle = d[3]; c.fill(); c.lineWidth = 3; c.strokeStyle = '#1b1640'; c.stroke();
-      if (kind === 'ruler') {
-        for (var x = 20; x < bw - 18; x += 14) { c.beginPath(); c.moveTo(x, 6); c.lineTo(x, x % 28 === 6 ? 20 : 14); c.stroke(); }
-      } else if (kind === 'eraser') {
-        Kit.art.round(c, bw * 0.55, 6, bw * 0.36, bh - 12, 7); c.fillStyle = '#38bdf8'; c.fill(); c.stroke();
-      } else {
-        c.fillStyle = 'rgba(255,255,255,0.45)'; c.fillRect(22, 12, bw - 44, 8);
-      }
-    }, { pad: 4 });
-  }
-
-  function buildRoadCache(L) {
-    if (roadCache && roadCache.L === L) return;
-    var path = new Path2D();
-    for (var i = 0; i < L.pts.length; i++) { var p = L.pts[i]; if (i === 0) path.moveTo(p.x, p.y); else path.lineTo(p.x, p.y); }
-    path.closePath();
-    roadCache = { L: L, path: path };
-  }
-
-  var ITEM_NAMES = { ink_rocket: '🚀 صاروخ الحبر', eraser_turbo: '🔥 تيربو الممحاة', clip_magnet: '🧲 مغناطيس المشابك', glue_trap: '🍯 بقعة الصمغ', ruler_jump: '📐 قفزة المسطرة' };
-  function spawnBurst(x, y, col, count) {
-    if (Kit.motion.reduced()) return;
-    for (var i = 0; i < count && particles.length < 110; i++) {
-      var a = (i / count) * Math.PI * 2 + i * 0.37, spd = 70 + (i % 4) * 45;
-      particles.push({ x: x, y: y, vx: Math.cos(a) * spd, vy: Math.sin(a) * spd, life: 0.42, max: 0.42, col: col, r: 5 + (i % 3) * 2 });
+      sec.appendChild(row);
+      wrap.appendChild(sec);
     }
   }
-  function showBanner(txt, dur) { bannerText = txt; bannerT = dur || 1.2; }
 
-  function handleEvents(ev) {
-    for (var i = 0; i < ev.length; i++) {
-      var e = ev[i], isHuman = e.kart != null && world.karts[e.kart] && world.karts[e.kart].human;
-      if (e.t === 'coin' && isHuman) { Kit.juice.coin(); Kit.track.hit(); spawnBurst(e.x, e.y, '#ffd23f', 6); }
-      else if (e.t === 'box' && isHuman) { Kit.juice.pop(); Kit.track.hit(); spawnBurst(e.x, e.y, '#38bdf8', 8); }
-      else if ((e.t === 'pad' || e.t === 'ramp') && isHuman) {
-        Kit.juice.whoosh(); Kit.track.hit();
-        showBanner(e.t === 'ramp' ? 'قفزة المسطرة! ⭐' : 'انطلاق تيربو! ⚡', 1.0);
-        spawnBurst(e.x, e.y, '#00e5ff', 10);
-      } else if (e.t === 'driftBoost' && isHuman) {
-        Kit.juice.streak(e.lv + 1); Kit.track.hit();
-        showBanner(e.lv === 2 ? 'شرارات تيربو خارقة! 🔥' : 'دفعة دريفت! ⚡', 1.0);
-        spawnBurst(e.x, e.y, e.lv === 2 ? '#ff7b00' : '#38bdf8', 10);
-      } else if (e.t === 'trickLand' && isHuman) { Kit.juice.star(); Kit.track.hit(); showBanner('هبوط بهلواني! ⭐', 1.0); }
-      else if (e.t === 'item' && isHuman) { Kit.juice.whoosh(); Kit.track.hit(); showBanner((ITEM_NAMES[e.kind] || 'تيربو') + '!', 1.1); }
-      else if (e.t === 'inkHit' || e.t === 'glueHit' || e.t === 'zap' || e.t === 'chomp' || e.t === 'edgeDrop') {
+  function buildGarageUI() {
+    $('garageCoins').querySelector('b').textContent = Kit.fmt(save.coins);
+    var bGrid = $('bodyGrid');
+    bGrid.innerHTML = '';
+    for (var i = 0; i < E.BODIES.length; i++) {
+      var bd = E.BODIES[i];
+      var owned = !!save.bodies[i];
+      var active = save.body === i;
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'shop-item' + (active ? ' active' : '') + (!owned ? ' locked' : '');
+      btn.innerHTML = '<span class="shop-ico">' + BODY_ICONS[i] + '</span><span class="shop-name">' + bd.name + '</span><span class="shop-tag">' + (active ? 'مُختار ✓' : (owned ? 'اختيار' : '🪙 ' + bd.cost)) + '</span>';
+      btn.addEventListener('click', (function (idx) {
+        return function () {
+          if (E.buyBody(save, idx)) {
+            J.chime(2);
+            persist();
+            initDemo();
+            buildGarageUI();
+            refreshTitleUI();
+          } else {
+            J.error();
+          }
+        };
+      })(i));
+      bGrid.appendChild(btn);
+    }
+
+    var pGrid = $('paintGrid');
+    pGrid.innerHTML = '';
+    for (var j = 0; j < E.PAINTS.length; j++) {
+      var pt = E.PAINTS[j];
+      var pOwned = !!save.paints[j];
+      var pActive = save.paint === j;
+      var pBtn = document.createElement('button');
+      pBtn.type = 'button';
+      pBtn.className = 'shop-item' + (pActive ? ' active' : '') + (!pOwned ? ' locked' : '');
+      pBtn.innerHTML = '<span class="swatch" style="background:' + pt.css + '"></span><span class="shop-name">' + pt.name + '</span><span class="shop-tag">' + (pActive ? '✓' : (pOwned ? 'اختيار' : '🪙 ' + pt.cost)) + '</span>';
+      pBtn.addEventListener('click', (function (idx) {
+        return function () {
+          if (E.buyPaint(save, idx)) {
+            J.chime(2);
+            persist();
+            initDemo();
+            buildGarageUI();
+            refreshTitleUI();
+          } else {
+            J.error();
+          }
+        };
+      })(j));
+      pGrid.appendChild(pBtn);
+    }
+  }
+
+  /* --------------------------------------------------------------- Demo & Race Lifecycle */
+  function initDemo() {
+    demo = E.create({
+      demo: true,
+      track: selectedTrack,
+      seed: 2026 + selectedTrack * 31,
+      body: save.body,
+      paint: save.paint,
+      aiSkill: 0.45
+    });
+    // Advance slightly so karts are already zooming smoothly on the title screen
+    for (var i = 0; i < 45; i++) E.step(demo, E.FIXED_DT, []);
+    demo.ev.length = 0;
+    snapCam = true;
+    dirty = true;
+  }
+
+  function closeOpenRound(reason) {
+    if (!roundOpen) return;
+    roundOpen = false;
+    Kit.stats.end(reason || 'quit');
+  }
+
+  function startRace(trackIdx) {
+    if (trackIdx != null) selectedTrack = E.clamp(trackIdx | 0, 0, E.TRACKS.length - 1);
+    closeOpenRound('quit');
+
+    var skill = duo ? 0.45 : dda.value(0.18, 0.92);
+    world = E.create({
+      track: selectedTrack,
+      duo: duo,
+      demo: false,
+      aiSkill: skill,
+      body: save.body,
+      paint: save.paint,
+      seed: (Date.now() & 0xffff) || 404
+    });
+
+    Kit.keys.reset();
+    prevP1Item = false;
+    prevP2Item = false;
+    resultData = null;
+    resultLock = 0;
+    idleT = 0;
+    bannerT = 0;
+    $('banner').hidden = true;
+    $('p2ItemSlot').hidden = !duo;
+    $('p1ItemTag').textContent = duo ? '1P' : 'سلاح';
+    $('ghostKeys').innerHTML = duo
+      ? '<span class="sg-key">W</span><span class="sg-key">A</span><span class="sg-key">S</span><span class="sg-key">D</span> / <span class="sg-key">↑</span><span class="sg-key">←</span><span class="sg-key">→</span>'
+      : '<span class="sg-key">↑</span><span class="sg-key">←</span><span class="sg-key">→</span> <span class="sg-key">مسافة</span>';
+
+    hudCache.place = -1;
+    hudCache.lap = -1;
+    hudCache.coins = -1;
+    hudCache.speed = -1;
+    hudCache.p1Item = '-';
+    hudCache.p2Item = '-';
+    hudCache.trackId = '';
+
+    var rid = (duo ? 'duo-' : 't') + world.L.id;
+    Kit.stats.round(rid);
+    roundOpen = true;
+
+    if (!tutorialStarted) {
+      tutorialStarted = true;
+      Kit.stats.tutorial('start');
+    }
+
+    snapCam = true;
+    setMode('play');
+    updateHUD(true);
+    drawMinimap();
+    say('بدأت الحلبة ' + world.L.name);
+  }
+
+  function pauseGame() {
+    if (mode !== 'play') return;
+    $('pauseSub').textContent = world ? ('حلبة ' + world.L.name) : 'سيارتك جاهزة للانطلاق!';
+    setMode('pause');
+    J.back();
+  }
+
+  function resumeGame() {
+    if (mode !== 'pause') return;
+    Kit.keys.reset();
+    setMode('play');
+    J.select();
+  }
+
+  function goHome() {
+    closeOpenRound('quit');
+    world = null;
+    initDemo();
+    refreshTitleUI();
+    setMode('title');
+    J.back();
+  }
+
+  function openResult(summary) {
+    resultData = summary;
+    resultLock = 0.45;
+    roundOpen = false;
+
+    var resMeta = { newBest: false };
+    if (summary.duo) {
+      save.coins = E.clamp((save.coins | 0) + summary.coinsEarned, 0, 999999);
+      persist();
+      Kit.stats.end('end');
+      $('resTitle').textContent = 'فاز ' + summary.winnerName + '! 🏆';
+      $('resPlace').textContent = summary.winner === 0 ? '1P 🏆' : '2P 🏆';
+      J.levelUp();
+    } else {
+      resMeta = E.applyResult(save, selectedTrack, summary);
+      persist();
+      dda.result(summary.outcome);
+      Kit.stats.end(summary.place <= 3 ? 'win' : 'lose', summary.score);
+      var titles = ['', 'المركز الأول! 🏆', 'المركز الثاني! 🥈', 'المركز الثالث! 🥉', 'حاول مجددًا! 🏁'];
+      $('resTitle').textContent = titles[summary.place] || 'انتهى السباق!';
+      $('resPlace').textContent = summary.place + '/4';
+      if (summary.place === 1) J.levelUp();
+      else if (summary.place <= 3) J.star(summary.stars);
+      else J.fail();
+    }
+
+    $('resNewBest').hidden = !resMeta.newBest;
+    $('resScore').textContent = Kit.fmt(summary.score);
+    $('resCoins').textContent = '+' + Kit.fmt(summary.coinsEarned);
+
+    var starEls = $('resStars').querySelectorAll('.star');
+    for (var i = 0; i < starEls.length; i++) {
+      starEls[i].classList.toggle('on', i < summary.stars);
+    }
+
+    $('btnNext').hidden = selectedTrack >= E.TRACKS.length - 1;
+    setMode('result');
+    if (view && world) {
+      view.burst(world.karts[0].x, 2.2, world.karts[0].z, 26, [0xffd54f, 0xff4252, 0x22a7ff, 0x2ee06c], 12, 10, 0.36, 1.1);
+    }
+  }
+
+  /* --------------------------------------------------------------- Input Reading */
+  function readInputs() {
+    var K = Kit.keys;
+    if (!duo) {
+      var gas = (K.down('ArrowUp') || K.down('KeyW')) ? 1 : 0;
+      var brake = (K.down('ArrowDown') || K.down('KeyS')) ? 1 : 0;
+      var left = K.down('ArrowLeft') || K.down('KeyA');
+      var right = K.down('ArrowRight') || K.down('KeyD');
+      var steer = (right ? 1 : 0) - (left ? 1 : 0);
+      var drift = K.down('Space') || K.down('ShiftLeft') || K.down('ShiftRight');
+      var itemDown = K.down('Space') || K.down('KeyE') || K.down('Enter');
+      var itemEdge = itemDown && !prevP1Item;
+      prevP1Item = itemDown;
+      return [{ gas: gas, brake: brake, steer: steer, drift: drift, item: itemEdge }];
+    }
+
+    // 2P Local on one keyboard: P1 = WASD + Space/Q/ShiftLeft, P2 = Arrows + Enter / Slash / ShiftRight
+    var p1Gas = K.down('KeyW') ? 1 : 0;
+    var p1Brake = K.down('KeyS') ? 1 : 0;
+    var p1Steer = (K.down('KeyD') ? 1 : 0) - (K.down('KeyA') ? 1 : 0);
+    var p1Drift = K.down('Space') || K.down('ShiftLeft') || K.down('KeyQ');
+    var p1ItemDown = K.down('Space') || K.down('KeyQ');
+    var p1ItemEdge = p1ItemDown && !prevP1Item;
+    prevP1Item = p1ItemDown;
+
+    var p2Gas = K.down('ArrowUp') ? 1 : 0;
+    var p2Brake = K.down('ArrowDown') ? 1 : 0;
+    var p2Steer = (K.down('ArrowRight') ? 1 : 0) - (K.down('ArrowLeft') ? 1 : 0);
+    var p2Drift = K.down('Enter') || K.down('Slash') || K.down('ShiftRight');
+    var p2ItemDown = K.down('Enter') || K.down('Slash');
+    var p2ItemEdge = p2ItemDown && !prevP2Item;
+    prevP2Item = p2ItemDown;
+
+    return [
+      { gas: p1Gas, brake: p1Brake, steer: p1Steer, drift: p1Drift, item: p1ItemEdge },
+      { gas: p2Gas, brake: p2Brake, steer: p2Steer, drift: p2Drift, item: p2ItemEdge }
+    ];
+  }
+
+  /* --------------------------------------------------------------- Events, SFX & Particles */
+  function handleEvents(w) {
+    for (var i = 0; i < w.ev.length; i++) {
+      var ev = w.ev[i];
+      var isHuman = ev.kart === 0 || (w.duo && ev.kart === 1);
+      if (ev.type === 'go') {
+        J.countdown(0);
+        showBanner('انطلق! 🏁', 1.1);
+        if (!tutorialDone) { tutorialDone = true; Kit.stats.tutorial('done'); }
+      } else if (ev.type === 'coin' && isHuman) {
+        J.coin(w.karts[ev.kart].coins);
+        Kit.track.hit();
+        if (view) view.burst(ev.x, 1.2, ev.z, 8, [0xffe066, 0xffca28, 0xffffff], 6, 5, 0.24, 0.45);
+      } else if (ev.type === 'boost') {
         if (isHuman) {
-          Kit.juice.impact(); Kit.track.miss();
-          if (!Kit.motion.reduced()) { shakeT = 0.25; shakeMag = 7; }
-          showBanner(e.t === 'inkHit' ? 'لطخة حبر! 🖋️' : e.t === 'chomp' ? 'عضة الدباسة! 📎' : 'انزلاق!', 1.0);
-        } else if (e.owner != null && world.karts[e.owner] && world.karts[e.owner].human) {
-          Kit.juice.pop(); Kit.track.hit(); showBanner('إصابة مباشرة! 🎯', 1.0);
+          J.whoosh(0.85);
+          Kit.track.hit();
+          showBanner('تيربو! ⚡', 0.9);
+          if (view) view.shake(0.5);
         }
-      } else if (e.t === 'lap' && isHuman && e.lap < E.LAPS) {
-        Kit.juice.star(); Kit.track.hit();
-        showBanner(e.lap === E.LAPS - 1 ? 'الدورة الأخيرة! 🏁' : ('دورة ' + (e.lap + 1) + '/' + E.LAPS + '!'), 1.3);
-      } else if (e.t === 'warp' && isHuman) { Kit.juice.whoosh(); showBanner('لحاق سريع! ✨', 0.9); }
+        if (view) view.burst(ev.x, 0.6, ev.z, 10, [0xffcf2b, 0x4df5ff, 0xffffff], 7, 4, 0.28, 0.4);
+      } else if (ev.type === 'jump') {
+        if (isHuman) {
+          J.jump(0.8);
+          Kit.track.hit();
+          showBanner('قفزة رائعة! 🚀', 0.95);
+        }
+        if (view) view.burst(ev.x, 0.6, ev.z, 9, [0xffffff, 0xffd54f], 6, 5, 0.26, 0.42);
+      } else if (ev.type === 'land' && isHuman) {
+        J.land(0.65);
+        if (view) view.shake(0.35);
+      } else if (ev.type === 'driftCharge' && isHuman) {
+        J.chime(ev.stage);
+      } else if (ev.type === 'driftBoost') {
+        if (isHuman) {
+          J.whoosh(ev.stage === 2 ? 1.0 : 0.72);
+          Kit.track.hit();
+          showBanner(ev.stage === 2 ? 'دريفت خارق! 🔥' : 'تيربو دريفت! ⚡', 0.9);
+          if (view) view.shake(ev.stage === 2 ? 0.65 : 0.35);
+        }
+        if (view) view.burst(ev.x, 0.5, ev.z, 12, ev.stage === 2 ? [0xffd600, 0xff6b22] : [0x38d9ff, 0xffffff], 8, 5, 0.28, 0.45);
+      } else if (ev.type === 'pickup' && isHuman) {
+        J.pop(0.75);
+        Kit.track.hit();
+        var itemDef = E.ITEMS[ev.item];
+        if (itemDef) showBanner(itemDef.icon + ' ' + itemDef.name, 1.05);
+        if (view) view.burst(ev.x, 1.4, ev.z, 10, [0xffcf2b, 0xffffff, itemDef ? itemDef.color : 0xffffff], 7, 5, 0.26, 0.45);
+      } else if (ev.type === 'rocket') {
+        if (isHuman) { J.whoosh(1.0); showBanner('صاروخ التيربو! 🚀', 1.0); if (view) view.shake(0.7); }
+        if (view) view.burst(ev.x, 0.8, ev.z, 14, [0xff5a36, 0xffe066, 0xffffff], 9, 5, 0.32, 0.5);
+      } else if (ev.type === 'shield') {
+        if (isHuman) { J.chime(3); showBanner('درع المطاط! 🛡️', 1.0); }
+      } else if (ev.type === 'inkDrop' && isHuman) {
+        J.pop(0.5);
+      } else if (ev.type === 'inkHit') {
+        if (isHuman) {
+          J.impact(0.6);
+          Kit.track.miss();
+          showBanner('بقعة حبر! 💧', 0.9);
+          if (view) view.shake(0.6);
+        }
+        if (view) view.burst(ev.x, 0.7, ev.z, 12, [0x2c1d6b, 0x6247aa, 0x99aaff], 7, 6, 0.28, 0.52);
+      } else if (ev.type === 'eraser') {
+        if (isHuman) { J.pop(0.85); if (view) view.shake(0.45); }
+        if (view) view.burst(ev.x, 0.9, ev.z, 10, [0xff77a9, 0x3ba7ff, 0xffffff], 7, 6, 0.25, 0.45);
+      } else if (ev.type === 'wall' && isHuman) {
+        J.impact(ev.power * 0.45);
+        if (view) view.shake(ev.power * 0.28);
+      } else if (ev.type === 'bump' && (ev.a === 0 || ev.b === 0 || (w.duo && (ev.a === 1 || ev.b === 1)))) {
+        J.impact(0.42);
+      } else if (ev.type === 'warp') {
+        J.jump(0.9);
+        showBanner('تلحّق سريع! ✨', 0.95);
+        if (view) view.burst(ev.x, 1.2, ev.z, 14, [0x38e890, 0xffe066, 0xffffff], 8, 6, 0.3, 0.5);
+      } else if (ev.type === 'lap' && isHuman) {
+        J.chime(ev.lap + 1);
+        showBanner(ev.lap === E.LAPS - 1 ? 'اللفة الأخيرة! 🏁' : ('اللفة ' + (ev.lap + 1) + '/' + E.LAPS), 1.35);
+      } else if (ev.type === 'raceOver') {
+        openResult(ev.summary);
+      }
     }
+    w.ev.length = 0;
   }
 
-  function update(dt) {
-    if (screen === 'title') {
-      demoWorld.ev.length = 0; E.step(demoWorld, dt, []);
-      if (demoWorld.worldTime > 42) demoWorld = makeDemoWorld();
-      return;
-    }
-    if (screen !== 'play') return;
-
-    var wasStarted = world.karts[0].started;
-    world.ev.length = 0;
-    E.step(world, dt, gatherInputs());
-    if (!wasStarted && world.karts[0].started) Kit.juice.whoosh();
-    handleEvents(world.ev);
-
+  /* --------------------------------------------------------------- HUD & Minimap */
+  function updateHUD(force) {
+    if (!world) return;
     var p1 = world.karts[0];
-    els.btnItemUse.hidden = !p1.item;
-    if (p1.item) els.btnItemUse.textContent = (ITEM_NAMES[p1.item] || 'مفاجأة') + ' · أطلق!';
+    var p2 = world.karts[1];
+    if (force || hudCache.trackId !== world.L.id) {
+      hudCache.trackId = world.L.id;
+      $('hudTrackId').textContent = world.L.id;
+      $('hudTrackName').textContent = world.L.name;
+    }
+    if (force || hudCache.place !== p1.place) {
+      hudCache.place = p1.place;
+      $('hudPlace').textContent = p1.place + '/4';
+      var pw = $('hudPlaceWrap');
+      pw.className = 'pill place-pill p' + p1.place + (p1.place === 1 ? 'st' : (p1.place === 2 ? 'nd' : (p1.place === 3 ? 'rd' : 'th')));
+    }
+    var dispLap = Math.min(E.LAPS, p1.lap + 1);
+    if (force || hudCache.lap !== dispLap) {
+      hudCache.lap = dispLap;
+      $('hudLap').textContent = dispLap + '/' + E.LAPS;
+    }
+    if (force || hudCache.coins !== p1.coins) {
+      hudCache.coins = p1.coins;
+      $('hudCoins').textContent = String(p1.coins);
+    }
+    var kmh = Math.round(Math.abs(p1.speed) * 3.6);
+    var boosted = p1.boostT > 0;
+    if (force || hudCache.speed !== kmh || hudCache.boost !== boosted) {
+      hudCache.speed = kmh;
+      hudCache.boost = boosted;
+      $('hudSpeed').textContent = String(kmh);
+      $('hudSpeedWrap').classList.toggle('boost', boosted);
+    }
+    var i1 = p1.item || '';
+    if (force || hudCache.p1Item !== i1) {
+      hudCache.p1Item = i1;
+      $('p1ItemIco').textContent = i1 ? ITEM_ICONS[i1] : '·';
+      $('p1ItemSlot').classList.toggle('ready', !!i1);
+    }
+    if (duo) {
+      var i2 = p2.item || '';
+      if (force || hudCache.p2Item !== i2) {
+        hudCache.p2Item = i2;
+        $('p2ItemIco').textContent = i2 ? ITEM_ICONS[i2] : '·';
+        $('p2ItemSlot').classList.toggle('ready', !!i2);
+      }
+    }
+  }
 
-    if (!Kit.motion.reduced()) {
-      for (var ki = 0; ki < world.karts.length; ki++) {
-        var k = world.karts[ki];
-        if (!k.started) continue;
-        if ((k.turboT > 0 || k.miniBoostT > 0 || k.padBoostT > 0 || k.drifting) && particles.length < 110) {
-          var fl = E.FLAMES[k.flameIdx || 0];
-          var col = k.drifting ? (k.driftLv === 2 ? '#ff7b00' : k.driftLv === 1 ? '#38bdf8' : '#e2e8f0') : fl.c0;
-          particles.push({ x: k.x - Math.cos(k.ang) * 28, y: k.y - Math.sin(k.ang) * 28, vx: ((ki * 19 % 7) - 3) * 14, vy: ((ki * 13 % 7) - 3) * 14, life: 0.24, max: 0.24, col: col, r: k.turboT > 0 ? 9 : 6 });
+  function drawMinimap() {
+    if (!world || !mapCtx) return;
+    var L = world.L;
+    var w = mapCanvas.width, h = mapCanvas.height;
+    mapCtx.clearRect(0, 0, w, h);
+
+    var b = L.bounds;
+    var spanX = Math.max(1, b.maxX - b.minX + 18);
+    var spanZ = Math.max(1, b.maxZ - b.minZ + 18);
+    var scale = Math.min((w - 16) / spanX, (h - 16) / spanZ);
+    var cx = (b.minX + b.maxX) * 0.5;
+    var cz = (b.minZ + b.maxZ) * 0.5;
+    function mx(x) { return w * 0.5 + (x - cx) * scale; }
+    function my(z) { return h * 0.5 + (z - cz) * scale; }
+
+    mapCtx.beginPath();
+    for (var i = 0; i < L.samples.length; i += 3) {
+      var sx = mx(L.samples[i].x), sy = my(L.samples[i].z);
+      if (i === 0) mapCtx.moveTo(sx, sy); else mapCtx.lineTo(sx, sy);
+    }
+    mapCtx.closePath();
+    mapCtx.lineWidth = 7;
+    mapCtx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+    mapCtx.stroke();
+    mapCtx.lineWidth = 3.5;
+    mapCtx.strokeStyle = '#ffffff';
+    mapCtx.stroke();
+
+    // Draw all 4 kart dots (humans larger with dark outline)
+    for (i = world.karts.length - 1; i >= 0; i--) {
+      var k = world.karts[i];
+      var kx = mx(k.x), ky = my(k.z);
+      mapCtx.beginPath();
+      mapCtx.arc(kx, ky, k.human ? 4.8 : 3.4, 0, Math.PI * 2);
+      mapCtx.fillStyle = '#' + ('000000' + k.color.toString(16)).slice(-6);
+      mapCtx.fill();
+      mapCtx.lineWidth = 1.6;
+      mapCtx.strokeStyle = k.human ? '#ffffff' : '#182038';
+      mapCtx.stroke();
+    }
+  }
+
+  /* --------------------------------------------------------------- Loop */
+  function update(dt) {
+    if (resultLock > 0) resultLock = Math.max(0, resultLock - dt);
+
+    if (mode === 'play' && world) {
+      var inputs = readInputs();
+      E.step(world, dt, inputs);
+      handleEvents(world);
+
+      if (bannerT > 0) {
+        bannerT -= dt;
+        if (bannerT <= 0) $('banner').hidden = true;
+      }
+
+      // First-10-seconds gentle ghost keycap hint if P1 hasn't moved yet or is idle
+      if (!world.started || world.karts[0].speed < 1.2) {
+        idleT += dt;
+        if ((!world.started && idleT > 0.65) || idleT > 2.4) {
+          $('ghostHint').hidden = false;
+          $('ghostText').textContent = !world.started ? 'اضغط للانطلاق!' : 'اضغط ↑ للقيادة!';
         }
+      } else {
+        idleT = 0;
+        $('ghostHint').hidden = true;
       }
-    }
-    for (var pi = particles.length - 1; pi >= 0; pi--) {
-      var pt = particles[pi]; pt.life -= dt;
-      if (pt.life <= 0) { particles.splice(pi, 1); continue; }
-      pt.x += pt.vx * dt; pt.y += pt.vy * dt;
-    }
-    if (bannerT > 0) bannerT = Math.max(0, bannerT - dt);
-    if (shakeT > 0) shakeT = Math.max(0, shakeT - dt);
-    if (world.done) finishRace();
-  }
 
-  function renderWorldScene(w, centerVx, centerVy) {
-    var L = w.L, cup = L.cup;
-    buildRoadCache(L);
-    ctx.fillStyle = cup.bg; ctx.fillRect(0, 0, E.VIEW_W, E.VIEW_H);
-
-    ctx.save();
-    var sx = (shakeT > 0 && !Kit.motion.reduced()) ? Math.sin(w.worldTime * 55) * shakeMag : 0;
-    var sy = (shakeT > 0 && !Kit.motion.reduced()) ? Math.cos(w.worldTime * 48) * shakeMag : 0;
-    ctx.translate(centerVx + sx, centerVy + sy);
-    ctx.scale(w.cam.zoom, w.cam.zoom);
-    ctx.translate(-w.cam.x, -w.cam.y);
-
-    var vx0 = Math.max(0, Math.floor((w.cam.x - 900) / 160) * 160), vx1 = Math.min(E.WORLD_W, w.cam.x + 900);
-    var vy0 = Math.max(0, Math.floor((w.cam.y - 650) / 160) * 160), vy1 = Math.min(E.WORLD_H, w.cam.y + 650);
-    ctx.strokeStyle = cup.grid; ctx.lineWidth = 3; ctx.beginPath();
-    for (var gx = vx0; gx <= vx1; gx += 160) { ctx.moveTo(gx, vy0); ctx.lineTo(gx, vy1); }
-    for (var gy = vy0; gy <= vy1; gy += 160) { ctx.moveTo(vx0, gy); ctx.lineTo(vx1, gy); }
-    ctx.stroke();
-    ctx.strokeStyle = '#1b1640'; ctx.lineWidth = 14; ctx.strokeRect(40, 40, E.WORLD_W - 80, E.WORLD_H - 80);
-
-    for (var pr = 0; pr < L.props.length; pr++) {
-      var prop = L.props[pr];
-      if (Math.abs(prop.x - w.cam.x) < 960 && Math.abs(prop.y - w.cam.y) < 680) Kit.art.blit(ctx, getPropSprite(prop.kind), prop.x, prop.y, { rot: prop.rot });
+      updateHUD(false);
+      drawMinimap();
+      if (view) view.sync(world, dt, snapCam, false);
+      snapCam = false;
+      dirty = true;
+    } else if ((mode === 'title' || mode === 'tracks' || mode === 'garage') && demo) {
+      E.step(demo, dt, []);
+      demo.ev.length = 0;
+      if (view) view.sync(demo, dt, snapCam, true);
+      snapCam = false;
+      dirty = true;
     }
 
-    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-    ctx.strokeStyle = 'rgba(15, 12, 36, 0.34)'; ctx.lineWidth = L.hw * 2 + 28; ctx.stroke(roadCache.path);
-    ctx.strokeStyle = '#1b1640'; ctx.lineWidth = L.hw * 2 + 18; ctx.stroke(roadCache.path);
-    if (!w.params.openEdges) {
-      ctx.strokeStyle = cup.curbB; ctx.lineWidth = L.hw * 2 + 10; ctx.stroke(roadCache.path);
-      ctx.save(); ctx.setLineDash([42, 42]); ctx.strokeStyle = w.params.diff === 'easy' ? '#ffd23f' : cup.curbA; ctx.lineWidth = L.hw * 2 + 10; ctx.stroke(roadCache.path); ctx.restore();
-    }
-    ctx.strokeStyle = cup.road; ctx.lineWidth = L.hw * 2 - 6; ctx.stroke(roadCache.path);
-    ctx.save(); ctx.setLineDash([30, 32]); ctx.strokeStyle = 'rgba(255,255,255,0.28)'; ctx.lineWidth = 5; ctx.stroke(roadCache.path); ctx.restore();
-
-    for (var wi = 0; wi < L.winds.length; wi++) {
-      var wn = L.winds[wi]; ctx.strokeStyle = 'rgba(0, 229, 255, 0.5)'; ctx.lineWidth = 4;
-      for (var ws = wn.s0; ws < wn.s1; ws += 55) {
-        var wc = E.at(L, ws + ((w.worldTime * 160) % 55));
-        ctx.beginPath(); ctx.moveTo(wc.x - wc.tx * 18, wc.y - wc.ty * 18); ctx.lineTo(wc.x + wc.tx * 18, wc.y + wc.ty * 18); ctx.stroke();
-      }
-    }
-
-    var st = E.at(L, 28), sq = 18, rows = Math.floor((L.hw * 2 - 12) / sq);
-    ctx.save(); ctx.translate(st.x, st.y); ctx.rotate(Math.atan2(st.ty, st.tx));
-    for (var r = 0; r < rows; r++) {
-      var ry = -L.hw + 8 + r * sq;
-      ctx.fillStyle = r % 2 === 0 ? '#fff' : '#1b1640'; ctx.fillRect(-sq, ry, sq, sq);
-      ctx.fillStyle = r % 2 === 0 ? '#1b1640' : '#fff'; ctx.fillRect(0, ry, sq, sq);
-    }
-    ctx.fillStyle = '#ffd23f'; ctx.strokeStyle = '#1b1640'; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.arc(0, -L.hw - 6, 14, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-    ctx.beginPath(); ctx.arc(0, L.hw + 6, 14, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-    ctx.restore();
-
-    for (var mi = 0; mi < L.magnets.length; mi++) {
-      var mg = L.magnets[mi]; ctx.strokeStyle = 'rgba(56, 189, 248, 0.35)'; ctx.lineWidth = 4;
-      ctx.beginPath(); ctx.arc(mg.x, mg.y, mg.r * (0.7 + 0.25 * ((w.worldTime * 1.6) % 1)), 0, Math.PI * 2); ctx.stroke();
-    }
-    for (var rmi = 0; rmi < L.ramps.length; rmi++) {
-      var rm = L.ramps[rmi];
-      ctx.save(); ctx.translate(rm.x, rm.y); ctx.rotate(rm.ang);
-      Kit.art.round(ctx, -48, -40, 96, 80, 10); ctx.fillStyle = '#f59e0b'; ctx.fill(); ctx.lineWidth = 3.5; ctx.strokeStyle = '#1b1640'; cStrokeFillRamp(); ctx.restore();
-    }
-    for (var pdi = 0; pdi < L.pads.length; pdi++) Kit.art.blit(ctx, getItemSprite('pad'), L.pads[pdi].x, L.pads[pdi].y, { rot: L.pads[pdi].ang });
-    for (var hzi = 0; hzi < L.hazards.length; hzi++) Kit.art.blit(ctx, getHazardSprite(L.hazards[hzi].kind), L.hazards[hzi].x, L.hazards[hzi].y);
-    for (var trp = 0; trp < w.traps.length; trp++) Kit.art.blit(ctx, getItemSprite('glue'), w.traps[trp].x, w.traps[trp].y);
-    for (var bmi = 0; bmi < L.bumpers.length; bmi++) Kit.art.blit(ctx, getBumperSprite(L.bumpers[bmi].kind), L.bumpers[bmi].x, L.bumpers[bmi].y);
-
-    for (var coi = 0; coi < L.coils.length; coi++) {
-      var co = L.coils[coi], zapOn = ((w.worldTime + co.phase) % co.period) < 0.85;
-      ctx.beginPath(); ctx.arc(co.x, co.y, co.r, 0, Math.PI * 2);
-      ctx.fillStyle = zapOn ? 'rgba(56, 189, 248, 0.45)' : 'rgba(148, 163, 184, 0.2)'; ctx.fill();
-      ctx.lineWidth = 3; ctx.strokeStyle = zapOn ? '#00e5ff' : '#64748b'; ctx.stroke();
-    }
-    for (var chi = 0; chi < L.chompers.length; chi++) {
-      var ch = L.chompers[chi], snapOn = ((w.worldTime + ch.phase) % ch.period) < 0.65;
-      ctx.save(); ctx.translate(ch.x, ch.y); ctx.rotate(ch.ang);
-      Kit.art.round(ctx, -32, snapOn ? -16 : -28, 64, snapOn ? 32 : 20, 8);
-      ctx.fillStyle = snapOn ? '#ef4444' : '#4f46e5'; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = '#1b1640'; ctx.stroke();
-      ctx.restore();
-    }
-
-    var bob = Kit.motion.reduced() ? 0 : Math.sin(w.worldTime * 5) * 3;
-    for (var ci = 0; ci < w.coins.length; ci++) if (!w.coins[ci].taken) Kit.art.blit(ctx, getItemSprite('coin'), w.coins[ci].x, w.coins[ci].y + bob);
-    for (var bi = 0; bi < w.boxes.length; bi++) if (w.boxes[bi].cd <= 0) Kit.art.blit(ctx, getItemSprite('box'), w.boxes[bi].x, w.boxes[bi].y - bob);
-
-    for (var pi = 0; pi < particles.length; pi++) {
-      var pt = particles[pi]; ctx.globalAlpha = E.clamp(pt.life / pt.max, 0, 1); ctx.fillStyle = pt.col;
-      ctx.beginPath(); ctx.arc(pt.x, pt.y, pt.r, 0, Math.PI * 2); ctx.fill();
-    }
-    ctx.globalAlpha = 1;
-    for (var rki = 0; rki < w.rockets.length; rki++) Kit.art.blit(ctx, getItemSprite('rocket'), w.rockets[rki].x, w.rockets[rki].y, { rot: w.rockets[rki].ang });
-
-    var drawOrder = w.karts.slice().sort(function (a, b) { return a.z - b.z; });
-    for (var ki = 0; ki < drawOrder.length; ki++) {
-      var k = drawOrder[ki], scale = 1 + E.clamp(k.z / 170, 0, 0.36);
-      var spinRot = k.spinT > 0 ? k.ang + k.spinT * 14 : k.ang + (k.drifting ? k.driftDir * 0.22 : 0);
-      ctx.fillStyle = 'rgba(15, 12, 36, 0.35)'; ctx.beginPath(); ctx.ellipse(k.x + 4, k.y + 7, 26, 17, k.ang, 0, Math.PI * 2); ctx.fill();
-      if (k.turboT > 0 || k.magnetT > 0) {
-        ctx.strokeStyle = k.turboT > 0 ? '#ffd23f' : '#38bdf8'; ctx.lineWidth = 4;
-        ctx.beginPath(); ctx.arc(k.x, k.y - k.z * 0.65, 34 * scale, 0, Math.PI * 2); ctx.stroke();
-      }
-      if (k.drifting && k.driftLv > 0) {
-        ctx.fillStyle = k.driftLv === 2 ? '#ff7b00' : '#00e5ff';
-        ctx.beginPath(); ctx.arc(k.x - Math.cos(k.ang) * 26, k.y - Math.sin(k.ang) * 26 - k.z * 0.65, k.driftLv === 2 ? 12 : 8, 0, Math.PI * 2); ctx.fill();
-      }
-      Kit.art.blit(ctx, getKartSprite(k), k.x, k.y - k.z * 0.65, { rot: spinRot, sx: scale, sy: scale });
-      if (k.human && screen === 'play') {
-        ctx.font = '900 13px Fredoka, Cairo, sans-serif'; ctx.textAlign = 'center';
-        ctx.fillStyle = k.id === 0 ? '#ffd23f' : '#38bdf8'; ctx.strokeStyle = '#1b1640'; ctx.lineWidth = 3.5;
-        var tagTxt = w.humans === 2 ? k.name : 'أنت ▼';
-        ctx.strokeText(tagTxt, k.x, k.y - k.z * 0.65 - 30 * scale); ctx.fillText(tagTxt, k.x, k.y - k.z * 0.65 - 30 * scale);
-      }
-    }
-    ctx.restore();
-  }
-
-  function cStrokeFillRamp() {
-    ctx.stroke();
-    ctx.fillStyle = '#fef08a'; ctx.fillRect(-38, -32, 76, 10); ctx.fillRect(-38, 22, 76, 10);
-    ctx.strokeStyle = '#00e5ff'; ctx.lineWidth = 4.5;
-    for (var rx = -20; rx <= 20; rx += 20) { ctx.beginPath(); ctx.moveTo(rx - 8, -14); ctx.lineTo(rx + 6, 0); ctx.lineTo(rx - 8, 14); ctx.stroke(); }
-  }
-
-  function renderHUD() {
-    var p1 = world.karts[0], L = world.L;
-    if (p1.inkedT > 0) {
-      ctx.save(); ctx.globalAlpha = Math.min(0.6, p1.inkedT * 0.35); ctx.fillStyle = '#1e1b4b';
-      var blobs = [[220, 160, 95], [1040, 190, 105], [340, 560, 90], [950, 530, 100]];
-      for (var bi = 0; bi < 4; bi++) { ctx.beginPath(); ctx.arc(blobs[bi][0], blobs[bi][1], blobs[bi][2], 0, Math.PI * 2); ctx.fill(); }
-      ctx.restore();
-    }
-    drawPill(955, 11, 200, 44, '#ffd23f', '#1b1640', 'المركز ' + p1.rank + '/4');
-    drawPill(765, 11, 178, 44, '#1e293b', '#f8fafc', 'دورة ' + Math.min(E.LAPS, p1.lap + 1) + '/' + E.LAPS);
-    drawPill(555, 11, 198, 44, '#1e293b', '#fde68a', '🪙 ' + p1.coins + ' · ' + world.time.toFixed(1) + ' ث');
-    drawPill(315, 11, 228, 44, p1.item ? '#7c3aed' : 'rgba(30,41,59,0.85)', '#fff', p1.item ? ITEM_NAMES[p1.item] : '🎁 صندوق المفاجآت');
-    if (world.humans === 2) drawPill(135, 11, 168, 44, '#0284c7', '#fff', 'لاعب 2: مركز ' + world.karts[1].rank);
-
-    var mx = 18, my = E.VIEW_H - 166, mw = 206, mh = 148, sx = (mw - 28) / E.WORLD_W, sy = (mh - 24) / E.WORLD_H, ox = mx + 14, oy = my + 12;
-    ctx.save(); Kit.art.round(ctx, mx, my, mw, mh, 16); ctx.fillStyle = 'rgba(19, 15, 45, 0.84)'; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = '#ffd23f'; ctx.stroke();
-    ctx.beginPath();
-    for (var i = 0; i < L.pts.length; i += 2) { var p = L.pts[i]; if (i === 0) ctx.moveTo(ox + p.x * sx, oy + p.y * sy); else ctx.lineTo(ox + p.x * sx, oy + p.y * sy); }
-    ctx.closePath(); ctx.strokeStyle = 'rgba(255,255,255,0.65)'; ctx.lineWidth = 5; ctx.stroke();
-    for (var ki = world.karts.length - 1; ki >= 0; ki--) {
-      var k = world.karts[ki]; ctx.beginPath(); ctx.arc(ox + k.x * sx, oy + k.y * sy, k.id === 0 ? 6.5 : 4.8, 0, Math.PI * 2);
-      ctx.fillStyle = k.id === 0 ? '#ff4757' : (k.human ? '#00e5ff' : k.bodyColor); ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = '#fff'; ctx.stroke();
-    }
-    ctx.restore();
-
-    var msg = !p1.started ? 'انطلق! اضغط ↑ أو ← → أو اسحب بالماوس 🏎️' : (bannerT > 0 ? bannerText : '');
-    if (msg) {
-      ctx.save();
-      ctx.font = '900 22px Fredoka, Cairo, sans-serif';
-      var tw = Math.min(620, ctx.measureText(msg).width + 44);
-      Kit.art.round(ctx, (E.VIEW_W - tw) * 0.5, 68, tw, 44, 16);
-      ctx.fillStyle = 'rgba(27, 22, 64, 0.88)'; ctx.fill();
-      ctx.lineWidth = 3; ctx.strokeStyle = '#ffd23f'; ctx.stroke();
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillStyle = '#ffd23f';
-      ctx.fillText(msg, E.VIEW_W * 0.5, 91);
-      ctx.restore();
-    }
-  }
-
-  function drawPill(x, y, w, h, bg, fg, text) {
-    ctx.save(); Kit.art.round(ctx, x, y, w, h, 14); ctx.fillStyle = bg; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = '#1b1640'; ctx.stroke();
-    ctx.fillStyle = fg; ctx.font = '900 16px Fredoka, Cairo, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(text, x + w * 0.5, y + h * 0.52); ctx.restore();
+    Kit.keys.endFrame();
   }
 
   function render() {
-    if (screen === 'pause') { if (pausedDrawn) return; pausedDrawn = true; }
-    if (screen === 'title') { renderWorldScene(demoWorld, E.VIEW_W * 0.34, E.VIEW_H * 0.52); return; }
-    renderWorldScene(world, E.VIEW_W * 0.5, E.VIEW_H * 0.5);
-    if (screen === 'play' || screen === 'pause') renderHUD();
+    if (!view || contextLost || !dirty) return;
+    // Keep last paused frame untouched without redrawing while paused!
+    if (mode === 'pause' && !dirty) return;
+    if (!view.mayDraw(performance.now(), mode === 'play')) return;
+    view.render();
+    drawCount++;
+    dirty = false;
   }
 
-  function worldToClient(wx, wy) {
-    var rect = canvas.getBoundingClientRect();
-    var vx = (wx - world.cam.x) * world.cam.zoom + E.VIEW_W * 0.5, vy = (wy - world.cam.y) * world.cam.zoom + E.VIEW_H * 0.5;
-    return { x: rect.left + (vx / E.VIEW_W) * rect.width, y: rect.top + (vy / E.VIEW_H) * rect.height };
-  }
+  /* --------------------------------------------------------------- Events & Buttons */
+  $('btnPlay').addEventListener('click', function () { J.select(); startRace(selectedTrack); });
+  $('btnDuo').addEventListener('click', function () {
+    duo = !duo;
+    J.toggle(duo);
+    refreshTitleUI();
+  });
+  $('btnTracks').addEventListener('click', function () { J.select(); buildTracksUI(); setMode('tracks'); });
+  $('btnTracksBack').addEventListener('click', function () { J.back(); setMode('title'); });
+  $('btnGarage').addEventListener('click', function () { J.select(); buildGarageUI(); setMode('garage'); });
+  $('btnGarageBack').addEventListener('click', function () { J.back(); setMode('title'); });
+  $('btnPause').addEventListener('click', pauseGame);
+  $('btnResume').addEventListener('click', resumeGame);
+  $('btnRestart').addEventListener('click', function () { J.select(); startRace(selectedTrack); });
+  $('btnHome').addEventListener('click', goHome);
+  $('btnAgain').addEventListener('click', function () { J.select(); startRace(selectedTrack); });
+  $('btnNext').addEventListener('click', function () {
+    J.select();
+    startRace(Math.min(E.TRACKS.length - 1, selectedTrack + 1));
+  });
+  $('btnResHome').addEventListener('click', goHome);
 
-  function snapshotState() {
-    var p1 = world.karts[0];
-    return {
-      screen: screen, id: world.id, trackIdx: world.trackIdx, cup: world.R.cup, humans: world.humans, diff: save.diff,
-      worldTime: world.worldTime, time: world.time, p1Dist: p1.dist, p1GasTime: p1.gasTime, p1Inputs: p1.inputs, finished: world.done,
-      cam: { x: world.cam.x, y: world.cam.y, zoom: world.cam.zoom },
-      karts: world.karts.map(function (k) {
-        return {
-          id: k.id, name: k.name, human: k.human, started: k.started, x: k.x, y: k.y, z: k.z, s: k.s, off: k.off,
-          ang: k.ang, speed: k.speed, lap: k.lap, rank: k.rank, dist: k.dist, totalDist: k.totalDist,
-          finished: k.finished, item: k.item, coins: k.coins, driftLv: k.driftLv, turboT: k.turboT, spinT: k.spinT, inkedT: k.inkedT
-        };
-      })
-    };
-  }
-
-  Object.defineProperty(window, '__game', {
-    configurable: true,
-    value: {
-      get state() { return snapshotState(); },
-      get trackInfo() {
-        return { len: world.L.len, w: world.L.hw * 2, hw: world.L.hw, hazards: world.L.hazards, bumpers: world.L.bumpers, coils: world.L.coils, chompers: world.L.chompers, ramps: world.L.ramps };
-      },
-      at: function (s) { return E.at(world.L, s); },
-      point: worldToClient,
-      startTrack: function (idx, humans) { startRace(idx, humans || modeHumans); }
+  window.addEventListener('keydown', function (e) {
+    if (e.repeat || !Kit.isGameKeyEvent(e)) return;
+    if (mode === 'title') {
+      if (e.code === 'Enter' || e.code === 'Space') { e.preventDefault(); J.select(); startRace(selectedTrack); }
+    } else if (mode === 'play') {
+      if (e.code === 'Escape' || e.code === 'KeyP') { e.preventDefault(); pauseGame(); }
+      else if (e.code === 'KeyR') { e.preventDefault(); J.select(); startRace(selectedTrack); }
+    } else if (mode === 'pause') {
+      if (e.code === 'Escape' || e.code === 'KeyP') { e.preventDefault(); resumeGame(); }
+      else if (e.code === 'KeyR') { e.preventDefault(); J.select(); startRace(selectedTrack); }
+    } else if (mode === 'result') {
+      if (resultLock <= 0 && (e.code === 'Enter' || e.code === 'Space' || e.code === 'KeyR')) {
+        e.preventDefault();
+        J.select();
+        startRace(selectedTrack);
+      }
+    } else if (mode === 'tracks' || mode === 'garage') {
+      if (e.code === 'Escape') { e.preventDefault(); J.back(); setMode('title'); }
     }
   });
 
-  showScreen('title');
-  Kit.loop(update, render);
-  Kit.ready();
+  /* --------------------------------------------------------------- Resize, Motion, Lifecycle */
+  function resize() {
+    if (!view) return;
+    view.resize(Math.max(1, window.innerWidth), Math.max(1, window.innerHeight));
+    dirty = true;
+    if (mode === 'pause') render();
+  }
+  window.addEventListener('resize', resize);
+
+  Kit.motion.onChange(function (reduced) {
+    if (view) view.calm = reduced;
+  });
+
+  Kit.muteButton();
+  Kit.lifecycle({
+    pause: function () { if (mode === 'play') pauseGame(); },
+    reset: function () { prevP1Item = false; prevP2Item = false; }
+  });
+
+  canvas.addEventListener('webglcontextlost', function (e) {
+    e.preventDefault();
+    contextLost = true;
+    $('ctxNotice').hidden = false;
+  });
+  canvas.addEventListener('webglcontextrestored', function () {
+    contextLost = false;
+    $('ctxNotice').hidden = true;
+    dirty = true;
+  });
+
+  /* --------------------------------------------------------------- Debug / Test Handle */
+  function snapshotState() {
+    var w = world || demo;
+    var p1 = w ? w.karts[0] : null;
+    var aim = (w && p1) ? E.sampleAt(w.L, p1.s + 11) : null;
+    return {
+      screen: mode,
+      duo: duo,
+      trackIdx: selectedTrack,
+      id: w ? w.id : E.TRACKS[selectedTrack].id,
+      worldTime: w ? w.worldTime : 0,
+      time: w ? w.time : 0,
+      started: w ? w.started : false,
+      finished: w ? w.finished : false,
+      p1Dist: w ? w.p1Dist : 0,
+      draws: drawCount,
+      karts: w ? w.karts.map(function (k) {
+        return {
+          id: k.id, x: Math.round(k.x * 100) / 100, y: Math.round(k.y * 100) / 100, z: Math.round(k.z * 100) / 100,
+          ang: Math.round(k.ang * 1000) / 1000, speed: Math.round(k.speed * 100) / 100,
+          lap: k.lap, place: k.place, coins: k.coins, item: k.item,
+          drifting: k.drifting, driftStage: k.driftStage, boostT: k.boostT, shieldT: k.shieldT, finished: k.finished
+        };
+      }) : [],
+      aim: aim ? { x: aim.x, z: aim.z } : null,
+      save: save
+    };
+  }
+
+  window.__game = {
+    get state() { return snapshotState(); },
+    selectTrack: function (idx) { selectedTrack = E.clamp(idx | 0, 0, E.TRACKS.length - 1); },
+    setDuo: function (on) { duo = !!on; refreshTitleUI(); }
+  };
+
+  /* --------------------------------------------------------------- Boot */
+  refreshTitleUI();
+  initDemo();
+
+  try {
+    view = A.createView(canvas);
+    view.calm = Kit.motion.reduced();
+    resize();
+    view.sync(demo, E.FIXED_DT, true, true);
+    view.prepare(function () {
+      view.render();
+      drawCount++;
+      dirty = false;
+      view.whenDrawn(function () {
+        live = true;
+        loop = Kit.loop(update, render);
+        Kit.ready();
+      });
+    });
+  } catch (err) {
+    $('scrTitle').hidden = true;
+    $('scrError').hidden = false;
+    Kit.ready();
+  }
 })();
