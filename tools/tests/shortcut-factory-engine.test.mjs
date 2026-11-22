@@ -1,204 +1,114 @@
+// Pure Node unit tests for Shortcut Factory 3D (مصنع الاختصارات) engine.
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import path from 'node:path';
-import vm from 'node:vm';
 import { test } from 'node:test';
 import { createRequire } from 'node:module';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const enginePath = path.join(repo, 'games/shortcut-factory/engine.js');
-const source = fs.readFileSync(enginePath, 'utf8');
 const require = createRequire(import.meta.url);
-const SFEngine = require(enginePath);
+const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const SF = require(path.join(repo, 'games/shortcut-factory/engine.js'));
 
-function stepSecs(w, secs) {
-  const dt = 1 / 60;
-  const steps = Math.round(secs / dt);
-  for (let i = 0; i < steps && w.phase === 'play'; i++) {
-    SFEngine.step(w, dt);
-    w.events.length = 0;
-  }
+function stepSec(w, sec) {
+  const n = Math.ceil(sec * 60);
+  for (let i = 0; i < n; i++) SF.step(w, 1 / 60);
 }
 
-test('engine purity and dual Node/browser export', () => {
-  assert.ok(SFEngine && typeof SFEngine.create === 'function');
-  const sandbox = { window: {} };
-  vm.runInNewContext(source, sandbox);
-  assert.ok(sandbox.window.SFEngine && typeof sandbox.window.SFEngine.create === 'function');
-
-  const stripped = source.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
-  assert.doesNotMatch(
-    stripped,
-    /\bKit\b|\bdocument\b|setTimeout|setInterval|requestAnimationFrame|Math\.random|localStorage/
-  );
-});
-
-test('all 12 missions + Endless Rush are unlocked, Arabic-named, and use 2-4 dock keycaps', () => {
-  assert.equal(SFEngine.COUNT, 12);
-  assert.equal(SFEngine.MISSIONS.length, 13);
-  assert.equal(SFEngine.TIERS.length, 3);
-  const save = SFEngine.defaultSave();
-
-  for (let i = 0; i < SFEngine.MISSIONS.length; i++) {
-    const m = SFEngine.MISSIONS[i];
-    assert.equal(SFEngine.isOpen(save, i), true, `mission ${m.id} open from start`);
-    assert.match(m.title, /[؀-ۿ]/, `mission ${m.id} has Arabic title`);
-    assert.ok(m.dock.length >= 2 && m.dock.length <= 4, `mission ${m.id} dock has 2-4 badges`);
-    for (const sc of m.dock) {
-      assert.ok(SFEngine.SHORTCUTS[sc], `known shortcut ${sc}`);
-      for (const code of SFEngine.SHORTCUTS[sc].codes) {
-        assert.doesNotMatch(code, /KeyW|KeyT|KeyN|KeyP|KeyR|F5/);
-      }
-    }
+test('Shortcut Factory: 12 levels across 3 halls plus rush mode', () => {
+  assert.equal(SF.COUNT, 12);
+  assert.equal(SF.HALLS.length, 3);
+  assert.ok(SF.RUSH.rush);
+  for (const L of SF.LEVELS) {
+    const w = SF.create(L, { dda: 0.35, seed: 123 });
+    assert.ok(w.boxes.length >= 1, `${L.id} has boxes`);
+    assert.ok(w.toys.length >= 1, `${L.id} starts with toys`);
   }
 });
 
-test('Mission 1 (level 0) smoke contract: visible bot on belt[0], click + Ctrl+C + Ctrl+V deploys into boxes[0]', () => {
-  const w = SFEngine.create(0, { seed: 42 });
-  assert.equal(w.phase, 'play');
-  assert.equal(w.timeLimit, 0, 'Tier 0 has zero fail-timer stress');
-  const visibleBot = w.belts[0].items.find(it => SFEngine.isVisible(it.x) && !it.virus);
-  assert.ok(visibleBot, 'at least one visible hero bot on belt[0] at start');
+test('Shortcut Factory: copy and paste fill an order and finish level 1-1', () => {
+  const w = SF.create(SF.LEVELS[0], { dda: 0.35, seed: 7 });
+  stepSec(w, 6);
+  assert.ok(w.toys.length >= 1);
+  SF.select(w, w.toys[0].id);
+  assert.equal(SF.act(w, 'copy'), true, 'Ctrl+C copies selected toy');
+  assert.equal(w.clip.length, 1);
 
-  assert.equal(SFEngine.act(w, { type: 'click', x: visibleBot.x, y: visibleBot.y }), 'ok');
-  assert.deepEqual(w.sel, [visibleBot.id]);
-  assert.equal(SFEngine.act(w, { type: 'copy' }), 'ok');
-  assert.ok(w.clip && w.clip.items.length === 1 && w.clip.items[0].kind === 'laser');
+  assert.equal(SF.act(w, 'paste'), true);
+  assert.equal(SF.act(w, 'paste'), true);
+  assert.equal(w.counts.copy, 1);
+  assert.equal(w.counts.paste, 2);
 
-  const before = w.boxes[0].items.length;
-  assert.equal(SFEngine.act(w, { type: 'paste' }), 'ok');
-  assert.ok(w.boxes[0].items.length > before, 'boxes[0].items.length increased after Ctrl+V');
-
-  // Complete pod (target = 3)
-  assert.equal(SFEngine.act(w, { type: 'paste' }), 'ok');
-  assert.equal(SFEngine.act(w, { type: 'paste' }), 'ok');
-  assert.equal(w.boxes[0].launched, true);
-  stepSecs(w, 1.0);
-  assert.equal(w.phase, 'win');
-  assert.equal(SFEngine.starsFor(w), 3);
+  stepSec(w, 25);
+  assert.equal(w.done, true);
+  assert.equal(w.won, true);
+  const res = SF.result(w);
+  assert.ok(res.stars >= 1 && res.stars <= 3);
 });
 
-test('conveyor belt movement, spawning, and cue events', () => {
-  const w = SFEngine.create(1, { seed: 99 });
-  const x0 = w.belts[0].items[0].x;
-  stepSecs(w, 2.0);
-  assert.ok(w.offset > 0, 'belt offset advances');
-  assert.ok(w.belts[0].items[0].x < x0, 'belt items roll leftward');
-  stepSecs(w, 12.0);
-  assert.ok(w.belts[0].items.some(it => SFEngine.isVisible(it.x)), 'spawner keeps belt populated');
+test('Shortcut Factory: delete removes broken toys, cut lifts to clipboard, undo/redo rewind', () => {
+  const w = SF.create(SF.LEVELS[2], { dda: 0.35, seed: 11 });
+  const target = w.toys[0];
+  SF.select(w, target.id);
+  const beforeCount = w.toys.length;
+  assert.equal(SF.act(w, 'cut'), true);
+  assert.equal(w.toys.length, beforeCount - 1);
+  assert.equal(w.clip.length, 1);
+  assert.equal(w.clipCut, true);
+
+  const w2 = SF.create(SF.LEVELS[4], { dda: 0.35, seed: 19 });
+  const t0 = w2.toys[0];
+  SF.select(w2, t0.id);
+  const n0 = w2.toys.length;
+  assert.equal(SF.act(w2, 'delete'), true);
+  assert.equal(w2.toys.length, n0 - 1);
+  assert.equal(SF.act(w2, 'undo'), true);
+  assert.equal(w2.toys.length, n0, 'undo restores deleted toy');
+
+  const w3 = SF.create(SF.LEVELS[9], { dda: 0.35, seed: 29 });
+  SF.select(w3, w3.toys[0].id);
+  assert.equal(SF.act(w3, 'copy'), true);
+  assert.equal(SF.act(w3, 'paste'), true);
+  const afterPaste = w3.toys.length;
+  assert.equal(SF.act(w3, 'undo'), true);
+  assert.equal(w3.toys.length, afterPaste - 1);
+  assert.equal(SF.act(w3, 'redo'), true);
+  assert.equal(w3.toys.length, afterPaste, 'redo reapplies undone paste');
 });
 
-test('Ctrl+X warp-cut lifts misplaced bot out of pod and Ctrl+V deploys into matching pod', () => {
-  const w = SFEngine.create(4, { seed: 7 }); // sf_m5
-  // Pod 0 starts with ['laser', 'shark'], wants 'laser'
-  const misplaced = w.boxes[0].items.find(it => it.kind === 'shark');
-  assert.ok(misplaced, 'Pod 0 starts with misplaced shark bot');
+test('Shortcut Factory: selectAll selects every toy and Ctrl+S seals full boxes in Hall 3', () => {
+  const w = SF.create(SF.LEVELS[5], { dda: 0.35, seed: 31 });
+  assert.ok(w.toys.length >= 2);
+  assert.equal(SF.act(w, 'selectAll'), true);
+  assert.equal(w.sel.length, w.toys.length);
 
-  assert.equal(SFEngine.act(w, { type: 'click', x: misplaced.x, y: misplaced.y }), 'ok');
-  assert.equal(SFEngine.act(w, { type: 'cut' }), 'ok');
-  assert.equal(w.boxes[0].items.some(it => it.kind === 'shark'), false, 'misplaced bot lifted out');
-  assert.equal(w.clip.cut, true);
-
-  assert.equal(SFEngine.act(w, { type: 'paste' }), 'ok');
-  assert.equal(w.clip, null, 'cut clipboard consumed after paste');
-  assert.equal(w.boxes[1].launched, true, 'Pod 1 (shark) filled and launched');
+  const wSeal = SF.create(SF.LEVELS[8], { dda: 0.35, seed: 5 });
+  assert.equal(SF.needsSeal(wSeal), true);
+  const box = SF.active(wSeal);
+  SF.select(wSeal, wSeal.toys[0].id);
+  SF.act(wSeal, 'copy');
+  SF.act(wSeal, 'paste');
+  SF.act(wSeal, 'paste');
+  stepSec(wSeal, 22);
+  assert.equal(box.state, 'full', 'full Hall-3 box waits for Ctrl+S seal');
+  assert.equal(SF.act(wSeal, 'save'), true, 'Ctrl+S seals full box');
+  assert.equal(wSeal.counts.save, 1);
 });
 
-test('Delete blasts virus bombs and Undo/Redo restores full history stack', () => {
-  const w = SFEngine.create(2, { seed: 12 }); // sf_m3 has viruses
-  const virus = w.belts[0].items.find(it => it.virus);
-  assert.ok(virus, 'virus present on belt');
+test('Shortcut Factory: saves ignore legacy shapes, track unlocks, and buy skins', () => {
+  const fresh = SF.loadSave({ legacy: true, stars: [99] });
+  assert.equal(fresh.v, 1);
+  assert.equal(SF.totalStars(fresh), 0);
+  assert.equal(SF.isOpen(fresh, 0), true);
+  assert.equal(SF.isOpen(fresh, 1), false);
 
-  // Auto-target nearest virus with Delete even without prior selection
-  assert.equal(SFEngine.act(w, { type: 'delete' }), 'ok');
-  assert.equal(w.zapped, 1);
-  assert.equal(w.belts[0].items.some(it => it.id === virus.id), false);
+  const out = SF.apply(fresh, 0, { stars: 3, score: 500, coins: 80 });
+  assert.equal(out.opened, true);
+  assert.equal(SF.isOpen(fresh, 1), true);
+  assert.equal(SF.buy(fresh, 1), 'buy');
+  assert.equal(fresh.skin, 1);
+  assert.equal(SF.buy(fresh, 5), 'poor');
 
-  // Undo brings it back; Redo zaps it again
-  assert.equal(SFEngine.act(w, { type: 'undo' }), 'ok');
-  assert.equal(w.belts[0].items.some(it => it.id === virus.id), true);
-  assert.equal(SFEngine.act(w, { type: 'redo' }), 'ok');
-  assert.equal(w.belts[0].items.some(it => it.id === virus.id), false);
-});
-
-test('Saboteur Bot attacks pod and Ctrl+Z rewinds sabotage and bonks Saboteur', () => {
-  const w = SFEngine.create(6, { seed: 21 }); // sf_m7 starts with preSabotage
-  assert.equal(w.boxes[0].items[0].glitched, true);
-  assert.equal(w.saboteur.state, 'laugh');
-
-  assert.equal(SFEngine.act(w, { type: 'undo' }), 'ok');
-  assert.equal(w.boxes[0].items[0].glitched, false, 'glitched bot restored cleanly');
-  assert.equal(w.saboteur.state, 'away', 'saboteur bonked away');
-  assert.equal(w.bonks, 1);
-});
-
-test('Ctrl+A multi-lock, Shift+Arrow additive select, and Ctrl+S Mega Fleet Launch work cleanly', () => {
-  const w = SFEngine.create(10, { seed: 55 }); // sf_m11 has megaSave: true
-  assert.equal(SFEngine.act(w, { type: 'select', dir: 1 }), 'ok');
-  assert.equal(w.sel.length, 1);
-  assert.equal(SFEngine.act(w, { type: 'select', dir: 1, add: true }), 'ok');
-  assert.equal(w.sel.length, 2, 'additive select appends next visible bot');
-
-  assert.equal(SFEngine.act(w, { type: 'selectAll' }), 'ok');
-  assert.ok(w.sel.length >= 2, 'Ctrl+A selects all visible hero bots');
-  for (const id of w.sel) {
-    const f = SFEngine.findItem(w, id);
-    assert.equal(f.item.virus, false, 'Ctrl+A skips virus bombs');
-  }
-  assert.equal(SFEngine.act(w, { type: 'copy' }), 'ok');
-  assert.equal(SFEngine.act(w, { type: 'paste' }), 'ok');
-
-  // Ensure all 3 pods reach target
-  for (const bx of w.boxes) {
-    while (bx.items.length < bx.target) {
-      w.clip = { cut: false, items: [{ kind: bx.kind }] };
-      SFEngine.act(w, { type: 'paste' });
-    }
-  }
-  assert.equal(w.megaReady, true, 'megaReady activates when all pods are filled');
-  assert.equal(SFEngine.act(w, { type: 'paste' }), 'pod_full', 'extra paste when full does not count as mistake');
-  assert.equal(w.mistakes, 0);
-  assert.equal(SFEngine.act(w, { type: 'saveShip' }), 'ok');
-  assert.ok(w.boxes.every(bx => bx.launched), 'all pods launch together on Ctrl+S');
-  stepSecs(w, 1.0);
-  assert.equal(w.phase, 'win');
-});
-
-test('automated hint solver completes all 12 campaign missions cleanly', () => {
-  for (let mi = 0; mi < 12; mi++) {
-    const w = SFEngine.create(mi, { seed: 100 + mi });
-    for (let guard = 0; guard < 500 && w.phase === 'play'; guard++) {
-      const h = SFEngine.hint(w);
-      if (!h) {
-        stepSecs(w, 0.35);
-        continue;
-      }
-      if (h.act === 'select' && h.targetId) {
-        const f = SFEngine.findItem(w, h.targetId);
-        if (f) SFEngine.act(w, { type: 'click', x: f.x, y: f.y });
-      } else {
-        SFEngine.act(w, { type: h.act });
-      }
-      stepSecs(w, 0.25);
-    }
-    assert.equal(w.phase, 'win', `Mission ${w.id} solved to win`);
-    assert.ok(SFEngine.starsFor(w) >= 2, `Mission ${w.id} earned high stars`);
-  }
-});
-
-test('difficulty scaling (DDA) and shop/save helpers clamp and persist properly', () => {
-  const easy = SFEngine.create(9, { speedScale: 0.6, virusScale: 0.5, timeScale: 1.4 });
-  const hard = SFEngine.create(9, { speedScale: 1.5, virusScale: 1.5, timeScale: 0.75 });
-  assert.ok(easy.speed < hard.speed);
-  assert.ok(easy.virusRate < hard.virusRate);
-  assert.ok(easy.timeLeft > hard.timeLeft);
-
-  const save = SFEngine.loadSave({ coins: 90, stars: [3, 2] });
-  assert.equal(SFEngine.buyItem(save, 'theme', 'plasma'), 'bought');
-  assert.equal(save.theme, 'plasma');
-  assert.equal(save.coins, 65);
-  assert.equal(SFEngine.buyItem(save, 'armor', 'nova'), 'poor');
-  assert.equal(SFEngine.buyItem(save, 'armor', 'gold'), 'bought');
-  assert.equal(save.armor, 'gold');
+  const round = SF.loadSave(JSON.parse(JSON.stringify(fresh)));
+  assert.equal(round.skin, 1);
+  assert.equal(round.stars[0], 3);
 });
