@@ -1,392 +1,246 @@
-// Unit tests for Egg Rush (سباق البيض: Turbo Dino & Robo-Coop Heist!) pure simulation engine.
-import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import vm from 'node:vm';
+// Egg Rush (سباق البيض) engine: tracks, the egg on the spoon, obstacles, CPU racers, stars and saves.
 import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
 
-const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const enginePath = path.join(repo, 'games/egg-rush/engine.js');
 const require = createRequire(import.meta.url);
-const E = require(enginePath);
+const ER = require('../../games/egg-rush/engine.js');
+
 const DT = 1 / 60;
+const calm = () => ER.tuning(0);
+function race(i = 0, opts = {}) { return ER.create(i, Object.assign({ tune: calm(), cpus: 0, seed: 5 }, opts)); }
+function toRace(r) { while (r.phase !== 'race') ER.step(r, DT, [{}]); return r; }
+function run(r, secs, input = {}) { const n = Math.round(secs / DT); for (let k = 0; k < n; k++) ER.step(r, DT, [typeof input === 'function' ? input(r) : input, {}]); }
 
-function stepFor(w, seconds, inputFn) {
-  const frames = Math.round(seconds / DT);
-  for (let i = 0; i < frames && !w.over; i++) {
-    const inp = typeof inputFn === 'function' ? inputFn(w, i) : inputFn;
-    E.stepWorld(w, DT, inp);
+test('nine tracks in three worlds, built the same way every time', () => {
+  assert.equal(ER.TRACK_COUNT, 9);
+  assert.equal(ER.WORLDS.length, 3);
+  for (let i = 0; i < 9; i++) {
+    const t = ER.track(i);
+    assert.equal(t.id, ER.trackId(i));
+    assert.equal(t.world, Math.floor(i / 3));
+    assert.ok(t.len >= 300 && t.len <= 700, 'track length ' + t.len);
+    assert.ok(t.items.length > 4, 'track ' + i + ' has obstacles');
+    assert.equal(t.gold.length, 3, 'three golden eggs on track ' + i);
+    assert.equal(t.cps[0], 0);
+    for (let k = 1; k < t.items.length; k++) assert.ok(t.items[k].s >= t.items[k - 1].s, 'items sorted');
+    assert.ok(t.items.every((it) => it.s > 20 && it.s < t.len - 20), 'nothing on the start or finish line');
   }
-}
-
-// Lightweight A* / BFS grid navigator for our scripted test bot across walls & closed lasers.
-function makeGridBot(w, pid = 0) {
-  const cell = 32;
-  const cols = Math.ceil(E.W / cell), rows = Math.ceil(E.H / cell);
-  let cachedLaserMask = -1, path = [], targetKey = '', repathCd = 0;
-
-  function laserMask() {
-    let m = 0;
-    for (let i = 0; i < w.lasers.length; i++) if (w.lasers[i].openTimer <= 0.4) m |= (1 << i);
-    return m;
-  }
-
-  function blockedCell(cx, cy, mask) {
-    const x = cx * cell + cell / 2, y = cy * cell + cell / 2, pad = 23;
-    if (x < E.AX0 + pad || x > E.AX1 - pad || y < E.AY0 + pad || y > E.AY1 - pad) return true;
-    for (const wl of w.walls) {
-      if (x >= wl.x - pad && x <= wl.x + wl.w + pad && y >= wl.y - pad && y <= wl.y + wl.h + pad) return true;
-    }
-    for (let i = 0; i < w.lasers.length; i++) {
-      if (!(mask & (1 << i))) continue;
-      const lz = w.lasers[i];
-      if (x >= lz.x - pad && x <= lz.x + lz.w + pad && y >= lz.y - pad && y <= lz.y + lz.h + pad) return true;
-    }
-    return false;
-  }
-
-  function bfs(sx, sy, gx, gy, mask) {
-    const sc = Math.max(0, Math.min(cols - 1, (sx / cell) | 0));
-    const sr = Math.max(0, Math.min(rows - 1, (sy / cell) | 0));
-    const gc = Math.max(0, Math.min(cols - 1, (gx / cell) | 0));
-    const gr = Math.max(0, Math.min(rows - 1, (gy / cell) | 0));
-    const start = sr * cols + sc, goal = gr * cols + gc;
-    const prev = new Int32Array(cols * rows).fill(-1);
-    const seen = new Uint8Array(cols * rows);
-    const q = [start];
-    seen[start] = 1;
-    const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
-    let head = 0, bestNode = start, bestDist = Math.hypot(gc - sc, gr - sr);
-
-    while (head < q.length) {
-      const cur = q[head++];
-      if (cur === goal) { bestNode = goal; break; }
-      const cr = (cur / cols) | 0, cc = cur % cols;
-      for (const [dc, dr] of dirs) {
-        const nc = cc + dc, nr = cr + dr;
-        if (nc < 0 || nc >= cols || nr < 0 || nr >= rows) continue;
-        const ni = nr * cols + nc;
-        if (seen[ni] || blockedCell(nc, nr, mask)) continue;
-        if (dc !== 0 && dr !== 0 && (blockedCell(cc + dc, cr, mask) || blockedCell(cc, cr + dr, mask))) continue;
-        seen[ni] = 1;
-        prev[ni] = cur;
-        const d = Math.hypot(gc - nc, gr - nr);
-        if (d < bestDist) { bestDist = d; bestNode = ni; }
-        q.push(ni);
-      }
-    }
-    if (bestNode === start) return { reachable: start === goal, pts: [{ x: gx, y: gy }] };
-    const out = [];
-    let cur = bestNode;
-    while (cur !== -1 && cur !== start) {
-      const r = (cur / cols) | 0, c = cur % cols;
-      out.push({ x: c * cell + cell / 2, y: r * cell + cell / 2 });
-      cur = prev[cur];
-    }
-    out.reverse();
-    if (bestNode === goal) out.push({ x: gx, y: gy });
-    return { reachable: bestNode === goal, pts: out };
-  }
-
-  return () => {
-    const p = w.players[pid];
-    const mask = laserMask();
-    const teamCarry = w.mode === 'coop' ? w.players.reduce((s, pl) => s + pl.carry.length, 0) : p.carry.length;
-    const needMore = Math.max(0, w.goal - w.hatched);
-
-    let goalObj = null;
-    if (p.carry.length >= 3 || (p.carry.length > 0 && teamCarry >= needMore)) {
-      goalObj = { x: p.home.x, y: p.home.y, key: 'home' };
-    } else {
-      let bestEgg = null, bestD = 1e9;
-      for (const eg of w.eggs) {
-        if (eg.state !== 'nest' && !(eg.state === 'loose' && eg.looseDelay <= 0)) continue;
-        const d = Math.hypot(eg.x - p.x, eg.y - p.y) + (pid === 1 ? eg.id * 12 : 0);
-        if (d < bestD) { bestD = d; bestEgg = eg; }
-      }
-      goalObj = bestEgg ? { x: bestEgg.x, y: bestEgg.y, key: 'egg_' + bestEgg.id } : { x: p.home.x, y: p.home.y, key: 'home' };
-    }
-
-    repathCd -= DT;
-    if (goalObj.key !== targetKey || mask !== cachedLaserMask || repathCd <= 0 || !path.length) {
-      let nav = bfs(p.x, p.y, goalObj.x, goalObj.y, mask);
-      if (!nav.reachable && mask !== 0 && w.switches.length) {
-        // Step on nearest reachable laser switch first!
-        let bestSw = null, swDist = 1e9;
-        for (const sw of w.switches) {
-          const trySw = bfs(p.x, p.y, sw.x, sw.y, mask);
-          const d = Math.hypot(sw.x - p.x, sw.y - p.y);
-          if (trySw.reachable && d < swDist) { swDist = d; bestSw = trySw; }
-        }
-        if (bestSw) nav = bestSw;
-      }
-      path = nav.pts;
-      targetKey = goalObj.key;
-      cachedLaserMask = mask;
-      repathCd = 0.35;
-    }
-
-    while (path.length > 1 && Math.hypot(path[0].x - p.x, path[0].y - p.y) < 20) path.shift();
-    const wp = path[0] || goalObj;
-    const dx = wp.x - p.x, dy = wp.y - p.y, d = Math.hypot(dx, dy) || 1;
-    const guardClose = w.guards.some(g => Math.hypot(g.x - p.x, g.y - p.y) < 150);
-    return { x: dx / d, y: dy / d, dash: p.dashCd <= 0 && (guardClose || d > 95) };
-  };
-}
-
-test('dual Node + browser global loading and zero DOM or telemetry inside engine.js', () => {
-  const src = readFileSync(enginePath, 'utf8');
-  assert.equal(/\bdocument\b/.test(src), false, 'engine.js must not touch document');
-  assert.equal(/\bKit\s*\.\s*(?:stats|track)\b/.test(src), false, 'engine.js must not call Kit.stats or Kit.track');
-
-  const ctx = vm.createContext({ window: {} });
-  vm.runInContext(src, ctx, { filename: 'engine.js' });
-  assert.ok(ctx.window.EREngine, 'exposes window.EREngine in browser context');
-  assert.equal(ctx.window.EREngine.WORLDS.length, 4);
-  assert.equal(ctx.window.EREngine.STAGES.length, 12);
+  assert.equal(ER.trackId(0), 'w1-1');
+  assert.equal(ER.trackId(8), 'w3-3');
+  const a = JSON.stringify(ER.track(4).items);
+  delete require.cache[require.resolve('../../games/egg-rush/engine.js')];
+  const ER2 = require('../../games/egg-rush/engine.js');
+  assert.equal(JSON.stringify(ER2.track(4).items), a, 'deterministic tracks');
 });
 
-test('all 4 Open Worlds and 12 stages start idle at spawn and walk right cleanly', () => {
-  assert.equal(E.WORLDS.length, 4);
-  assert.deepEqual(
-    E.WORLDS.map(w => w.name),
-    ['مزرعة التيربو', 'وادي الديناصورات', 'قلعة الجليد', 'المختبر الآلي']
-  );
-  assert.equal(E.STAGES.length, 12);
-
-  for (let i = 0; i < E.STAGES.length; i++) {
-    const w = E.createWorld({ stage: i, diff: 'normal', seed: 101 + i });
-    assert.ok(w.eggs.length >= w.goal, `${w.id}: enough eggs for goal`);
-    assert.equal(E.isAtStart(w), true, `${w.id}: starts at spawn`);
-    const x0 = w.players[0].x, y0 = w.players[0].y;
-
-    // 2 seconds with zero input must keep P1 completely still and safe inside Hatcher Base
-    stepFor(w, 2.0, [{ x: 0, y: 0, dash: false }]);
-    assert.equal(w.players[0].x, x0, `${w.id}: px unchanged when idle`);
-    assert.equal(w.players[0].y, y0, `${w.id}: py unchanged when idle`);
-    assert.equal(E.isAtStart(w), true, `${w.id}: still atStart when idle`);
-    assert.equal(w.bonks, 0, `${w.id}: safe at spawn`);
-
-    // Holding right moves P1 cleanly rightward and clears atStart
-    stepFor(w, 0.6, [{ x: 1, y: 0, dash: false }]);
-    assert.ok(w.players[0].x > x0 + 120, `${w.id}: open rightward lane from spawn`);
-    assert.equal(E.isAtStart(w), false, `${w.id}: atStart becomes false once moved`);
-  }
+test('later tracks are busier than the first one', () => {
+  const first = ER.track(0), last = ER.track(8);
+  assert.ok(last.items.length / last.len > first.items.length / first.len);
+  const kinds = new Set(ER.track(8).items.map((it) => it.k));
+  assert.ok(kinds.size >= 3, 'mixed obstacles late on');
 });
 
-test('Egg-Chain Turbo boosts speed instead of slowing down, mud never slows, and 3-egg hatch gives mega bonus', () => {
-  assert.equal(E.chainSpeedMult(0), 1.0);
-  assert.ok(E.chainSpeedMult(1) > 1.0);
-  assert.ok(E.chainSpeedMult(2) > E.chainSpeedMult(1));
-  assert.ok(E.chainSpeedMult(3) > E.chainSpeedMult(2));
-  assert.equal(E.chainScoreMult(3), 2.2);
-
-  // Compare distance covered in 0.5s with 0 eggs vs 3 carried eggs
-  const w0 = E.createWorld({ stage: 'w1s1', diff: 'normal' });
-  w0.eggs = []; w0.walls = []; w0.pads = []; w0.guards = [];
-  stepFor(w0, 0.5, [{ x: 1, y: 0, dash: false }]);
-  const dist0 = w0.players[0].x - w0.players[0].spawnX;
-
-  const w3 = E.createWorld({ stage: 'w1s1', diff: 'normal' });
-  w3.walls = []; w3.pads = []; w3.guards = [];
-  for (let k = 0; k < 3; k++) {
-    const eg = w3.eggs[k];
-    eg.state = 'carried'; eg.carrier = 0;
-    w3.players[0].carry.push(eg);
-  }
-  w3.players[0].x = 300; // outside home so stack doesn't immediately hatch
-  const start3 = w3.players[0].x;
-  stepFor(w3, 0.5, [{ x: 1, y: 0, dash: false }]);
-  const dist3 = w3.players[0].x - start3;
-  assert.ok(dist3 > dist0 * 1.2, '3-egg conga chain runs faster than 0 eggs!');
-
-  // Mud never slows walking below 100%, and dashing through mud gives extra hydro-boost (2.05x vs 1.85x)
-  const wMud = E.createWorld({ stage: 'w1s1', diff: 'normal' });
-  wMud.walls = []; wMud.eggs = []; wMud.guards = [];
-  wMud.pads = [{ kind: 'mud', x: 250, y: 300, w: 500, h: 200, r: 32, dx: 0, dy: 0, cd: 0 }];
-  wMud.players[0].x = 280;
-  stepFor(wMud, 0.5, [{ x: 1, y: 0, dash: false }]);
-  assert.ok(Math.abs((wMud.players[0].x - 280) - dist0) < 1, 'mud never slows normal running');
-
-  wMud.players[0].x = 300; wMud.players[0].dashCd = 0;
-  E.stepWorld(wMud, DT, [{ x: 1, y: 0, dash: true }]);
-  E.stepWorld(wMud, DT, [{ x: 1, y: 0, dash: false }]);
-  const mudDashVx = wMud.players[0].vx;
-  assert.ok(mudDashVx > wMud.tuning.baseSpeed * 2.0, 'mud dash gives > 2x hydro-slide boost');
-
-  // Delivering 3 eggs to Turbo Hatcher Base hatches 3 babies, grants feather speed boost, and 2.2x score
-  w3.players[0].x = w3.players[0].home.x;
-  w3.players[0].y = w3.players[0].home.y;
-  w3.events.length = 0;
-  E.stepWorld(w3, DT, [{ x: 0, y: 0, dash: false }]);
-  assert.equal(w3.hatched, 3);
-  assert.equal(w3.babies.length, 3);
-  assert.equal(w3.comboBursts, 1);
-  assert.ok(w3.players[0].featherTimer >= 4.4, '3-egg hatch grants helper speed-feather boost');
-  const hatchEv = w3.events.find(e => e.type === 'hatch');
-  assert.ok(hatchEv && hatchEv.mega && hatchEv.points === Math.round(300 * 2.2));
+test('countdown first, then the race starts and the runner jogs forward', () => {
+  const r = race();
+  ER.step(r, DT, [{ up: true }]);
+  assert.equal(r.phase, 'count');
+  run(r, 1.5, { up: true });
+  assert.equal(r.runners[0].s, 0, 'no running during the countdown');
+  toRace(r);
+  assert.equal(r.phase, 'race');
+  assert.ok(r.ev.some((e) => e.t === 'count' && e.n === 0), 'GO event');
+  run(r, 2);
+  assert.ok(r.runners[0].s > 10, 'jogging by itself');
 });
 
-test('Turbo Dash drops Squeaky Decoy Duck ("؟!"), stealth pods hide P1, Bubble Shield & 0.65s cartoon bonk work', () => {
-  const w = E.createWorld({ stage: 'w1s1', diff: 'easy' });
-  const p = w.players[0], g = w.guards[0];
-  assert.equal(p.shield, 1, 'easy tier starts with free Bubble-Helmet Shield');
-
-  // Place player near guard and press dash -> drops decoy duck & distracts guard with "؟!"
-  p.x = 500; p.y = 385;
-  g.x = 620; g.y = 385; g.state = 'patrol'; g.bonkCd = 0;
-  w.events.length = 0;
-  E.stepWorld(w, DT, [{ x: 1, y: 0, dash: true }]);
-  assert.equal(w.decoys.length, 1, 'drops squeaky decoy duck');
-  assert.equal(g.state, 'decoy', 'guard switches to decoy state');
-  assert.equal(g.bubble, '؟!', 'guard shows comical ؟! bubble');
-
-  // Stealth pod hides player from guard sight & contact
-  const pod = w.hides[0];
-  p.x = pod.x; p.y = pod.y; p.invuln = 0; p.bonkTimer = 0; p.dashTimer = 0;
-  g.state = 'patrol'; g.x = pod.x + 60; g.y = pod.y; g.look = Math.PI;
-  E.stepWorld(w, DT, [{ x: 0, y: 0, dash: false }]);
-  assert.equal(p.hidden, true, 'inside stealth pod');
-  assert.equal(E.canGuardSee(w, g, p), false, 'guard cannot see hidden player');
-
-  // Bubble Shield absorbs guard hit with ZERO stun and ZERO dropped eggs
-  p.x = 500; p.y = 385; p.hidden = false; p.invuln = 0;
-  for (let k = 0; k < 3; k++) { w.eggs[k].state = 'carried'; p.carry.push(w.eggs[k]); }
-  g.x = 505; g.y = 385; g.state = 'patrol'; g.bonkCd = 0;
-  w.events.length = 0;
-  E.stepWorld(w, DT, [{ x: 0, y: 0, dash: false }]);
-  assert.equal(p.shield, 0, 'shield consumed');
-  assert.equal(p.bonkTimer, 0, 'zero stun when shielded');
-  assert.equal(p.carry.length, 3, 'keeps all 3 eggs when shielded');
-  assert.ok(w.events.some(e => e.type === 'shieldPop'));
-
-  // Unshielded bonk is strictly 0.65s (<= 0.65s, NEVER 9s!), drops ONLY 1 loose egg, and lets P1 grab it back
-  p.invuln = 0; g.bonkCd = 0; g.state = 'patrol'; g.x = 505; g.y = 385;
-  w.events.length = 0;
-  E.stepWorld(w, DT, [{ x: 0, y: 0, dash: false }]);
-  assert.ok(p.bonkTimer > 0 && p.bonkTimer <= 0.65, `cartoon bounce is <= 0.65s (got ${p.bonkTimer})`);
-  assert.equal(E.BONK_DURATION, 0.65);
-  assert.equal(p.carry.length, 2, 'drops only 1 egg from a 3-egg stack');
-  const looseEgg = w.eggs.find(e => e.state === 'loose');
-  assert.ok(looseEgg, 'popped egg is loose nearby');
-
-  // After 0.7s bounce clears while blink-invuln is still active, P1 can snatch the loose egg right back!
-  g.x = 950; // move guard away
-  stepFor(w, 0.7, [{ x: 0, y: 0, dash: false }]);
-  assert.equal(p.bonkTimer, 0, 'bounce recovered in <= 0.7s');
-  assert.ok(p.invuln > 1.0, 'blink-shield still active for safe recovery');
-  stepFor(w, 0.35, () => {
-    const dx = looseEgg.x - p.x, dy = looseEgg.y - p.y, d = Math.hypot(dx, dy) || 1;
-    return [{ x: dx / d, y: dy / d, dash: false }];
+test('sprint is faster than jogging, slowing is slower', () => {
+  const speeds = ['up', null, 'down'].map((key) => {
+    const r = toRace(race(1, { cpus: 0 }));
+    run(r, 3, key ? { [key]: true } : {});
+    return r.runners[0].v;
   });
-  assert.equal(p.carry.length, 3, 'recovered popped egg right back!');
+  assert.ok(speeds[0] > speeds[1] && speeds[1] > speeds[2], speeds.join(' > '));
 });
 
-test('world gadgets work: spring pad, boost strip, paired teleporter, laser floor switch, and pickups', () => {
-  // Spring pad launch
-  const w1 = E.createWorld({ stage: 'w1s1', diff: 'normal' });
-  const sp = w1.pads.find(pd => pd.kind === 'spring');
-  w1.players[0].x = sp.x; w1.players[0].y = sp.y;
-  w1.events.length = 0;
-  E.stepWorld(w1, DT, [{ x: 0, y: 0, dash: false }]);
-  assert.ok(w1.players[0].springTimer > 0, 'spring launches player');
-  assert.ok(w1.events.some(e => e.type === 'spring'));
-
-  // Glacier boost lane
-  const w3 = E.createWorld({ stage: 'w3s1', diff: 'normal' });
-  const boost = w3.pads.find(pd => pd.kind === 'boost');
-  w3.players[0].x = boost.x + 40; w3.players[0].y = boost.y + boost.h / 2; w3.players[0].moved = true;
-  E.stepWorld(w3, DT, [{ x: 1, y: 0, dash: false }]);
-  assert.equal(w3.players[0].onBoost, true);
-  assert.ok(w3.players[0].vx > w3.tuning.baseSpeed + 140, 'ice boost pad accelerates instead of slowing');
-
-  // Cyber-Coop teleporter + laser switch + laser gate
-  const w4 = E.createWorld({ stage: 'w4s2', diff: 'normal' });
-  const p = w4.players[0];
-  const pt = w4.portals[0];
-  w4.eggs[0].state = 'carried'; p.carry.push(w4.eggs[0]);
-  p.x = pt.x1; p.y = pt.y1; p.moved = true;
-  w4.events.length = 0;
-  E.stepWorld(w4, DT, [{ x: 0, y: 0, dash: false }]);
-  assert.ok(Math.hypot(p.x - pt.x2, p.y - pt.y2) < 5, 'teleports player to paired pad');
-  assert.ok(Math.hypot(p.carry[0].x - pt.x2, p.carry[0].y - pt.y2) < 35, 'carried egg warps with player');
-  assert.ok(w4.events.some(e => e.type === 'portal'));
-
-  // Closed laser bonks, stepping on switch opens laser
-  const lz = w4.lasers[0], sw = w4.switches[0];
-  assert.equal(lz.openTimer, 0);
-  p.invuln = 0; p.bonkTimer = 0;
-  p.x = lz.x - 5; p.y = lz.y + lz.h / 2;
-  E.stepWorld(w4, DT, [{ x: 1, y: 0, dash: false }]);
-  assert.ok(p.bonkTimer > 0, 'closed laser bonks player');
-
-  p.bonkTimer = 0; p.invuln = 0;
-  p.x = sw.x; p.y = sw.y;
-  E.stepWorld(w4, DT, [{ x: 0, y: 0, dash: false }]);
-  assert.ok(lz.openTimer > 7.0, 'floor switch opens laser barrier');
+test('steering moves the runner sideways and stays on the track', () => {
+  const r = toRace(race());
+  const x0 = r.runners[0].x;
+  run(r, 0.3, { steer: 1 });
+  assert.ok(r.runners[0].x > x0 + 0.5);
+  run(r, 3, { steer: -1 });
+  assert.ok(r.runners[0].x >= -ER.HALF - 1e-9 && r.runners[0].x < 0);
 });
 
-test('scripted player beats all 12 stages across easy, normal, and hero difficulties', () => {
-  for (const diff of ['easy', 'normal', 'hero']) {
-    for (let si = 0; si < E.STAGES.length; si++) {
-      const w = E.createWorld({ stage: si, diff, seed: 42 + si });
-      const bot = makeGridBot(w, 0);
-      stepFor(w, w.maxTime + 2, () => [bot()]);
-      assert.equal(w.over, true, `${w.id} (${diff}) ended`);
-      assert.equal(w.won, true, `${w.id} (${diff}) won (${w.hatched}/${w.goal} hatched, timeLeft=${w.timeLeft.toFixed(1)}s)`);
-      assert.ok(w.hatched >= w.goal, `${w.id} (${diff}) met egg goal`);
-      assert.ok(w.stars >= 1 && w.stars <= 3, `${w.id} (${diff}) awarded stars`);
-      assert.ok(w.coinsEarned > 0, `${w.id} (${diff}) awarded coins`);
-    }
+test('the egg wobbles more when sprinting, and leaning toward it brings it back', () => {
+  const tune = ER.tuning(0.5);
+  const amp = (input) => {
+    const r = toRace(race(0, { tune })), me = r.runners[0];
+    let m = 0;
+    for (let k = 0; k < 150; k++) { ER.step(r, DT, [input]); me.ghost = 1; if (k > 90) m = Math.max(m, Math.abs(me.e) + me.drops); }
+    return m;
+  };
+  assert.ok(amp({ up: true }) > amp({ down: true }), 'sprinting shakes more');
+  // Push the egg to one side, then chase it: steering toward the egg pulls it back.
+  const r = toRace(race(0, { tune: calm() }));
+  r.runners[0].e = 0.6; r.runners[0].ev = 0;
+  run(r, 0.25, { steer: 1 });
+  assert.ok(r.runners[0].e < 0.6, 'steering toward the egg recentres it');
+});
+
+test('egg past the rim splats, then respawns at the checkpoint with a fresh egg', () => {
+  const r = toRace(race());
+  run(r, 1);
+  const me = r.runners[0];
+  me.e = 1.2; me.ev = 3;
+  run(r, DT);
+  assert.equal(me.state, 'splat');
+  assert.equal(me.drops, 1);
+  assert.ok(r.ev.some((e) => e.t === 'drop' && e.human));
+  r.ev.length = 0;
+  run(r, 2);
+  assert.equal(me.state, 'run');
+  assert.equal(me.s > 0 && me.s < 30, true, 'back near the last checkpoint');
+  assert.equal(me.e, me.e); // finite
+  assert.ok(Math.abs(me.e) < 0.5, 'fresh egg');
+});
+
+test('jumping clears the first-track hurdle; running into it drops the egg', () => {
+  const tr = ER.track(0);
+  const h = tr.items.find((it) => it.k === 'hurdle' && it.full);
+  assert.ok(h, 'track 1 teaches a full-width hurdle');
+  // Jump right before it.
+  const a = toRace(race());
+  const me = a.runners[0];
+  me.s = h.s - 3; me.x = 0;
+  let jumped = false;
+  for (let k = 0; k < 120; k++) {
+    const jump = !jumped && me.s > h.s - 1.6;
+    if (jump) jumped = true;
+    ER.step(a, DT, [{ jump }]);
+  }
+  assert.equal(me.drops, 0);
+  assert.equal(me.hits, 0);
+  assert.ok(me.cleared >= 1, 'counted as cleared');
+  assert.ok(me.s > h.s);
+  // No jump.
+  const b = toRace(race());
+  const you = b.runners[0];
+  you.s = h.s - 3; you.x = 0;
+  run(b, 1);
+  assert.equal(you.drops, 1, 'tripping on a hurdle drops the egg');
+  assert.ok(b.ev.some((e) => e.t === 'hit' && e.k === 'hurdle'));
+});
+
+test('after two trips on the same hurdle the runner hops it alone (nobody gets stuck)', () => {
+  const r = toRace(race());
+  const me = r.runners[0];
+  const h = r.track.items.find((it) => it.k === 'hurdle' && it.full);
+  me.s = h.s - 8;
+  me.cp = 0;
+  let guard = 0;
+  while (me.s < h.s + 2 && guard++ < 60 * 60) ER.step(r, DT, [{}]);
+  assert.ok(me.s > h.s, 'passed the hurdle without pressing anything');
+  assert.ok(me.drops <= 2);
+  assert.ok(me.helped);
+});
+
+test('golden eggs are collected by running (or jumping) through them', () => {
+  const r = toRace(race(0));
+  const g = r.track.gold.find((x) => x.need === 0) || r.track.gold[0];
+  const me = r.runners[0];
+  me.s = g.s - 0.5; me.x = g.x; me.ghost = 5;
+  if (g.need > 0) { me.air = true; me.y = 1; me.vy = 0; }
+  ER.step(r, DT, [{}]);
+  assert.equal(me.gold, 1);
+  assert.ok(r.ev.some((e) => e.t === 'gold'));
+  ER.step(r, DT, [{}]);
+  assert.equal(me.gold, 1, 'each egg only once');
+});
+
+test('finishing ends the race with a place; stars for finish, first place and no drops', () => {
+  const r = toRace(race(0, { cpus: 3 }));
+  const me = r.runners[0];
+  me.s = r.track.len - 1; me.v = ER.V_JOG; me.ghost = 2;
+  run(r, 0.5);
+  assert.ok(me.finished);
+  assert.equal(me.place, 1);
+  assert.ok(r.over);
+  assert.equal(ER.stars(me), 3);
+  assert.deepEqual(ER.starFlags(me), [true, true, true]);
+  me.drops = 1;
+  assert.equal(ER.stars(me), 2);
+  me.place = 3;
+  assert.equal(ER.stars(me), 1);
+  assert.equal(ER.stars({ finished: false }), 0);
+  assert.ok(ER.outcome({ place: 1, drops: 0 }) > ER.outcome({ place: 4, drops: 3 }));
+  assert.ok(ER.reward({ place: 1, gold: 2 }) > ER.reward({ place: 4, gold: 0 }));
+});
+
+test('difficulty knobs move the right way', () => {
+  const lo = ER.tuning(0), hi = ER.tuning(1);
+  assert.ok(hi.cpuSpeed > lo.cpuSpeed);
+  assert.ok(hi.sens > lo.sens);
+  assert.ok(hi.cradle < lo.cradle);
+  assert.ok(hi.cpuSkill > lo.cpuSkill);
+  assert.deepEqual(ER.tuning(-3), lo);
+  assert.deepEqual(ER.tuning(7), hi);
+});
+
+test('two players: both humans race the CPUs with their own inputs', () => {
+  const r = toRace(ER.create(2, { humans: 2, tune: calm(), seed: 3 }));
+  assert.equal(r.runners.length, 4);
+  assert.equal(r.runners.filter((q) => q.human).length, 2);
+  for (let k = 0; k < 40; k++) ER.step(r, DT, [{ steer: -1 }, { steer: 1 }]);
+  assert.ok(r.runners[0].x < r.runners[1].x, 'P1 left, P2 right');
+});
+
+test('CPU runners finish every track, and an idle player always finishes too', () => {
+  for (let i = 0; i < 9; i++) {
+    const r = ER.create(i, { tune: ER.tuning(0.5), seed: 11 + i });
+    let t = 0;
+    while (!r.runners.every((q) => q.finished) && t < 240) { ER.step(r, 1 / 30, [{}]); t += 1 / 30; }
+    assert.ok(r.runners[0].finished, 'idle player finished track ' + i + ' (t=' + t.toFixed(0) + ')');
+    assert.ok(r.runners.slice(1).every((q) => q.finished), 'CPUs finished track ' + i);
   }
 });
 
-test('2P Co-Op, 2P VS Egg-Thief Race, save sanitization, and Costume Barn purchases work cleanly', () => {
-  // 2P Co-Op
-  const coop = E.createWorld({ mode: 'coop', stage: 'w1s1', diff: 'normal' });
-  assert.equal(coop.players.length, 2);
-  assert.equal(coop.goal, E.getStage('w1s1').goal + 2);
-  const b0 = makeGridBot(coop, 0), b1 = makeGridBot(coop, 1);
-  stepFor(coop, coop.maxTime, () => [b0(), b1()]);
-  assert.equal(coop.won, true, '2P co-op team wins stage');
+test('saves: other shapes are ignored, bad values cleaned, finishing opens the next track', () => {
+  const fresh = ER.newSave();
+  assert.deepEqual(ER.loadSave(null), fresh);
+  assert.deepEqual(ER.loadSave({ level: 5, best: 999 }), fresh, 'old egg-rush save ignored');
+  assert.deepEqual(ER.loadSave('junk'), fresh);
+  const s = ER.loadSave({ v: 2, stars: [3, 9, -1, 'x'], best: [12.5], gold: [5], eggs: -4, runner: 7, egg: 99, ownR: [0, 7, 'a', 50], ownE: [0], coach: 1 });
+  assert.deepEqual(s.stars.slice(0, 4), [3, 3, 0, 0]);
+  assert.equal(s.gold[0], 3);
+  assert.equal(s.eggs, 0);
+  assert.equal(s.runner, 7);
+  assert.equal(s.egg, 0, 'unowned egg skin falls back');
+  assert.ok(s.ownR.includes(0) && s.ownR.includes(2) && !s.ownR.includes(50));
+  assert.equal(s.coach, true);
 
-  // 2P VS Race: rival dash bump + egg respawn + winner resolution
-  const vs = E.createWorld({ mode: 'vs', world: 0, diff: 'normal' });
-  assert.equal(vs.players.length, 2);
-  const p0 = vs.players[0], p1 = vs.players[1];
-  p0.x = 600; p0.y = 385; p1.x = 635; p1.y = 385;
-  vs.eggs[0].state = 'carried'; p1.carry.push(vs.eggs[0]);
-  E.stepWorld(vs, DT, [{ x: 1, y: 0, dash: true }, { x: 0, y: 0, dash: false }]);
-  assert.ok(p1.bonkTimer > 0, 'dashing rival bumps opponent in VS mode');
-  assert.equal(p1.carry.length, 0, 'bumped rival pops carried egg');
+  const save = ER.newSave();
+  assert.ok(ER.isOpen(save, 0));
+  assert.ok(!ER.isOpen(save, 1));
+  const out = ER.record(save, 0, { finished: true, place: 2, drops: 0, gold: 1, finishT: 41.234 });
+  assert.equal(out.stars, 2);
+  assert.ok(out.unlocked);
+  assert.ok(ER.isOpen(save, 1));
+  assert.equal(save.best[0], 41.23);
+  assert.equal(save.eggs, out.reward);
+  assert.equal(ER.nextTrack(save), 1);
+  const again = ER.record(save, 0, { finished: true, place: 1, drops: 0, gold: 0, finishT: 39 });
+  assert.ok(again.newBest);
+  assert.equal(save.stars[0], 3);
+  assert.equal(save.gold[0], 1, 'best golden-egg count is kept');
+  assert.equal(ER.totalStars(save), 3);
+  assert.equal(ER.record(save, 1, { finished: false }).stars, 0);
+});
 
-  // Exhaust timer in VS -> higher hatched count wins
-  p0.hatched = 4; p1.hatched = 2;
-  vs.time = vs.maxTime - 0.01;
-  E.stepWorld(vs, 0.02, [{ x: 0, y: 0 }, { x: 0, y: 0 }]);
-  assert.equal(vs.over, true);
-  assert.equal(vs.won, true);
-  assert.equal(vs.winner, 0);
-
-  // Save sanitization & Costume Barn
-  const s = E.loadSave({ coins: -50, stars: [9, -2, 'bad'], skins: [0, 99, 2], skin: 99, diff: 'bogus', world: 99 });
-  assert.equal(s.coins, 0);
-  assert.equal(s.stars.length, 12);
-  assert.deepEqual(s.stars.slice(0, 3), [3, 0, 0]);
-  assert.deepEqual(s.skins, [0, 2]);
-  assert.equal(s.skin, 0);
-  assert.equal(s.diff, 'normal');
-  assert.equal(s.world, 3);
-
-  assert.equal(E.buyOrEquipSkin(s, 1).action, 'poor');
-  s.coins = 50;
-  const buy = E.buyOrEquipSkin(s, 1);
-  assert.equal(buy.ok, true);
-  assert.equal(buy.action, 'buy');
-  assert.equal(s.skin, 1);
-  assert.equal(s.coins, 50 - E.SKINS[1].cost);
-  assert.equal(E.buyOrEquipSkin(s, 2).action, 'equip');
-  assert.equal(s.skin, 2);
+test('skins: two free runners, one free egg, prices go up', () => {
+  assert.equal(ER.RUNNERS.length, 8);
+  assert.equal(ER.EGGS.length, 6);
+  assert.equal(ER.RUNNERS.filter((r) => r.price === 0).length, 2);
+  assert.equal(ER.EGGS[0].price, 0);
+  for (let i = 2; i < ER.EGGS.length; i++) assert.ok(ER.EGGS[i].price > ER.EGGS[i - 1].price);
 });

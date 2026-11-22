@@ -1,789 +1,582 @@
-/* سباق البيض (Egg Rush: Turbo Dino & Robo-Coop Heist!) — Kit.art Canvas, Juice SFX & UI */
+/* Egg Rush (سباق البيض): screens, keys, HUD, sound, saving and Kit hooks.
+ * engine.js runs the race (pure); art.js draws it. This UI layer reads Kit.dda at each
+ * one-player race start and reports the result back; two-player races never touch it. */
 (function () {
   'use strict';
+  var J = Kit.juice, AU = Kit.audio, W = 1280, H = 720, M = Math;
+  var $ = function (id) { return document.getElementById(id); };
+  var canvas = $('gl'), ui = $('ui');
+  var calm = function () { return Kit.motion.reduced(); };
+  var software = ER.softwareGL();
+  var view = null, contextLost = false, dirty = true, lastFrame = 0, lastDraw = 0;
+  var fit = Kit.fit(canvas, W, H, { webgl: true, maxDpr: 1.5, onResize: function (v) {
+    ui.style.left = canvas.style.left; ui.style.top = canvas.style.top; ui.style.transform = 'scale(' + v.scale + ')';
+    if (view) view.resize(M.round(W * v.scale), M.round(H * v.scale));
+    dirty = true;
+  } });
 
-  var E = window.EREngine, J = Kit.juice, A = Kit.art;
-  var W = E.W, H = E.H, TAU = Math.PI * 2, INK = '#1b1640';
-  function $(id) { return document.getElementById(id); }
-
-  var canvas = $('game');
-  A.init({ canvas: canvas, mode: '2d', theme: 'day' });
-
-  var dirty = true;
-  var view = Kit.fit(canvas, W, H, {
-    maxDpr: 1.5,
-    onResize: function () {
-      dirty = true;
-    }
-  });
-  var ctx = view.ctx;
-
+  /* ---------------------------------------------------------------- save */
   var store = Kit.store('egg-rush');
-  var saveStatus = Kit.saveStatus({ retry: persistSave });
-  var save = E.loadSave(store.get('save', null));
-  var dda = Kit.dda('egg-rush', { id: 'main', target: 0.72, tiers: 5, start: 0.35 });
-
-  function persistSave() {
-    if (store.set('save', save) === false) { saveStatus.failed(); return false; }
+  var saveStatus = Kit.saveStatus({ retry: persist });
+  var save = ER.loadSave(store.get('save2', null));
+  function persist() {
+    if (store.set('save2', save) === false) { saveStatus.failed(); return false; }
     saveStatus.saved();
     return true;
   }
-  function sfx(kind, a) { if (J && typeof J[kind] === 'function') J[kind](a); }
+  var dda = Kit.dda('egg-rush', { id: 'race', start: 0.3 });
 
-  /* ------------------------------ Bounded Static Kit.art Sprites */
-  var BG_KEYS = ['bg_0', 'bg_1', 'bg_2', 'bg_3'];
-  var HERO_OPEN = ['hero_0_0', 'hero_1_0', 'hero_2_0', 'hero_3_0', 'hero_4_0', 'hero_5_0'];
-  var HERO_BLINK = ['hero_0_1', 'hero_1_1', 'hero_2_1', 'hero_3_1', 'hero_4_1', 'hero_5_1'];
-  var EGG_KEYS = { normal: 'egg_normal', gold: 'egg_gold', dino: 'egg_dino', cyber: 'egg_cyber' };
-  var BABY_KEYS = { chick: 'baby_chick', raptor: 'baby_raptor', mecha: 'baby_mecha' };
-  var GUARD_KEYS = { rooster: 'guard_rooster', dog: 'guard_dog', trex: 'guard_trex', yeti: 'guard_yeti', drone: 'guard_drone' };
-  var POD_KEYS = { hay: 'pod_hay', fern: 'pod_fern', igloo: 'pod_igloo', holo: 'pod_holo' };
+  /* --------------------------------------------------------------- state */
+  var screen = 'title', race = null, demo = null, cur = 0, time = 0, viewTime = 0, idle = 0, resultT = 0, lock = 0;
+  var result = null, roundOpen = false, hintsOn = false, coachStarted = false;
+  var preview = { r: save.runner, e: save.egg, row: 0 };
+  var SCREENS = { title: 'scrTitle', map: 'scrMap', skins: 'scrSkins', pause: 'scrPause', result: 'scrResult' };
+  var PLACE = ['', 'المركز الأول!', 'المركز الثاني!', 'المركز الثالث!', 'المركز الرابع'];
+  var PRAISE = ['رائع!', 'ممتاز!', 'قفزة!', 'بطل!'];
+  var DOT = ['#ff4d4d', '#2ea8ff', '#4cd964', '#ff6fb5'];
 
-  var fx = A.fx(280), hatchSpring = A.spring(240, 12);
-  var pSprings = [A.spring(260, 13), A.spring(260, 13)], blinkSlots = [{}, {}];
-
-  function drawEyes(c, cx, cy, sep, r, blink, angry) {
-    for (var s = -1; s <= 1; s += 2) {
-      var ex = cx + s * sep;
-      if (blink) {
-        c.beginPath(); c.moveTo(ex - r, cy); c.quadraticCurveTo(ex, cy + r * 0.45, ex + r, cy);
-        c.lineWidth = 3; c.strokeStyle = INK; c.stroke();
-      } else {
-        c.beginPath(); c.arc(ex, cy, r, 0, TAU); A.outlined(c, '#ffffff', 2.4);
-        c.beginPath(); c.arc(ex + r * 0.2, cy, r * 0.52, 0, TAU); c.fillStyle = INK; c.fill();
-        c.beginPath(); c.arc(ex - r * 0.2, cy - r * 0.25, r * 0.24, 0, TAU); c.fillStyle = '#ffffff'; c.fill();
-      }
-      if (angry) {
-        c.beginPath(); c.moveTo(ex - r * 1.1, cy - r * (s < 0 ? 1.25 : 0.75));
-        c.lineTo(ex + r * 1.1, cy - r * (s < 0 ? 0.75 : 1.25));
-        c.lineWidth = 3.2; c.strokeStyle = INK; c.stroke();
-      }
-    }
-  }
-
-  function getWorldBg(worldIdx) {
-    var wi = Kit.clamp(worldIdx | 0, 0, 3);
-    return A.bake(BG_KEYS[wi], W, H, function (c) {
-      var palettes = [
-        { top: '#2b6a3e', floorA: '#5fd368', floorB: '#4ec259', rim: '#c97a3d', trim: '#ffd23f' },
-        { top: '#59331d', floorA: '#e7a955', floorB: '#dc9b45', rim: '#8f4726', trim: '#ff9f1c' },
-        { top: '#1d4d73', floorA: '#b8ecff', floorB: '#9ce0fb', rim: '#38bdf8', trim: '#e0f7ff' },
-        { top: '#1f1b3d', floorA: '#334155', floorB: '#293548', rim: '#7c3aed', trim: '#00e5ff' }
-      ];
-      var pal = palettes[wi];
-      c.fillStyle = pal.top; c.fillRect(0, 0, W, H);
-      A.round(c, E.AX0 - 14, E.AY0 - 14, (E.AX1 - E.AX0) + 28, (E.AY1 - E.AY0) + 28, 28);
-      A.outlined(c, pal.rim, 5);
-
-      c.save();
-      A.round(c, E.AX0, E.AY0, E.AX1 - E.AX0, E.AY1 - E.AY0, 18); c.clip();
-      c.fillStyle = pal.floorA; c.fillRect(E.AX0, E.AY0, E.AX1 - E.AX0, E.AY1 - E.AY0);
-      c.fillStyle = pal.floorB;
-      for (var gy = E.AY0; gy < E.AY1; gy += 64) {
-        for (var gx = E.AX0; gx < E.AX1; gx += 64) {
-          if ((((gx - E.AX0) >> 6) + ((gy - E.AY0) >> 6)) % 2 === 0) c.fillRect(gx, gy, 64, 64);
-        }
-      }
-      c.strokeStyle = wi === 3 ? 'rgba(0,229,255,0.16)' : 'rgba(255,255,255,0.22)'; c.lineWidth = 3;
-      for (var k = 0; k < 14; k++) {
-        var px = E.AX0 + 90 + ((k * 173) % (E.AX1 - E.AX0 - 180));
-        var py = E.AY0 + 60 + ((k * 137) % (E.AY1 - E.AY0 - 120));
-        c.beginPath();
-        if (wi === 0) { c.arc(px - 4, py, 3, 0, TAU); c.moveTo(px + 7, py + 2); c.arc(px + 4, py + 2, 2.5, 0, TAU); }
-        else if (wi === 1) { c.moveTo(px - 12, py); c.lineTo(px, py - 6); c.lineTo(px + 11, py + 4); }
-        else if (wi === 2) { c.moveTo(px - 8, py); c.lineTo(px + 8, py); c.moveTo(px, py - 8); c.lineTo(px, py + 8); }
-        else c.arc(px, py, 5, 0, TAU);
-        c.stroke();
-      }
-      c.restore();
-
-      A.round(c, E.AX0, E.AY0, E.AX1 - E.AX0, E.AY1 - E.AY0, 18);
-      c.strokeStyle = INK; c.lineWidth = 4; c.stroke();
-      var posts = [[E.AX0 - 4, E.AY0 - 4], [E.AX1 + 4, E.AY0 - 4], [E.AX0 - 4, E.AY1 + 4], [E.AX1 + 4, E.AY1 + 4]];
-      for (var pi = 0; pi < posts.length; pi++) { c.beginPath(); c.arc(posts[pi][0], posts[pi][1], 11, 0, TAU); A.outlined(c, pal.trim, 3.5); }
-    });
-  }
-
-  function getHeroSprite(skinIdx, blink) {
-    var idx = Kit.clamp(skinIdx | 0, 0, 5), key = blink ? HERO_BLINK[idx] : HERO_OPEN[idx];
-    return A.sprite(key, 64, 64, function (c, w, h) {
-      var cx = w / 2, cy = h / 2, spec = idx === 5 ? { body: '#ff5964', trim: '#ffd23f', cape: '#38bdf8' } : E.SKINS[idx];
-      c.beginPath(); c.moveTo(cx - 8, cy - 12); c.lineTo(cx - 27, cy - 16); c.lineTo(cx - 23, cy); c.lineTo(cx - 28, cy + 16); c.lineTo(cx - 8, cy + 12); c.closePath();
-      A.outlined(c, spec.cape, 3.2);
-      if (idx === 2) {
-        for (var rs = -1; rs <= 1; rs++) {
-          c.beginPath(); c.moveTo(cx - 16, cy + rs * 9 - 4); c.lineTo(cx - 26, cy + rs * 9); c.lineTo(cx - 16, cy + rs * 9 + 4); c.closePath();
-          A.outlined(c, spec.trim, 2.5);
-        }
-      } else if (idx === 4) {
-        for (var fs = -1; fs <= 1; fs += 2) {
-          c.beginPath(); c.moveTo(cx - 4, cy + fs * 14); c.lineTo(cx - 12, cy + fs * 27); c.lineTo(cx + 8, cy + fs * 19); c.closePath();
-          A.outlined(c, spec.trim, 3);
-        }
-      }
-      c.beginPath(); c.arc(cx + 2, cy, 20, 0, TAU); A.outlined(c, spec.body, 4);
-      if (idx === 1) { A.round(c, cx - 10, cy - 18, 16, 36, 6); A.outlined(c, spec.trim, 2.8); }
-      else if (idx === 3) { c.beginPath(); c.arc(cx + 6, cy, 14, 0, TAU); A.outlined(c, spec.trim, 2.8); }
-      else { c.beginPath(); c.arc(cx - 2, cy, 19, 1.8, 4.48); c.lineWidth = 5; c.strokeStyle = spec.trim; c.stroke(); }
-      drawEyes(c, cx + 8, cy, 7.5, 5.2, blink, idx === 1 || idx === 2);
-      c.beginPath(); c.ellipse(cx - 4, cy - 9, 6, 3.5, -0.4, 0, TAU); c.fillStyle = 'rgba(255,255,255,0.55)'; c.fill();
-    }, { pad: 6 });
-  }
-
-  function getEggSprite(kind) {
-    var key = EGG_KEYS[kind] || EGG_KEYS.normal;
-    return A.sprite(key, 44, 50, function (c, w, h) {
-      var cx = w / 2, cy = h / 2 + 2;
-      var fill = kind === 'gold' ? '#ffd23f' : kind === 'dino' ? '#4ade80' : kind === 'cyber' ? '#38bdf8' : '#fff7e6';
-      var spot = kind === 'gold' ? '#fff4b8' : kind === 'dino' ? '#f43f5e' : kind === 'cyber' ? '#e879f9' : '#fbbf24';
-      c.beginPath(); c.moveTo(cx, cy - 20);
-      c.bezierCurveTo(cx + 18, cy - 18, cx + 19, cy + 17, cx, cy + 18);
-      c.bezierCurveTo(cx - 19, cy + 17, cx - 18, cy - 18, cx, cy - 20);
-      c.closePath(); A.outlined(c, fill, 3.6);
-      c.fillStyle = spot;
-      if (kind === 'cyber') {
-        c.strokeStyle = spot; c.lineWidth = 3;
-        c.beginPath(); c.moveTo(cx - 11, cy + 2); c.lineTo(cx, cy - 5); c.lineTo(cx + 11, cy + 2); c.stroke();
-      } else {
-        c.beginPath(); c.arc(cx - 5, cy + 3, 4, 0, TAU); c.fill();
-        c.beginPath(); c.arc(cx + 6, cy - 3, 3.2, 0, TAU); c.fill();
-        if (kind === 'dino') { c.beginPath(); c.arc(cx + 2, cy + 9, 3, 0, TAU); c.fill(); }
-      }
-      c.beginPath(); c.ellipse(cx - 5, cy - 8, 3.8, 6.5, 0.25, 0, TAU); c.fillStyle = 'rgba(255,255,255,0.75)'; c.fill();
-    }, { pad: 4 });
-  }
-
-  function getBabySprite(kind) {
-    var key = BABY_KEYS[kind] || BABY_KEYS.chick;
-    return A.sprite(key, 34, 34, function (c, w, h) {
-      var cx = w / 2, cy = h / 2 + 2, col = kind === 'raptor' ? '#4ade80' : kind === 'mecha' ? '#38bdf8' : '#ffe14d';
-      c.beginPath(); c.arc(cx, cy, 11, 0, TAU); A.outlined(c, col, 3);
-      c.fillStyle = INK; c.beginPath(); c.arc(cx - 4, cy - 2, 2.2, 0, TAU); c.arc(cx + 4, cy - 2, 2.2, 0, TAU); c.fill();
-      c.beginPath(); c.moveTo(cx - 3, cy + 2); c.lineTo(cx + 3, cy + 2); c.lineTo(cx, cy + 7); c.closePath();
-      c.fillStyle = '#ff9f1c'; c.fill();
-    }, { pad: 4 });
-  }
-
-  function getGuardSprite(type) {
-    var key = GUARD_KEYS[type] || GUARD_KEYS.rooster, sz = type === 'trex' ? 80 : 66;
-    return A.sprite(key, sz, sz, function (c, w, h) {
-      var cx = w / 2, cy = h / 2;
-      if (type === 'rooster') {
-        c.beginPath(); c.moveTo(cx - 8, cy - 12); c.lineTo(cx - 18, cy); c.lineTo(cx - 8, cy + 12); c.closePath(); A.outlined(c, '#ef4444', 3);
-        c.beginPath(); c.moveTo(cx + 16, cy - 7); c.lineTo(cx + 29, cy); c.lineTo(cx + 16, cy + 7); c.closePath(); A.outlined(c, '#fbbf24', 3);
-        c.beginPath(); c.arc(cx, cy, 21, 0, TAU); A.outlined(c, '#f8fafc', 4);
-        c.beginPath(); c.arc(cx - 2, cy, 8, 0, TAU); A.outlined(c, '#ef4444', 2.5);
-        drawEyes(c, cx + 8, cy, 8, 5, false, true);
-      } else if (type === 'dog') {
-        for (var ds = -1; ds <= 1; ds += 2) { A.round(c, cx - 10, cy + ds * 18 - 5, 14, 10, 4); A.outlined(c, '#475569', 3); }
-        c.beginPath(); c.arc(cx, cy, 22, 0, TAU); A.outlined(c, '#94a3b8', 4);
-        A.round(c, cx + 6, cy - 11, 16, 22, 7); A.outlined(c, '#cbd5e1', 3);
-        drawEyes(c, cx + 6, cy, 8, 5, false, true);
-      } else if (type === 'trex') {
-        c.beginPath(); c.moveTo(cx - 14, cy - 10); c.lineTo(cx - 34, cy); c.lineTo(cx - 14, cy + 10); c.closePath(); A.outlined(c, '#16a34a', 3.5);
-        c.beginPath(); c.arc(cx, cy, 27, 0, TAU); A.outlined(c, '#22c55e', 4.5);
-        A.round(c, cx + 6, cy - 16, 24, 32, 10); A.outlined(c, '#4ade80', 3.5);
-        for (var ts = -1; ts <= 1; ts++) { c.beginPath(); c.arc(cx - 10, cy + ts * 9, 4.5, 0, TAU); A.outlined(c, '#ff9f1c', 2.2); }
-        drawEyes(c, cx + 8, cy, 10, 5.8, false, true);
-      } else if (type === 'yeti') {
-        for (var ys = -1; ys <= 1; ys += 2) {
-          c.beginPath(); c.moveTo(cx - 2, cy + ys * 18); c.lineTo(cx + 10, cy + ys * 30); c.lineTo(cx + 14, cy + ys * 16); c.closePath();
-          A.outlined(c, '#38bdf8', 3);
-        }
-        c.beginPath(); c.arc(cx, cy, 24, 0, TAU); A.outlined(c, '#f1f5f9', 4);
-        c.beginPath(); c.arc(cx + 4, cy, 15, 0, TAU); c.fillStyle = '#bae6fd'; c.fill();
-        drawEyes(c, cx + 7, cy, 8.5, 5.2, false, true);
-      } else {
-        for (var ri = 0; ri < 3; ri++) {
-          var ra = ri * (TAU / 3);
-          c.beginPath(); c.arc(cx + Math.cos(ra) * 20, cy + Math.sin(ra) * 20, 8, 0, TAU); A.outlined(c, '#334155', 3);
-        }
-        c.beginPath(); c.arc(cx, cy, 18, 0, TAU); A.outlined(c, '#7c3aed', 3.8);
-        c.beginPath(); c.arc(cx + 6, cy, 8, 0, TAU); A.outlined(c, '#ff3b5c', 2.8);
-        c.beginPath(); c.arc(cx + 8, cy - 2, 2.8, 0, TAU); c.fillStyle = '#fff'; c.fill();
-      }
-    }, { pad: 6 });
-  }
-
-  function getPodSprite(kind) {
-    var key = POD_KEYS[kind] || POD_KEYS.hay;
-    return A.sprite(key, 92, 92, function (c, w, h) {
-      var cx = w / 2, cy = h / 2;
-      if (kind === 'hay') { A.blob(c, cx, cy, 36, 0.08, 0.4); A.outlined(c, '#f59e0b', 4); A.blob(c, cx, cy - 3, 25, 0.08, 1.4); c.fillStyle = '#fbbf24'; c.fill(); }
-      else if (kind === 'fern') { A.blob(c, cx, cy, 37, 0.14, 0.2); A.outlined(c, '#15803d', 4); A.blob(c, cx, cy, 24, 0.12, 1.8); c.fillStyle = '#22c55e'; c.fill(); }
-      else if (kind === 'igloo') { c.beginPath(); c.arc(cx, cy + 2, 35, 0, TAU); A.outlined(c, '#e0f2fe', 4); A.round(c, cx - 14, cy + 6, 28, 22, 8); A.outlined(c, '#38bdf8', 3); }
-      else { c.beginPath(); c.arc(cx, cy, 36, 0, TAU); A.outlined(c, 'rgba(168,85,247,0.55)', 4); c.beginPath(); c.arc(cx, cy, 22, 0, TAU); c.strokeStyle = '#00e5ff'; c.lineWidth = 3; c.stroke(); }
-    }, { pad: 4 });
-  }
-
-  function getDuckSprite() {
-    return A.sprite('decoy_duck', 46, 46, function (c, w, h) {
-      var cx = w / 2, cy = h / 2 + 2;
-      c.beginPath(); c.ellipse(cx - 2, cy + 4, 15, 11, 0, 0, TAU); A.outlined(c, '#ffe135', 3.4);
-      c.beginPath(); c.arc(cx + 7, cy - 7, 9.5, 0, TAU); A.outlined(c, '#ffe135', 3.4);
-      c.beginPath(); c.moveTo(cx + 14, cy - 9); c.lineTo(cx + 22, cy - 6); c.lineTo(cx + 14, cy - 3); c.closePath(); A.outlined(c, '#ff7b00', 2.6);
-      c.beginPath(); c.arc(cx + 9, cy - 9, 2.3, 0, TAU); c.fillStyle = INK; c.fill();
-    }, { pad: 4 });
-  }
-
-  function getSpringSprite() {
-    return A.sprite('pad_spring', 68, 68, function (c, w, h) {
-      var cx = w / 2, cy = h / 2;
-      c.beginPath(); c.arc(cx, cy, 28, 0, TAU); A.outlined(c, '#ef4444', 4);
-      c.beginPath(); c.arc(cx, cy, 18, 0, TAU); A.outlined(c, '#ffd23f', 3.2);
-      c.beginPath(); c.moveTo(cx - 7, cy - 8); c.lineTo(cx + 9, cy); c.lineTo(cx - 7, cy + 8); c.closePath(); c.fillStyle = INK; c.fill();
-    }, { pad: 4 });
-  }
-
-  function getPickupSprite(kind) {
-    return A.sprite(kind === 'shield' ? 'pk_shield' : 'pk_feather', 48, 48, function (c, w, h) {
-      var cx = w / 2, cy = h / 2;
-      if (kind === 'shield') {
-        c.beginPath(); c.arc(cx, cy, 18, 0, TAU); A.outlined(c, '#38bdf8', 3.5);
-        c.beginPath(); c.arc(cx - 5, cy - 5, 5, 0, TAU); c.fillStyle = 'rgba(255,255,255,0.75)'; c.fill();
-      } else {
-        c.beginPath(); c.moveTo(cx - 14, cy + 12); c.quadraticCurveTo(cx - 6, cy - 16, cx + 15, cy - 14);
-        c.quadraticCurveTo(cx + 8, cy + 8, cx - 14, cy + 12); c.closePath(); A.outlined(c, '#ffd23f', 3.5);
-      }
-    }, { pad: 4 });
-  }
-
-  /* ------------------------------ Game State & Controls */
-  var screen = 'title', curMode = 'solo', curDiff = save.diff || 'normal';
-  var curWorld = save.world || 0, curStage = save.stage || 0;
-  var world = null, intro = false, tries = 0;
-  var previewWorld = E.createWorld({ mode: 'solo', diff: curDiff, world: curWorld, stage: E.stageIndexOf(curWorld, curStage), skin: save.skin });
-  var mouseSteer = { active: false, x: 0, y: 0, startX: -999, startY: -999, dashQueued: false };
-  var p1DashQueued = false, p2DashQueued = false;
-
-  function resetInputs() { mouseSteer.active = false; mouseSteer.dashQueued = false; p1DashQueued = false; p2DashQueued = false; }
-  function formatClock(sec) { var s = Math.max(0, Math.ceil(sec)), m = (s / 60) | 0, r = s % 60; return m + ':' + (r < 10 ? '0' : '') + r; }
-  function totalStars() { var sum = 0; for (var i = 0; i < save.stars.length; i++) sum += save.stars[i] || 0; return sum; }
-
-  function setScreen(next) {
-    screen = next;
-    $('hud').hidden = next !== 'play';
-    $('scrTitle').hidden = next !== 'title';
-    $('scrShop').hidden = next !== 'shop';
-    $('scrPause').hidden = next !== 'pause';
-    $('scrResult').hidden = next !== 'result';
-    if (next !== 'play') $('introCard').hidden = true;
+  function setScreen(name) {
+    screen = name;
+    for (var k in SCREENS) $(SCREENS[k]).hidden = k !== name;
+    $('hud').hidden = name !== 'play' && name !== 'pause';
     dirty = true;
+    if (name === 'play') focusGame();
   }
+  function focusGame() { try { canvas.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }
+  function say(t) { $('live').textContent = t; }
+  function on(el, fn) { el.addEventListener('click', function (e) { fn(e); if (e.detail > 0) el.blur(); }); }
+  function setText(el, t) { if (el.textContent !== t) el.textContent = t; }
 
-  function dismissIntro() {
-    if (!intro) return;
-    intro = false; $('introCard').hidden = true;
-    if (!save.coached) { save.coached = true; persistSave(); }
-    Kit.stats.tutorial('done'); dirty = true;
+  /* --------------------------------------------------------- demo scene */
+  // Behind the menus: the runners wait at the start line of the next track, egg wobbling.
+  function showDemo(i) {
+    view.setTrack(i);
+    demo = ER.create(i, { humans: save.duo ? 2 : 1, skins: [preview.r, 2] });
+    view.setRunners(runnerList(demo, true));
   }
-
-  function startRound(opts) {
-    opts = opts || {};
-    var isRestart = !!opts.restart, stgIdx = E.stageIndexOf(curWorld, curStage);
-    world = E.createWorld({
-      mode: curMode, diff: curDiff, world: curWorld, stage: stgIdx,
-      skin: save.skin, dda: dda.level, seed: ((Date.now() & 0xffff) ^ (stgIdx * 131 + tries * 17)) >>> 0
+  function runnerList(r, menu) {
+    return r.runners.map(function (q, i) {
+      if (i === 0) return { skin: menu ? preview.r : save.runner, egg: menu ? preview.e : save.egg, tone: 0 };
+      if (q.human) return { skin: 2, egg: 1, tone: 1 };
+      return { skin: q.skin, egg: [1, 2, 3][i % 3], tone: (i + 1) % 4 };
     });
-    tries++; resetInputs();
-    var roundKey = world.id + '_' + curMode;
-    Kit.stats.round(roundKey);
-
-    if (!isRestart && !save.coached && curMode === 'solo') {
-      intro = true; $('introCard').hidden = false; Kit.stats.tutorial('start');
-    } else {
-      if (intro) Kit.stats.tutorial('done');
-      intro = false; $('introCard').hidden = true;
-      if (!save.coached) { save.coached = true; persistSave(); }
-    }
-    setScreen('play'); updateHud();
-    try { canvas.focus(); } catch (e) { /* ignore */ }
   }
 
-  function pauseGame() { if (screen !== 'play') return; resetInputs(); setScreen('pause'); }
-  function resumeGame() {
-    if (screen !== 'pause') return;
-    resetInputs(); setScreen('play'); $('introCard').hidden = !intro;
-    try { canvas.focus(); } catch (e) { /* ignore */ }
+  /* ------------------------------------------------------------ menus */
+  function refreshChips() {
+    var st = ER.totalStars(save) + '/27';
+    setText($('titleStars'), st); setText($('mapStars'), st);
+    setText($('titleEggs'), String(save.eggs)); setText($('mapEggs'), String(save.eggs)); setText($('skinEggs'), String(save.eggs));
+    $('btnDuo').setAttribute('aria-pressed', String(save.duo));
+    $('keysSolo').hidden = save.duo; $('keysDuo').hidden = !save.duo;
   }
-  function showTitle() {
-    if (screen === 'play' || screen === 'pause') Kit.stats.end('quit', world ? world.score : 0);
-    intro = false; resetInputs();
-    previewWorld = E.createWorld({ mode: 'solo', diff: curDiff, world: curWorld, stage: E.stageIndexOf(curWorld, curStage), skin: save.skin });
-    renderTitleUI(); setScreen('title');
+  function toTitle() {
+    leaveRace();
+    preview.r = save.runner; preview.e = save.egg;
+    showDemo(ER.nextTrack(save));
+    refreshChips();
+    setScreen('title');
   }
-  function openShop() { renderShopUI(); setScreen('shop'); }
-
-  function handleRoundEnd() {
-    if (!world) return;
-    var stgIdx = E.stageIndexOf(curWorld, curStage);
-    if (curMode !== 'vs') dda.result(world.won ? (world.stars >= 3 ? 1 : world.stars === 2 ? 0.8 : 0.62) : 0);
-    if (world.won && curMode !== 'vs') {
-      if (world.stars > (save.stars[stgIdx] || 0)) save.stars[stgIdx] = world.stars;
-      if (world.score > (save.best[stgIdx] || 0)) save.best[stgIdx] = world.score;
-    }
-    if (world.coinsEarned > 0) save.coins = Math.min(999999, save.coins + world.coinsEarned);
-    persistSave();
-    Kit.stats.end(world.won ? 'win' : 'lose', world.score);
-
-    if (world.won) {
-      sfx('levelUp'); if (world.stars >= 1) sfx('star', world.stars);
-      $('resBadge').textContent = curMode === 'vs' ? 'نهاية السباق الثنائي' : world.title;
-      $('resTitle').textContent = curMode === 'vs' ? ('فاز اللاعب ' + (world.winner + 1) + '!') : (world.stars === 3 ? 'فقس أسطوري خارق!' : 'انتصار رائع!');
-      var stStr = '';
-      for (var i = 0; i < 3; i++) stStr += (i < world.stars ? '★' : '☆') + (i < 2 ? ' ' : '');
-      $('resStars').textContent = stStr;
-    } else {
-      sfx('fail');
-      $('resBadge').textContent = world.title;
-      $('resTitle').textContent = 'انتهى الوقت — حاول مجدداً!';
-      $('resStars').textContent = '☆ ☆ ☆';
-    }
-    if (curMode === 'vs') {
-      $('resStats').textContent = 'لاعب 1: ' + world.players[0].hatched + ' بيضات · لاعب 2: ' + world.players[1].hatched + ' بيضات · العملات المكتسبة: +' + world.coinsEarned;
-      $('btnNext').hidden = true;
-    } else {
-      $('resStats').textContent = 'فقست ' + world.hatched + ' من ' + world.goal + ' · أطول سلسلة: ' + world.bestChain + '× · النقاط: ' + Kit.fmt(world.score) + ' · العملات: +' + world.coinsEarned;
-      $('btnNext').hidden = !world.won;
-    }
-    setScreen('result');
-  }
-
-  function processEvents(w) {
-    for (var i = 0; i < w.events.length; i++) {
-      var ev = w.events[i];
-      if (ev.type === 'pickup') {
-        sfx('coin', Math.min(5, ev.chain)); sfx('pop', 0.45);
-        if (pSprings[ev.pid]) pSprings[ev.pid].kick(0.32);
-        fx.burst(ev.x, ev.y, { n: 8, color: '#ffd23f', shape: 'star', speed: 150, life: 0.45, size: 8 });
-        if (ev.chain >= 2) A.pop('سلسلة ' + ev.chain + '×!', ev.x, ev.y - 24, { color: '#fde047', size: 24 });
-      } else if (ev.type === 'dash') {
-        sfx('whoosh', 0.85);
-        if (ev.decoy) { sfx('pop', 0.8); A.pop('كواك!', ev.x, ev.y - 20, { color: '#ffe135', size: 22 }); }
-        if (pSprings[ev.pid]) pSprings[ev.pid].kick(-0.38);
-        fx.burst(ev.x, ev.y, { n: 7, color: '#38bdf8', shape: 'spark', speed: 170, life: 0.35, size: 7 });
-      } else if (ev.type === 'distract') sfx('jump', 0.35);
-      else if (ev.type === 'spring') {
-        sfx('jump', 0.9); if (pSprings[ev.pid]) pSprings[ev.pid].kick(0.45);
-        fx.burst(ev.x, ev.y, { n: 10, color: '#ffd23f', shape: 'spark', speed: 200, life: 0.4, size: 8 });
-        A.pop('بووم!', ev.x, ev.y - 24, { color: '#ffd23f', size: 24 });
-      } else if (ev.type === 'portal') {
-        sfx('chime', 1); fx.burst(ev.x, ev.y, { n: 14, color: '#00e5ff', shape: 'star', speed: 210, life: 0.5, size: 9 });
-      } else if (ev.type === 'switch') {
-        sfx('toggle', true); A.pop('فُتح الليزر!', ev.x, ev.y - 24, { color: '#3ddc84', size: 24 });
-      } else if (ev.type === 'powerup') {
-        sfx('chime', 2); fx.burst(ev.x, ev.y, { n: 12, color: ev.kind === 'shield' ? '#38bdf8' : '#ffd23f', shape: 'star', speed: 190, life: 0.5, size: 9 });
-        A.pop(ev.kind === 'shield' ? 'درع الفقاعة!' : 'ريشة التيربو!', ev.x, ev.y - 26, { color: '#7ef29d', size: 25 });
-      } else if (ev.type === 'hatch') {
-        for (var hi = 0; hi < ev.count; hi++) Kit.track.hit();
-        sfx('streak', Math.min(10, w.hatched));
-        if (ev.mega) { sfx('chime', 3); A.shake.add(0.32); A.flash('#ffd23f', 130); }
-        hatchSpring.kick(0.5);
-        fx.burst(ev.x, ev.y, { n: ev.mega ? 24 : 14, color: '#ffd23f', shape: 'star', speed: 240, life: 0.65, size: 11 });
-        A.pop(ev.mega ? 'فقس خارق ×' + ev.count + '! +' + ev.points : '+' + ev.points, ev.x, ev.y - 38, { color: '#ffd23f', size: ev.mega ? 30 : 25 });
-      } else if (ev.type === 'shieldPop') {
-        sfx('pop', 0.75); fx.burst(ev.x, ev.y, { n: 12, color: '#38bdf8', shape: 'spark', speed: 190, life: 0.45, size: 8 });
-        A.pop('حماك الدرع!', ev.x, ev.y - 28, { color: '#38bdf8', size: 25 });
-      } else if (ev.type === 'bonk') {
-        Kit.track.miss(); sfx('impact', 0.55); A.shake.add(0.24);
-        if (pSprings[ev.pid]) pSprings[ev.pid].kick(0.45);
-        fx.burst(ev.x, ev.y, { n: 10, color: '#ff5470', shape: 'star', speed: 180, life: 0.45, size: 9 });
-        A.pop('بونك!', ev.x, ev.y - 26, { color: '#ff8fa3', size: 27 });
+  var lvlButtons = [];
+  function buildMap() {
+    var box = $('worlds');
+    ER.WORLDS.forEach(function (wd, w) {
+      var col = document.createElement('div');
+      col.className = 'world w' + w;
+      col.innerHTML = '<h3>' + wd.name + '</h3>';
+      for (var l = 0; l < 3; l++) {
+        var i = w * 3 + l, b = document.createElement('button');
+        b.type = 'button'; b.className = 'er-btn lvl';
+        b.innerHTML = '<span class="num">' + (l + 1) + '</span><span class="info"><span class="st">' + '<svg><use href="#i-star"/></svg>'.repeat(3) +
+          '</span><span class="ge">' + '<svg><use href="#i-egg"/></svg>'.repeat(3) + '</span></span><svg class="lock" aria-hidden="true"><use href="#i-lock"/></svg>';
+        (function (idx, btn) { on(btn, function () { pick(idx); }); btn.addEventListener('mouseenter', function () { if (ER.isOpen(save, idx)) { J.hover(); } }); })(i, b);
+        col.appendChild(b);
+        lvlButtons.push(b);
       }
-    }
-    w.events.length = 0;
+      box.appendChild(col);
+    });
+  }
+  function refreshMap() {
+    var nx = ER.nextTrack(save);
+    lvlButtons.forEach(function (b, i) {
+      var open = ER.isOpen(save, i);
+      b.classList.toggle('locked', !open);
+      b.classList.toggle('next', open && i === nx);
+      b.querySelectorAll('.st svg').forEach(function (s, k) { s.classList.toggle('on', k < save.stars[i]); });
+      b.querySelectorAll('.ge svg').forEach(function (s, k) { s.classList.toggle('on', k < save.gold[i]); });
+      b.setAttribute('aria-label', ER.WORLDS[M.floor(i / 3)].name + ' ' + (i % 3 + 1) + (open ? '، ' + save.stars[i] + ' من 3 نجوم' : ' (مقفل)'));
+    });
+    refreshChips();
+  }
+  function toMap() {
+    leaveRace();
+    preview.r = save.runner; preview.e = save.egg;
+    if (!demo || race) showDemo(ER.nextTrack(save));
+    race = null;
+    refreshMap();
+    setScreen('map');
+  }
+  function pick(i) {
+    if (!ER.isOpen(save, i)) { J.error(); return; }
+    J.select();
+    startRace(i);
+  }
+  function play() {
+    J.select();
+    // A first visit goes straight into the first race.
+    if (!ER.totalStars(save)) startRace(0); else toMap();
+  }
+  function toggleDuo() {
+    save.duo = !save.duo; persist();
+    J.toggle(save.duo);
+    refreshChips();
+    showDemo(ER.nextTrack(save));
+    say(save.duo ? 'لاعبان' : 'لاعب واحد');
   }
 
-  /* ------------------------------ UI Rendering & Bindings */
-  function updateHud() {
-    if (!world) return;
-    $('hudEggs').textContent = curMode === 'vs'
-      ? ('🔵 \u2066' + world.players[0].hatched + ' / ' + world.goal + '\u2069 · 🔴 \u2066' + world.players[1].hatched + ' / ' + world.goal + '\u2069')
-      : ('🥚 \u2066' + world.hatched + ' / ' + world.goal + '\u2069');
-    var p0 = world.players[0], chEl = $('hudChain'), tmEl = $('hudTime');
-    chEl.textContent = (p0.shield > 0 ? '🫧' + p0.shield + ' · ' : '') + '⚡ تيربو \u2066' + E.chainSpeedMult(p0.carry.length).toFixed(2) + '×\u2069';
-    chEl.classList.toggle('hot', p0.carry.length >= 3 || p0.featherTimer > 0);
-    tmEl.textContent = '⏱️ \u2066' + formatClock(world.timeLeft) + '\u2069';
-    tmEl.classList.toggle('warn', world.timeLeft <= 15);
-    $('hudScore').textContent = '⭐ ' + Kit.fmt(world.score) + ' · 🪙 ' + (save.coins + world.coinsEarned);
+  /* ------------------------------------------------------------ skins */
+  function openSkins() { J.select(); preview.r = save.runner; preview.e = save.egg; preview.row = 0; refreshSkins(); setScreen('skins'); showDemo(ER.nextTrack(save)); }
+  function refreshSkins() {
+    [['pickRunner', ER.RUNNERS, preview.r, save.ownR], ['pickEgg', ER.EGGS, preview.e, save.ownE]].forEach(function (row, k) {
+      var el = $(row[0]), item = row[1][row[2]], owned = row[3].indexOf(row[2]) >= 0, buy = el.querySelector('.buy');
+      el.querySelector('.pname b').textContent = item.name;
+      el.classList.toggle('focus', preview.row === k);
+      buy.hidden = owned;
+      buy.querySelector('b').textContent = String(item.price);
+      buy.classList.toggle('cant', save.eggs < item.price);
+      buy.setAttribute('aria-label', 'اشترِ بـ ' + item.price + ' بيضة ذهبية');
+    });
+    refreshChips();
+    if (demo) view.setRunners(runnerList(demo, true));
   }
-
-  function renderTitleUI() {
-    $('titleStars').textContent = String(totalStars());
-    $('titleCoins').textContent = Kit.fmt(save.coins);
-    $('shopBtnCoins').textContent = Kit.fmt(save.coins);
-
-    var modeBtns = $('modeBar').querySelectorAll('button');
-    for (var m = 0; m < modeBtns.length; m++) modeBtns[m].classList.toggle('on', modeBtns[m].getAttribute('data-mode') === curMode);
-    $('howtoSolo').hidden = curMode !== 'solo';
-    $('howtoDuo').hidden = curMode === 'solo';
-
-    var diffBtns = $('diffBar').querySelectorAll('button');
-    for (var d = 0; d < diffBtns.length; d++) diffBtns[d].classList.toggle('on', diffBtns[d].getAttribute('data-diff') === curDiff);
-    $('diffDesc').textContent = E.DIFFS[curDiff].desc;
-
-    var grid = $('worldGrid'); grid.textContent = '';
-    for (var wi = 0; wi < E.WORLDS.length; wi++) {
-      (function (wIdx) {
-        var wInfo = E.WORLDS[wIdx], card = document.createElement('div');
-        card.className = 'er-wcard' + (curWorld === wIdx ? ' on' : '');
-        card.setAttribute('data-world', String(wIdx));
-        var head = document.createElement('div'); head.className = 'er-whead';
-        var nm = document.createElement('span'); nm.className = 'er-wname'; nm.textContent = wInfo.name;
-        var dot = document.createElement('span'); dot.className = 'er-wdot'; dot.style.background = wInfo.color;
-        head.appendChild(nm); head.appendChild(dot);
-        var sub = document.createElement('div'); sub.className = 'er-wsub'; sub.textContent = wInfo.sub;
-        var stRow = document.createElement('div'); stRow.className = 'er-stages';
-        for (var si = 0; si < 3; si++) {
-          (function (sIdx) {
-            var stCount = save.stars[E.stageIndexOf(wIdx, sIdx)] || 0;
-            var sb = document.createElement('button'); sb.type = 'button';
-            sb.className = 'er-stg-btn' + (curWorld === wIdx && curStage === sIdx ? ' on' : '');
-            sb.textContent = (sIdx + 1) + (stCount ? ' ★' + stCount : '');
-            sb.addEventListener('click', function (ev) {
-              ev.stopPropagation(); sfx('tap');
-              curWorld = wIdx; curStage = sIdx; save.world = curWorld; save.stage = curStage; persistSave();
-              previewWorld = E.createWorld({ mode: 'solo', diff: curDiff, world: curWorld, stage: E.stageIndexOf(curWorld, curStage), skin: save.skin });
-              renderTitleUI(); dirty = true;
-            });
-            stRow.appendChild(sb);
-          })(si);
-        }
-        card.addEventListener('click', function () {
-          sfx('tap'); curWorld = wIdx; save.world = curWorld; persistSave();
-          previewWorld = E.createWorld({ mode: 'solo', diff: curDiff, world: curWorld, stage: E.stageIndexOf(curWorld, curStage), skin: save.skin });
-          renderTitleUI(); dirty = true;
-        });
-        card.appendChild(head); card.appendChild(sub); card.appendChild(stRow); grid.appendChild(card);
-      })(wi);
-    }
+  function cycle(row, dir) {
+    preview.row = row;
+    if (row === 0) preview.r = (preview.r + dir + ER.RUNNERS.length) % ER.RUNNERS.length;
+    else preview.e = (preview.e + dir + ER.EGGS.length) % ER.EGGS.length;
+    // Browsing to something owned puts it on straight away.
+    if (row === 0 && save.ownR.indexOf(preview.r) >= 0) { save.runner = preview.r; persist(); }
+    if (row === 1 && save.ownE.indexOf(preview.e) >= 0) { save.egg = preview.e; persist(); }
+    J.tap();
+    refreshSkins();
   }
-
-  function renderShopUI() {
-    $('shopCoins').textContent = Kit.fmt(save.coins);
-    var grid = $('skinGrid'); grid.textContent = '';
-    for (var i = 0; i < E.SKINS.length; i++) {
-      (function (skin) {
-        var owned = save.skins.indexOf(skin.id) !== -1, eq = save.skin === skin.id;
-        var card = document.createElement('div'); card.className = 'er-skin-card' + (eq ? ' equipped' : '');
-        var sw = document.createElement('div'); sw.className = 'er-skin-swatch';
-        sw.style.background = 'radial-gradient(circle at 35% 30%, ' + skin.trim + ', ' + skin.body + ')';
-        var nm = document.createElement('div'); nm.className = 'er-skin-name'; nm.textContent = skin.name;
-        var ds = document.createElement('div'); ds.className = 'er-skin-desc'; ds.textContent = skin.desc;
-        var btn = document.createElement('button'); btn.type = 'button'; btn.setAttribute('data-skin', String(skin.id));
-        if (eq) { btn.className = 'er-skin-btn equipped'; btn.textContent = 'مُرتدى ✓'; }
-        else if (owned) { btn.className = 'er-skin-btn owned'; btn.textContent = 'ارتداء'; }
-        else { btn.className = 'er-skin-btn'; btn.textContent = 'شراء · 🪙 ' + skin.cost; if (save.coins < skin.cost) btn.disabled = true; }
-        btn.addEventListener('click', function () {
-          var res = E.buyOrEquipSkin(save, skin.id);
-          if (res.ok) {
-            sfx(res.action === 'buy' ? 'levelUp' : 'select');
-            persistSave(); renderShopUI(); renderTitleUI(); dirty = true;
-          } else sfx('error');
-        });
-        card.appendChild(sw); card.appendChild(nm); card.appendChild(ds); card.appendChild(btn); grid.appendChild(card);
-      })(E.SKINS[i]);
-    }
+  function buy(row) {
+    var list = row === 0 ? ER.RUNNERS : ER.EGGS, idx = row === 0 ? preview.r : preview.e, own = row === 0 ? save.ownR : save.ownE;
+    if (own.indexOf(idx) >= 0) return;
+    if (save.eggs < list[idx].price) { J.error(); return; }
+    save.eggs -= list[idx].price; own.push(idx);
+    if (row === 0) save.runner = idx; else save.egg = idx;
+    persist();
+    J.levelUp();
+    if (view && demo) view.burstAt(demo.runners[0], 'gold');
+    say('اشتريت ' + list[idx].name);
+    refreshSkins();
   }
+  function closeSkins() { J.back(); preview.r = save.runner; preview.e = save.egg; toTitle(); }
 
-  $('modeBar').addEventListener('click', function (e) {
-    var b = e.target.closest('button[data-mode]'); if (!b) return;
-    sfx('tap'); curMode = b.getAttribute('data-mode'); renderTitleUI();
-  });
-  $('diffBar').addEventListener('click', function (e) {
-    var b = e.target.closest('button[data-diff]'); if (!b) return;
-    sfx('tap'); curDiff = b.getAttribute('data-diff'); save.diff = curDiff; persistSave(); renderTitleUI();
-  });
-  $('btnPlay').addEventListener('click', function () { sfx('select'); startRound({ restart: false }); });
-  $('btnShop').addEventListener('click', function () { sfx('select'); openShop(); });
-  $('btnShopBack').addEventListener('click', function () { sfx('back'); renderTitleUI(); setScreen('title'); });
-  $('btnPause').addEventListener('click', function () { sfx('tap'); pauseGame(); });
-  $('btnResume').addEventListener('click', function () { sfx('select'); resumeGame(); });
-  $('btnRestart').addEventListener('click', function () { sfx('select'); startRound({ restart: true }); });
-  $('btnMenu').addEventListener('click', function () { sfx('back'); showTitle(); });
-  $('btnAgain').addEventListener('click', function () { sfx('select'); startRound({ restart: true }); });
-  $('btnNext').addEventListener('click', function () {
-    sfx('select');
-    var nextIdx = (E.stageIndexOf(curWorld, curStage) + 1) % E.STAGES.length;
-    curWorld = (nextIdx / 3) | 0; curStage = nextIdx % 3; save.world = curWorld; save.stage = curStage;
-    persistSave(); startRound({ restart: true });
-  });
-  $('btnResShop').addEventListener('click', function () { sfx('select'); openShop(); });
-  $('btnResMenu').addEventListener('click', function () { sfx('back'); showTitle(); });
-
-  /* Keyboard Input — strictly guarded by Kit.isGameKeyEvent(e)! */
-  var ALL_PLAY_KEYS = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'KeyA', 'KeyD', 'KeyW', 'KeyS', 'Space', 'Enter', 'NumpadEnter'];
-  window.addEventListener('keydown', function (e) {
-    if (!Kit.isGameKeyEvent(e)) return;
-    if (!e.repeat && (e.code === 'KeyP' || e.code === 'Escape')) {
-      if (screen === 'play') { sfx('tap'); pauseGame(); return; }
-      if (screen === 'pause') { sfx('select'); resumeGame(); return; }
-      if (screen === 'shop') { sfx('back'); renderTitleUI(); setScreen('title'); return; }
-    }
+  /* ------------------------------------------------------------ race */
+  function startRace(i) {
+    leaveRace();
+    cur = i;
+    var duo = save.duo, tune = duo ? ER.tuning(0.3) : ER.tuning(dda.level);
+    race = ER.create(i, { humans: duo ? 2 : 1, tune: tune, seed: (M.random() * 1e9) | 0, skins: [save.runner, 2] });
+    view.setTrack(i);
+    view.setRunners(runnerList(race, false));
+    view.snap();
+    demo = null; result = null; idle = 0; resultT = 0; reported = false;
+    hintsOn = !duo && (i < 2 || !save.coach);
+    Kit.stats.round((duo ? 'duo-' : '') + ER.trackId(i));
+    roundOpen = true;
+    if (!save.coach && i === 0 && !duo && !coachStarted) { coachStarted = true; Kit.stats.tutorial('start'); }
+    Kit.keys.reset();
+    buildHud();
+    setScreen('play');
+    say(ER.WORLDS[race.track.world].name + ' ' + (i % 3 + 1));
+  }
+  var reported = false;
+  function leaveRace() {
+    if (race && roundOpen) Kit.stats.end('quit');
+    roundOpen = false;
+    hidePops();
+  }
+  function pause() {
     if (screen !== 'play') return;
-    if (intro && ALL_PLAY_KEYS.indexOf(e.code) !== -1) dismissIntro();
-    if (!e.repeat) {
-      if (e.code === 'Space') p1DashQueued = true;
-      else if (e.code === 'Enter' || e.code === 'NumpadEnter') {
-        if (curMode === 'solo') p1DashQueued = true; else p2DashQueued = true;
+    J.back();
+    setScreen('pause');
+  }
+  function resume() { J.select(); Kit.keys.reset(); setScreen('play'); }
+  function restart() { J.select(); startRace(cur); }
+
+  /* ------------------------------------------------------------ input */
+  var K = Kit.keys;
+  function inputs() {
+    var a = [], duo = race.humans === 2;
+    if (!duo) {
+      a.push({
+        steer: (K.anyDown(['ArrowRight', 'KeyD']) ? 1 : 0) - (K.anyDown(['ArrowLeft', 'KeyA']) ? 1 : 0),
+        up: K.anyDown(['ArrowUp', 'KeyW']), down: K.anyDown(['ArrowDown', 'KeyS']),
+        jump: K.anyPressed(['Space', 'Enter', 'NumpadEnter'])
+      });
+    } else {
+      a.push({ steer: (K.down('KeyD') ? 1 : 0) - (K.down('KeyA') ? 1 : 0), up: K.down('KeyW'), down: K.down('KeyS'), jump: K.anyPressed(['Space', 'KeyF', 'KeyG']) });
+      a.push({ steer: (K.down('ArrowRight') ? 1 : 0) - (K.down('ArrowLeft') ? 1 : 0), up: K.down('ArrowUp'), down: K.down('ArrowDown'),
+        jump: K.anyPressed(['Enter', 'NumpadEnter', 'Slash', 'Numpad0', 'ShiftRight', 'Period']) });
+    }
+    return a;
+  }
+  var lastInput = [null, null];
+  function handleKeys() {
+    var go = K.anyPressed(['Enter', 'NumpadEnter', 'Space']);
+    if (screen === 'title') {
+      if (go) play();
+      else if (K.pressed('KeyT')) toggleDuo();
+    } else if (screen === 'map') {
+      if (go) { var n = ER.nextTrack(save); pick(n); }
+      else if (K.pressed('Escape')) { J.back(); toTitle(); }
+    } else if (screen === 'skins') {
+      if (K.pressed('Escape')) closeSkins();
+      else if (K.anyPressed(['ArrowUp', 'ArrowDown', 'KeyW', 'KeyS'])) { preview.row = 1 - preview.row; J.tap(); refreshSkins(); }
+      else if (K.anyPressed(['ArrowLeft', 'KeyA'])) cycle(preview.row, -1);
+      else if (K.anyPressed(['ArrowRight', 'KeyD'])) cycle(preview.row, 1);
+      else if (go) {
+        var own = preview.row === 0 ? save.ownR.indexOf(preview.r) >= 0 : save.ownE.indexOf(preview.e) >= 0;
+        if (own) closeSkins(); else buy(preview.row);
       }
+    } else if (screen === 'play') {
+      if (K.anyPressed(['Escape', 'KeyP'])) pause();
+    } else if (screen === 'pause') {
+      if (K.anyPressed(['Escape', 'KeyP', 'Enter', 'NumpadEnter', 'Space'])) resume();
+      else if (K.pressed('KeyR')) restart();
+    } else if (screen === 'result' && lock <= 0) {
+      if (go) next();
+      else if (K.pressed('KeyR')) again();
+      else if (K.pressed('Escape')) { J.back(); toMap(); }
     }
-  });
+  }
 
-  window.addEventListener('pointerdown', function (e) {
-    if (screen !== 'play' || e.button !== 0) return;
-    if (e.target && e.target.closest && e.target.closest('button')) return;
-    var pt = view.toLogical(e.clientX, e.clientY);
-    if (intro) dismissIntro();
-    if (curMode === 'solo') {
-      mouseSteer.active = true; mouseSteer.x = pt.x; mouseSteer.y = pt.y;
-      mouseSteer.startX = pt.x; mouseSteer.startY = pt.y; mouseSteer.dashQueued = true;
+  /* ------------------------------------------------------------ HUD */
+  var dots = [], ticks = [], pops = [];
+  function buildHud() {
+    var duo = race.humans === 2, dotBox = $('dots'), tickBox = $('ticks');
+    dotBox.innerHTML = ''; tickBox.innerHTML = ''; dots = [];
+    race.track.cps.slice(1).forEach(function (s) { var t = document.createElement('i'); t.style.left = (480 * (1 - s / race.track.len)) + 'px'; tickBox.appendChild(t); });
+    // CPU dots first so the players' sit on top.
+    for (var k = race.runners.length - 1; k >= 0; k--) {
+      var q = race.runners[k], d = document.createElement('i');
+      d.className = q.human ? 'me' : 'cpu';
+      d.style.background = q.human ? DOT[q.i] : ER.RUNNERS[q.skin].shirt;
+      if (q.human) d.textContent = duo ? String(q.i + 1) : '';
+      dotBox.appendChild(d);
+      dots[k] = d;
     }
-  });
-  window.addEventListener('pointermove', function (e) {
-    if (screen !== 'play' || curMode !== 'solo' || intro) return;
-    var pt = view.toLogical(e.clientX, e.clientY);
-    if (mouseSteer.startX < -900) { mouseSteer.startX = pt.x; mouseSteer.startY = pt.y; return; }
-    if (!mouseSteer.active && Math.hypot(pt.x - mouseSteer.startX, pt.y - mouseSteer.startY) > 16) mouseSteer.active = true;
-    if (mouseSteer.active) { mouseSteer.x = pt.x; mouseSteer.y = pt.y; }
-  });
-
-  function gatherInputs() {
-    if (intro && Kit.keys.anyDown(ALL_PLAY_KEYS)) dismissIntro();
-    var p1x = 0, p1y = 0, p2x = 0, p2y = 0;
-    if (curMode === 'solo') {
-      if (Kit.keys.anyDown(['ArrowLeft', 'KeyA'])) p1x -= 1;
-      if (Kit.keys.anyDown(['ArrowRight', 'KeyD'])) p1x += 1;
-      if (Kit.keys.anyDown(['ArrowUp', 'KeyW'])) p1y -= 1;
-      if (Kit.keys.anyDown(['ArrowDown', 'KeyS'])) p1y += 1;
-      if (p1x || p1y) mouseSteer.active = false;
-      else if (mouseSteer.active && world && world.players[0]) {
-        var dx = mouseSteer.x - world.players[0].x, dy = mouseSteer.y - world.players[0].y, d = Math.hypot(dx, dy);
-        if (d > 14) { p1x = dx / d; p1y = dy / d; }
+    $('place1').hidden = !duo; $('meter1').hidden = !duo; $('tag0').hidden = !duo; $('tag1').hidden = !duo; $('splitline').hidden = !duo;
+    $('meter0').classList.toggle('duo', duo);
+    $('hud').classList.toggle('duo', duo);
+    $('place0').classList.toggle('duo', duo);
+    $('count').hidden = true;
+    $('hint0').hidden = true; $('hint1').hidden = true;
+    hudCache = {};
+  }
+  var hudCache = {};
+  function fmt(t) { var s = M.floor(t); return M.floor(s / 60) + ':' + (s % 60 < 10 ? '0' : '') + (s % 60); }
+  function drawHud() {
+    if (!race) return;
+    var tr = race.track, n = race.runners.length;
+    for (var k = 0; k < n; k++) {
+      var q = race.runners[k];
+      dots[k].style.transform = 'translateX(' + (480 * (1 - ER.progress(race, q))).toFixed(1) + 'px)';
+    }
+    for (var h = 0; h < race.humans; h++) {
+      var r = race.runners[h], pl = $('place' + h);
+      if (hudCache['p' + h] !== r.rank) {
+        var bump = hudCache['p' + h] && r.rank < hudCache['p' + h];
+        hudCache['p' + h] = r.rank;
+        pl.querySelector('b').textContent = String(r.rank);
+        pl.querySelector('small').textContent = '/' + n;
+        pl.className = 'place p' + h + ' r' + r.rank + (race.humans === 2 && h === 0 ? ' duo' : '');
+        if (bump && !calm()) { pl.classList.add('bump'); setTimeout(function (el) { el.classList.remove('bump'); }, 220, pl); }
       }
-      var dash1 = p1DashQueued || mouseSteer.dashQueued || Kit.keys.pressed('Space');
-      p1DashQueued = false; mouseSteer.dashQueued = false;
-      return [{ x: p1x, y: p1y, dash: dash1 }];
+      var m = $('meter' + h), e = r.state === 'splat' ? (r.e > 0 ? 1.1 : -1.1) : ER.clamp(r.e, -1.1, 1.1);
+      m.querySelector('.needle').style.transform = 'rotate(' + (e * 62).toFixed(1) + 'deg)';
+      var warn = M.abs(r.e) > 0.65 && r.state === 'run';
+      if (hudCache['w' + h] !== warn) { hudCache['w' + h] = warn; m.classList.toggle('warn', warn); }
+      // Light the key that brings the egg back (run under it).
+      var kl = hintsOn && r.state === 'run' && r.e < -0.45, kr = hintsOn && r.state === 'run' && r.e > 0.45;
+      if (hudCache['kl' + h] !== kl) { hudCache['kl' + h] = kl; m.querySelector('.kc.l').classList.toggle('on', kl); }
+      if (hudCache['kr' + h] !== kr) { hudCache['kr' + h] = kr; m.querySelector('.kc.r').classList.toggle('on', kr); }
     }
-    if (Kit.keys.down('KeyA')) p1x -= 1;
-    if (Kit.keys.down('KeyD')) p1x += 1;
-    if (Kit.keys.down('KeyW')) p1y -= 1;
-    if (Kit.keys.down('KeyS')) p1y += 1;
-    if (Kit.keys.down('ArrowLeft')) p2x -= 1;
-    if (Kit.keys.down('ArrowRight')) p2x += 1;
-    if (Kit.keys.down('ArrowUp')) p2y -= 1;
-    if (Kit.keys.down('ArrowDown')) p2y += 1;
-    var d1 = p1DashQueued || Kit.keys.pressed('Space');
-    var d2 = p2DashQueued || Kit.keys.pressed('Enter') || Kit.keys.pressed('NumpadEnter');
-    p1DashQueued = false; p2DashQueued = false;
-    return [{ x: p1x, y: p1y, dash: d1 }, { x: p2x, y: p2y, dash: d2 }];
+    var gold = race.runners[0].gold + (race.humans === 2 ? race.runners[1].gold : 0);
+    setText($('hudGold'), String(gold));
+    setText($('hudTime'), fmt(race.t));
+    hints();
+    placePops();
   }
-
-  /* ------------------------------ Canvas Arena Drawing */
-  function drawWall(c, w) {
-    A.shadow(c, w.x, w.y, w.w, w.h, 0.42);
-    var fill = w.kind === 'barn' ? '#e8473f' : w.kind === 'crate' ? '#d97706' : w.kind === 'rock' ? '#92400e' : w.kind === 'ice' ? '#38bdf8' : '#475569';
-    A.round(c, w.x, w.y, w.w, w.h, 16); A.outlined(c, fill, 4);
-    A.round(c, w.x + 8, w.y + 7, w.w - 16, Math.max(16, w.h - 22), 10);
-    c.fillStyle = A.shade(fill, 0.25); c.fill();
+  // Countdown numbers.
+  function showCount(n) {
+    var el = $('count');
+    el.hidden = false;
+    el.className = 'count' + (n === 0 ? ' go' : '');
+    el.textContent = n === 0 ? 'انطلق!' : String(n);
+    void el.offsetWidth; // restart the animation
+    clearTimeout(showCount.t);
+    if (n === 0) showCount.t = setTimeout(function () { el.hidden = true; }, 800);
   }
-
-  function drawHatcher(c, home, pid, isVs, count) {
-    var col = pid === 1 ? '#ff5964' : (isVs ? '#2b8cff' : '#3ddc84');
-    A.blit(c, A.glow(col, 62), home.x, home.y, { alpha: 0.45 });
-    c.save(); c.translate(home.x, home.y); c.scale(hatchSpring.sx, hatchSpring.sy);
-    c.beginPath(); c.arc(0, 0, home.r, 0, TAU); A.outlined(c, 'rgba(255,255,255,0.28)', 4);
-    c.beginPath(); c.arc(0, 0, home.r - 12, 0, TAU); c.strokeStyle = col; c.lineWidth = 5; c.setLineDash([12, 8]); c.stroke(); c.setLineDash([]);
-    c.beginPath(); c.arc(0, 0, 24, 0, TAU); A.outlined(c, col, 3.5);
-    c.font = '700 16px Fredoka'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = INK;
-    c.fillText(isVs ? ('م' + (pid + 1)) : ('🥚' + count), 0, 1);
-    c.restore();
+  // Floating words over a runner's head.
+  function pop(text, r, big, color) {
+    if (pops.length > 6) { var old = pops.shift(); old.el.remove(); }
+    var el = document.createElement('div');
+    el.className = 'pop' + (big ? ' big' : '');
+    if (color) el.style.color = color;
+    el.textContent = text;
+    $('pops').appendChild(el);
+    var p = { el: el, r: r, t: 0 };
+    pops.push(p);
+    setTimeout(function () { el.remove(); var i = pops.indexOf(p); if (i >= 0) pops.splice(i, 1); }, 1100);
+    placePop(p);
   }
+  function placePop(p) {
+    var q = race && race.runners[p.r];
+    if (!q) return;
+    var cam = race.humans === 2 ? p.r : 0, pt = view.project(q.s, q.x, 2.6 + q.y, cam);
+    p.el.style.left = pt.x.toFixed(0) + 'px'; p.el.style.top = pt.y.toFixed(0) + 'px';
+  }
+  function placePops() { for (var i = 0; i < pops.length; i++) placePop(pops[i]); }
+  function hidePops() { pops.forEach(function (p) { p.el.remove(); }); pops = []; }
 
-  function drawWorldScene(w) {
-    var bg = getWorldBg(w.worldIdx);
-    if (bg.canvas) ctx.drawImage(bg.canvas, 0, 0, W, H);
-    ctx.save(); A.shake.apply(ctx);
-
-    for (var pi = 0; pi < w.pads.length; pi++) {
-      var pad = w.pads[pi];
-      if (pad.kind === 'mud') {
-        A.round(ctx, pad.x, pad.y, pad.w, pad.h, 28); A.outlined(ctx, '#854d0e', 3);
-        A.round(ctx, pad.x + 12, pad.y + 10, pad.w - 24, pad.h - 20, 18); ctx.fillStyle = '#a16207'; ctx.fill();
-      } else if (pad.kind === 'boost') {
-        A.round(ctx, pad.x, pad.y, pad.w, pad.h, 16); A.outlined(ctx, w.worldIdx === 2 ? '#0284c7' : '#ea580c', 3.2);
-        ctx.fillStyle = '#fde047';
-        var dir = pad.dx >= 0 ? 1 : -1, cy = pad.y + pad.h / 2;
-        for (var bx = pad.x + 28; bx < pad.x + pad.w - 20; bx += 52) {
-          ctx.beginPath(); ctx.moveTo(bx - 8 * dir, cy - 12); ctx.lineTo(bx + 10 * dir, cy); ctx.lineTo(bx - 8 * dir, cy + 12); ctx.closePath(); ctx.fill();
+  // Keycap hints over the runner: jump a hurdle, steer round something, balance.
+  var hintKey = ['', ''];
+  function hints() {
+    for (var h = 0; h < race.humans; h++) {
+      var r = race.runners[h], el = $('hint' + h), want = '';
+      if (race.phase === 'race' && r.state === 'run' && !r.finished) {
+        var tr = race.track, helped = r.trips;
+        for (var k = 0; k < tr.items.length; k++) {
+          var it = tr.items[k], ds = it.s - r.s;
+          if (ds < 2 || ds > 15) continue;
+          var ix = ER.itemX(it, race.t + ds / M.max(1, r.v));
+          if (M.abs(ix - r.x) > it.hw + 0.5) continue;
+          if (it.k === 'hurdle' && (hintsOn || (helped && helped[k]))) { want = 'jump'; break; }
+          if (hintsOn && (it.k === 'cone' || it.k === 'ball' || it.k === 'sprinkler')) { want = ix > r.x || (ix === r.x && r.x < 0) ? (r.x > -2.5 ? 'left' : 'right') : (r.x < 2.5 ? 'right' : 'left'); break; }
         }
-      } else if (pad.kind === 'spring') A.blit(ctx, getSpringSprite(), pad.x, pad.y, { rot: Math.atan2(pad.dy, pad.dx) });
-    }
-
-    for (var ti = 0; ti < w.portals.length; ti++) {
-      var pt = w.portals[ti], pGlow = A.glow(pt.color, 38), ends = [[pt.x1, pt.y1], [pt.x2, pt.y2]];
-      for (var ei = 0; ei < 2; ei++) {
-        A.blit(ctx, pGlow, ends[ei][0], ends[ei][1], { alpha: 0.55 });
-        ctx.beginPath(); ctx.arc(ends[ei][0], ends[ei][1], pt.r, 0, TAU); A.outlined(ctx, '#1e1b4b', 3.5);
-        ctx.beginPath(); ctx.arc(ends[ei][0], ends[ei][1], pt.r - 9, 0, TAU); ctx.strokeStyle = pt.color; ctx.lineWidth = 4; ctx.stroke();
+        if (!want && hintsOn && idle > 3 && race.t < 25) want = 'steer';
+      }
+      if (want !== hintKey[h]) {
+        hintKey[h] = want;
+        el.hidden = !want;
+        var duo = race.humans === 2, jumpKey = duo ? (h === 0 ? 'مسافة' : 'Enter') : 'مسافة';
+        var L = duo && h === 0 ? 'A' : '←', R = duo && h === 0 ? 'D' : '→';
+        el.innerHTML = want === 'jump' ? '<kbd class="wide">' + jumpKey + '</kbd>' : want === 'left' ? '<kbd>' + L + '</kbd>' : want === 'right' ? '<kbd>' + R + '</kbd>' :
+          want === 'steer' ? '<span dir="ltr"><kbd>' + L + '</kbd> <kbd>' + R + '</kbd></span>' : '';
+      }
+      if (want) {
+        var pt = view.project(r.s, r.x, 3.1 + r.y, duo ? h : 0);
+        el.style.left = pt.x.toFixed(0) + 'px'; el.style.top = pt.y.toFixed(0) + 'px';
       }
     }
-
-    for (var si = 0; si < w.switches.length; si++) {
-      var sw = w.switches[si], gateOpen = false;
-      for (var li = 0; li < w.lasers.length; li++) if (w.lasers[li].id === sw.gateId && w.lasers[li].openTimer > 0) gateOpen = true;
-      ctx.beginPath(); ctx.arc(sw.x, sw.y, sw.r, 0, TAU); A.outlined(ctx, gateOpen ? '#3ddc84' : '#f43f5e', 3.5);
-      ctx.beginPath(); ctx.arc(sw.x, sw.y, sw.r - 9, 0, TAU); ctx.fillStyle = '#fff'; ctx.fill();
-    }
-    for (var lzi = 0; lzi < w.lasers.length; lzi++) {
-      var lz = w.lasers[lzi];
-      if (lz.openTimer > 0) {
-        ctx.strokeStyle = 'rgba(61,220,132,0.45)'; ctx.lineWidth = 3; ctx.setLineDash([8, 8]); ctx.strokeRect(lz.x, lz.y, lz.w, lz.h); ctx.setLineDash([]);
-      } else {
-        A.round(ctx, lz.x, lz.y, lz.w, lz.h, 8); A.outlined(ctx, '#ff3b5c', 3);
-        ctx.fillStyle = '#fff'; ctx.fillRect(lz.x + lz.w * 0.38, lz.y + 4, lz.w * 0.24, lz.h - 8);
-      }
-    }
-
-    if (w.mode === 'vs' && w.players.length >= 2) {
-      drawHatcher(ctx, w.players[0].home, 0, true, w.players[0].hatched);
-      drawHatcher(ctx, w.players[1].home, 1, true, w.players[1].hatched);
-    } else if (w.players[0]) drawHatcher(ctx, w.players[0].home, 0, false, w.hatched);
-
-    for (var bi = 0; bi < w.babies.length; bi++) {
-      var bb = w.babies[bi];
-      A.blit(ctx, getBabySprite(bb.kind), bb.x, bb.y - Math.abs(Math.sin(bb.phase)) * 6);
-    }
-    for (var wi = 0; wi < w.walls.length; wi++) drawWall(ctx, w.walls[wi]);
-
-    for (var gi = 0; gi < w.guards.length; gi++) {
-      var g = w.guards[gi];
-      if (g.state === 'sleep') continue;
-      ctx.save(); ctx.beginPath(); ctx.moveTo(g.x, g.y);
-      ctx.arc(g.x, g.y, g.coneRange, g.look - g.coneHalf, g.look + g.coneHalf); ctx.closePath();
-      ctx.fillStyle = g.state === 'chase' ? 'rgba(255, 59, 92, 0.26)' : g.state === 'decoy' ? 'rgba(255, 225, 53, 0.24)' : 'rgba(255, 238, 120, 0.20)';
-      ctx.fill(); ctx.restore();
-    }
-
-    for (var ki = 0; ki < w.pickups.length; ki++) {
-      var pk = w.pickups[ki]; if (!pk.active) continue;
-      var pkBob = Math.sin(w.time * 4 + ki) * 4;
-      A.blit(ctx, A.glow('#ffd23f', 30), pk.x, pk.y + pkBob, { alpha: 0.45 });
-      A.blit(ctx, getPickupSprite(pk.kind), pk.x, pk.y + pkBob);
-    }
-
-    var eGlow = A.glow('#ffd23f', 34);
-    for (var egi = 0; egi < w.eggs.length; egi++) {
-      var eg = w.eggs[egi]; if (eg.state === 'hatched' || eg.state === 'carried') continue;
-      ctx.beginPath(); ctx.ellipse(eg.nestX, eg.nestY + 12, 20, 10, 0, 0, TAU); ctx.fillStyle = 'rgba(120, 72, 24, 0.35)'; ctx.fill();
-      var bob = Math.sin(w.time * 3.6 + eg.wobble) * 3;
-      A.blit(ctx, eGlow, eg.x, eg.y + bob, { alpha: eg.kind === 'normal' ? 0.3 : 0.6 });
-      A.blit(ctx, getEggSprite(eg.kind), eg.x, eg.y + bob);
-    }
-
-    for (var dci = 0; dci < w.decoys.length; dci++) {
-      var dc = w.decoys[dci];
-      ctx.beginPath(); ctx.arc(dc.x, dc.y, 20 + ((w.time * 70) % 45), 0, TAU);
-      ctx.strokeStyle = 'rgba(255, 225, 53, 0.55)'; ctx.lineWidth = 3; ctx.stroke();
-      A.blit(ctx, getDuckSprite(), dc.x, dc.y, { rot: Math.sin(w.time * 14) * 0.2 });
-    }
-
-    for (var pli = 0; pli < w.players.length; pli++) {
-      var pl = w.players[pli];
-      if (pl.carry.length > 0) {
-        ctx.beginPath(); ctx.moveTo(pl.x, pl.y);
-        for (var cei = 0; cei < pl.carry.length; cei++) ctx.lineTo(pl.carry[cei].x, pl.carry[cei].y);
-        ctx.strokeStyle = pl.carry.length >= 3 ? '#ffd23f' : 'rgba(255,255,255,0.65)';
-        ctx.lineWidth = pl.carry.length >= 3 ? 5 : 3.5; ctx.stroke();
-        for (var cei2 = pl.carry.length - 1; cei2 >= 0; cei2--) {
-          var ce = pl.carry[cei2];
-          A.blit(ctx, getEggSprite(ce.kind), ce.x, ce.y, { rot: Math.sin(ce.wobble) * 0.16, sx: 0.9, sy: 0.9 });
-        }
-      }
-      var alpha = pl.hidden ? 0.52 : (pl.invuln > 0 && ((w.time * 16 | 0) % 2 === 0) ? 0.55 : 1);
-      var spr = getHeroSprite(pli === 1 ? 5 : pl.skin, A.blink(blinkSlots[pli] || blinkSlots[0]) > 0.5);
-      var sp = pSprings[pli] || pSprings[0];
-      A.shadow(ctx, pl.x - 20, pl.y - 16, 40, 34, 0.4);
-      if (pl.carry.length >= 3 || pl.featherTimer > 0 || pl.dashTimer > 0) A.blit(ctx, A.glow('#ffd23f', 40), pl.x, pl.y, { alpha: 0.55 });
-      A.blit(ctx, spr, pl.x, pl.y, { rot: pl.facing, sx: sp.sx, sy: sp.sy, alpha: alpha });
-      if (pl.shield > 0) {
-        ctx.beginPath(); ctx.arc(pl.x, pl.y, pl.r + 7, 0, TAU);
-        ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = 3.5; ctx.stroke();
-        ctx.fillStyle = 'rgba(56, 189, 248, 0.18)'; ctx.fill();
-      }
-    }
-
-    for (var hi = 0; hi < w.hides.length; hi++) {
-      var hd = w.hides[hi]; A.blit(ctx, getPodSprite(hd.kind), hd.x, hd.y);
-      for (var hpi = 0; hpi < w.players.length; hpi++) {
-        var hp = w.players[hpi];
-        if (hp.hidden && Math.hypot(hp.x - hd.x, hp.y - hd.y) <= hd.r) drawEyes(ctx, hd.x, hd.y - 4, 8, 5, false, false);
-      }
-    }
-
-    for (var gi2 = 0; gi2 < w.guards.length; gi2++) {
-      var gd = w.guards[gi2];
-      A.shadow(ctx, gd.x - gd.r, gd.y - gd.r, gd.r * 2, gd.r * 2, 0.42);
-      A.blit(ctx, getGuardSprite(gd.type), gd.x, gd.y, { rot: gd.look });
-      if (gd.bubble) {
-        var bx2 = gd.x, by2 = gd.y - gd.r - 20;
-        A.round(ctx, bx2 - 22, by2 - 15, 44, 30, 12); A.outlined(ctx, '#ffffff', 3);
-        ctx.font = '800 18px Fredoka'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillStyle = gd.bubble === '!' ? '#ef4444' : '#1b1640';
-        ctx.fillText(gd.bubble, bx2, by2 + 1);
-      }
-    }
-
-    fx.draw(ctx); A.pop.draw(ctx); ctx.restore();
-    A.flash.draw(ctx, W, H); A.vignette(ctx, W, H, 0.25);
   }
 
+  /* ------------------------------------------------------------ sound */
+  function cluck() { AU.tone({ freq: 900, to: 1400, type: 'square', dur: 0.06, vol: 0.06 }); AU.tone({ freq: 1100, to: 700, type: 'square', dur: 0.08, vol: 0.06, delay: 0.08 }); }
+  function boing() { AU.tone({ freq: 160, to: 520, type: 'sine', dur: 0.25, vol: 0.18 }); }
+  function crack() { AU.noise({ dur: 0.12, vol: 0.3, filter: 3500, to: 1500 }); AU.noise({ dur: 0.3, vol: 0.18, filter: 900, to: 200, delay: 0.05 }); J.pop(0.9); }
+  function ohNo() { AU.tone({ freq: 520, to: 300, type: 'triangle', dur: 0.2, vol: 0.12, delay: 0.1 }); AU.tone({ freq: 400, to: 210, type: 'triangle', dur: 0.3, vol: 0.12, delay: 0.3 }); }
+  function wobble() { AU.tone({ freq: 300, to: 420, type: 'sine', dur: 0.09, vol: 0.08 }); AU.tone({ freq: 420, to: 300, type: 'sine', dur: 0.09, vol: 0.08, delay: 0.09 }); }
+  function splash() { AU.noise({ dur: 0.35, vol: 0.2, filter: 2200, to: 400 }); }
+
+  /* ------------------------------------------------------------ events */
+  function handleEvents() {
+    var duo = race.humans === 2;
+    for (var i = 0; i < race.ev.length; i++) {
+      var e = race.ev[i], r = e.r != null ? race.runners[e.r] : null, me = r && r.human;
+      view.event(e, race);
+      switch (e.t) {
+        case 'count': J.countdown(e.n); showCount(e.n); break;
+        case 'jump': if (me) J.jump(0.5); break;
+        case 'land': if (me) J.land(0.3); break;
+        case 'clear': if (me) { Kit.track.hit(); J.streak(M.min(8, r.cleared)); if (r.cleared % 2 === 1) pop(PRAISE[r.cleared % PRAISE.length], e.r); } break;
+        case 'hit':
+          if (me) {
+            Kit.track.miss();
+            J.impact(0.55);
+            if (e.k === 'critter') cluck(); else if (e.k === 'ball') boing(); else if (e.k === 'sprinkler') splash();
+            pop(e.k === 'critter' ? 'كاك!' : e.k === 'ball' ? 'بونغ!' : 'أوه!', e.r, false, '#ffffff');
+          }
+          break;
+        case 'splash': if (me) { splash(); pop('بلوب!', e.r, false, '#bdf0ff'); } break;
+        case 'wobble': if (me) wobble(); break;
+        case 'drop': if (me) { Kit.track.miss(); J.whoosh(0.5); ohNo(); pop('أوه لا!', e.r, true, '#ffffff'); say('سقطت البيضة'); } break;
+        case 'respawn': if (me) { J.pop(0.4); pop('بيضة جديدة!', e.r, false, '#fffaf0'); } break;
+        case 'gold': if (me) { Kit.track.hit(); J.coin(1); pop('+1', e.r, true); } break;
+        case 'cp': if (me) J.chime(1); break;
+        case 'finish':
+          if (me) {
+            if (e.place === 1) J.levelUp(); else J.chime(2);
+            pop(duo ? 'وصلت!' : PLACE[e.place], e.r, true);
+          }
+          break;
+      }
+    }
+    race.ev.length = 0;
+  }
+
+  /* ------------------------------------------------------------ results */
+  function finishRace() {
+    var duo = race.humans === 2, r = race.runners[0];
+    roundOpen = false;
+    if (duo) {
+      var a = race.runners[0], b = race.runners[1], win = a.place < b.place ? 0 : 1;
+      Kit.stats.end('end');
+      save.eggs += a.gold + b.gold; persist();
+      result = { duo: true, win: win, stars: 0, time: race.runners[win].finishT, eggs: a.gold + b.gold, best: false, next: cur < 8 && ER.isOpen(save, cur + 1) };
+    } else {
+      var out = ER.record(save, cur, r);
+      dda.result(ER.outcome(r));
+      Kit.stats.end(r.place === 1 ? 'win' : 'lose', out.stars);
+      if (!save.coach) { save.coach = true; Kit.stats.tutorial('done'); }
+      persist();
+      result = { duo: false, place: r.place, flags: ER.starFlags(r), stars: out.stars, time: r.finishT, eggs: out.reward, best: out.newBest, next: cur < 8 && ER.isOpen(save, cur + 1) };
+    }
+    showResult();
+  }
+  var starTimers = [];
+  function showResult() {
+    resultT = 0; lock = 0.6;
+    $('resTitle').textContent = result.duo ? 'فاز اللاعب ' + (result.win + 1) + '!' : PLACE[result.place];
+    $('resTitle').style.color = result.duo ? DOT[result.win] : result.place === 1 ? '#ffd23f' : '#ffffff';
+    $('resStars').hidden = result.duo;
+    var stars = $('resStars').querySelectorAll('.st');
+    stars.forEach(function (s) { s.classList.remove('on'); });
+    starTimers.forEach(clearTimeout); starTimers = [];
+    if (!result.duo) result.flags.forEach(function (f, k) {
+      if (!f) return;
+      starTimers.push(setTimeout(function () { stars[k].classList.add('on'); J.star(k + 1); }, calm() ? 0 : 450 + k * 380));
+    });
+    $('resTime').textContent = fmt(result.time) + '.' + M.floor((result.time % 1) * 10);
+    $('resEggs').textContent = '+' + result.eggs;
+    $('resBest').hidden = !result.best;
+    $('resNext').hidden = !result.next;
+    if (result.best || (!result.duo && result.place === 1)) { view.confetti(); }
+    say(result.duo ? $('resTitle').textContent : PLACE[result.place] + '، ' + result.stars + ' نجوم');
+    setScreen('result');
+    $('hud').hidden = true;
+  }
+  function next() {
+    if (result && result.next) { J.select(); startRace(cur + 1); }
+    else again();
+  }
+  function again() { J.select(); startRace(cur); }
+
+  /* ----------------------------------------------------------------- loop */
   function update(dt) {
-    if (screen !== 'play' || !world) { Kit.keys.endFrame(); return; }
-    var inputs = gatherInputs();
-    if (intro) { Kit.keys.endFrame(); return; }
-    E.stepWorld(world, dt, inputs);
-    processEvents(world);
-    fx.update(dt); A.pop.update(dt); A.shake.update(dt); A.flash.update(dt);
-    hatchSpring.update(dt); pSprings[0].update(dt); pSprings[1].update(dt);
-    updateHud(); dirty = true;
-    if (world.over) handleRoundEnd();
-    Kit.keys.endFrame();
+    if (screen !== 'pause') time += dt;
+    handleKeys();
+    if (screen === 'play' && race) {
+      var inp = inputs();
+      if (inp.some(function (x) { return x.steer || x.up || x.down || x.jump; })) idle = 0; else idle += dt;
+      lastInput = inp;
+      ER.step(race, dt, inp);
+      handleEvents();
+      if (race.over && race.overT > 1.8 && screen === 'play') finishRace();
+    } else if (screen === 'result') {
+      resultT += dt; lock -= dt;
+      if (race) { ER.step(race, dt, [{}, {}]); race.ev.length = 0; }
+    }
+    if (screen !== 'pause') dirty = true;
+    K.endFrame();
   }
 
   function render() {
-    if (screen !== 'play' && !dirty) return;
+    if (!view || contextLost) return;
+    var now = performance.now();
+    if (screen === 'pause' && !dirty) return;
+    // A software renderer rests between menu frames so the page stays responsive.
+    if (software && screen !== 'play' && now - lastDraw < 90) return;
+    if (screen === 'play' && lastFrame && view.frameTime(now - lastFrame)) fit.resize();
+    lastFrame = now; lastDraw = now;
+    var dt = M.max(0, M.min(0.1, time - viewTime));
+    viewTime = time;
+    view.calm = calm();
+    var r = race || demo, mode = screen === 'play' || screen === 'pause' ? 'play' : screen === 'result' ? 'result' : screen === 'skins' ? 'skins' : 'title';
+    var follow = race && race.humans === 2 && mode === 'play' ? [0, 1] : [0];
+    var intro = race && race.phase === 'count' && mode === 'play' && !calm() ? M.max(0, 1 - race.clock / (ER.COUNTDOWN * 0.85)) : null;
+    view.update({ mode: mode, dt: dt, t: time, race: r, follow: follow, intro: intro });
+    view.render();
+    if (screen === 'play' || screen === 'pause') drawHud();
     dirty = false;
-    drawWorldScene(world || previewWorld);
   }
 
-  window.__game = {
-    get screen() { return screen; },
-    get mode() { return curMode; },
-    get diff() { return curDiff; },
-    get level() { return world ? world.id : ''; },
-    get stageId() { return world ? world.id : E.STAGES[E.stageIndexOf(curWorld, curStage)].id; },
-    get tries() { return tries; },
-    get intro() { return intro; },
-    get px() { return world && world.players[0] ? world.players[0].x : 0; },
-    get py() { return world && world.players[0] ? world.players[0].y : 0; },
-    get time() { return world ? world.time : 0; },
-    get timeLeft() { return world ? world.timeLeft : 0; },
-    get hatched() { return world ? world.hatched : 0; },
-    get goal() { return world ? world.goal : 0; },
-    get score() { return world ? world.score : 0; },
-    get carrying() { return world && world.players[0] ? world.players[0].carry.length : 0; },
-    get atStart() { return world ? E.isAtStart(world) : true; },
-    get guards() { return world ? world.guards.map(function (g) { return { type: g.type, x: g.x, y: g.y, state: g.state, look: g.look }; }) : []; },
-    get eggList() { return world ? world.eggs : []; },
-    get world() { return world; },
-    get save() { return save; },
-    point: function (lx, ly) { var r = canvas.getBoundingClientRect(); return { x: r.left + lx * view.scale, y: r.top + ly * view.scale }; }
-  };
+  /* ------------------------------------------------------------ buttons */
+  on($('btnPlay'), play);
+  on($('btnDuo'), toggleDuo);
+  on($('btnSkins'), openSkins);
+  on($('mapHome'), function () { J.back(); toTitle(); });
+  on($('skinsBack'), closeSkins);
+  on($('btnPause'), pause);
+  on($('btnResume'), resume);
+  on($('btnRestart'), restart);
+  on($('btnHome'), function () { J.back(); toMap(); });
+  on($('resNext'), next);
+  on($('resAgain'), again);
+  on($('resMap'), function () { J.back(); toMap(); });
+  ['pickRunner', 'pickEgg'].forEach(function (id, row) {
+    $(id).querySelectorAll('.er-arrow').forEach(function (b) { on(b, function () { cycle(row, +b.dataset.dir); }); });
+    on($(id).querySelector('.buy'), function () { preview.row = row; buy(row); });
+  });
+  canvas.addEventListener('pointerdown', focusGame);
 
+  /* --------------------------------------------------- test and debug hook */
+  var r3 = function (v) { return M.round(v * 1000) / 1000; };
+  function runnerInfo(q) {
+    return q ? { s: r3(q.s), x: r3(q.x), y: r3(q.y), v: r3(q.v), e: r3(q.e), lean: r3(q.lean), state: q.state, drops: q.drops, gold: q.gold, hits: q.hits, jumps: q.jumps,
+      place: q.place, rank: q.rank || 0, finished: q.finished, cp: q.cp } : null;
+  }
+  function snapshot() {
+    return {
+      screen: screen, phase: race ? race.phase : '', track: race ? cur : -1, id: race ? race.track.id : '', duo: save.duo, humans: race ? race.humans : 0,
+      time: race ? r3(race.t) : 0, clock: race ? r3(race.clock) : 0, over: !!(race && race.over), len: race ? race.track.len : 0,
+      p1: race ? runnerInfo(race.runners[0]) : null, p2: race && race.humans === 2 ? runnerInfo(race.runners[1]) : null,
+      cpus: race ? race.runners.filter(function (q) { return !q.human; }).map(runnerInfo) : [],
+      result: result ? { place: result.place || 0, stars: result.stars, eggs: result.eggs, best: result.best, win: result.win } : null,
+      hint: hintKey[0], calm: calm(), software: software, particles: view ? view.particleCount() : 0, tune: race ? race.tune : null
+    };
+  }
+
+  /* ---------------------------------------------------------------- init */
   Kit.muteButton();
-  Kit.lifecycle({ pause: function () { if (screen === 'play') pauseGame(); }, reset: resetInputs });
-  renderTitleUI(); setScreen('title'); render();
-  A.loop(update, render);
-  Kit.ready();
+  Kit.lifecycle({ pause: pause, reset: function () { lastInput = [null, null]; } });
+  Kit.motion.onChange(function () { dirty = true; });
+  window.addEventListener('pageshow', function () { dirty = true; });
+  canvas.addEventListener('webglcontextlost', function (e) { e.preventDefault(); contextLost = true; pause(); $('contextNotice').hidden = false; });
+  canvas.addEventListener('webglcontextrestored', function () { contextLost = false; $('contextNotice').hidden = true; dirty = true; fit.resize(); });
+  var loop = null;
+  try {
+    view = ER.createView(canvas, { software: software });
+    view.onSplat = function (i) { if (race && race.runners[i] && race.runners[i].human) { crack(); } };
+    fit.resize();
+    buildMap();
+    toTitle();
+    render();
+    window.__game = {
+      get state() { return snapshot(); },
+      get save() { return JSON.parse(JSON.stringify(save)); },
+      get race() { return race; },
+      point: function (x, y) { var r = canvas.getBoundingClientRect(); return { x: r.left + x * fit.scale, y: r.top + y * fit.scale }; },
+      drawCalls: function () { return view.info().calls; }
+    };
+    loop = Kit.loop(update, render);
+    // Tell the portal only once the first frame is really drawn (software WebGL can lag behind).
+    var gl = view.gl, sync = null, waited = 0;
+    try { if (gl.fenceSync) { sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0); gl.flush(); } } catch (e) { sync = null; }
+    (function poll() {
+      var done = !sync;
+      if (!done) { try { done = gl.getSyncParameter(sync, gl.SYNC_STATUS) === gl.SIGNALED; } catch (e) { done = true; } }
+      if (done || waited++ > 120) { if (sync) { try { gl.deleteSync(sync); } catch (e) { /* ignore */ } } Kit.ready(); return; }
+      setTimeout(poll, 25);
+    })();
+  } catch (error) {
+    if (loop) loop.stop();
+    for (var k in SCREENS) $(SCREENS[k]).hidden = true;
+    $('hud').hidden = true;
+    $('scrError').hidden = false;
+    Kit.fail(error);
+  }
 })();

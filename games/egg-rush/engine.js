@@ -1,707 +1,576 @@
-/* سباق البيض (Egg Rush: Turbo Dino & Robo-Coop Heist!) — Pure Simulation Engine */
-(function () {
+/* Egg Rush (سباق البيض): the pure race simulation. A school sports-day egg-and-spoon race.
+ * Tracks, runners, the egg balancing on the spoon, obstacles, CPU runners (rubber band),
+ * checkpoints, golden eggs, places and stars. No Kit, no DOM: game.js passes difficulty
+ * in (from Kit.dda) and Node tests load this file directly. */
+(function (root) {
   'use strict';
+  var ER = {};
+  var M = Math;
 
-  var W = 1280, H = 720, AX0 = 52, AY0 = 88, AX1 = 1228, AY1 = 682;
-  var TAU = Math.PI * 2, BONK_DURATION = 0.65;
+  /* ------------------------------------------------------------ constants */
+  ER.HALF = 3.5;          // furthest a runner's centre may go from the middle of the track
+  ER.TRACK_W = 4.3;       // half width of the running surface
+  ER.V_JOG = 8.5;         // automatic jog (m/s)
+  ER.V_SPRINT = 12;       // ↑ / W
+  ER.V_SLOW = 5;          // ↓ / S
+  ER.VX_MAX = 5.2;        // sideways speed
+  ER.JUMP_V = 7.2;
+  ER.GRAVITY = 24;
+  ER.COUNTDOWN = 3;
+  var K_LEAN = 2.4, K_AX = 0.04, K_TURN = 0.3, RIM = 0.6, RIM_PUSH = 1.8;
 
-  function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
-  function wrapAngle(a) {
-    while (a > Math.PI) a -= TAU;
-    while (a < -Math.PI) a += TAU;
-    return a;
-  }
-  function makeRng(seed) {
-    var s = (seed >>> 0) || 0x9e3779b9;
+  /* ------------------------------------------------------------ worlds */
+  ER.WORLDS = [
+    { name: 'ساحة المدرسة', kinds: ['cone1', 'cones2', 'hurdleFull', 'puddle', 'slalom', 'hurdleHalf', 'ball'] },
+    { name: 'المزرعة', kinds: ['critters', 'hurdleFull', 'cone1', 'puddle', 'sprinkler', 'hurdleHalf', 'cones2'] },
+    { name: 'الشاطئ', kinds: ['ball', 'critters', 'sprinkler', 'hurdleFull', 'slalom', 'puddle', 'hurdleHalf'] }
+  ];
+  ER.TRACK_COUNT = 9;
+  var LENGTHS = [380, 420, 460, 460, 500, 540, 540, 580, 620];
+  ER.trackId = function (i) { return 'w' + (M.floor(i / 3) + 1) + '-' + (i % 3 + 1); };
+
+  /* ------------------------------------------------------------ helpers */
+  function rng(seed) {
+    var a = seed >>> 0;
     return function () {
-      s = (s + 0x6d2b79f5) | 0;
-      var t = Math.imul(s ^ (s >>> 15), 1 | s);
-      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      a = (a + 0x6D2B79F5) >>> 0;
+      var t = a;
+      t = M.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + M.imul(t ^ (t >>> 7), t | 61);
       return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
   }
+  ER.rng = rng;
+  function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+  function approach(v, t, d) { return v < t ? M.min(t, v + d) : M.max(t, v - d); }
+  function lerp(a, b, k) { return a + (b - a) * k; }
+  ER.clamp = clamp;
 
-  var DIFFS = {
-    easy: { id: 'easy', label: 'سهل', desc: 'حراس نعسانون · خوذة فقاعة مجانية · وقت وفير ومغناطيس بيض!', guardSpeed: 0.72, coneScale: 0.82, timeBonus: 26, magnetBonus: 18, startShield: 1, sleepPause: 1.35, dashCd: 1.1, coinMult: 1.0 },
-    normal: { id: 'normal', label: 'متوسط', desc: 'حراس يقظون · سلاسل تيربو ثلاثية · خدع البطة الصفّارة!', guardSpeed: 1.0, coneScale: 1.0, timeBonus: 0, magnetBonus: 0, startShield: 0, sleepPause: 0.45, dashCd: 1.32, coinMult: 1.25 },
-    hero: { id: 'hero', label: 'بطل', desc: 'حراس نخبة سريعون · مطاردات زعيم الرابتور · مكافأة عملات مضاعفة!', guardSpeed: 1.18, coneScale: 1.12, timeBonus: -8, magnetBonus: -4, startShield: 0, sleepPause: 0.15, dashCd: 1.42, coinMult: 1.55 }
-  };
-
-  var SKINS = [
-    { id: 0, name: 'بطل المزرعة', desc: 'خوذة التيربو الكلاسيكية الجاهزة للانطلاق', cost: 0, body: '#2b8cff', trim: '#ffd23f', cape: '#ff5964' },
-    { id: 1, name: 'نينجا البيض', desc: 'وشاح الظل الخفي وعصابة النينجا القرمزية', cost: 15, body: '#2d3142', trim: '#ff3b5c', cape: '#00e5ff' },
-    { id: 2, name: 'فارس الرابتور', desc: 'درع الديناصور الأخضر مع عرف الرابتور الناري', cost: 30, body: '#22c55e', trim: '#ff9f1c', cape: '#fde047' },
-    { id: 3, name: 'رائد الفضاء', desc: 'بدلة المدار الفضائية مع خوذة الليزر الذهبية', cost: 45, body: '#e2e8f0', trim: '#00d4ff', cape: '#8b5cf6' },
-    { id: 4, name: 'ثعلب البرق', desc: 'أذنا الثعلب الذهبي وشرارات السرعة الخارقة', cost: 60, body: '#ff7b00', trim: '#ffee32', cape: '#00bbf9' }
-  ];
-
-  var WORLDS = [
-    { id: 'w1', idx: 0, name: 'مزرعة التيربو', badge: 'العالم 1', sub: 'أنفاق القش · منصات النابض · الديك المدرع', podType: 'hay', eggSpecial: 'gold', color: '#3ecf6e' },
-    { id: 'w2', idx: 1, name: 'وادي الديناصورات', badge: 'العالم 2', sub: 'بيض الرابتور العملاق · ينابيع الهواء · زعيم تي ريكس', podType: 'fern', eggSpecial: 'dino', color: '#ff9f1c' },
-    { id: 'w3', idx: 2, name: 'قلعة الجليد', badge: 'العالم 3', sub: 'مسارات التزلج التيربو · حارس اليتي الآلي', podType: 'igloo', eggSpecial: 'gold', color: '#38bdf8' },
-    { id: 'w4', idx: 3, name: 'المختبر الآلي', badge: 'العالم 4', sub: 'بوابات الانتقال · مفاتيح الليزر · طائرات الحراسة', podType: 'holo', eggSpecial: 'cyber', color: '#a855f7' }
-  ];
-
-  var EGG_SPECS = { normal: { pts: 100, coins: 2 }, gold: { pts: 220, coins: 4 }, dino: { pts: 250, coins: 5 }, cyber: { pts: 250, coins: 5 } };
-  var GUARD_SPECS = {
-    rooster: { name: 'الديك المدرع', r: 24, speed: 122, coneRange: 205, coneHalf: 0.46 },
-    dog:     { name: 'الكلب الآلي', r: 25, speed: 142, coneRange: 225, coneHalf: 0.48 },
-    trex:    { name: 'تي ريكس الحارس', r: 32, speed: 130, coneRange: 240, coneHalf: 0.52, boss: true },
-    yeti:    { name: 'حارس اليتي', r: 28, speed: 134, coneRange: 215, coneHalf: 0.48 },
-    drone:   { name: 'طائرة الحراسة', r: 23, speed: 152, coneRange: 230, coneHalf: 0.44 }
-  };
-
-  /* 12 Open Stages (3 per World) — Spawn (128, 385) has clear rightward lane x:128..470 */
-  var STAGES = [
-    { id: 'w1s1', world: 0, stageIdx: 0, title: 'حظيرة الانطلاق', goal: 5, time: 80,
-      walls: [{ x: 520, y: 175, w: 120, h: 95, kind: 'barn' }, { x: 520, y: 500, w: 120, h: 95, kind: 'barn' }, { x: 880, y: 335, w: 95, h: 100, kind: 'crate' }],
-      hides: [{ x: 390, y: 235 }, { x: 745, y: 495 }],
-      pads: [{ kind: 'spring', x: 340, y: 545, dx: 1, dy: -0.35 }, { kind: 'mud', x: 650, y: 340, w: 150, h: 90 }],
-      pickups: [{ kind: 'feather', x: 690, y: 200 }],
-      eggs: [{ x: 335, y: 385, kind: 'normal' }, { x: 455, y: 155, kind: 'normal' }, { x: 760, y: 215, kind: 'normal' }, { x: 760, y: 575, kind: 'normal' }, { x: 1115, y: 385, kind: 'gold' }, { x: 1060, y: 170, kind: 'normal' }],
-      guards: [{ type: 'rooster', pts: [[700, 160], [1020, 160], [1020, 290], [700, 290]] }, { type: 'rooster', pts: [[980, 600], [690, 600], [690, 465], [980, 465]] }] },
-    { id: 'w1s2', world: 0, stageIdx: 1, title: 'ممر الكلاب الآلية', goal: 6, time: 84,
-      walls: [{ x: 500, y: 295, w: 90, h: 180, kind: 'barn' }, { x: 830, y: 155, w: 110, h: 100, kind: 'crate' }, { x: 830, y: 515, w: 110, h: 100, kind: 'crate' }],
-      hides: [{ x: 375, y: 205 }, { x: 685, y: 385 }, { x: 1020, y: 270 }],
-      pads: [{ kind: 'spring', x: 330, y: 575, dx: 1, dy: 0 }, { kind: 'spring', x: 1050, y: 575, dx: -1, dy: -0.25 }, { kind: 'mud', x: 580, y: 155, w: 165, h: 80 }],
-      pickups: [{ kind: 'shield', x: 675, y: 575 }],
-      eggs: [{ x: 355, y: 385, kind: 'normal' }, { x: 650, y: 195, kind: 'normal' }, { x: 650, y: 575, kind: 'normal' }, { x: 1015, y: 165, kind: 'gold' }, { x: 1135, y: 385, kind: 'gold' }, { x: 1015, y: 605, kind: 'normal' }, { x: 430, y: 600, kind: 'normal' }],
-      guards: [{ type: 'dog', pts: [[640, 260], [990, 260]] }, { type: 'dog', pts: [[990, 490], [640, 490]] }, { type: 'rooster', pts: [[1120, 200], [1120, 565]] }] },
-    { id: 'w1s3', world: 0, stageIdx: 2, title: 'مهرجان التيربو', goal: 7, time: 88,
-      walls: [{ x: 485, y: 165, w: 95, h: 115, kind: 'barn' }, { x: 485, y: 490, w: 95, h: 115, kind: 'barn' }, { x: 815, y: 325, w: 105, h: 120, kind: 'barn' }],
-      hides: [{ x: 375, y: 525 }, { x: 675, y: 245 }, { x: 1010, y: 385 }],
-      pads: [{ kind: 'spring', x: 360, y: 200, dx: 1, dy: 0.2 }, { kind: 'spring', x: 965, y: 585, dx: -1, dy: 0 }, { kind: 'mud', x: 605, y: 345, w: 165, h: 85 }, { kind: 'mud', x: 955, y: 165, w: 155, h: 80 }],
-      pickups: [{ kind: 'feather', x: 685, y: 565 }, { kind: 'shield', x: 700, y: 145 }],
-      eggs: [{ x: 345, y: 385, kind: 'normal' }, { x: 645, y: 160, kind: 'normal' }, { x: 645, y: 605, kind: 'normal' }, { x: 870, y: 175, kind: 'gold' }, { x: 870, y: 595, kind: 'normal' }, { x: 1145, y: 245, kind: 'gold' }, { x: 1145, y: 525, kind: 'gold' }, { x: 1155, y: 385, kind: 'normal' }],
-      guards: [{ type: 'dog', pts: [[625, 225], [990, 225]] }, { type: 'dog', pts: [[990, 535], [625, 535]] }, { type: 'rooster', pts: [[685, 300], [685, 470]] }, { type: 'rooster', pts: [[1095, 175], [1095, 595]] }] },
-    { id: 'w2s1', world: 1, stageIdx: 0, title: 'عش الرابتور', goal: 5, time: 82,
-      walls: [{ x: 525, y: 175, w: 110, h: 105, kind: 'rock' }, { x: 525, y: 495, w: 110, h: 105, kind: 'rock' }, { x: 890, y: 335, w: 105, h: 105, kind: 'rock' }],
-      hides: [{ x: 400, y: 245 }, { x: 750, y: 515 }, { x: 1045, y: 235 }],
-      pads: [{ kind: 'boost', x: 500, y: 345, w: 230, h: 80, dx: 1, dy: 0 }, { kind: 'boost', x: 680, y: 595, w: 250, h: 62, dx: -1, dy: 0 }],
-      pickups: [{ kind: 'feather', x: 760, y: 175 }],
-      eggs: [{ x: 345, y: 385, kind: 'normal' }, { x: 685, y: 225, kind: 'dino' }, { x: 685, y: 545, kind: 'normal' }, { x: 1055, y: 165, kind: 'dino' }, { x: 1135, y: 385, kind: 'gold' }, { x: 1055, y: 595, kind: 'normal' }],
-      guards: [{ type: 'trex', pts: [[790, 240], [1075, 240], [1075, 525], [790, 525]] }, { type: 'rooster', pts: [[445, 165], [445, 590]] }] },
-    { id: 'w2s2', world: 1, stageIdx: 1, title: 'جسر البراكين', goal: 6, time: 85,
-      walls: [{ x: 490, y: 285, w: 95, h: 195, kind: 'rock' }, { x: 810, y: 160, w: 100, h: 110, kind: 'rock' }, { x: 810, y: 505, w: 100, h: 110, kind: 'rock' }],
-      hides: [{ x: 375, y: 530 }, { x: 675, y: 385 }, { x: 1015, y: 385 }],
-      pads: [{ kind: 'boost', x: 460, y: 165, w: 260, h: 72, dx: 1, dy: 0 }, { kind: 'boost', x: 460, y: 535, w: 260, h: 72, dx: -1, dy: 0 }, { kind: 'spring', x: 960, y: 200, dx: 0, dy: 1 }],
-      pickups: [{ kind: 'shield', x: 660, y: 270 }],
-      eggs: [{ x: 345, y: 385, kind: 'normal' }, { x: 750, y: 200, kind: 'dino' }, { x: 750, y: 575, kind: 'normal' }, { x: 985, y: 155, kind: 'normal' }, { x: 1140, y: 295, kind: 'dino' }, { x: 1140, y: 485, kind: 'dino' }, { x: 985, y: 615, kind: 'gold' }],
-      guards: [{ type: 'trex', pts: [[945, 265], [1110, 265], [1110, 505], [945, 505]] }, { type: 'dog', pts: [[635, 195], [635, 575]] }] },
-    { id: 'w2s3', world: 1, stageIdx: 2, title: 'عرين التي ريكس', goal: 8, time: 92,
-      walls: [{ x: 485, y: 165, w: 100, h: 105, kind: 'rock' }, { x: 485, y: 500, w: 100, h: 105, kind: 'rock' }, { x: 830, y: 330, w: 105, h: 110, kind: 'rock' }],
-      hides: [{ x: 385, y: 255 }, { x: 690, y: 385 }, { x: 1020, y: 215 }, { x: 1020, y: 555 }],
-      pads: [{ kind: 'boost', x: 590, y: 150, w: 260, h: 68, dx: 1, dy: 0 }, { kind: 'boost', x: 590, y: 555, w: 260, h: 68, dx: -1, dy: 0 }, { kind: 'spring', x: 350, y: 565, dx: 1, dy: -0.3 }],
-      pickups: [{ kind: 'shield', x: 535, y: 385 }, { kind: 'feather', x: 880, y: 205 }],
-      eggs: [{ x: 340, y: 385, kind: 'normal' }, { x: 655, y: 235, kind: 'normal' }, { x: 655, y: 535, kind: 'dino' }, { x: 880, y: 145, kind: 'normal' }, { x: 880, y: 625, kind: 'gold' }, { x: 1140, y: 195, kind: 'dino' }, { x: 1150, y: 385, kind: 'dino' }, { x: 1140, y: 575, kind: 'gold' }, { x: 425, y: 150, kind: 'normal' }],
-      guards: [{ type: 'trex', pts: [[645, 250], [990, 250]] }, { type: 'trex', pts: [[990, 520], [645, 520]] }, { type: 'rooster', pts: [[1105, 225], [1105, 545]] }] },
-    { id: 'w3s1', world: 2, stageIdx: 0, title: 'زحليقة البطريق', goal: 6, time: 82,
-      walls: [{ x: 520, y: 295, w: 110, h: 180, kind: 'ice' }, { x: 875, y: 295, w: 110, h: 180, kind: 'ice' }],
-      hides: [{ x: 390, y: 255 }, { x: 750, y: 385 }, { x: 1055, y: 500 }],
-      pads: [{ kind: 'boost', x: 420, y: 135, w: 560, h: 74, dx: 1, dy: 0 }, { kind: 'boost', x: 420, y: 565, w: 560, h: 74, dx: -1, dy: 0 }, { kind: 'spring', x: 1125, y: 205, dx: 0, dy: 1 }],
-      pickups: [{ kind: 'feather', x: 750, y: 225 }],
-      eggs: [{ x: 345, y: 385, kind: 'normal' }, { x: 575, y: 170, kind: 'normal' }, { x: 925, y: 170, kind: 'gold' }, { x: 1135, y: 385, kind: 'gold' }, { x: 925, y: 600, kind: 'normal' }, { x: 575, y: 600, kind: 'normal' }, { x: 750, y: 500, kind: 'normal' }],
-      guards: [{ type: 'yeti', pts: [[700, 240], [700, 535]] }, { type: 'yeti', pts: [[1055, 235], [1055, 535]] }] },
-    { id: 'w3s2', world: 2, stageIdx: 1, title: 'متاهة الكريستال', goal: 7, time: 86,
-      walls: [{ x: 495, y: 170, w: 105, h: 105, kind: 'ice' }, { x: 495, y: 495, w: 105, h: 105, kind: 'ice' }, { x: 825, y: 170, w: 105, h: 105, kind: 'ice' }, { x: 825, y: 495, w: 105, h: 105, kind: 'ice' }],
-      hides: [{ x: 375, y: 525 }, { x: 710, y: 215 }, { x: 1030, y: 385 }],
-      pads: [{ kind: 'boost', x: 465, y: 348, w: 480, h: 74, dx: 1, dy: 0 }, { kind: 'boost', x: 635, y: 560, w: 165, h: 74, dx: -1, dy: 0 }, { kind: 'spring', x: 1135, y: 385, dx: -1, dy: -0.45 }],
-      pickups: [{ kind: 'shield', x: 710, y: 545 }],
-      eggs: [{ x: 345, y: 385, kind: 'normal' }, { x: 710, y: 150, kind: 'gold' }, { x: 710, y: 385, kind: 'normal' }, { x: 710, y: 615, kind: 'normal' }, { x: 1070, y: 165, kind: 'gold' }, { x: 1070, y: 605, kind: 'gold' }, { x: 1155, y: 270, kind: 'normal' }, { x: 415, y: 155, kind: 'normal' }],
-      guards: [{ type: 'yeti', pts: [[645, 295], [990, 295]] }, { type: 'yeti', pts: [[990, 475], [645, 475]] }, { type: 'dog', pts: [[1095, 200], [1095, 570]] }] },
-    { id: 'w3s3', world: 2, stageIdx: 2, title: 'عاصفة القمة', goal: 8, time: 92,
-      walls: [{ x: 515, y: 330, w: 100, h: 110, kind: 'ice' }, { x: 845, y: 175, w: 100, h: 105, kind: 'ice' }, { x: 845, y: 495, w: 100, h: 105, kind: 'ice' }],
-      hides: [{ x: 390, y: 220 }, { x: 695, y: 385 }, { x: 1020, y: 235 }, { x: 1020, y: 535 }],
-      pads: [{ kind: 'boost', x: 430, y: 135, w: 370, h: 68, dx: 1, dy: 0 }, { kind: 'boost', x: 430, y: 570, w: 370, h: 68, dx: -1, dy: 0 }, { kind: 'spring', x: 350, y: 545, dx: 1, dy: -0.35 }, { kind: 'spring', x: 1140, y: 385, dx: -1, dy: 0 }],
-      pickups: [{ kind: 'feather', x: 695, y: 225 }, { kind: 'shield', x: 695, y: 545 }],
-      eggs: [{ x: 340, y: 385, kind: 'normal' }, { x: 565, y: 235, kind: 'normal' }, { x: 565, y: 535, kind: 'normal' }, { x: 780, y: 385, kind: 'gold' }, { x: 990, y: 155, kind: 'gold' }, { x: 990, y: 615, kind: 'gold' }, { x: 1145, y: 235, kind: 'gold' }, { x: 1145, y: 535, kind: 'normal' }, { x: 445, y: 605, kind: 'normal' }],
-      guards: [{ type: 'yeti', pts: [[665, 195], [665, 575]] }, { type: 'yeti', pts: [[985, 310], [1120, 310], [1120, 460], [985, 460]] }, { type: 'trex', pts: [[775, 255], [1035, 255]] }] },
-    { id: 'w4s1', world: 3, stageIdx: 0, title: 'بوابة الانتقال', goal: 6, time: 84,
-      walls: [{ x: 535, y: 170, w: 95, h: 130, kind: 'tech' }, { x: 535, y: 470, w: 95, h: 130, kind: 'tech' }, { x: 875, y: 320, w: 95, h: 130, kind: 'tech' }],
-      hides: [{ x: 405, y: 245 }, { x: 745, y: 515 }, { x: 1045, y: 245 }],
-      pads: [], portals: [{ x1: 350, y1: 565, x2: 1065, y2: 175, color: '#00e5ff' }], switches: [], lasers: [],
-      pickups: [{ kind: 'feather', x: 725, y: 225 }],
-      eggs: [{ x: 345, y: 385, kind: 'normal' }, { x: 705, y: 165, kind: 'cyber' }, { x: 705, y: 595, kind: 'normal' }, { x: 1135, y: 175, kind: 'cyber' }, { x: 1135, y: 385, kind: 'gold' }, { x: 1135, y: 585, kind: 'cyber' }, { x: 445, y: 155, kind: 'normal' }],
-      guards: [{ type: 'drone', pts: [[695, 255], [1020, 255]] }, { type: 'drone', pts: [[1020, 515], [695, 515]] }] },
-    { id: 'w4s2', world: 3, stageIdx: 1, title: 'مفاتيح الليزر', goal: 7, time: 88,
-      walls: [{ x: 515, y: 295, w: 90, h: 180, kind: 'tech' }, { x: 870, y: 88, w: 44, h: 155, kind: 'tech' }, { x: 870, y: 525, w: 44, h: 157, kind: 'tech' }],
-      hides: [{ x: 385, y: 235 }, { x: 715, y: 385 }, { x: 1035, y: 515 }],
-      pads: [{ kind: 'spring', x: 355, y: 565, dx: 1, dy: -0.25 }],
-      portals: [{ x1: 420, y1: 165, x2: 1035, y2: 175, color: '#c084fc' }],
-      switches: [{ x: 685, y: 215, gateId: 'g1' }, { x: 685, y: 555, gateId: 'g1' }, { x: 955, y: 385, gateId: 'g1' }],
-      lasers: [{ id: 'g1', x: 878, y: 248, w: 28, h: 272 }],
-      pickups: [{ kind: 'shield', x: 760, y: 165 }],
-      eggs: [{ x: 345, y: 385, kind: 'normal' }, { x: 650, y: 155, kind: 'normal' }, { x: 650, y: 615, kind: 'normal' }, { x: 1015, y: 295, kind: 'cyber' }, { x: 1145, y: 205, kind: 'cyber' }, { x: 1145, y: 385, kind: 'gold' }, { x: 1145, y: 565, kind: 'cyber' }, { x: 430, y: 605, kind: 'normal' }],
-      guards: [{ type: 'drone', pts: [[665, 275], [820, 275], [820, 495], [665, 495]] }, { type: 'drone', pts: [[1065, 225], [1065, 545]] }, { type: 'dog', pts: [[390, 200], [390, 520]] }] },
-    { id: 'w4s3', world: 3, stageIdx: 2, title: 'قلب المختبر', goal: 8, time: 94,
-      walls: [{ x: 495, y: 165, w: 95, h: 110, kind: 'tech' }, { x: 495, y: 495, w: 95, h: 110, kind: 'tech' }, { x: 845, y: 330, w: 100, h: 110, kind: 'tech' }],
-      hides: [{ x: 380, y: 255 }, { x: 685, y: 385 }, { x: 1015, y: 225 }, { x: 1015, y: 545 }],
-      pads: [{ kind: 'boost', x: 585, y: 575, w: 290, h: 66, dx: -1, dy: 0 }],
-      portals: [{ x1: 350, y1: 570, x2: 1075, y2: 165, color: '#00e5ff' }, { x1: 665, y1: 165, x2: 1075, y2: 595, color: '#f472b6' }],
-      switches: [{ x: 685, y: 270, gateId: 'g2' }, { x: 965, y: 495, gateId: 'g2' }],
-      lasers: [{ id: 'g2', x: 880, y: 125, w: 28, h: 195 }],
-      pickups: [{ kind: 'feather', x: 750, y: 495 }, { kind: 'shield', x: 440, y: 150 }],
-      eggs: [{ x: 340, y: 385, kind: 'normal' }, { x: 645, y: 235, kind: 'cyber' }, { x: 645, y: 535, kind: 'normal' }, { x: 790, y: 165, kind: 'gold' }, { x: 995, y: 165, kind: 'cyber' }, { x: 1150, y: 265, kind: 'cyber' }, { x: 1150, y: 385, kind: 'dino' }, { x: 1150, y: 515, kind: 'cyber' }, { x: 965, y: 615, kind: 'normal' }],
-      guards: [{ type: 'drone', pts: [[645, 225], [820, 225]] }, { type: 'drone', pts: [[995, 295], [1110, 295], [1110, 485], [995, 485]] }, { type: 'trex', pts: [[650, 515], [985, 515]] }] }
-  ];
-
-  function buildVsTemplate(worldIdx) {
-    var wInfo = WORLDS[clamp(worldIdx | 0, 0, 3)];
-    var gType = worldIdx === 1 ? 'trex' : worldIdx === 2 ? 'yeti' : worldIdx === 3 ? 'drone' : 'dog';
-    var wallKind = worldIdx === 1 ? 'rock' : worldIdx === 2 ? 'ice' : worldIdx === 3 ? 'tech' : 'barn';
-    var pads = [], portals = [];
-    if (worldIdx === 2) pads.push({ kind: 'boost', x: 470, y: 135, w: 340, h: 68, dx: -1, dy: 0 }, { kind: 'boost', x: 470, y: 565, w: 340, h: 68, dx: 1, dy: 0 });
-    else if (worldIdx === 3) portals.push({ x1: 370, y1: 175, x2: 910, y2: 595, color: '#00e5ff' });
-    else pads.push({ kind: 'spring', x: 420, y: 565, dx: 1, dy: -0.4 }, { kind: 'spring', x: 860, y: 205, dx: -1, dy: 0.4 });
-    return {
-      id: wInfo.id + 'vs', world: wInfo.idx, stageIdx: 0, title: 'سباق اللصوص: ' + wInfo.name, goal: 7, time: 68,
-      walls: [{ x: 595, y: 215, w: 90, h: 95, kind: wallKind }, { x: 595, y: 460, w: 90, h: 95, kind: wallKind }],
-      hides: [{ x: 435, y: 270 }, { x: 845, y: 500 }], pads: pads, portals: portals, switches: [], lasers: [],
-      pickups: [{ kind: 'feather', x: 640, y: 145 }, { kind: 'shield', x: 640, y: 625 }],
-      eggs: [{ x: 640, y: 385, kind: wInfo.eggSpecial }, { x: 495, y: 185, kind: 'normal' }, { x: 785, y: 185, kind: 'normal' }, { x: 495, y: 585, kind: 'normal' }, { x: 785, y: 585, kind: 'normal' }, { x: 485, y: 385, kind: 'gold' }, { x: 795, y: 385, kind: 'gold' }],
-      guards: [{ type: gType, pts: [[515, 345], [765, 345]] }, { type: worldIdx === 0 ? 'rooster' : gType, pts: [[765, 425], [515, 425]] }]
-    };
-  }
-
-  function getStage(indexOrId) {
-    if (typeof indexOrId === 'string') {
-      for (var i = 0; i < STAGES.length; i++) if (STAGES[i].id === indexOrId) return STAGES[i];
+  /* ------------------------------------------------------------ tracks */
+  var cache = [];
+  ER.track = function (i) {
+    if (cache[i]) return cache[i];
+    var world = M.floor(i / 3), local = i % 3, d = i / 8, len = LENGTHS[i];
+    var R = rng(1000 + i * 7919);
+    // Curvature, one value per metre: straight start and finish, alternating bends between.
+    var n = len + 1, kap = new Float32Array(n), pieces = [], s = 40, sign = R() < 0.5 ? -1 : 1;
+    while (s < len - 50) {
+      var straight = lerp(40, 22, d) * (0.7 + R() * 0.6);
+      s += straight;
+      var bend = lerp(40, 70, R()), k = sign * lerp(0.008, 0.014 + 0.012 * d, R());
+      if (s + bend > len - 45) break;
+      pieces.push([s, s + bend, k]);
+      s += bend; sign = -sign;
     }
-    return STAGES[clamp(indexOrId | 0, 0, STAGES.length - 1)];
-  }
-  function stageIndexOf(worldIdx, stageIdx) { return clamp(worldIdx | 0, 0, 3) * 3 + clamp(stageIdx | 0, 0, 2); }
-  function chainSpeedMult(n) { return n <= 0 ? 1.0 : n === 1 ? 1.07 : n === 2 ? 1.15 : 1.24; }
-  function chainScoreMult(n) { return n <= 1 ? 1.0 : n === 2 ? 1.5 : 2.2 + (n - 3) * 0.4; }
-  function atHome(p) { return Math.hypot(p.x - p.home.x, p.y - p.home.y) <= p.home.r; }
-
-  function circleVsRect(cx, cy, cr, rx, ry, rw, rh) {
-    var nx = clamp(cx, rx, rx + rw), ny = clamp(cy, ry, ry + rh);
-    var dx = cx - nx, dy = cy - ny, d2 = dx * dx + dy * dy;
-    if (d2 >= cr * cr) return null;
-    if (d2 > 1e-6) { var d = Math.sqrt(d2); return { x: (dx / d) * (cr - d), y: (dy / d) * (cr - d) }; }
-    var dl = cx - rx, dr = (rx + rw) - cx, dt = cy - ry, db = (ry + rh) - cy, m = Math.min(dl, dr, dt, db);
-    if (m === dl) return { x: -(dl + cr), y: 0 };
-    if (m === dr) return { x: dr + cr, y: 0 };
-    return m === dt ? { x: 0, y: -(dt + cr) } : { x: 0, y: db + cr };
-  }
-
-  function segmentIntersectsRect(x1, y1, x2, y2, rx, ry, rw, rh) {
-    var t0 = 0, t1 = 1, dx = x2 - x1, dy = y2 - y1;
-    var p = [-dx, dx, -dy, dy], q = [x1 - rx, rx + rw - x1, y1 - ry, ry + rh - y1];
-    for (var i = 0; i < 4; i++) {
-      if (Math.abs(p[i]) < 1e-8) { if (q[i] < 0) return false; }
-      else {
-        var t = q[i] / p[i];
-        if (p[i] < 0) { if (t > t1) return false; if (t > t0) t0 = t; }
-        else { if (t < t0) return false; if (t < t1) t1 = t; }
+    for (var m = 0; m < n; m++) {
+      var v = 0;
+      for (var p = 0; p < pieces.length; p++) {
+        var a = pieces[p][0], b = pieces[p][1];
+        if (m > a && m < b) v = pieces[p][2] * clamp(M.min(m - a, b - m) / 10, 0, 1);
       }
+      kap[m] = v;
     }
-    return t0 <= t1;
-  }
-
-  function clearSight(world, x1, y1, x2, y2) {
-    for (var i = 0; i < world.walls.length; i++) {
-      var w = world.walls[i];
-      if (segmentIntersectsRect(x1, y1, x2, y2, w.x, w.y, w.w, w.h)) return false;
+    // Centre line: heading th, position (px, pz). Forward = (sin th, -cos th).
+    var px = new Float32Array(n), pz = new Float32Array(n), th = new Float32Array(n);
+    for (m = 1; m < n; m++) {
+      th[m] = th[m - 1] + (kap[m - 1] + kap[m]) / 2;
+      var h = (th[m - 1] + th[m]) / 2;
+      px[m] = px[m - 1] + M.sin(h);
+      pz[m] = pz[m - 1] - M.cos(h);
     }
-    return true;
-  }
-
-  function resolveArenaAndWalls(world, ent) {
-    var r = ent.r;
-    ent.x = clamp(ent.x, AX0 + r, AX1 - r); ent.y = clamp(ent.y, AY0 + r, AY1 - r);
-    for (var pass = 0; pass < 2; pass++) {
-      for (var i = 0; i < world.walls.length; i++) {
-        var w = world.walls[i], push = circleVsRect(ent.x, ent.y, r, w.x, w.y, w.w, w.h);
-        if (push) { ent.x += push.x; ent.y += push.y; }
+    // Checkpoints: arches roughly every 75 m.
+    var cps = [0], nc = M.max(3, M.round(len / 75));
+    for (var c = 1; c < nc; c++) cps.push(M.round(len * c / nc));
+    // Obstacles from the world's patterns, more and closer on later tracks.
+    var kinds = ER.WORLDS[world].kinds.slice(0, M.min(7, 3 + local * 2 + (world > 0 ? 1 : 0)));
+    var items = [], last = '', gap = lerp(34, 19, d);
+    function nearCp(at) { for (var q = 1; q < cps.length; q++) if (M.abs(cps[q] - at) < 9) return true; return false; }
+    var script = i === 0 ? [['cone1', 0], ['cones2', 1], ['hurdleFull', 0]] : [];
+    s = 48;
+    while (s < len - 32) {
+      if (nearCp(s)) { s += 6; continue; }
+      var kind, lane = R();
+      if (script.length) { var sc = script.shift(); kind = sc[0]; lane = sc[1]; }
+      else { do { kind = kinds[M.floor(R() * kinds.length)]; } while (kind === last && kinds.length > 1); }
+      last = kind;
+      s = addPattern(items, kind, s, lane, R, d, len);
+      s += gap * (0.85 + R() * 0.35);
+    }
+    items.sort(function (x, y) { return x.s - y.s; });
+    items.forEach(function (it, idx) { it.i = idx; });
+    // Golden eggs: three per track, over a hurdle (jump for it) or out at the edge.
+    var gold = [];
+    [0.28, 0.58, 0.86].forEach(function (f) {
+      var want = len * f, best = null;
+      items.forEach(function (it) {
+        if (it.k === 'hurdle' && M.abs(it.s - want) < 45 && (!best || M.abs(it.s - want) < M.abs(best.s - want))) best = it;
+      });
+      if (best && !gold.some(function (g) { return g.s === best.s; })) {
+        gold.push({ s: best.s, x: clamp(best.x + (R() - 0.5) * best.hw, -2.6, 2.6), need: 0.3 });
+      } else {
+        var at = want;
+        for (var tries = 0; tries < 30 && items.some(function (it) { return M.abs(it.s - at) < 5; }); tries++) at += 3;
+        gold.push({ s: M.round(at), x: R() < 0.5 ? -3.0 : 3.0, need: 0 });
       }
-      ent.x = clamp(ent.x, AX0 + r, AX1 - r); ent.y = clamp(ent.y, AY0 + r, AY1 - r);
-    }
-  }
-
-  function makePlayer(id, x, y, home, skinId, startShield) {
-    return {
-      id: id, x: x, y: y, spawnX: x, spawnY: y, vx: 0, vy: 0, r: 21,
-      facing: id === 1 ? Math.PI : 0, skin: skinId | 0, home: { x: home.x, y: home.y, r: home.r || 64 },
-      carry: [], hatched: 0, score: 0, bestChain: 0, bonks: 0, shield: startShield | 0, featherTimer: 0,
-      dashTimer: 0, dashCd: 0, dashDx: id === 1 ? -1 : 1, dashDy: 0, decoyCd: 0,
-      springTimer: 0, springCd: 0, springVx: 0, springVy: 0, portalCd: 0, bonkTimer: 0, bonkVx: 0, bonkVy: 0, invuln: 0,
-      hidden: false, inMud: false, onBoost: false, moved: false, walkCycle: 0
-    };
-  }
-
-  function safeEggSpot(walls, x, y) {
-    for (var r = 0; r <= 120; r += 30) {
-      for (var a = 0; a < 8; a++) {
-        var ang = a * (Math.PI / 4), tx = clamp(x + Math.cos(ang) * r, AX0 + 40, AX1 - 40), ty = clamp(y + Math.sin(ang) * r, AY0 + 40, AY1 - 40);
-        var hit = false;
-        for (var i = 0; i < walls.length; i++) if (circleVsRect(tx, ty, 28, walls[i].x, walls[i].y, walls[i].w, walls[i].h)) { hit = true; break; }
-        if (!hit) return { x: tx, y: ty };
-      }
-    }
-    return { x: 350, y: 385 };
-  }
-
-  function createWorld(opts) {
-    opts = opts || {};
-    var mode = opts.mode === 'coop' || opts.mode === 'vs' ? opts.mode : 'solo';
-    var diffKey = DIFFS[opts.diff] ? opts.diff : 'normal', diff = DIFFS[diffKey];
-    var dda = typeof opts.dda === 'number' && Number.isFinite(opts.dda) ? clamp(opts.dda, 0, 1) : 0.35;
-    var ddaShift = (dda - 0.35) * 0.16;
-    var tpl = mode === 'vs' ? buildVsTemplate(opts.world != null ? opts.world : 0) : getStage(opts.stage != null ? opts.stage : 0);
-    var wInfo = WORLDS[tpl.world] || WORLDS[0];
-    var rng = makeRng(opts.seed != null ? opts.seed : (tpl.world * 97 + tpl.stageIdx * 31 + 17));
-    var guardSpeedScale = clamp(diff.guardSpeed * (1 + ddaShift), 0.62, 1.32);
-    var coneScale = clamp(diff.coneScale * (1 + ddaShift * 0.5), 0.75, 1.22);
-    var totalTime = Math.max(45, Math.round(tpl.time + diff.timeBonus - ddaShift * 18));
-    var goal = mode === 'coop' ? tpl.goal + 2 : tpl.goal;
-    var tuning = { baseSpeed: 296, guardSpeedScale: guardSpeedScale, coneScale: coneScale, magnetBonus: diff.magnetBonus, sleepPause: diff.sleepPause, dashCd: diff.dashCd, coinMult: diff.coinMult };
-
-    var players = [], skin0 = clamp(opts.skin | 0, 0, SKINS.length - 1);
-    var skin1 = opts.skin2 != null ? clamp(opts.skin2 | 0, 0, SKINS.length - 1) : ((skin0 + 2) % SKINS.length);
-    if (mode === 'vs') players.push(makePlayer(0, 120, 385, { x: 120, y: 385, r: 64 }, skin0, diff.startShield), makePlayer(1, 1160, 385, { x: 1160, y: 385, r: 64 }, skin1, diff.startShield));
-    else if (mode === 'coop') { var sh = { x: 128, y: 385, r: 68 }; players.push(makePlayer(0, 128, 355, sh, skin0, diff.startShield), makePlayer(1, 128, 415, sh, skin1, diff.startShield)); }
-    else players.push(makePlayer(0, 128, 385, { x: 128, y: 385, r: 66 }, skin0, diff.startShield));
-
-    var walls = (tpl.walls || []).map(function (w) { return { x: w.x, y: w.y, w: w.w, h: w.h, kind: w.kind }; });
-    var eggs = tpl.eggs.map(function (es, ei) { return { id: ei, x: es.x, y: es.y, nestX: es.x, nestY: es.y, kind: EGG_SPECS[es.kind] ? es.kind : 'normal', state: 'nest', carrier: -1, looseDelay: 0, looseAge: 0, wobble: ei * 1.1 }; });
-    if (mode === 'coop') {
-      var sp1 = safeEggSpot(walls, 430, 275), sp2 = safeEggSpot(walls, 760, 385);
-      eggs.push(
-        { id: eggs.length, x: sp1.x, y: sp1.y, nestX: sp1.x, nestY: sp1.y, kind: wInfo.eggSpecial, state: 'nest', carrier: -1, looseDelay: 0, looseAge: 0, wobble: 0.5 },
-        { id: eggs.length + 1, x: sp2.x, y: sp2.y, nestX: sp2.x, nestY: sp2.y, kind: 'gold', state: 'nest', carrier: -1, looseDelay: 0, looseAge: 0, wobble: 1.7 }
-      );
-    }
-
-    var guards = tpl.guards.map(function (gs, gi) {
-      var spec = GUARD_SPECS[gs.type] || GUARD_SPECS.rooster, p0 = gs.pts[0], p1 = gs.pts[1 % gs.pts.length];
-      return {
-        id: gi, type: gs.type, x: p0[0], y: p0[1], r: spec.r,
-        pts: gs.pts.map(function (pt) { return [pt[0], pt[1]]; }), wp: 1 % gs.pts.length,
-        speed: spec.speed * guardSpeedScale, chaseSpeed: spec.speed * guardSpeedScale * 1.22,
-        coneRange: spec.coneRange * coneScale, coneHalf: spec.coneHalf * coneScale,
-        look: Math.atan2(p1[1] - p0[1], p1[0] - p0[0]), scanPhase: gi * 1.7,
-        state: 'patrol', stateTimer: 0, pauseTimer: 0, bonkCd: 0, targetPid: -1, decoyTarget: null, bubble: '', bubbleTimer: 0, boss: !!spec.boss
-      };
     });
-
-    return {
-      id: tpl.id, title: tpl.title, worldIdx: wInfo.idx, stageIdx: tpl.stageIdx, worldInfo: wInfo,
-      mode: mode, diff: diffKey, tuning: tuning, rng: rng, time: 0, maxTime: totalTime, timeLeft: totalTime, goal: goal,
-      hatched: 0, score: 0, coinsEarned: 0, bestChain: 0, comboBursts: 0, bonks: 0, over: false, won: false, winner: -1, stars: 0,
-      walls: walls,
-      hides: (tpl.hides || []).map(function (h) { return { x: h.x, y: h.y, r: h.r || 40, kind: wInfo.podType }; }),
-      pads: (tpl.pads || []).map(function (pd) { return { kind: pd.kind, x: pd.x, y: pd.y, w: pd.w || 68, h: pd.h || 68, r: pd.r || 32, dx: pd.dx || 0, dy: pd.dy || 0, cd: 0 }; }),
-      portals: (tpl.portals || []).map(function (pt, idx) { return { id: idx, x1: pt.x1, y1: pt.y1, x2: pt.x2, y2: pt.y2, r: 30, color: pt.color || '#00e5ff' }; }),
-      switches: (tpl.switches || []).map(function (sw) { return { x: sw.x, y: sw.y, r: 26, gateId: sw.gateId, pressed: false }; }),
-      lasers: (tpl.lasers || []).map(function (lz) { return { id: lz.id, x: lz.x, y: lz.y, w: lz.w, h: lz.h, openTimer: 0 }; }),
-      pickups: (tpl.pickups || []).map(function (pk, idx) { return { id: idx, kind: pk.kind, x: pk.x, y: pk.y, r: 22, active: true }; }),
-      players: players, eggs: eggs, guards: guards, decoys: [], babies: [], events: []
-    };
-  }
-
-  function isAtStart(world) {
-    if (!world || !world.players.length) return true;
-    for (var i = 0; i < world.players.length; i++) {
-      var p = world.players[i];
-      if (p.moved || Math.hypot(p.x - p.spawnX, p.y - p.spawnY) > 2) return false;
-    }
-    return true;
-  }
-
-  function placeLooseEgg(world, px, py, awayX, awayY) {
-    var baseAng = Math.atan2(py - awayY, px - awayX);
-    if (!Number.isFinite(baseAng)) baseAng = 0;
-    for (var k = 0; k < 8; k++) {
-      var ang = baseAng + (k === 0 ? 0 : (k % 2 ? 0.55 : -0.55) * Math.ceil(k / 2));
-      var tx = clamp(px + Math.cos(ang) * 52, AX0 + 28, AX1 - 28), ty = clamp(py + Math.sin(ang) * 52, AY0 + 28, AY1 - 28);
-      var blocked = false;
-      for (var wi = 0; wi < world.walls.length; wi++) {
-        var w = world.walls[wi];
-        if (circleVsRect(tx, ty, 18, w.x, w.y, w.w, w.h)) { blocked = true; break; }
-      }
-      if (!blocked) return { x: tx, y: ty };
-    }
-    return { x: clamp(px, AX0 + 28, AX1 - 28), y: clamp(py, AY0 + 28, AY1 - 28) };
-  }
-
-  function bonkPlayer(world, p, srcX, srcY, reason) {
-    if (p.invuln > 0 || p.bonkTimer > 0 || atHome(p)) return false;
-    if (p.shield > 0) {
-      p.shield--; p.invuln = 1.5;
-      world.events.push({ type: 'shieldPop', pid: p.id, x: p.x, y: p.y });
-      return false;
-    }
-    var dx = p.x - srcX, dy = p.y - srcY, d = Math.hypot(dx, dy) || 1;
-    p.bonkTimer = BONK_DURATION; p.invuln = 2.1; p.dashTimer = 0;
-    p.bonkVx = (dx / d) * 240; p.bonkVy = (dy / d) * 240;
-    p.bonks++; world.bonks++;
-    var dropped = null;
-    if (p.carry.length > 0) {
-      dropped = p.carry.pop();
-      var spot = placeLooseEgg(world, p.x, p.y, srcX, srcY);
-      dropped.x = spot.x; dropped.y = spot.y; dropped.state = 'loose'; dropped.carrier = -1;
-      dropped.looseDelay = 0.3; dropped.looseAge = 0;
-    }
-    world.events.push({ type: 'bonk', pid: p.id, reason: reason || 'guard', dropped: !!dropped, x: p.x, y: p.y });
-    return true;
-  }
-
-  function canGuardSee(world, g, p) {
-    if (p.hidden || atHome(p) || p.invuln > 0 || p.bonkTimer > 0) return false;
-    if (g.state === 'sleep' || g.state === 'decoy' || g.bonkCd > 0) return false;
-    var dx = p.x - g.x, dy = p.y - g.y, dist = Math.hypot(dx, dy);
-    if (dist > g.coneRange) return false;
-    if (dist > g.r + p.r + 12 && Math.abs(wrapAngle(Math.atan2(dy, dx) - g.look)) > g.coneHalf) return false;
-    return clearSight(world, g.x, g.y, p.x, p.y);
-  }
-
-  function computeStars(world) {
-    if (!world.won) return 0;
-    if (world.mode === 'vs') return 3;
-    var ratio = world.timeLeft / Math.max(1, world.maxTime);
-    if ((ratio >= 0.32 || world.bestChain >= 3) && world.bonks <= 2) return 3;
-    return (ratio >= 0.14 || world.bonks <= 3) ? 2 : 1;
-  }
-
-  function finishWorld(world, won, winnerPid) {
-    if (world.over) return;
-    world.over = true; world.won = !!won; world.winner = winnerPid == null ? -1 : winnerPid;
-    if (won && world.mode !== 'vs') {
-      world.score += Math.round(world.timeLeft * 10);
-      world.stars = computeStars(world);
-      world.coinsEarned += world.stars * 4;
-    } else if (world.mode === 'vs') {
-      world.stars = 3; world.coinsEarned = Math.max(6, world.coinsEarned);
-    } else world.stars = 0;
-    world.events.push({ type: won ? 'win' : 'lose', stars: world.stars, score: world.score, coins: world.coinsEarned, winner: world.winner });
-  }
-
-  function stepPlayer(world, p, inp, dt) {
-    inp = inp || {};
-    if (p.invuln > 0) p.invuln = Math.max(0, p.invuln - dt);
-    if (p.featherTimer > 0) p.featherTimer = Math.max(0, p.featherTimer - dt);
-    if (p.dashCd > 0) p.dashCd = Math.max(0, p.dashCd - dt);
-    if (p.decoyCd > 0) p.decoyCd = Math.max(0, p.decoyCd - dt);
-    if (p.springCd > 0) p.springCd = Math.max(0, p.springCd - dt);
-    if (p.portalCd > 0) p.portalCd = Math.max(0, p.portalCd - dt);
-
-    var ix = +(inp.x || 0), iy = +(inp.y || 0), mag = Math.hypot(ix, iy);
-    if (mag > 1) { ix /= mag; iy /= mag; } else if (mag < 0.04) { ix = 0; iy = 0; }
-
-    if (inp.dash && p.dashCd <= 0 && p.bonkTimer <= 0) {
-      p.dashTimer = 0.28; p.dashCd = world.tuning.dashCd;
-      if (ix || iy) { p.dashDx = ix; p.dashDy = iy; p.facing = Math.atan2(iy, ix); }
-      else { p.dashDx = Math.cos(p.facing); p.dashDy = Math.sin(p.facing); }
-      p.moved = true;
-      var droppedDecoy = false;
-      if (p.decoyCd <= 0) {
-        p.decoyCd = 3.5;
-        var decoy = { x: p.x, y: p.y, life: 3.2, maxLife: 3.2, pid: p.id };
-        world.decoys.push(decoy); droppedDecoy = true;
-        for (var gi = 0; gi < world.guards.length; gi++) {
-          var g = world.guards[gi];
-          if (Math.hypot(g.x - decoy.x, g.y - decoy.y) <= 285 && g.bonkCd <= 0) {
-            g.state = 'decoy'; g.decoyTarget = decoy; g.stateTimer = 2.4; g.bubble = '؟!'; g.bubbleTimer = 2.2;
-            world.events.push({ type: 'distract', gid: g.id, x: g.x, y: g.y });
-          }
-        }
-      }
-      world.events.push({ type: 'dash', pid: p.id, decoy: droppedDecoy, x: p.x, y: p.y });
-    }
-
-    p.inMud = false; p.onBoost = false;
-    var boostVx = 0, boostVy = 0;
-    for (var pi = 0; pi < world.pads.length; pi++) {
-      var pad = world.pads[pi];
-      if (pad.kind === 'mud' && p.x >= pad.x && p.x <= pad.x + pad.w && p.y >= pad.y && p.y <= pad.y + pad.h) p.inMud = true;
-      else if (pad.kind === 'boost' && p.x >= pad.x && p.x <= pad.x + pad.w && p.y >= pad.y && p.y <= pad.y + pad.h) {
-        p.onBoost = true; boostVx += pad.dx * 165; boostVy += pad.dy * 165;
-      } else if (pad.kind === 'spring' && p.springCd <= 0 && p.bonkTimer <= 0 && Math.hypot(p.x - pad.x, p.y - pad.y) <= pad.r + p.r * 0.6) {
-        var sdx = (ix || iy) ? ix : (pad.dx || Math.cos(p.facing)), sdy = (ix || iy) ? iy : (pad.dy || Math.sin(p.facing));
-        var sm = Math.hypot(sdx, sdy) || 1;
-        p.springTimer = 0.32; p.springCd = 0.95; p.springVx = (sdx / sm) * 520; p.springVy = (sdy / sm) * 520; p.moved = true;
-        world.events.push({ type: 'spring', pid: p.id, x: pad.x, y: pad.y });
-      }
-    }
-
-    if (p.bonkTimer > 0) {
-      p.bonkTimer = Math.max(0, p.bonkTimer - dt);
-      var fade = 0.45 + 0.55 * (p.bonkTimer / BONK_DURATION);
-      p.vx = p.bonkVx * fade + ix * 90; p.vy = p.bonkVy * fade + iy * 90;
-    } else if (p.springTimer > 0) {
-      p.springTimer = Math.max(0, p.springTimer - dt);
-      p.vx = p.springVx + ix * 110; p.vy = p.springVy + iy * 110;
-    } else if (p.dashTimer > 0) {
-      p.dashTimer = Math.max(0, p.dashTimer - dt);
-      var dSpd = world.tuning.baseSpeed * chainSpeedMult(p.carry.length) * (p.inMud ? 2.05 : 1.85);
-      if (ix || iy) { p.dashDx = ix; p.dashDy = iy; p.facing = Math.atan2(iy, ix); }
-      p.vx = p.dashDx * dSpd + boostVx; p.vy = p.dashDy * dSpd + boostVy;
-    } else {
-      var spd = world.tuning.baseSpeed * chainSpeedMult(p.carry.length) * (p.featherTimer > 0 ? 1.24 : 1);
-      if (ix || iy) { p.facing = Math.atan2(iy, ix); p.moved = true; }
-      p.vx = ix * spd + (p.moved ? boostVx : 0); p.vy = iy * spd + (p.moved ? boostVx : 0);
-    }
-
-    p.x += p.vx * dt; p.y += p.vy * dt;
-    resolveArenaAndWalls(world, p);
-    var curSpd = Math.hypot(p.vx, p.vy);
-    if (curSpd > 15) p.walkCycle += (curSpd / 180) * dt * 8;
-
-    if (p.portalCd <= 0 && p.moved) {
-      for (var ti = 0; ti < world.portals.length; ti++) {
-        var pt = world.portals[ti], hit1 = Math.hypot(p.x - pt.x1, p.y - pt.y1) <= pt.r;
-        var hit2 = !hit1 && Math.hypot(p.x - pt.x2, p.y - pt.y2) <= pt.r;
-        if (hit1 || hit2) {
-          p.x = hit1 ? pt.x2 : pt.x1; p.y = hit1 ? pt.y2 : pt.y1; p.portalCd = 1.15;
-          for (var ci = 0; ci < p.carry.length; ci++) { p.carry[ci].x = p.x; p.carry[ci].y = p.y; }
-          world.events.push({ type: 'portal', pid: p.id, x: p.x, y: p.y });
-          break;
-        }
-      }
-    }
-
-    for (var si = 0; si < world.switches.length; si++) {
-      var sw = world.switches[si];
-      if (Math.hypot(p.x - sw.x, p.y - sw.y) <= sw.r + p.r * 0.65) {
-        for (var li = 0; li < world.lasers.length; li++) {
-          var lz = world.lasers[li];
-          if (lz.id === sw.gateId) {
-            if (lz.openTimer <= 0.5) world.events.push({ type: 'switch', pid: p.id, x: sw.x, y: sw.y });
-            lz.openTimer = 7.5;
-          }
-        }
-      }
-    }
-    for (var lzi = 0; lzi < world.lasers.length; lzi++) {
-      var gate = world.lasers[lzi];
-      if (gate.openTimer > 0) continue;
-      var lPush = circleVsRect(p.x, p.y, p.r, gate.x, gate.y, gate.w, gate.h);
-      if (lPush) { p.x += lPush.x; p.y += lPush.y; bonkPlayer(world, p, gate.x + gate.w / 2, gate.y + gate.h / 2, 'laser'); }
-    }
-
-    p.hidden = false;
-    for (var hi = 0; hi < world.hides.length; hi++) {
-      if (Math.hypot(p.x - world.hides[hi].x, p.y - world.hides[hi].y) <= world.hides[hi].r) { p.hidden = true; break; }
-    }
-    for (var ki = 0; ki < world.pickups.length; ki++) {
-      var pk = world.pickups[ki];
-      if (pk.active && Math.hypot(p.x - pk.x, p.y - pk.y) <= pk.r + p.r) {
-        pk.active = false;
-        if (pk.kind === 'feather') p.featherTimer = Math.max(p.featherTimer, 6.0);
-        else if (pk.kind === 'shield') p.shield = Math.min(3, p.shield + 1);
-        world.events.push({ type: 'powerup', pid: p.id, kind: pk.kind, x: pk.x, y: pk.y });
-      }
-    }
-
-    if (p.bonkTimer <= 0 && p.carry.length < 5) {
-      var pickR = 38 + world.tuning.magnetBonus + (p.featherTimer > 0 ? 22 : 0);
-      for (var ei = 0; ei < world.eggs.length; ei++) {
-        var egg = world.eggs[ei];
-        if (egg.state !== 'nest' && !(egg.state === 'loose' && egg.looseDelay <= 0)) continue;
-        if (Math.hypot(p.x - egg.x, p.y - egg.y) <= pickR) {
-          egg.state = 'carried'; egg.carrier = p.id; p.carry.push(egg);
-          world.events.push({ type: 'pickup', pid: p.id, eggType: egg.kind, chain: p.carry.length, x: egg.x, y: egg.y });
-          if (p.carry.length >= 5) break;
-        }
-      }
-    }
-    for (var ci2 = 0; ci2 < p.carry.length; ci2++) {
-      var ce = p.carry[ci2]; ce.wobble += dt * 9;
-      var anchorX = ci2 === 0 ? p.x : p.carry[ci2 - 1].x, anchorY = ci2 === 0 ? p.y : p.carry[ci2 - 1].y;
-      var spacing = ci2 === 0 ? 28 : 24, adx = ce.x - anchorX, ady = ce.y - anchorY, ad = Math.hypot(adx, ady);
-      if (ad < 1) { adx = -Math.cos(p.facing); ady = -Math.sin(p.facing); ad = 1; }
-      var tx = anchorX + (adx / ad) * spacing + Math.cos(ce.wobble + ci2) * 1.6;
-      var ty = anchorY + (ady / ad) * spacing + Math.sin(ce.wobble + ci2) * 1.6;
-      var blend = Math.min(1, dt * 18);
-      ce.x += (tx - ce.x) * blend; ce.y += (ty - ce.y) * blend;
-    }
-
-    if (p.carry.length > 0 && atHome(p)) {
-      var cnt = p.carry.length, rawPts = 0, rawCoins = 0;
-      for (var di = 0; di < cnt; di++) {
-        var de = p.carry[di], es2 = EGG_SPECS[de.kind] || EGG_SPECS.normal;
-        rawPts += es2.pts; rawCoins += es2.coins; de.state = 'hatched'; de.carrier = -1;
-        var bAng = (world.babies.length * 1.9) % TAU;
-        world.babies.push({
-          x: p.home.x + Math.cos(bAng) * (20 + (world.babies.length % 3) * 10),
-          y: p.home.y + Math.sin(bAng) * (18 + (world.babies.length % 3) * 8),
-          kind: de.kind === 'dino' ? 'raptor' : de.kind === 'cyber' ? 'mecha' : 'chick',
-          phase: world.babies.length * 0.8, pid: p.id
-        });
-      }
-      p.carry.length = 0;
-      var gainedPts = Math.round(rawPts * chainScoreMult(cnt));
-      var gainedCoins = Math.max(1, Math.round((rawCoins + (cnt >= 3 ? 4 : cnt === 2 ? 1 : 0)) * world.tuning.coinMult));
-      p.hatched += cnt; p.score += gainedPts; p.bestChain = Math.max(p.bestChain, cnt);
-      world.hatched += cnt; world.score += gainedPts; world.coinsEarned += gainedCoins;
-      world.bestChain = Math.max(world.bestChain, cnt);
-      if (cnt >= 3) { p.featherTimer = Math.max(p.featherTimer, 4.5); world.comboBursts++; }
-      world.events.push({ type: 'hatch', pid: p.id, count: cnt, points: gainedPts, coins: gainedCoins, mega: cnt >= 3, x: p.home.x, y: p.home.y });
-      if (world.mode === 'vs') { if (p.hatched >= world.goal) finishWorld(world, true, p.id); }
-      else if (world.hatched >= world.goal) finishWorld(world, true, 0);
-    }
-  }
-
-  function stepGuards(world, dt) {
-    for (var i = 0; i < world.guards.length; i++) {
-      var g = world.guards[i]; g.scanPhase += dt * 2.4;
-      if (g.bonkCd > 0) g.bonkCd = Math.max(0, g.bonkCd - dt);
-      if (g.bubbleTimer > 0 && (g.bubbleTimer = Math.max(0, g.bubbleTimer - dt)) <= 0) g.bubble = '';
-
-      if (g.state !== 'decoy' && g.state !== 'sleep' && g.bonkCd <= 0) {
-        for (var pi = 0; pi < world.players.length; pi++) {
-          var pl = world.players[pi];
-          if (canGuardSee(world, g, pl)) {
-            if (g.state !== 'chase') { g.bubble = '!'; g.bubbleTimer = 1.2; world.events.push({ type: 'spot', gid: g.id, pid: pl.id, x: g.x, y: g.y }); }
-            g.state = 'chase'; g.targetPid = pl.id; g.stateTimer = 2.0; break;
-          }
-        }
-      }
-
-      var tx = g.x, ty = g.y, spd = g.speed;
-      if (g.state === 'decoy') {
-        g.stateTimer -= dt;
-        if (!g.decoyTarget || g.decoyTarget.life <= 0 || g.stateTimer <= 0) { g.state = 'patrol'; g.decoyTarget = null; }
-        else { tx = g.decoyTarget.x; ty = g.decoyTarget.y; spd = g.speed * 0.95; }
-      } else if (g.state === 'chase') {
-        g.stateTimer -= dt;
-        var tgt = world.players[g.targetPid];
-        if (!tgt || tgt.hidden || atHome(tgt) || g.stateTimer <= 0) { g.state = 'patrol'; g.bubble = '؟'; g.bubbleTimer = 0.9; }
-        else { tx = tgt.x; ty = tgt.y; spd = g.chaseSpeed; }
-      } else if (g.state === 'sleep' && (g.pauseTimer -= dt) <= 0) { g.state = 'patrol'; g.bubble = ''; }
-
-      if (g.state === 'patrol') {
-        var wp = g.pts[g.wp]; tx = wp[0]; ty = wp[1];
-        if (Math.hypot(tx - g.x, ty - g.y) <= 10) {
-          g.wp = (g.wp + 1) % g.pts.length;
-          if (world.tuning.sleepPause >= 0.4 || g.boss) {
-            g.state = 'sleep'; g.pauseTimer = g.boss ? Math.max(0.75, world.tuning.sleepPause) : world.tuning.sleepPause;
-            g.bubble = '💤'; g.bubbleTimer = g.pauseTimer;
-          }
-        }
-      }
-
-      if (g.state !== 'sleep') {
-        var dx = tx - g.x, dy = ty - g.y, d = Math.hypot(dx, dy);
-        if (d > 4) {
-          var stepLen = Math.min(d, spd * dt);
-          g.x += (dx / d) * stepLen; g.y += (dy / d) * stepLen;
-          var wantLook = Math.atan2(dy, dx) + (g.state === 'patrol' ? Math.sin(g.scanPhase) * 0.22 : 0);
-          g.look = wrapAngle(g.look + wrapAngle(wantLook - g.look) * Math.min(1, dt * 8));
-        }
-        resolveArenaAndWalls(world, g);
-      }
-
-      for (var hi = 0; hi < world.players.length; hi++) {
-        var hm = world.players[hi].home, hdx = g.x - hm.x, hdy = g.y - hm.y, hd = Math.hypot(hdx, hdy), minD = hm.r + g.r + 18;
-        if (hd < minD) { var nh = hd || 1; g.x = hm.x + (hdx / nh) * minD; g.y = hm.y + (hdy / nh) * minD; if (g.state === 'chase') g.state = 'patrol'; }
-      }
-
-      if (g.bonkCd <= 0 && g.state !== 'sleep' && g.state !== 'decoy') {
-        for (var cpi = 0; cpi < world.players.length; cpi++) {
-          var cp = world.players[cpi];
-          if (cp.hidden || atHome(cp) || cp.invuln > 0 || cp.bonkTimer > 0) continue;
-          if (Math.hypot(cp.x - g.x, cp.y - g.y) <= g.r + cp.r - 2) {
-            bonkPlayer(world, cp, g.x, g.y, 'guard');
-            g.bonkCd = 1.35; g.state = 'patrol'; g.bubble = '!'; g.bubbleTimer = 0.9;
-          }
-        }
-      }
-    }
-  }
-
-  function stepWorld(world, dt, inputs) {
-    if (!world || world.over) return;
-    dt = clamp(+dt || 0, 0, 0.05);
-    if (dt <= 0) return;
-
-    world.time += dt; world.timeLeft = Math.max(0, world.maxTime - world.time);
-    for (var li = 0; li < world.lasers.length; li++) if (world.lasers[li].openTimer > 0) world.lasers[li].openTimer = Math.max(0, world.lasers[li].openTimer - dt);
-    for (var di = world.decoys.length - 1; di >= 0; di--) if ((world.decoys[di].life -= dt) <= 0) world.decoys.splice(di, 1);
-    for (var ei = 0; ei < world.eggs.length; ei++) {
-      var egg = world.eggs[ei];
-      if (egg.state === 'loose') {
-        if (egg.looseDelay > 0) egg.looseDelay = Math.max(0, egg.looseDelay - dt);
-        if ((egg.looseAge += dt) > 20) { egg.x = egg.nestX; egg.y = egg.nestY; egg.state = 'nest'; egg.looseAge = 0; }
-      }
-    }
-    if (world.mode === 'vs') {
-      var avail = 0;
-      for (var vi = 0; vi < world.eggs.length; vi++) if (world.eggs[vi].state !== 'hatched') avail++;
-      if (avail < 4) {
-        for (var rvi = 0; rvi < world.eggs.length && avail < 6; rvi++) {
-          var re = world.eggs[rvi];
-          if (re.state === 'hatched') { re.state = 'nest'; re.x = re.nestX; re.y = re.nestY; re.carrier = -1; avail++; }
-        }
-      }
-    }
-
-    inputs = inputs || [];
-    for (var pi = 0; pi < world.players.length; pi++) {
-      stepPlayer(world, world.players[pi], inputs[pi], dt);
-      if (world.over) return;
-    }
-    if (world.mode === 'vs' && world.players.length >= 2) {
-      var p0 = world.players[0], p1 = world.players[1];
-      if (Math.hypot(p0.x - p1.x, p0.y - p1.y) <= p0.r + p1.r + 4) {
-        if (p0.dashTimer > 0 && p1.dashTimer <= 0) bonkPlayer(world, p1, p0.x, p0.y, 'rival');
-        else if (p1.dashTimer > 0 && p0.dashTimer <= 0) bonkPlayer(world, p0, p1.x, p1.y, 'rival');
-      }
-    }
-    stepGuards(world, dt);
-    for (var bi = 0; bi < world.babies.length; bi++) world.babies[bi].phase += dt * 7;
-
-    if (!world.over && world.timeLeft <= 0) {
-      if (world.mode === 'vs') {
-        var a = world.players[0], b = world.players[1];
-        finishWorld(world, true, a.hatched > b.hatched ? 0 : b.hatched > a.hatched ? 1 : (a.score >= b.score ? 0 : 1));
-      } else finishWorld(world, world.hatched >= world.goal, -1);
-    }
-  }
-
-  function loadSave(raw) {
-    var src = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}, stars = [], best = [];
-    for (var i = 0; i < STAGES.length; i++) {
-      var st = Array.isArray(src.stars) ? src.stars[i] : 0, bs = Array.isArray(src.best) ? src.best[i] : 0;
-      stars.push(Number.isFinite(st) ? clamp(st | 0, 0, 3) : 0);
-      best.push(Number.isFinite(bs) ? clamp(bs | 0, 0, 9999999) : 0);
-    }
-    var skins = [0];
-    if (Array.isArray(src.skins)) {
-      for (var k = 0; k < src.skins.length; k++) {
-        var sid = src.skins[k] | 0;
-        if (sid >= 0 && sid < SKINS.length && skins.indexOf(sid) === -1) skins.push(sid);
-      }
-    }
-    var activeSkin = clamp(src.skin | 0, 0, SKINS.length - 1);
-    if (skins.indexOf(activeSkin) === -1) activeSkin = 0;
-    return {
-      v: 3, coins: Number.isFinite(src.coins) ? clamp(src.coins | 0, 0, 999999) : 0,
-      stars: stars, best: best, skins: skins, skin: activeSkin,
-      diff: DIFFS[src.diff] ? src.diff : 'normal',
-      world: Number.isFinite(src.world) ? clamp(src.world | 0, 0, WORLDS.length - 1) : 0,
-      stage: Number.isFinite(src.stage) ? clamp(src.stage | 0, 0, 2) : 0,
-      coached: !!src.coached
-    };
-  }
-
-  function buyOrEquipSkin(save, skinId) {
-    var id = clamp(skinId | 0, 0, SKINS.length - 1), spec = SKINS[id];
-    if (save.skins.indexOf(id) !== -1) { save.skin = id; return { ok: true, action: 'equip', skin: id }; }
-    if (save.coins < spec.cost) return { ok: false, action: 'poor', need: spec.cost - save.coins };
-    save.coins -= spec.cost; save.skins.push(id); save.skin = id;
-    return { ok: true, action: 'buy', skin: id };
-  }
-
-  var EREngine = {
-    W: W, H: H, AX0: AX0, AY0: AY0, AX1: AX1, AY1: AY1, BONK_DURATION: BONK_DURATION,
-    DIFFS: DIFFS, SKINS: SKINS, WORLDS: WORLDS, STAGES: STAGES, EGG_SPECS: EGG_SPECS, GUARD_SPECS: GUARD_SPECS,
-    getStage: getStage, stageIndexOf: stageIndexOf, chainSpeedMult: chainSpeedMult, chainScoreMult: chainScoreMult,
-    clearSight: clearSight, atHome: atHome, isAtStart: isAtStart, canGuardSee: canGuardSee,
-    createWorld: createWorld, stepWorld: stepWorld, loadSave: loadSave, buyOrEquipSkin: buyOrEquipSkin
+    var t = { i: i, id: ER.trackId(i), world: world, len: len, kap: kap, px: px, pz: pz, th: th, cps: cps, items: items, gold: gold };
+    cache[i] = t;
+    return t;
   };
 
-  if (typeof module !== 'undefined' && module.exports) module.exports = EREngine;
-  if (typeof window !== 'undefined') window.EREngine = EREngine;
-})();
+  function item(k, s, x, hw, hd, h, extra) {
+    var o = { k: k, s: s, x: x, hw: hw, hd: hd, h: h };
+    for (var key in extra) o[key] = extra[key];
+    return o;
+  }
+  var LANES = [-2.4, -0.8, 0.8, 2.4];
+  // Adds one pattern at s and returns where it ends.
+  function addPattern(items, kind, s, lane, R, d, len) {
+    var L = LANES[M.floor(lane * 4) % 4];
+    switch (kind) {
+      case 'cone1': items.push(item('cone', s, lane === 0 ? 0 : L, 0.35, 0.35, 0.6)); return s;
+      case 'cones2': {
+        var gapAt = M.floor(R() * 4);
+        for (var j = 0; j < 4; j++) if (j !== gapAt && (j === (gapAt + 1) % 4 || j === (gapAt + 3) % 4)) items.push(item('cone', s, LANES[j], 0.35, 0.35, 0.6));
+        return s;
+      }
+      case 'slalom': {
+        var side = R() < 0.5 ? -1 : 1;
+        for (var q = 0; q < 3; q++) items.push(item('cone', s + q * 8, side * (q % 2 ? -1.3 : 1.3), 0.35, 0.35, 0.6));
+        return s + 16;
+      }
+      case 'hurdleFull': items.push(item('hurdle', s, 0, ER.TRACK_W, 0.25, 0.5, { full: true })); return s;
+      case 'hurdleHalf': {
+        var hs = R() < 0.5 ? -1 : 1;
+        items.push(item('hurdle', s, hs * 2.1, 2.2, 0.25, 0.5, { full: false })); return s;
+      }
+      case 'puddle': items.push(item('puddle', s, clamp(L * 0.8, -2.2, 2.2), 1.3, 1.0, 0.05)); return s;
+      case 'ball': items.push(item('ball', s, 0, 0.55, 0.55, 1.1, { amp: 2.9, per: lerp(4.2, 3, d), ph: R() * 6.28 })); return s;
+      case 'critters': {
+        var nc = 1 + M.floor(R() * (1 + d * 2.5));
+        for (var c = 0; c < nc; c++) items.push(item('critter', s + c * 3.5, 0, 0.35, 0.3, 0.5, { sp: lerp(1.1, 1.9, R()), ph: R() * 14 }));
+        return s + (nc - 1) * 3.5;
+      }
+      case 'sprinkler': {
+        var sx = clamp(L, -2.4, 2.4);
+        items.push(item('sprinkler', s, sx, 0.85, 0.85, 3, { per: 2.6, on: 1.3, ph: R() * 2.6 }));
+        if (d > 0.4) items.push(item('sprinkler', s + 9, -sx, 0.85, 0.85, 3, { per: 2.6, on: 1.3, ph: R() * 2.6 }));
+        return s + 9;
+      }
+    }
+    return s;
+  }
+
+  // Where an item is (sideways) at race time t, and whether it is active.
+  ER.itemX = function (it, t) {
+    if (it.k === 'ball') return it.amp * M.sin(t * 6.2832 / it.per + it.ph);
+    if (it.k === 'critter') {
+      // Walks across and back between the edges (a triangle wave).
+      var span = 7, p = ((t + it.ph) * it.sp) % (span * 2);
+      return p < span ? -3.5 + p : 3.5 - (p - span);
+    }
+    return it.x;
+  };
+  ER.critterDir = function (it, t) { var p = ((t + it.ph) * it.sp) % 14; return p < 7 ? 1 : -1; };
+  ER.sprinklerOn = function (it, t) { return ((t + it.ph) % it.per + it.per) % it.per < it.on; };
+
+  // Curvature, heading and the centre line at distance s (interpolated).
+  ER.kappa = function (tr, s) { var i = clamp(M.floor(s), 0, tr.len); return tr.kap[i]; };
+  ER.frame = function (tr, s, out) {
+    var c = clamp(s, 0, tr.len), i = M.min(tr.len - 1, M.floor(c)), f = c - i;
+    var th = tr.th[i] + (tr.th[i + 1] - tr.th[i]) * f;
+    out = out || {};
+    out.x = tr.px[i] + (tr.px[i + 1] - tr.px[i]) * f;
+    out.z = tr.pz[i] + (tr.pz[i + 1] - tr.pz[i]) * f;
+    // Beyond the finish the line goes straight on.
+    if (s > tr.len) { out.x += M.sin(th) * (s - tr.len); out.z -= M.cos(th) * (s - tr.len); }
+    out.th = th;
+    return out;
+  };
+  // World position of track point (s, lateral x).
+  ER.toWorld = function (tr, s, x, out) {
+    out = ER.frame(tr, s, out);
+    out.x += M.cos(out.th) * x;
+    out.z += M.sin(out.th) * x;
+    return out;
+  };
+
+  /* ------------------------------------------------------------ difficulty */
+  // level 0..1 (from Kit.dda in game.js) -> the knobs the race uses.
+  ER.tuning = function (level) {
+    var l = clamp(level || 0, 0, 1);
+    return {
+      cpuSpeed: lerp(0.84, 1.1, l),     // CPU jog speed relative to the player's
+      sens: lerp(0.5, 1.15, l),         // how strongly running shakes the egg
+      cradle: lerp(3.0, 0.8, l),        // how much the spoon pulls the egg back to the middle
+      damp: lerp(1.8, 1.0, l),
+      hurdleH: lerp(0.35, 0.55, l),
+      cpuSkill: lerp(0.55, 0.92, l)     // how often CPUs see an obstacle in time
+    };
+  };
+
+  /* ------------------------------------------------------------ race */
+  ER.CPU = [
+    { name: 'زوزو', skin: 2 }, { name: 'لولو', skin: 4 }, { name: 'سوسو', skin: 3 }
+  ];
+  // opts: { humans: 1|2, cpus, tune (ER.tuning), seed, skins: [p1, p2] }
+  ER.create = function (trackIndex, opts) {
+    opts = opts || {};
+    var tr = ER.track(trackIndex), humans = opts.humans === 2 ? 2 : 1;
+    var cpus = opts.cpus == null ? (humans === 2 ? 2 : 3) : opts.cpus;
+    var tune = opts.tune || ER.tuning(0.35), R = rng(opts.seed == null ? 77 : opts.seed);
+    var count = humans + cpus, runners = [];
+    var lanes = count === 4 ? [-2.4, -0.8, 0.8, 2.4] : [-1.6, 0, 1.6];
+    // Players start in the middle lanes.
+    var order = count === 4 ? (humans === 2 ? [1, 2, 0, 3] : [1, 0, 2, 3]) : [1, 0, 2];
+    // CPU looks: never the same outfit as a player.
+    var taken = [], cpuSkins = [];
+    for (var h = 0; h < humans; h++) taken.push((opts.skins && opts.skins[h]) || 0);
+    [2, 4, 3, 1, 5, 6, 0].forEach(function (sk) { if (taken.indexOf(sk) < 0 && cpuSkins.length < 3) cpuSkins.push(sk); });
+    for (var i = 0; i < count; i++) {
+      var human = i < humans, cpu = human ? null : ER.CPU[i - humans];
+      runners.push({
+        i: i, human: human, name: human ? '' : cpu.name, skin: human ? taken[i] : cpuSkins[i - humans],
+        s: 0, x: lanes[order[i]], v: 0, vx: 0, y: 0, vy: 0, air: false, lean: 0,
+        e: 0, ev: 0, ph: R() * 6.28, state: 'run', timer: 0, stun: 0, ghost: 0, slow: 0, splash: 0, jumpBuf: 0,
+        cp: 0, drops: 0, gold: 0, hits: 0, jumps: 0, cleared: 0, finished: false, finishT: 0, place: 0, warn: false,
+        lastHit: -1, hitCd: 0, phase: 0,
+        ai: human ? null : { speed: tune.cpuSpeed * (0.97 + 0.06 * R()), tx: lanes[order[i]], seen: {}, react: {}, think: 0, jumpAt: -1 }
+      });
+    }
+    return {
+      track: tr, tune: tune, humans: humans, runners: runners, rng: R,
+      phase: 'count', clock: 0, t: 0, goldTaken: tr.gold.map(function () { return -1; }),
+      finishers: 0, over: false, overT: 0, ev: [], lastCount: 4
+    };
+  };
+
+  function emit(race, e) { if (race.ev.length < 64) race.ev.push(e); }
+
+  // inputs[i] for each human: { steer: -1..1, up, down, jump (pressed this step) }
+  ER.step = function (race, dt, inputs) {
+    race.clock += dt;
+    if (race.phase === 'count') {
+      var left = ER.COUNTDOWN - race.clock, n = M.ceil(left);
+      if (n < race.lastCount && n > 0) { race.lastCount = n; emit(race, { t: 'count', n: n }); }
+      // Wiggle in place while waiting: steering only, no running.
+      for (var w = 0; w < race.humans; w++) {
+        var rr = race.runners[w], inp0 = (inputs && inputs[w]) || {};
+        rr.lean = approach(rr.lean, (inp0.steer || 0) * 0.5, dt * 6);
+      }
+      if (left <= 0) { race.phase = 'race'; race.t = 0; emit(race, { t: 'count', n: 0 }); }
+      return;
+    }
+    race.t += dt;
+    var leader = 0, lead = null;
+    for (var i = 0; i < race.runners.length; i++) {
+      var r = race.runners[i];
+      if (r.human && (!lead || r.s > lead.s)) lead = r;
+    }
+    for (i = 0; i < race.runners.length; i++) {
+      r = race.runners[i];
+      var inp = r.human ? (inputs && inputs[i]) || {} : think(race, r, dt, lead);
+      stepRunner(race, r, dt, inp);
+      if (!r.finished) leader = M.max(leader, r.s);
+    }
+    places(race);
+    if (race.over) race.overT += dt;
+  };
+
+  function think(race, r, dt, lead) {
+    var a = r.ai, tr = race.track, t = race.t, inp = { steer: 0, jump: false };
+    // Rubber band: CPUs far ahead of the players ease off, CPUs behind speed up.
+    var gap = lead ? lead.s - r.s : 0, end = r.s > tr.len * 0.85 ? 0.5 : 1;
+    var band = clamp(1 + gap * 0.012 * end, 0.82, 1.18);
+    if (lead && lead.state === 'splat') band = M.min(band, 1);
+    a.vt = ER.V_JOG * a.speed * band;
+    // Look ahead and pick a lane that is clear, or plan a jump.
+    a.think -= dt;
+    if (a.think <= 0) {
+      a.think = 0.12;
+      var want = a.tx, jumpAt = -1;
+      for (var k = 0; k < tr.items.length; k++) {
+        var it = tr.items[k], ds = it.s - r.s;
+        if (ds < 0.5 || ds > 16) continue;
+        if (a.react[k] == null) a.react[k] = race.rng() < race.tune.cpuSkill;
+        if (!a.react[k]) continue;
+        var arrive = t + ds / M.max(1, r.v), ix = ER.itemX(it, arrive);
+        if (it.k === 'sprinkler' && !ER.sprinklerOn(it, arrive) && !ER.sprinklerOn(it, arrive + 0.3)) continue;
+        var blocked = M.abs(ix - want) < it.hw + 0.6;
+        if (!blocked) continue;
+        if (it.k === 'hurdle' && (it.full || ds < 6)) { jumpAt = it.s; continue; }
+        if ((it.k === 'puddle' || it.k === 'critter') && ds < 5) { jumpAt = it.s; continue; }
+        // Nearest clear lane.
+        var best = want, bestCost = 1e9;
+        for (var c = -3; c <= 3; c++) {
+          var cx = c * 1.1;
+          if (M.abs(ix - cx) < it.hw + 0.7) continue;
+          var cost = M.abs(cx - r.x);
+          if (cost < bestCost) { bestCost = cost; best = cx; }
+        }
+        want = best;
+      }
+      a.tx = want;
+      a.jumpAt = jumpAt;
+    }
+    var dx = a.tx - r.x;
+    inp.steer = M.abs(dx) < 0.15 ? 0 : clamp(dx * 1.5, -1, 1);
+    if (a.jumpAt >= 0) {
+      var dj = a.jumpAt - r.s, lead2 = 1.4 + r.v * 0.12;
+      if (dj > 0 && dj < lead2) { inp.jump = true; a.jumpAt = -1; }
+    }
+    return inp;
+  }
+
+  function stepRunner(race, r, dt, inp) {
+    var tr = race.track, tune = race.tune;
+    r.hitCd = M.max(0, r.hitCd - dt);
+    r.ghost = M.max(0, r.ghost - dt);
+    if (r.state === 'splat') {
+      r.timer -= dt;
+      r.v = M.max(0, r.v - 16 * dt);
+      r.s += r.v * dt;
+      r.vx = 0;
+      if (r.timer <= 0) respawn(race, r);
+      return;
+    }
+    var stunned = r.stun > 0;
+    r.stun = M.max(0, r.stun - dt);
+    r.slow = M.max(0, r.slow - dt);
+    r.splash = M.max(0, r.splash - dt);
+    // Forward speed.
+    var vt;
+    if (r.finished) vt = 3;
+    else if (r.human) vt = inp.up ? ER.V_SPRINT : inp.down ? ER.V_SLOW : ER.V_JOG;
+    else vt = r.ai.vt;
+    if (r.slow > 0) vt *= 0.6;
+    if (stunned) vt *= 0.25;
+    r.v = approach(r.v, vt, (vt > r.v ? 7 : 14) * dt);
+    // Sideways.
+    var steer = stunned || r.finished ? 0 : clamp(inp.steer || 0, -1, 1);
+    var vxPrev = r.vx;
+    r.vx = approach(r.vx, steer * ER.VX_MAX, 28 * dt);
+    r.x += r.vx * dt;
+    if (r.x > ER.HALF) { r.x = ER.HALF; r.vx = M.min(0, r.vx); }
+    if (r.x < -ER.HALF) { r.x = -ER.HALF; r.vx = M.max(0, r.vx); }
+    var ax = (r.vx - vxPrev) / dt;
+    // Jump (with a short buffer so an early press still counts).
+    // Helper: after two trips on the same hurdle the runner hops it by itself (nobody gets stuck).
+    if (r.human && !r.air && r.trips) {
+      for (var hk in r.trips) {
+        var hi = tr.items[hk], dh = hi.s - r.s;
+        if (r.trips[hk] >= 2 && dh > 0 && dh < 1.6 + r.v * 0.1 && M.abs(hi.x - r.x) < hi.hw + 0.4) { inp = { steer: inp.steer, up: inp.up, down: inp.down, jump: true }; r.helped = true; }
+      }
+    }
+    if (inp.jump) r.jumpBuf = 0.16;
+    else r.jumpBuf = M.max(0, r.jumpBuf - dt);
+    if (r.jumpBuf > 0 && !r.air && !stunned && !r.finished) {
+      r.air = true; r.vy = ER.JUMP_V; r.jumpBuf = 0; r.jumps++;
+      emit(race, { t: 'jump', r: r.i });
+    }
+    if (r.air) {
+      r.vy -= ER.GRAVITY * dt;
+      r.y += r.vy * dt;
+      if (r.y <= 0) {
+        r.y = 0; r.air = false; r.vy = 0;
+        if (!r.finished) r.ev += (race.rng() - 0.5) * 1.1 * tune.sens;
+        emit(race, { t: 'land', r: r.i });
+      }
+    }
+    var s0 = r.s;
+    r.s += r.v * dt;
+    r.phase += r.v * dt * 1.35;
+    // The egg on the spoon.
+    if (!r.finished) egg(race, r, dt, ax);
+    if (r.state !== 'run') return;
+    if (!r.finished) {
+      collide(race, r, s0);
+      if (r.state !== 'run') return;
+      if (r.human) collect(race, r);
+      for (var c = r.cp + 1; c < tr.cps.length; c++) {
+        if (r.s >= tr.cps[c]) { r.cp = c; emit(race, { t: 'cp', r: r.i, i: c }); }
+      }
+      if (r.s >= tr.len) {
+        r.finished = true; r.finishT = race.t; race.finishers++;
+        r.place = race.finishers;
+        r.e *= 0.3; r.ev = 0;
+        emit(race, { t: 'finish', r: r.i, place: r.place, human: r.human });
+        if (r.human && race.runners.every(function (q) { return !q.human || q.finished; })) race.over = true;
+      }
+    }
+  }
+
+  function egg(race, r, dt, ax) {
+    var tune = race.tune, t = race.t;
+    var target;
+    if (r.human) target = r.vx / ER.VX_MAX;
+    else target = clamp(1.6 * r.e + 0.5 * r.ev, -1, 1) * (0.35 + 0.5 * race.tune.cpuSkill) + (r.vx / ER.VX_MAX) * 0.2;
+    r.lean = approach(r.lean, target, dt * 9);
+    var v = r.v / ER.V_SPRINT;
+    var noise = 0.55 * M.sin(4.3 * t + r.ph) + 0.35 * M.sin(9.1 * t + 1.7 * r.ph) + 0.3 * M.sin(1.9 * t + 2.3 * r.ph);
+    var amp = tune.sens * (0.35 + 1.9 * v * v);
+    if (r.splash > 0) amp *= 2.2;
+    var acc = -r.lean * K_LEAN - ax * K_AX - ER.kappa(race.track, r.s) * r.v * r.v * K_TURN + noise * amp;
+    var ae = M.abs(r.e);
+    acc += -tune.cradle * r.e + (ae > RIM ? RIM_PUSH * (ae - RIM) * (r.e > 0 ? 1 : -1) : 0);
+    r.ev += acc * dt;
+    r.ev -= r.ev * tune.damp * dt;
+    r.e += r.ev * dt;
+    var warn = M.abs(r.e) > 0.7;
+    if (warn && !r.warn) emit(race, { t: 'wobble', r: r.i });
+    r.warn = warn;
+    if (M.abs(r.e) > 1) drop(race, r);
+  }
+
+  function drop(race, r) {
+    r.state = 'splat'; r.timer = 1.5; r.drops++;
+    emit(race, { t: 'drop', r: r.i, side: r.e > 0 ? 1 : -1, s: r.s, x: r.x, human: r.human });
+  }
+
+  function respawn(race, r) {
+    var tr = race.track;
+    r.s = tr.cps[r.cp]; r.x = 0; r.v = 0; r.vx = 0; r.y = 0; r.vy = 0; r.air = false;
+    r.e = 0; r.ev = 0; r.lean = 0; r.state = 'run'; r.ghost = 1.4; r.stun = 0; r.slow = 0; r.splash = 0; r.warn = false;
+    if (r.ai) { r.ai.tx = 0; r.ai.jumpAt = -1; r.ai.react = {}; }
+    emit(race, { t: 'respawn', r: r.i });
+  }
+
+  var IMPULSE = { cone: 1.3, hurdle: 2.6, ball: 2.0, critter: 1.6, sprinkler: 1.8 };
+  function collide(race, r, s0) {
+    if (r.ghost > 0) return;
+    var tr = race.track, t = race.t, items = tr.items, tune = race.tune;
+    for (var k = 0; k < items.length; k++) {
+      var it = items[k];
+      if (it.s - it.hd - 0.3 > r.s) break;
+      if (it.s + it.hd + 0.3 < s0) continue;
+      var ix = ER.itemX(it, t);
+      if (M.abs(r.x - ix) > it.hw + 0.35) continue;
+      var h = it.k === 'hurdle' ? tune.hurdleH : it.h;
+      if (it.k === 'sprinkler' && !ER.sprinklerOn(it, t)) continue;
+      if (r.y > h) {
+        if (it.k === 'hurdle' && r.lastHit !== k) { r.lastHit = k; r.cleared++; emit(race, { t: 'clear', r: r.i, k: it.k }); }
+        continue;
+      }
+      if (r.lastHit === k && r.hitCd > 0) continue;
+      r.lastHit = k; r.hitCd = 0.8;
+      if (it.k === 'puddle') {
+        r.slow = 0.7; r.splash = 0.7;
+        emit(race, { t: 'splash', r: r.i, s: it.s, x: ix });
+        continue;
+      }
+      var side = r.x === ix ? (race.rng() < 0.5 ? -1 : 1) : (r.x > ix ? 1 : -1);
+      r.ev += side * IMPULSE[it.k] * (0.8 + 0.4 * race.rng());
+      r.stun = it.k === 'hurdle' ? 0.6 : 0.35;
+      r.v *= it.k === 'hurdle' ? 0.3 : 0.5;
+      r.hits++;
+      if (it.k === 'sprinkler' || it.k === 'ball') r.vx = side * 4;
+      emit(race, { t: 'hit', r: r.i, k: it.k, i: k, s: it.s, x: ix, human: r.human });
+      // Tripping over a hurdle always throws the egg off the spoon.
+      if (it.k === 'hurdle') { r.trips = r.trips || {}; r.trips[k] = (r.trips[k] || 0) + 1; r.e = side * 1.01; drop(race, r); return; }
+    }
+  }
+
+  function collect(race, r) {
+    var g = race.track.gold;
+    for (var k = 0; k < g.length; k++) {
+      if (race.goldTaken[k] >= 0) continue;
+      if (M.abs(g[k].s - r.s) < 1.1 && M.abs(g[k].x - r.x) < 1.0 && r.y >= g[k].need) {
+        race.goldTaken[k] = r.i; r.gold++;
+        emit(race, { t: 'gold', r: r.i, i: k });
+      }
+    }
+  }
+
+  // Live places: finishers by finish order, then by distance.
+  function places(race) {
+    var list = race.runners.slice().sort(function (a, b) {
+      if (a.finished && b.finished) return a.place - b.place;
+      if (a.finished) return -1;
+      if (b.finished) return 1;
+      return b.s - a.s;
+    });
+    for (var i = 0; i < list.length; i++) list[i].rank = i + 1;
+  }
+  ER.progress = function (race, r) { return clamp(r.s / race.track.len, 0, 1); };
+
+  /* ------------------------------------------------------------ results */
+  // Stars: 1 = finished, 2 = first place, 3 = never dropped the egg.
+  ER.stars = function (r) {
+    if (!r.finished) return 0;
+    return 1 + (r.place === 1 ? 1 : 0) + (r.drops === 0 ? 1 : 0);
+  };
+  ER.starFlags = function (r) { return [r.finished, r.finished && r.place === 1, r.finished && r.drops === 0]; };
+  // 0..1 for Kit.dda (one-player races only).
+  ER.outcome = function (r) {
+    var p = [1, 0.7, 0.4, 0.15][clamp(r.place - 1, 0, 3)];
+    return clamp(p * 0.75 + M.max(0, 0.25 - r.drops * 0.1), 0, 1);
+  };
+  ER.reward = function (r) { return r.gold + [3, 2, 1, 1][clamp(r.place - 1, 0, 3)]; };
+
+  /* ------------------------------------------------------------ skins + save */
+  // Runner looks: shirt, shorts, hair, extra (hat kind), price in golden eggs.
+  ER.RUNNERS = [
+    { name: 'رياضي', shirt: '#ff4d4d', shorts: '#2b59c3', hair: '#3b2416', hat: 'cap', capColor: '#ffd23f', price: 0 },
+    { name: 'كتكوت', shirt: '#ffd23f', shorts: '#ff9f1c', hair: '#ffd23f', hat: 'crest', capColor: '#ff5a36', price: 5 },
+    { name: 'بطل أزرق', shirt: '#2ea8ff', shorts: '#1b3a8a', hair: '#1f1a17', hat: 'band', capColor: '#ffffff', price: 0 },
+    { name: 'ديناصور', shirt: '#4cd964', shorts: '#2a8f3d', hair: '#4cd964', hat: 'spikes', capColor: '#ffe14d', price: 8 },
+    { name: 'وردي', shirt: '#ff6fb5', shorts: '#8e44ad', hair: '#6b3b1e', hat: 'bun', capColor: '#ff6fb5', price: 10 },
+    { name: 'أرنب', shirt: '#f4f4f8', shorts: '#ff8fb8', hair: '#f4f4f8', hat: 'ears', capColor: '#ffb3cf', price: 12 },
+    { name: 'رائد فضاء', shirt: '#e8eef7', shorts: '#ff7a1a', hair: '#e8eef7', hat: 'helmet', capColor: '#5bd1ff', price: 16 },
+    { name: 'ملك السباق', shirt: '#7a3cff', shorts: '#2b1a66', hair: '#2b1a10', hat: 'crown', capColor: '#ffd23f', price: 22 }
+  ];
+  ER.EGGS = [
+    { name: 'أبيض', base: '#fffaf0', spot: null, price: 0 },
+    { name: 'بني', base: '#e3b07a', spot: null, price: 3 },
+    { name: 'منقّط', base: '#fff3df', spot: '#c98a4b', price: 5 },
+    { name: 'ديناصور', base: '#9be564', spot: '#3c8d2f', price: 8 },
+    { name: 'قوس قزح', base: 'rainbow', spot: null, price: 12 },
+    { name: 'ذهبي', base: '#ffcc1a', spot: '#fff2a8', price: 18 }
+  ];
+  ER.SAVE_VERSION = 2;
+  ER.newSave = function () {
+    return { v: 2, stars: zeros(9), best: zeros(9), gold: zeros(9), eggs: 0, runner: 0, egg: 0, ownR: [0, 2], ownE: [0], coach: false, duo: false };
+  };
+  function zeros(n) { var a = []; for (var i = 0; i < n; i++) a.push(0); return a; }
+  // Old saves (other shapes) are ignored; bad values are cleaned up.
+  ER.loadSave = function (raw) {
+    var s = ER.newSave();
+    if (!raw || typeof raw !== 'object' || raw.v !== 2) return s;
+    function nums(a, max) { return Array.isArray(a) ? s.stars.map(function (_, i) { var v = +a[i]; return isFinite(v) ? clamp(v, 0, max) : 0; }) : zeros(9); }
+    s.stars = nums(raw.stars, 3).map(M.floor);
+    s.best = nums(raw.best, 3600);
+    s.gold = nums(raw.gold, 3).map(M.floor);
+    s.eggs = isFinite(+raw.eggs) ? clamp(M.floor(+raw.eggs), 0, 99999) : 0;
+    function owned(a, list) { var o = (Array.isArray(a) ? a : []).filter(function (i) { return i === (i | 0) && i >= 0 && i < list.length; }); return o; }
+    s.ownR = owned(raw.ownR, ER.RUNNERS); if (s.ownR.indexOf(0) < 0) s.ownR.push(0); if (s.ownR.indexOf(2) < 0) s.ownR.push(2);
+    s.ownE = owned(raw.ownE, ER.EGGS); if (s.ownE.indexOf(0) < 0) s.ownE.push(0);
+    s.runner = s.ownR.indexOf(raw.runner) >= 0 ? raw.runner : 0;
+    s.egg = s.ownE.indexOf(raw.egg) >= 0 ? raw.egg : 0;
+    s.coach = !!raw.coach;
+    s.duo = !!raw.duo;
+    return s;
+  };
+  ER.isOpen = function (save, i) { return i === 0 || save.stars[i - 1] > 0; };
+  ER.totalStars = function (save) { return save.stars.reduce(function (a, b) { return a + b; }, 0); };
+  ER.nextTrack = function (save) {
+    for (var i = 0; i < 9; i++) if (!save.stars[i]) return i;
+    var low = 0;
+    for (i = 1; i < 9; i++) if (save.stars[i] < save.stars[low]) low = i;
+    return low;
+  };
+  // Records a finished one-player race; returns what changed.
+  ER.record = function (save, i, r) {
+    var stars = ER.stars(r), out = { stars: stars, newStars: M.max(0, stars - save.stars[i]), newBest: false, reward: ER.reward(r) };
+    if (!r.finished) return out;
+    var wasOpen = i < 8 ? ER.isOpen(save, i + 1) : true;
+    save.stars[i] = M.max(save.stars[i], stars);
+    if (!save.best[i] || r.finishT < save.best[i]) { out.newBest = !!save.best[i]; save.best[i] = M.round(r.finishT * 100) / 100; }
+    save.gold[i] = M.max(save.gold[i], r.gold);
+    save.eggs += out.reward;
+    out.unlocked = i < 8 && !wasOpen && ER.isOpen(save, i + 1);
+    return out;
+  };
+
+  if (typeof module !== 'undefined' && module.exports) module.exports = ER;
+  else root.ER = ER;
+})(this);
