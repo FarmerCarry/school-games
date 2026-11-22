@@ -781,16 +781,10 @@
     view.render();
     dirty = false;
 
+    if (view.software) { try { view.renderer.getContext().finish(); } catch (e) { /* ignore */ } }
     exposeApi();
     Kit.loop(stepSim, renderFrame);
-
-    var live = false;
-    function goLive() {
-      if (live) return;
-      live = true;
-      Kit.ready();
-    }
-    view.whenDrawn(goLive, 8000);
+    Kit.ready();
   }
 
   boot();
