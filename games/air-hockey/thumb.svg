@@ -1,87 +1,52 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
   <defs>
-    <radialGradient id="bg" cx="50%" cy="48%" r="68%">
-      <stop offset="0%" stop-color="#14296b"/>
-      <stop offset="65%" stop-color="#081134"/>
-      <stop offset="100%" stop-color="#050716"/>
-    </radialGradient>
-    <radialGradient id="fireGlow" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="#fff8b0"/>
-      <stop offset="40%" stop-color="#ff8a00"/>
-      <stop offset="80%" stop-color="#ff2a00" stop-opacity="0.7"/>
-      <stop offset="100%" stop-color="#ff2a00" stop-opacity="0"/>
-    </radialGradient>
-    <linearGradient id="cyanMallet" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#7ef9ff"/>
-      <stop offset="55%" stop-color="#00bfff"/>
-      <stop offset="100%" stop-color="#084eb8"/>
-    </linearGradient>
-    <linearGradient id="bossMallet" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#ff8fa3"/>
-      <stop offset="55%" stop-color="#ff2a55"/>
-      <stop offset="100%" stop-color="#870a28"/>
-    </linearGradient>
+    <radialGradient id="bg" cx="50%" cy="35%" r="75%"><stop offset="0" stop-color="#5a3fc0"/><stop offset="1" stop-color="#1c1240"/></radialGradient>
+    <linearGradient id="top" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9fd8ff"/><stop offset="1" stop-color="#e8f8ff"/></linearGradient>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#5ff2ff" stop-opacity=".95"/><stop offset="1" stop-color="#5ff2ff" stop-opacity="0"/></radialGradient>
+    <linearGradient id="trail" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5ff2ff" stop-opacity="0"/><stop offset="1" stop-color="#5ff2ff" stop-opacity=".85"/></linearGradient>
+    <radialGradient id="shine" cx="35%" cy="30%" r="70%"><stop offset="0" stop-color="#fff" stop-opacity=".6"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></radialGradient>
   </defs>
-
-  <!-- Cyber-Arena Rink -->
-  <rect width="400" height="400" rx="34" fill="url(#bg)"/>
-  <rect x="18" y="18" width="364" height="364" rx="28" fill="none" stroke="#00e5ff" stroke-width="5" stroke-opacity="0.85"/>
-  <rect x="18" y="18" width="364" height="364" rx="28" fill="none" stroke="#ffffff" stroke-width="1.5" stroke-opacity="0.6"/>
-
-  <!-- Center Laser Line & Reactor Ring -->
-  <line x1="200" y1="22" x2="200" y2="378" stroke="#ff2f92" stroke-width="6" stroke-opacity="0.35"/>
-  <line x1="200" y1="22" x2="200" y2="378" stroke="#ff52a8" stroke-width="2.5"/>
-  <circle cx="200" cy="196" r="56" fill="none" stroke="#ff2f92" stroke-width="5" stroke-opacity="0.35"/>
-  <circle cx="200" cy="196" r="56" fill="none" stroke="#ff6ec7" stroke-width="2.5"/>
-
-  <!-- Left Cyan Hero Cyber-Mech Mallet -->
-  <g transform="translate(96 226)">
-    <circle r="60" fill="#00e5ff" fill-opacity="0.22"/>
-    <circle r="50" fill="#0b4aa8" stroke="#8cf6ff" stroke-width="3"/>
-    <circle r="40" fill="url(#cyanMallet)"/>
-    <circle r="24" fill="#121a40" stroke="#7ef9ff" stroke-width="2.5"/>
-    <rect x="-15" y="-7" width="11" height="13" rx="4" fill="#5ef2ff"/>
-    <rect x="4" y="-7" width="11" height="13" rx="4" fill="#5ef2ff"/>
-    <circle cx="-11" cy="-3" r="2.5" fill="#ffffff"/>
-    <circle cx="8" cy="-3" r="2.5" fill="#ffffff"/>
+  <rect width="400" height="400" fill="url(#bg)"/>
+  <g fill="#ffd23f" opacity=".8"><circle cx="40" cy="50" r="3"/><circle cx="352" cy="38" r="4"/><circle cx="300" cy="96" r="2.5"/><circle cx="70" cy="120" r="2.5"/></g>
+  <!-- table body -->
+  <path d="M42 356 L92 92 L308 92 L358 356 Z" fill="#1a2c6e"/>
+  <path d="M30 372 L84 84 L316 84 L370 372 Z" fill="none" stroke="#58e8ff" stroke-width="7" stroke-linejoin="round" opacity=".9"/>
+  <path d="M52 346 L98 100 L302 100 L348 346 Z" fill="#2457d6" stroke="#1c2250" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M66 334 L106 112 L294 112 L334 334 Z" fill="url(#top)"/>
+  <g fill="#7fb8e6" opacity=".55">
+    <circle cx="130" cy="150" r="2"/><circle cx="170" cy="150" r="2"/><circle cx="210" cy="150" r="2"/><circle cx="250" cy="150" r="2"/>
+    <circle cx="120" cy="200" r="2.3"/><circle cx="160" cy="200" r="2.3"/><circle cx="240" cy="200" r="2.3"/><circle cx="280" cy="200" r="2.3"/>
+    <circle cx="110" cy="260" r="2.6"/><circle cx="150" cy="260" r="2.6"/><circle cx="250" cy="260" r="2.6"/><circle cx="290" cy="260" r="2.6"/>
   </g>
-
-  <!-- Right Crimson Boss Dragon-Mech Mallet -->
-  <g transform="translate(306 154)">
-    <circle r="60" fill="#ff2a55" fill-opacity="0.24"/>
-    <circle r="50" fill="#7a0d29" stroke="#ff9cb0" stroke-width="3"/>
-    <circle r="40" fill="url(#bossMallet)"/>
-    <!-- Saw blades -->
-    <polygon points="0,-49 6,-39 -6,-39" fill="#ffd23f"/>
-    <polygon points="49,0 39,6 39,-6" fill="#ffd23f"/>
-    <polygon points="0,49 6,39 -6,39" fill="#ffd23f"/>
-    <polygon points="-49,0 -39,6 -39,-6" fill="#ffd23f"/>
-    <circle r="24" fill="#160c29" stroke="#ff6b8a" stroke-width="2.5"/>
-    <!-- Boss horns & fierce laser eyes -->
-    <polygon points="-14,-16 -28,-32 -20,-8" fill="#ff3355"/>
-    <polygon points="14,-16 28,-32 20,-8" fill="#ff3355"/>
-    <polygon points="-16,-3 -4,-8 -5,4 -15,3" fill="#ffe033"/>
-    <polygon points="16,-3 4,-8 5,4 15,3" fill="#ffe033"/>
-  </g>
-
-  <!-- Blazing Fireball Comet Trail & Clash Shockwave -->
-  <path d="M112,218 Q156,204 206,186 L196,162 Q150,188 106,208 Z" fill="#ff5500" fill-opacity="0.72"/>
-  <path d="M128,214 Q166,200 206,186 L199,170 Q162,190 124,206 Z" fill="#ffe033" fill-opacity="0.88"/>
-  <circle cx="204" cy="182" r="54" fill="url(#fireGlow)"/>
-  <circle cx="204" cy="182" r="42" fill="none" stroke="#fff06a" stroke-width="3" stroke-dasharray="10 7"/>
-
-  <!-- Lightning Sparks -->
-  <polyline points="172,140 190,158 180,164 198,176" fill="none" stroke="#5ef2ff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
-  <polyline points="238,220 220,202 230,196 212,184" fill="none" stroke="#fff06a" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
-
-  <!-- Blazing Laser Power-Puck -->
-  <g transform="translate(204 182)">
-    <circle r="25" fill="#ffffff" stroke="#ff6a00" stroke-width="4"/>
-    <circle r="15" fill="none" stroke="#ff3d00" stroke-width="4"/>
-    <polygon points="3,-10 -6,1 0,1 -3,10 6,-1 0,-1" fill="#ff6a00"/>
-  </g>
-
-  <!-- Arabic Title Banner -->
-  <rect x="44" y="316" width="312" height="56" rx="28" fill="#060c28" fill-opacity="0.88" stroke="#00e5ff" stroke-width="2.5"/>
-  <text x="200" y="354" text-anchor="middle" direction="rtl" font-family="Fredoka, sans-serif" font-weight="800" font-size="36" fill="#fff06a" stroke="#091540" stroke-width="5" paint-order="stroke">هوكي الهواء</text>
+  <path d="M86 214 L314 214" stroke="#ff4f7a" stroke-width="5"/>
+  <ellipse cx="200" cy="214" rx="46" ry="20" fill="none" stroke="#ff4f7a" stroke-width="4"/>
+  <path d="M164 112 Q200 140 236 112" fill="none" stroke="#ff4f7a" stroke-width="4"/>
+  <rect x="166" y="103" width="68" height="9" rx="4" fill="#1c2250"/>
+  <rect x="150" y="337" width="100" height="11" rx="5" fill="#1c2250"/>
+  <!-- far mallet (pink, bow) -->
+  <ellipse cx="236" cy="154" rx="30" ry="10" fill="#1c2250" opacity=".25"/>
+  <path d="M206 146 Q206 128 236 128 Q266 128 266 146 Q266 156 236 156 Q206 156 206 146 Z" fill="#c2407e" stroke="#1c2250" stroke-width="4"/>
+  <circle cx="236" cy="118" r="20" fill="#ff7eb6" stroke="#1c2250" stroke-width="4"/>
+  <ellipse cx="229" cy="117" rx="4" ry="5" fill="#fff"/><ellipse cx="243" cy="117" rx="4" ry="5" fill="#fff"/>
+  <circle cx="229" cy="118" r="2.3" fill="#1c2250"/><circle cx="243" cy="118" r="2.3" fill="#1c2250"/>
+  <path d="M230 126 Q236 131 242 126" fill="none" stroke="#1c2250" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M244 100 L256 93 L254 106 Z M244 100 L233 92 L234 105 Z" fill="#ff4fb4" stroke="#1c2250" stroke-width="2.5" stroke-linejoin="round"/>
+  <!-- puck with trail -->
+  <path d="M118 290 Q150 250 196 224 L204 238 Q160 262 128 300 Z" fill="url(#trail)"/>
+  <circle cx="204" cy="230" r="34" fill="url(#glow)"/>
+  <ellipse cx="204" cy="236" rx="22" ry="9" fill="#1c2250"/>
+  <ellipse cx="204" cy="229" rx="22" ry="9" fill="#f4fbff" stroke="#1c2250" stroke-width="3.5"/>
+  <ellipse cx="204" cy="229" rx="12" ry="4.5" fill="#5ff2ff"/>
+  <!-- near mallet (blue, hero) -->
+  <ellipse cx="150" cy="322" rx="62" ry="18" fill="#1c2250" opacity=".3"/>
+  <path d="M92 306 Q92 272 150 272 Q208 272 208 306 Q208 326 150 326 Q92 326 92 306 Z" fill="#1b63c9" stroke="#1c2250" stroke-width="5"/>
+  <path d="M104 298 Q104 280 150 280 Q196 280 196 298 Q196 312 150 312 Q104 312 104 298 Z" fill="#3fa9ff"/>
+  <circle cx="150" cy="246" r="42" fill="#3fa9ff" stroke="#1c2250" stroke-width="5"/>
+  <circle cx="150" cy="246" r="40" fill="url(#shine)"/>
+  <ellipse cx="135" cy="244" rx="9" ry="11" fill="#fff" stroke="#1c2250" stroke-width="3"/><ellipse cx="165" cy="244" rx="9" ry="11" fill="#fff" stroke="#1c2250" stroke-width="3"/>
+  <circle cx="139" cy="242" r="5" fill="#1c2250"/><circle cx="169" cy="242" r="5" fill="#1c2250"/>
+  <circle cx="122" cy="260" r="6" fill="#ff7eb6" opacity=".7"/><circle cx="178" cy="260" r="6" fill="#ff7eb6" opacity=".7"/>
+  <path d="M136 262 Q150 276 164 262" fill="#1c2250" stroke="#1c2250" stroke-width="4" stroke-linejoin="round"/>
+  <!-- spark -->
+  <g stroke="#ffd23f" stroke-width="5" stroke-linecap="round"><path d="M186 196 L180 184"/><path d="M200 192 L201 178"/><path d="M214 198 L222 187"/></g>
 </svg>

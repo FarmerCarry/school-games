@@ -1,0 +1,244 @@
+/* Air Hockey: a 1280x720 UI layer laid over the 3D table. Big picture buttons with thick
+   dark outlines, chunky cards and a bright arcade scoreboard. */
+:root { --ink: #1c2250; }
+html, body { background: #1c1240; }
+.defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+#game { z-index: 0; }
+body.hide-cursor, body.hide-cursor #game { cursor: none; }
+
+#ui { position: fixed; left: 0; top: 0; width: 1280px; height: 720px; transform-origin: 0 0; pointer-events: none; z-index: 5; color: var(--ink); }
+#ui button { pointer-events: auto; cursor: pointer; font-family: inherit; }
+.screen { position: absolute; left: 0; top: 0; width: 1280px; height: 720px; }
+.screen[hidden], #hud[hidden], #ghost[hidden], #vs[hidden], .ribbon[hidden], .notice[hidden], .badge[hidden], #matchPoint[hidden] { display: none; }
+.screen.dim:not([hidden]) { display: flex; align-items: center; justify-content: center; background: rgba(20, 14, 60, 0.5); pointer-events: auto; }
+
+/* ------------------------------------------------------------- buttons */
+.ah-btn {
+  position: relative; display: inline-flex; align-items: center; justify-content: center; padding: 0;
+  font: inherit; font-weight: 700; color: #fff; background: #4fd1ff;
+  border: 5px solid var(--ink); border-radius: 999px; box-shadow: 0 7px 0 var(--ink);
+  transition: transform 0.08s ease, filter 0.08s ease;
+}
+.ah-btn svg { width: 54%; height: 54%; fill: currentColor; overflow: visible; pointer-events: none; }
+.ah-btn:hover { transform: translateY(-3px) scale(1.06); filter: brightness(1.06); }
+.ah-btn:active { transform: translateY(5px); box-shadow: 0 2px 0 var(--ink); }
+.ah-btn:focus-visible { outline: 6px solid #ffcc00; outline-offset: 5px; }
+.ah-round { width: 66px; height: 66px; background: #ffffff; color: var(--ink); }
+.ah-round.big { width: 92px; height: 92px; }
+.ah-round.big svg { width: 62%; height: 62%; }
+.ah-go { width: 140px; height: 140px; background: #3ddc84; }
+.ah-go svg, .ah-play svg { width: 58%; height: 58%; transform: translateX(7%); }
+.ah-go.next { background: #ffb02e; }
+.ah-go.next svg { transform: none; }
+.ring::after {
+  content: ''; position: absolute; inset: -17px; border-radius: 50%; border: 7px solid #ffcc00;
+  animation: ah-ring 1.3s ease-out infinite; pointer-events: none;
+}
+@keyframes ah-ring { 0% { transform: scale(0.9); opacity: 1; } 100% { transform: scale(1.3); opacity: 0; } }
+
+.chip {
+  position: absolute; top: 14px; left: 14px; height: 60px; padding: 0 20px 0 10px; display: flex; align-items: center; gap: 8px;
+  direction: ltr; border-radius: 999px; background: rgba(28, 34, 80, 0.82); border: 4px solid #fff; color: #fff;
+  font-size: 30px; font-weight: 700;
+}
+.chip svg { width: 42px; height: 42px; fill: #ffd23f; stroke: var(--ink); stroke-width: 3; }
+kbd {
+  display: inline-block; min-width: 38px; padding: 2px 8px; margin: 0 3px; border-radius: 9px; text-align: center;
+  font: inherit; font-weight: 700; font-size: 22px; color: var(--ink); background: #fff;
+  border: 3px solid var(--ink); box-shadow: 0 4px 0 var(--ink);
+}
+
+/* Faces: little SVG portraits of the mallets, drawn by game.js. */
+.face { width: 64px; height: 64px; flex: none; }
+.face svg { width: 100%; height: 100%; overflow: visible; }
+
+/* --------------------------------------------------------------- title */
+.logo { position: absolute; top: 14px; left: 0; right: 0; margin: 0; text-align: center; line-height: 1; pointer-events: none; }
+.logo span {
+  display: block; font-weight: 700;
+  text-shadow: -5px -5px 0 var(--ink), 5px -5px 0 var(--ink), -5px 5px 0 var(--ink), 5px 5px 0 var(--ink),
+    0 -6px 0 var(--ink), 0 6px 0 var(--ink), -6px 0 0 var(--ink), 6px 0 0 var(--ink), 0 13px 0 var(--ink);
+}
+.logo .l1 { font-size: 64px; color: #ffffff; }
+.logo .l2 { font-size: 118px; color: #5ff2ff; margin-top: -18px; }
+#ladder { position: absolute; left: 0; right: 0; top: 352px; display: flex; justify-content: center; gap: 14px; direction: ltr; }
+.foe {
+  position: relative; width: 78px; height: 78px; padding: 4px; border-radius: 50%;
+  background: rgba(28, 34, 80, 0.75); border: 4px solid rgba(255, 255, 255, 0.55); box-shadow: 0 5px 0 rgba(28, 34, 80, 0.9);
+  transition: transform 0.1s ease;
+}
+.foe .face { width: 100%; height: 100%; }
+.foe:hover:not([disabled]) { transform: translateY(-3px) scale(1.06); }
+.foe:focus-visible { outline: 5px solid #ffcc00; outline-offset: 4px; }
+.foe.on { border-color: #ffd23f; background: #fff3c2; transform: scale(1.14); }
+.foe[disabled] { cursor: default; }
+.foe[disabled] .face { filter: grayscale(1) brightness(0.45); }
+.foe .lk { position: absolute; left: 50%; top: 50%; width: 34px; height: 34px; margin: -17px 0 0 -17px; fill: #fff; color: #fff; }
+.foe .won { position: absolute; bottom: -12px; left: 0; right: 0; display: flex; justify-content: center; gap: 0; }
+.foe .won svg { width: 22px; height: 22px; fill: #ffd23f; stroke: var(--ink); stroke-width: 4; }
+.foe .won svg.off { fill: rgba(255, 255, 255, 0.35); }
+.ah-play { position: absolute; left: 560px; top: 470px; width: 160px; height: 160px; background: #3ddc84; border-width: 7px; box-shadow: 0 10px 0 var(--ink); }
+.ah-play::after { inset: -20px; border-width: 9px; }
+.small { position: absolute; left: 0; right: 0; top: 504px; display: flex; justify-content: center; gap: 290px; direction: ltr; pointer-events: none; }
+#btnDuo { background: #fff; }
+.keyline {
+  position: absolute; left: 0; right: 0; bottom: 14px; display: flex; justify-content: center; align-items: center; gap: 10px;
+  color: #fff; font-size: 20px; font-weight: 700; direction: ltr; pointer-events: none;
+}
+.keyline .mouse { width: 34px; height: 34px; }
+.keyline .sep { opacity: 0.6; margin: 0 6px; }
+.keyline .duo-keys kbd { font-size: 18px; }
+
+/* ---------------------------------------------------------------- HUD */
+#pauseBtn { position: absolute; left: 14px; top: 14px; }
+#board {
+  position: absolute; left: 340px; top: 10px; width: 600px; height: 86px; display: flex; gap: 8px;
+}
+#board .side {
+  flex: 1; display: flex; align-items: center; gap: 8px; padding: 0 10px; border-radius: 26px;
+  background: rgba(20, 16, 60, 0.82); border: 4px solid #fff; box-shadow: 0 6px 0 rgba(20, 16, 60, 0.9);
+}
+#board .s1 { justify-content: flex-end; }
+#board .num {
+  width: 70px; text-align: center; font-size: 60px; font-weight: 700; line-height: 1; color: #fff;
+  text-shadow: 0 4px 0 var(--ink);
+}
+#board .num.bump { animation: ah-bump 0.45s ease-out; }
+@keyframes ah-bump { 0% { transform: scale(1); } 30% { transform: scale(1.6); color: #ffd23f; } 100% { transform: scale(1); } }
+#board .who { flex: 1; min-width: 0; color: #fff; }
+#board .s1 .who { text-align: right; }
+#board .who b { display: block; font-size: 22px; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#board .face { width: 58px; height: 58px; }
+.pips { display: flex; gap: 4px; margin-top: 5px; }
+.s1 .pips { justify-content: flex-end; }
+.pips i { width: 14px; height: 14px; border-radius: 50%; background: rgba(255, 255, 255, 0.22); border: 2px solid rgba(255, 255, 255, 0.5); }
+.pips i.on { background: #ffd23f; border-color: #fff; }
+.badge {
+  position: absolute; top: 104px; height: 44px; padding: 0 16px; display: flex; align-items: center; gap: 6px;
+  border-radius: 999px; border: 4px solid #fff; background: #ff4fb4; color: #fff; font-size: 22px; font-weight: 700;
+  animation: ah-in 0.3s ease-out;
+}
+.badge.b0 { left: 352px; }
+.badge.b1 { right: 352px; }
+#matchPoint {
+  position: absolute; left: 0; right: 0; top: 108px; margin: 0 auto; width: max-content; padding: 4px 22px; border-radius: 999px;
+  background: #ff4f5e; border: 4px solid #fff; color: #fff; font-size: 26px; font-weight: 700; animation: ah-throb 0.8s ease-in-out infinite;
+}
+@keyframes ah-throb { 50% { transform: scale(1.08); } }
+@keyframes ah-in { from { transform: scale(0.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+/* Score popups and the countdown. */
+#pops { position: absolute; inset: 0; pointer-events: none; }
+.pop {
+  position: absolute; left: 0; top: 0; white-space: nowrap; font-weight: 700; font-size: 34px; color: #fff;
+  text-shadow: -3px -3px 0 var(--ink), 3px -3px 0 var(--ink), -3px 3px 0 var(--ink), 3px 3px 0 var(--ink), 0 5px 0 var(--ink);
+  animation: ah-pop 0.9s ease-out forwards;
+}
+.pop.big { font-size: 84px; animation-duration: 1.3s; }
+@keyframes ah-pop {
+  0% { transform: translate(-50%, -50%) scale(0.3); opacity: 0; }
+  18% { transform: translate(-50%, -60%) scale(1.15); opacity: 1; }
+  70% { transform: translate(-50%, -90%) scale(1); opacity: 1; }
+  100% { transform: translate(-50%, -120%) scale(0.95); opacity: 0; }
+}
+#count {
+  position: absolute; left: 0; right: 0; top: 250px; text-align: center; font-size: 150px; font-weight: 700; line-height: 1; color: #ffd23f;
+  pointer-events: none;
+  text-shadow: -7px -7px 0 var(--ink), 7px -7px 0 var(--ink), -7px 7px 0 var(--ink), 7px 7px 0 var(--ink), 0 14px 0 var(--ink);
+}
+#count.tick { animation: ah-count 0.5s ease-out; }
+@keyframes ah-count { from { transform: scale(1.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+/* VS banner before the first serve. */
+#vs { position: absolute; left: 0; right: 0; top: 200px; display: flex; justify-content: center; align-items: center; gap: 30px; direction: ltr; }
+.vs-card {
+  display: flex; flex-direction: column; align-items: center; gap: 6px; width: 250px; padding: 16px 10px 12px; border-radius: 30px;
+  background: #fff; border: 6px solid var(--ink); box-shadow: 0 9px 0 var(--ink); font-size: 32px; font-weight: 700;
+}
+.vs-card .face { width: 130px; height: 130px; }
+.vs-card.l { animation: ah-left 0.45s cubic-bezier(.2, 1.4, .5, 1); }
+.vs-card.r { animation: ah-right 0.45s cubic-bezier(.2, 1.4, .5, 1); }
+.vs-word {
+  font-size: 90px; font-weight: 700; color: #ffd23f; animation: ah-in 0.4s 0.2s both;
+  text-shadow: -6px -6px 0 var(--ink), 6px -6px 0 var(--ink), -6px 6px 0 var(--ink), 6px 6px 0 var(--ink), 0 11px 0 var(--ink);
+}
+@keyframes ah-left { from { transform: translateX(-500px) rotate(-12deg); } to { transform: none; } }
+@keyframes ah-right { from { transform: translateX(500px) rotate(12deg); } to { transform: none; } }
+
+/* The wordless coach beside your mallet. */
+#ghost {
+  position: absolute; left: 0; top: 0; display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-radius: 22px;
+  background: rgba(255, 255, 255, 0.92); border: 4px solid var(--ink); font-size: 22px; font-weight: 700; transform: translate(-50%, -100%);
+}
+#ghost .mouse { width: 50px; height: 50px; animation: ah-wobble 1s ease-in-out infinite; }
+#ghost kbd { min-width: 32px; font-size: 18px; }
+#ghost .keys { display: grid; grid-template-columns: repeat(3, auto); gap: 4px 0; }
+#ghost .keys .up { grid-column: 2; }
+#ghost .keys kbd:nth-child(2) { grid-column: 1; }
+@keyframes ah-wobble { 0%, 100% { transform: translateX(-10px) rotate(-8deg); } 50% { transform: translateX(10px) rotate(8deg); } }
+
+/* ------------------------------------------------------------- cards */
+.card {
+  position: relative; min-width: 460px; padding: 26px 40px 34px; border-radius: 40px; text-align: center;
+  background: #fff; border: 7px solid var(--ink); box-shadow: 0 12px 0 var(--ink); pointer-events: auto;
+  animation: ah-in 0.3s ease-out;
+}
+.card h2 { margin: 0 0 18px; font-size: 52px; line-height: 1.1; color: var(--ink); }
+.card .row { display: flex; justify-content: center; align-items: center; gap: 28px; direction: ltr; }
+#scrResult:not([hidden]) { display: flex; align-items: center; justify-content: center; background: rgba(20, 14, 60, 0.35); pointer-events: auto; }
+.result { min-width: 560px; }
+.res-faces { display: flex; justify-content: center; align-items: center; gap: 24px; margin-bottom: 6px; }
+.res-faces .face { width: 96px; height: 96px; }
+.res-score { font-size: 76px; font-weight: 700; line-height: 1; }
+.res-score i { font-style: normal; margin: 0 10px; opacity: 0.5; }
+.result h2 { font-size: 60px; }
+.result.win h2 { color: #ff8a00; }
+.stars { display: flex; justify-content: center; gap: 12px; margin: -6px 0 16px; }
+.stars svg { width: 74px; height: 74px; fill: #e5e7f2; stroke: var(--ink); stroke-width: 4; }
+.stars svg.on { fill: #ffd23f; animation: ah-star 0.5s cubic-bezier(.2, 1.6, .5, 1) both; }
+.stars svg.on:nth-child(2) { animation-delay: 0.25s; }
+.stars svg.on:nth-child(3) { animation-delay: 0.5s; }
+@keyframes ah-star { from { transform: scale(0) rotate(-90deg); } to { transform: scale(1) rotate(0); } }
+.ribbon {
+  margin: -4px auto 18px; width: max-content; padding: 6px 22px; border-radius: 999px; background: #ff4fb4; color: #fff;
+  font-size: 26px; font-weight: 700; border: 4px solid var(--ink); animation: ah-in 0.4s 0.6s both;
+}
+.notice {
+  position: absolute; left: 0; right: 0; bottom: 30px; margin: 0 auto; width: max-content; padding: 10px 24px; border-radius: 20px;
+  background: #fff; border: 4px solid var(--ink); font-size: 26px; font-weight: 700;
+}
+
+/* --------------------------------------------------------------- skins */
+#btnSkinsBack { position: absolute; left: 14px; top: 14px; }
+#skinStars { left: 100px; }
+.shelf {
+  position: absolute; right: 26px; top: 90px; width: 600px; display: flex; flex-direction: column; gap: 18px;
+  pointer-events: none;
+}
+.shelf-row { padding: 12px 18px 18px; border-radius: 30px; background: rgba(255, 255, 255, 0.94); border: 6px solid var(--ink); box-shadow: 0 8px 0 var(--ink); }
+.shelf-row h3 { margin: 0 0 8px; font-size: 30px; line-height: 1.1; }
+.swatches { display: flex; gap: 12px; flex-wrap: wrap; direction: ltr; justify-content: flex-end; }
+.sw {
+  position: relative; width: 78px; height: 78px; border-radius: 50%; padding: 0; border: 5px solid var(--ink);
+  box-shadow: 0 5px 0 var(--ink); transition: transform 0.08s ease;
+}
+.sw:hover:not([disabled]) { transform: translateY(-3px) scale(1.06); }
+.sw:focus-visible { outline: 5px solid #ffcc00; outline-offset: 4px; }
+.sw.on::after { content: ''; position: absolute; inset: -12px; border-radius: 50%; border: 6px solid #3ddc84; }
+.sw[disabled] { cursor: default; }
+.sw .lk {
+  position: absolute; inset: -5px; display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 50%;
+  background: rgba(28, 34, 80, 0.72); color: #fff; font-size: 20px; font-weight: 700; line-height: 1;
+}
+.sw .lk svg { width: 26px; height: 26px; fill: #fff; color: #fff; }
+.sw .lk span { display: flex; align-items: center; gap: 2px; direction: ltr; }
+.sw .lk span svg { width: 18px; height: 18px; fill: #ffd23f; }
+.sw.new::before {
+  content: ''; position: absolute; top: -6px; right: -6px; width: 22px; height: 22px; border-radius: 50%; background: #ff4f5e; border: 3px solid #fff; z-index: 1;
+}
+
+html[data-sg-motion="reduce"] .ring::after { display: none; }
+html[data-sg-motion="reduce"] .ah-btn:hover, html[data-sg-motion="reduce"] .ah-btn:active { transform: none; }
+/* Reduced motion: popups simply appear and are removed by their timer. */
+html[data-sg-motion="reduce"] .pop { animation: none; transform: translate(-50%, -50%); }
