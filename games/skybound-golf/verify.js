@@ -1,82 +1,150 @@
 'use strict';
-const assert=require('node:assert/strict'),P=require('./physics.js');
-const half=(lv,m)=>Math.min(m,Math.round(lv/2));
-const all=lv=>({power:lv,bounce:Math.min(10,lv),rockets:half(lv,5),magnet:half(lv,5),thrust:half(lv,5),aim:Math.min(4,Math.round(lv/3)),skip:Math.min(4,Math.round(lv/3)),treasure:half(lv,5)});
+const assert = require('node:assert/strict');
+const P = require('./physics.js');
 
-function shot(w=0,up={},pwr=1,bot='idle',diff='normal'){
-const c=P.createCourse(w,diff),b=P.launch(c,up,pwr),ev=[];
-let f=0,rise=b.vy>0;
-while(!b.done&&f++<4200){
-if(bot!=='idle'&&b.mode==='air'&&b.vy<0&&!b.armed){
-const p=P.predictImpact(c,b,c.diff.armWindow);
-if(p&&p.t<0.12)assert.equal(P.press(c,b,up).type,'arm');
+function simShot({ seed = 101, upgrades = {}, angle = 46, power = 0.96, bot = 'idle', dda = {} } = {}) {
+  const course = P.createCourse(seed, dda);
+  const ball = P.launch(course, upgrades, angle, power);
+  const events = [];
+  let frames = 0;
+
+  while (!ball.done && frames++ < 4200) {
+    let boost = false;
+    if (bot === 'boost' && ball.mode === 'air' && ball.fuel > 0 && ball.time > 0.25) {
+      boost = true;
+    } else if (bot === 'skill' && ball.mode === 'air') {
+      if (ball.fuel > 0 && (ball.vy < 14 || ball.time > 0.35)) boost = true;
+      if (ball.vy < -2 && !ball.armed) {
+        const pred = P.predictImpact(course, ball, 0.35);
+        if (pred && pred.t < 0.20) {
+          const res = P.pressDive(course, ball);
+          assert.equal(res.type, 'arm');
+        }
+      }
+    } else if (bot === 'dive' && ball.mode === 'air' && ball.vy < -2 && !ball.armed) {
+      const pred = P.predictImpact(course, ball, 0.42);
+      if (pred && pred.t < 0.18) P.pressDive(course, ball);
+    }
+
+    const ev = P.step(course, ball, upgrades, 1 / 60, { boost });
+    events.push(...ev);
+    assert(Number.isFinite(ball.x) && Number.isFinite(ball.y), 'ball position must stay finite');
+    if (!ball.done) {
+      assert(ball.y >= P.heightAt(course, ball.x) + ball.r - 1e-6, 'ball stays above terrain');
+    }
+  }
+
+  assert(ball.done, 'every shot terminates');
+  assert(ball.time <= P.MAX_TIME + 0.1, 'shot terminates within max time');
+  assert.equal(events.filter(e => e.type === 'stop').length, 1, 'exactly one stop event');
+  const coinIds = events.filter(e => e.type === 'coin').map(e => e.id);
+  assert.equal(new Set(coinIds).size, coinIds.length, 'each coin collected at most once');
+  return { ball, events, course };
 }
-if(bot==='rockets'&&b.mode==='air'&&b.vy>0&&b.rocketsLeft>0&&f % 9===0)assert.equal(P.press(c,b,up).type,'rocket');
-if(bot==='skill'&&b.mode==='air'&&rise&&b.vy<=0&&b.rocketsLeft>0)P.press(c,b,up);
-rise=b.vy>0;
-ev.push(...P.step(c,b,up,1/60));
-assert(Number.isFinite(b.x)&&Number.isFinite(b.y));
-if(!b.done)assert(b.y>=P.heightAt(c,b.x)+b.r - 1e-6);
-for(const o of P.features(c,b.x - 6,b.x+6).props)assert(Math.hypot(b.x - o.x,b.y - o.ground - o.lift)>=o.r+b.r - 0.02);
+
+// 1. Determinism & baseline first-shot sanity
+const base = simShot({ seed: 101, upgrades: {}, angle: 45, power: 0.96, bot: 'idle' });
+const repeat = simShot({ seed: 101, upgrades: {}, angle: 45, power: 0.96, bot: 'idle' });
+assert.deepEqual(repeat.ball, base.ball, 'simulation is strictly deterministic');
+assert(base.ball.maxX >= 60 && base.ball.maxX <= 360, 'starter shot distance feels rewarding: ' + base.ball.maxX);
+assert(base.events.some(e => e.type === 'coin'), 'starter shot collects coins');
+
+// Weak hit travels noticeably shorter than perfect hit
+const weak = simShot({ seed: 101, upgrades: {}, angle: 45, power: 0.25, bot: 'idle' });
+assert(weak.ball.maxX < base.ball.maxX * 0.72, 'weak hit travels shorter than perfect hit');
+
+// 2. Aim & Power meter grades & DDA perfect band
+assert.equal(P.isPerfectAngle(46), true);
+assert.equal(P.isPerfectAngle(22), false);
+assert.equal(P.grade(0.96, { perfectWidth: 0.14 }), 'perfect');
+assert.equal(P.grade(0.78, { perfectWidth: 0.14 }), 'great');
+assert.equal(P.grade(0.55, { perfectWidth: 0.14 }), 'good');
+assert.equal(P.grade(0.30, { perfectWidth: 0.14 }), 'weak');
+assert.equal(P.grade(0.80, { perfectWidth: 0.24 }), 'perfect', 'easier DDA widens golden zone');
+
+// 3. Upgrades meaningfully improve flight & rewards
+const boosted = simShot({ seed: 101, upgrades: { fuel: 4 }, angle: 48, power: 0.96, bot: 'boost' });
+assert(boosted.ball.maxX > base.ball.maxX * 1.4, 'rocket boost extends flight significantly');
+assert(boosted.events.some(e => e.type === 'boost'), 'rocket boost emits boost events');
+
+const powered = simShot({ seed: 101, upgrades: { power: 6 }, angle: 46, power: 0.96, bot: 'idle' });
+assert(powered.ball.maxX > base.ball.maxX * 1.5, 'power upgrade significantly boosts distance');
+
+// Bounce upgrade increases rebound velocity on identical drop
+const c0 = P.createCourse(101);
+const bLow = Object.assign(P.launch(c0, { bounce: 0 }, 45, 0.9), { x: 24, y: P.heightAt(c0, 24) + P.BALL_R + 0.05, vx: 14, vy: -18 });
+const bHigh = Object.assign(P.launch(c0, { bounce: 10 }, 45, 0.9), { x: 24, y: P.heightAt(c0, 24) + P.BALL_R + 0.05, vx: 14, vy: -18 });
+P.step(c0, bLow, { bounce: 0 }, 1 / 60);
+P.step(c0, bHigh, { bounce: 10 }, 1 / 60);
+assert(bHigh.vy > bLow.vy, 'bounce upgrade increases bounce height');
+assert(P.magnetRadius({ magnet: 10 }) > P.magnetRadius({ magnet: 0 }) * 2.5, 'magnet upgrade expands radius');
+
+// 4. Interactive course features exist & respond
+const scan = P.features(c0, 0, 2600);
+assert(scan.trampolines.length >= 10, 'trampolines spawn');
+assert(scan.tnts.length >= 10, 'tnt crates spawn');
+assert(scan.balloons.length >= 25, 'balloons spawn');
+assert(scan.rings.length >= 20, 'boost rings spawn');
+assert(scan.ufos.length >= 15, 'ufos spawn');
+assert(scan.stars.length >= 150, 'stars/coins spawn');
+
+// Direct collision checks for TNT, Balloon, Ring, UFO & Water Skip
+const t0 = scan.tnts[0];
+const bt = Object.assign(P.launch(c0, {}, 45, 0.8), { x: t0.x, y: t0.y, vx: 10, vy: -2 });
+assert(P.step(c0, bt, {}, 1 / 60).some(e => e.type === 'tnt') && bt.vy >= 28, 'TNT launches upward');
+
+const r0 = scan.rings[0];
+const br = Object.assign(P.launch(c0, {}, 45, 0.8), { x: r0.x, y: r0.y, vx: 14, vy: 2 });
+assert(P.step(c0, br, {}, 1 / 60).some(e => e.type === 'ring') && br.vx > 24, 'boost ring accelerates');
+
+const u0 = scan.ufos[0];
+const bu = Object.assign(P.launch(c0, {}, 45, 0.8), { x: u0.x, y: u0.y, vx: 14, vy: -3 });
+assert(P.step(c0, bu, {}, 1 / 60).some(e => e.type === 'ufo') && bu.vy >= 30, 'UFO launches ball high');
+
+const w0 = scan.flats.find(f => f.type === 'water');
+assert(w0, 'water pond exists');
+const bwFast = Object.assign(P.launch(c0, { bounce: 4 }, 45, 0.9), { x: w0.x, y: w0.level + P.BALL_R + 0.05, vx: 18, vy: -10 });
+assert(P.step(c0, bwFast, { bounce: 4 }, 1 / 60).some(e => e.type === 'skip'), 'fast ball skips on water');
+const bwSlow = Object.assign(P.launch(c0, {}, 45, 0.9), { x: w0.x, y: w0.level + P.BALL_R + 0.05, vx: 2, vy: -6 });
+assert(P.step(c0, bwSlow, {}, 1 / 60).some(e => e.type === 'splash') && bwSlow.done, 'slow ball splashes cleanly');
+
+// 5. Outer space & milestones reachable with upgrades + rocket boost
+const maxUp = { power: 12, fuel: 10, bounce: 10, magnet: 10 };
+const spaceRun = simShot({ seed: 101, upgrades: maxUp, angle: 50, power: 1.0, bot: 'skill' });
+assert(spaceRun.ball.space && spaceRun.ball.maxY >= 310, 'upgraded shot reaches outer space: maxY=' + spaceRun.ball.maxY);
+assert(spaceRun.ball.maxX >= 1200, 'upgraded shot reaches Moon milestone: maxX=' + spaceRun.ball.maxX);
+const rew = P.reward(spaceRun.ball, maxUp, []);
+assert(rew.total > 200 && rew.newMilestones.length >= 2 && rew.stars === 3, 'space run earns rich reward & 3 stars');
+
+// Multiple seeds all terminate cleanly
+for (const seed of [7, 42, 202, 777]) {
+  simShot({ seed, upgrades: {}, angle: 35, power: 0.7, bot: 'dive' });
+  simShot({ seed, upgrades: { power: 6, fuel: 5, bounce: 5, magnet: 4 }, angle: 48, power: 0.96, bot: 'skill' });
 }
-assert(b.done,'every shot terminates');
-assert(b.time<=55.05&&ev.filter(e=>e.type==='stop').length===1);
-const ids=ev.filter(e=>e.type==='coin').map(e=>e.id);
-assert.equal(new Set(ids).size,ids.length);
-return{ball:b,events:ev};
-}
 
-const first=shot();
-assert.deepEqual(shot(),first);
-assert(first.ball.maxX>=80&&first.ball.maxX<=170&&shot(0,{},0.3).ball.maxX<first.ball.maxX*0.6);
-assert(first.events.some(e=>e.type==='coin'));
-assert.deepEqual([1,0.9,0.8,0.5,0.2].map(p=>P.grade(p)),['perfect','perfect','great','good','weak']);
-assert(P.perfectBand({},'easy')<P.perfectBand({},'normal')- 0.05&&P.perfectBand({},'hero')>P.perfectBand({},'normal'));
-const nr=P.reward({maxX:300,coins:20}),hr=P.reward(Object.assign(P.launch(P.createCourse(0,'hero'),{},1),{maxX:300,coins:20}));
-assert(hr.total>nr.total&&hr.hero>0);
+// 6. Save sanitization (rejects old v2 shapes cleanly, clamps invalid v3 fields)
+const oldV2 = P.sanitizeSave({ v: 2, coins: 999, best: 500, world: 3 });
+assert.deepEqual([oldV2.v, oldV2.coins, oldV2.bestDist, oldV2.skin], [P.SAVE_VERSION, 0, 0, 'classic']);
+const dirtyV3 = P.sanitizeSave({
+  v: P.SAVE_VERSION,
+  coins: -50,
+  bestDist: NaN,
+  bestAlt: 420.9,
+  shots: -3,
+  upgrades: { power: 99, fuel: -2, bounce: 5, magnet: Infinity },
+  skin: 'hacked',
+  ownedSkins: ['fireball', 'bogus'],
+  milestones: ['moon', 'fake', 'moon']
+});
+assert.deepEqual(
+  [dirtyV3.coins, dirtyV3.bestDist, dirtyV3.bestAlt, dirtyV3.upgrades.power, dirtyV3.upgrades.fuel, dirtyV3.upgrades.bounce, dirtyV3.skin, dirtyV3.ownedSkins, dirtyV3.milestones],
+  [0, 0, 420, 12, 0, 5, 'classic', ['classic', 'fireball'], ['moon']]
+);
+assert.deepEqual(P.sanitizeSave(dirtyV3), dirtyV3, 'sanitization is idempotent');
 
-const c0=P.createCourse(0),avg=up=>[0.85,0.95,1].reduce((s,p)=>s+shot(0,up,p).ball.maxX,0)/3;
-assert(avg({power:6})>avg({})*1.8);
-const b0=P.launch(c0,{},1),b1=P.launch(c0,{},1);
-for(const b of[b0,b1])Object.assign(b,{x:30,y:P.heightAt(c0,30)+b.r+0.1,vx:10,vy:-15});
-P.step(c0,b0,{},1/60);P.step(c0,b1,{bounce:10},1/60);
-assert(b1.vy>b0.vy&&P.launch(c0,{rockets:3},1).rocketsLeft===4&&P.magnetOf({magnet:5})>P.magnetOf({magnet:0})*3);
-assert.equal(P.grade(0.83),'great');assert.equal(P.grade(0.83,{aim:4}),'perfect');
-
-const kick=th=>{const b=P.launch(c0,{thrust:th},1);for(let i=0;i<20;i++)P.step(c0,b,{thrust:th},1/60);const v=[b.vx,b.vy];P.press(c0,b,{thrust:th});return[b.vx - v[0],b.vy - v[1]];};
-assert(kick(5)[1]>kick(0)[1]+12&&kick(5)[0]>kick(0)[0]+6);
-
-const water=P.features(c0,0,4000).flats.find(f=>f.type==='water');
-const onto=(skip,vx,vy,mode='air')=>{
-const b=Object.assign(P.launch(c0,{skip},1),{x:water.x -(mode==='roll'?water.hw+0.2:0),mode,vx,vy,time:3});
-b.y=(mode==='roll'?P.heightAt(c0,b.x):water.level)+b.r+(mode==='roll'?0:0.02);
-const s=[];for(let i=0;i<30&&!b.done;i++)s.push(...P.step(c0,b,{skip},1/60).map(e=>e.type));return s;
-};
-assert(onto(0,7,-9).includes('splash')&&onto(4,7,-9).includes('skip')&&onto(0,12,0,'roll').includes('splash')&&onto(4,12,0,'roll').includes('skip'));
-assert.equal(P.reward({maxX:300,coins:20,treasure:5}).total,nr.total+Math.floor(nr.total*0.5));
-
-const air=P.launch(c0,{},1);for(let i=0;i<20;i++)P.step(c0,air,{},1/60);
-assert.equal(P.press(c0,air,{},true).type,'none');
-assert.equal(P.press(c0,air,{}).type,'rocket');
-assert.equal(P.press(c0,air,{}).type,'empty');
-
-const timed=shot(0,{},1,'timed'),scan=P.features(c0,0,4000);
-assert(timed.ball.supers>=2&&timed.ball.maxX>first.ball.maxX&&scan.coins.length>80&&scan.rings.length>4&&scan.ufos.length>4&&scan.tnts.length>4&&scan.cannons.length>2);
-const bTnt=Object.assign(P.launch(c0,{},1),{x:scan.tnts[0].x,y:scan.tnts[0].y,vx:8,vy:-4});
-const bCan=Object.assign(P.launch(c0,{},1),{x:scan.cannons[0].x,y:scan.cannons[0].y,vx:6,vy:-2});
-assert(P.step(c0,bTnt,{},1/60).some(e=>e.type==='tnt')&&bTnt.vy>20&&P.step(c0,bCan,{},1/60).some(e=>e.type==='cannon')&&bCan.vx>20);
-
-const mx=all(12);
-for(let w=0;w<P.worlds.length;w++){
-if(w>0)assert(P.worlds[w].unlock>P.worlds[w - 1].unlock);
-for(const d of P.diffIds){shot(w,{},0.5,'idle',d);shot(w,all(6),1,'timed',d);shot(w,mx,1,'skill',d);}
-if(w<P.worlds.length - 1)assert(Math.max(...[0.9,0.95,1].map(p=>shot(w,mx,p,'skill').ball.maxX))>=P.worlds[w+1].unlock);
-}
-assert(shot(0,all(8),1,'rockets').ball.space);
-
-const cl=P.sanitizeSave({coins:-20,best:NaN,world:4,difficulty:'hero',upgrades:{power:Infinity,bounce:91},shots:-7});
-assert.deepEqual([cl.world,cl.difficulty,cl.coins,cl.upgrades.bounce],[4,'hero',0,10]);
-const old=P.sanitizeSave({coins:100,best:640,world:2,upgrades:{power:2,bounce:1,glide:0},skins:['gold','x'],skin:'gold',shots:9});
-assert.deepEqual([old.coins,old.best,old.world,old.skin,old.skins,old.tips],[310,640,2,'gold',['classic','gold'],2]);
-assert.deepEqual(P.sanitizeSave(old),old);
-console.log(JSON.stringify({status:'PASS',firstShot:Math.round(first.ball.maxX),timedFirstShot:Math.round(timed.ball.maxX)}));
+console.log(JSON.stringify({
+  status: 'PASS',
+  starterDist: Math.round(base.ball.maxX),
+  spaceDist: Math.round(spaceRun.ball.maxX),
+  spaceAlt: Math.round(spaceRun.ball.maxY)
+}));

@@ -11,7 +11,7 @@ this file wins and they are updated to match.
 | Play tracking | **Anonymous play statistics only** ("Play statistics" below): the fast build may send what is played on each PC, never who plays it, to the school's own statistics server, and only when the build is given its address (`SG_TELEMETRY_URL`). No names, accounts, profiles or ages; no local play statistics or teacher statistics page; no third-party analytics. Nothing else on the site uses the network. |
 | Players | **No profiles.** No "who's playing", guests, age bands or XP: children open a game and play. Each game's progress and difficulty belong to the PC. |
 | Classroom settings | **None.** No classroom panel, quiet/effects preset, session timer or hand-over. The topbar 🔊 button mutes the portal and the games. |
-| Difficulty | Every game scales from a gentle start to real challenge via tiered levels or endless ramps, and 23 of the 52 games also adapt dynamically (`Kit.dda`) to how children play on that PC. |
+| Difficulty | Every game scales from a gentle start to real challenge via tiered levels or endless ramps, and 27 of the 52 games also adapt dynamically (`Kit.dda`) to how children play on that PC. |
 
 ## Audience and pillars
 
@@ -211,8 +211,8 @@ ranges. The full contract is [`TELEMETRY.md`](TELEMETRY.md).
 | Reports | Games |
 |---|---|
 | rounds, outcome and score | all 52 (connect-four and tic-tac-toe through `shared/board-game.js`); no score: block-world, critter-mart, pizza-clicker, tank-splat, the board games and two-player rounds |
-| hits and misses | balloon-blast, bubble-bop, chaos-island, desk-karts, dino-3d, egg-rush, juicy-drop, key-runner, keyboard-obby, lucky-lake, magic-crayon, math-gates, recess-kitchen, road-hopper, robo-swarm, seek-zoom, shortcut-factory, splat-catapult, steady-hand, toy-castle, typing-test, word-garden |
-| reaction times (`Kit.track.cue` / `react`) | bubble-bop, chaos-island, dino-3d, key-runner, keyboard-obby, lucky-lake, road-hopper, robo-swarm, shortcut-factory, typing-test, word-garden |
+| hits and misses | air-hockey, balloon-blast, bubble-bop, chaos-island, desk-karts, dino-3d, egg-rush, hoop-heads, juicy-drop, key-runner, keyboard-obby, lucky-lake, magic-crayon, math-gates, recess-kitchen, road-hopper, robo-swarm, seek-zoom, shortcut-factory, skybound-golf, splat-catapult, steady-hand, toy-castle, typing-test, word-garden |
+| reaction times (`Kit.track.cue` / `react`) | bubble-bop, chaos-island, dino-3d, key-runner, keyboard-obby, lucky-lake, road-hopper, robo-swarm, shortcut-factory, skybound-golf, typing-test, word-garden |
 | difficulty tier and level | every game that uses `Kit.dda` (reported by Kit at each read) |
 | tutorial start and done | the games with a first-time coach |
 

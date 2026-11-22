@@ -1,662 +1,929 @@
-/* Toy Castle: Mega-Mech & Lego-Knight Siege (قلعة الألعاب) — Pure Simulation Engine
- * Dual UMD export: window.TCEngine (browser) and module.exports (Node tests).
- * Zero DOM, zero network, zero Math.random, pure deterministic simulation. */
+/* Toy Castle (قلعة الألعاب) — Pure deterministic tug-of-war simulation engine.
+ * Pure headless UMD simulation (browser global + CommonJS module.exports). */
 (function (root, factory) {
-  'use strict';
-  var api = factory();
-  if (typeof module !== 'undefined' && module.exports) module.exports = api;
-  if (root) root.TCEngine = api;
-})(typeof window !== 'undefined' ? window : null, function () {
+  if (typeof module === 'object' && module.exports) module.exports = factory();
+  else root.ToyCastleEngine = factory();
+})(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
-  var W = 1280, H = 720, GROUND_Y = 524, AIR_Y = 224;
-  var GATE_L = 166, GATE_R = 1114, PAD_X = 640;
-  var CANNON_LX = 136, CANNON_RX = 1144, CANNON_Y = 264;
-  var AIM_MIN = -0.95, AIM_MAX = 1.18, START_ENERGY = 35;
+  var LANE_MIN = -11.4;
+  var LANE_MAX = 11.4;
+  var LEFT_CASTLE_X = -12.4;
+  var RIGHT_CASTLE_X = 12.4;
+  var LEFT_GATE_X = -10.5;
+  var RIGHT_GATE_X = 10.5;
+  var CANNON_Y = 4.55;
+  var GRAVITY = 20.0;
+  var MAX_ENERGY = 100;
+  var START_ENERGY = 35;
+  var MAX_UNITS_PER_SIDE = 12;
+  var CANNON_COOLDOWN = 1.45;
+  var CANNON_DMG_UNIT = 28;
+  var CANNON_DMG_CASTLE = 18;
+  var CANNON_SPLASH = 2.25;
+  var CRATE_BONUS_ENERGY = 25;
+  var CRATE_BONUS_COINS = 10;
+  var CRATE_HIT_RADIUS = 1.55;
 
-  var GEN_LEVELS = [
-    { lv: 1, cost: 0, rate: 12.4, max: 120 },
-    { lv: 2, cost: 40, rate: 18.0, max: 150 },
-    { lv: 3, cost: 65, rate: 24.5, max: 180 }
+  var UNITS = [
+    {
+      id: 'knight', name: 'فارس الفوم', cost: 15, hp: 58, dmg: 13,
+      speed: 3.05, range: 1.15, atkCd: 0.65, cd: 0.55, radius: 0.55,
+      ranged: false, splash: 0, knockback: 0.35, score: 15, scale: 1.0
+    },
+    {
+      id: 'blaster', name: 'رامي السهام', cost: 25, hp: 44, dmg: 12,
+      speed: 2.35, range: 5.8, atkCd: 0.92, cd: 0.85, radius: 0.52,
+      ranged: true, projSpeed: 14.5, splash: 0, knockback: 0.15, score: 25, scale: 1.0
+    },
+    {
+      id: 'dino', name: 'ديناصور الدبابة', cost: 45, hp: 155, dmg: 26,
+      speed: 1.72, range: 1.38, atkCd: 1.05, cd: 1.4, radius: 0.82,
+      ranged: false, splash: 0.9, knockback: 1.45, score: 45, scale: 1.25
+    },
+    {
+      id: 'mech', name: 'العملاق الآلي', cost: 80, hp: 275, dmg: 48,
+      speed: 1.28, range: 1.85, atkCd: 1.22, cd: 2.3, radius: 1.08,
+      ranged: false, splash: 2.7, knockback: 2.3, score: 85, scale: 1.65
+    }
   ];
-
-  var DIFFS = {
-    easy: { id: 'easy', name: 'سهل', p1Energy: 1.4, p1Hp: 1.35, aiHp: 0.8, aiEnergy: 0.68, aiThink: 1.3, aimCone: 0.58, cannonMul: 1.25, coinMul: 1.0 },
-    normal: { id: 'normal', name: 'متوسط', p1Energy: 1.08, p1Hp: 1.0, aiHp: 0.96, aiEnergy: 0.88, aiThink: 1.02, aimCone: 0.36, cannonMul: 1.05, coinMul: 1.15 },
-    hero: { id: 'hero', name: 'بطل', p1Energy: 1.0, p1Hp: 0.96, aiHp: 1.08, aiEnergy: 1.0, aiThink: 0.86, aimCone: 0.24, cannonMul: 1.0, coinMul: 1.35 }
-  };
-  var DIFF_ORDER = ['easy', 'normal', 'hero'];
 
   var WORLDS = [
-    { id: 'knights', name: 'قلعة الفرسان', bossName: 'حارس الدروع', pad: 'none' },
-    { id: 'mechs', name: 'قاعدة الآليين', bossName: 'الزعيم الآلي', pad: 'turbo' },
-    { id: 'dinos', name: 'وادي الديناصورات', bossName: 'ملك الديناصورات', pad: 'lava' },
-    { id: 'space', name: 'ساحة الصواريخ', bossName: 'مدمّرة المجرة', pad: 'jump' }
+    { id: 'carpet', name: 'سجادة اللعب', sky: 0x6fd4ff, fog: 0x9ce3ff, accent: '#2ec4b6' },
+    { id: 'blocks', name: 'مملكة المكعبات', sky: 0x76b8ff, fog: 0xb6dbff, accent: '#ff9f1c' },
+    { id: 'space', name: 'مكتب الفضاء', sky: 0x3b3578, fog: 0x524b9e, accent: '#9b5de5' }
   ];
 
-  var LEVELS = [
-    { id: '1-1', world: 0, name: 'جسر الفرسان', hpL: 720, hpR: 430, par: 52, pool: ['sword', 'rocket'], airRate: 0, boss: false, reward: 28 },
-    { id: '1-2', world: 0, name: 'منجنيق الحصن', hpL: 720, hpR: 490, par: 58, pool: ['sword', 'rocket', 'dino'], airRate: 9.5, boss: false, reward: 32 },
-    { id: '1-3', world: 0, name: 'حارس الدروع', hpL: 760, hpR: 580, par: 68, pool: ['sword', 'rocket', 'dino'], airRate: 8.5, boss: true, reward: 42 },
-    { id: '2-1', world: 1, name: 'ممر الليزر', hpL: 760, hpR: 550, par: 58, pool: ['sword', 'rocket', 'dino'], airRate: 8.8, boss: false, reward: 35 },
-    { id: '2-2', world: 1, name: 'سرب الطائرات', hpL: 780, hpR: 620, par: 64, pool: ['sword', 'rocket', 'dino', 'mech'], airRate: 6.8, boss: false, reward: 40 },
-    { id: '2-3', world: 1, name: 'الزعيم الآلي', hpL: 800, hpR: 700, par: 74, pool: ['sword', 'rocket', 'dino', 'mech'], airRate: 7.5, boss: true, reward: 50 },
-    { id: '3-1', world: 2, name: 'وادي المخالب', hpL: 800, hpR: 660, par: 64, pool: ['sword', 'rocket', 'dino'], airRate: 8.2, boss: false, reward: 42 },
-    { id: '3-2', world: 2, name: 'حمم البركان', hpL: 820, hpR: 730, par: 70, pool: ['sword', 'rocket', 'dino', 'mech'], airRate: 7.0, boss: false, reward: 46 },
-    { id: '3-3', world: 2, name: 'ملك الديناصورات', hpL: 840, hpR: 820, par: 80, pool: ['sword', 'rocket', 'dino', 'mech'], airRate: 6.8, boss: true, reward: 58 },
-    { id: '4-1', world: 3, name: 'رصيف المدار', hpL: 840, hpR: 760, par: 68, pool: ['sword', 'rocket', 'dino', 'mech'], airRate: 6.4, boss: false, reward: 50 },
-    { id: '4-2', world: 3, name: 'أسطول النجوم', hpL: 860, hpR: 850, par: 76, pool: ['sword', 'rocket', 'dino', 'mech'], airRate: 5.8, boss: false, reward: 56 },
-    { id: '4-3', world: 3, name: 'مدمّرة المجرة', hpL: 900, hpR: 940, par: 88, pool: ['sword', 'rocket', 'dino', 'mech'], airRate: 6.0, boss: true, reward: 72 }
+  var STAGES = [
+    // World 1: Playroom Carpet
+    {
+      id: '1-1', world: 0, num: 1, name: 'انطلاقة السجادة',
+      p1Hp: 220, cpuHp: 155, p1Regen: 9.2, cpuRegen: 5.4,
+      unlocks: [0, 1], cpuPool: [0, 0, 1], cpuDelay: 3.1,
+      crateInterval: 10.5, boss: null, reward: 30
+    },
+    {
+      id: '1-2', world: 0, num: 2, name: 'زحف الديناصور',
+      p1Hp: 230, cpuHp: 205, p1Regen: 9.6, cpuRegen: 6.4,
+      unlocks: [0, 1, 2], cpuPool: [0, 1, 2], cpuDelay: 2.6,
+      crateInterval: 10.0, boss: null, reward: 40, newUnit: 2
+    },
+    {
+      id: '1-3', world: 0, num: 3, name: 'قبطان المكعبات',
+      p1Hp: 250, cpuHp: 265, p1Regen: 10.2, cpuRegen: 7.4,
+      unlocks: [0, 1, 2, 3], cpuPool: [0, 1, 2], cpuDelay: 2.2,
+      crateInterval: 9.5, boss: { kind: 0, hpMult: 2.4, dmgMult: 1.45, name: 'قبطان المكعبات' }, reward: 60, newUnit: 3
+    },
+    // World 2: Block Castle
+    {
+      id: '2-1', world: 1, num: 1, name: 'جسر المكعبات',
+      p1Hp: 260, cpuHp: 295, p1Regen: 10.6, cpuRegen: 8.1,
+      unlocks: [0, 1, 2, 3], cpuPool: [0, 1, 1, 2], cpuDelay: 2.0,
+      crateInterval: 9.0, boss: null, reward: 55
+    },
+    {
+      id: '2-2', world: 1, num: 2, name: 'قافلة الدبابات',
+      p1Hp: 270, cpuHp: 335, p1Regen: 11.0, cpuRegen: 8.8,
+      unlocks: [0, 1, 2, 3], cpuPool: [0, 2, 2, 1], cpuDelay: 1.85,
+      crateInterval: 8.8, boss: null, reward: 65
+    },
+    {
+      id: '2-3', world: 1, num: 3, name: 'ملك الديناصورات',
+      p1Hp: 290, cpuHp: 390, p1Regen: 11.4, cpuRegen: 9.5,
+      unlocks: [0, 1, 2, 3], cpuPool: [0, 1, 2, 3], cpuDelay: 1.7,
+      crateInterval: 8.5, boss: { kind: 2, hpMult: 1.9, dmgMult: 1.35, name: 'ملك الديناصورات' }, reward: 85
+    },
+    // World 3: Space Desk
+    {
+      id: '3-1', world: 2, num: 1, name: 'مدار المسطرة',
+      p1Hp: 300, cpuHp: 420, p1Regen: 11.8, cpuRegen: 10.1,
+      unlocks: [0, 1, 2, 3], cpuPool: [1, 1, 2, 3], cpuDelay: 1.6,
+      crateInterval: 8.2, boss: null, reward: 80
+    },
+    {
+      id: '3-2', world: 2, num: 2, name: 'ثورة الآليين',
+      p1Hp: 310, cpuHp: 470, p1Regen: 12.2, cpuRegen: 10.8,
+      unlocks: [0, 1, 2, 3], cpuPool: [0, 1, 2, 3, 3], cpuDelay: 1.5,
+      crateInterval: 8.0, boss: null, reward: 95
+    },
+    {
+      id: '3-3', world: 2, num: 3, name: 'إمبراطور الميكا',
+      p1Hp: 340, cpuHp: 540, p1Regen: 12.8, cpuRegen: 11.6,
+      unlocks: [0, 1, 2, 3], cpuPool: [0, 1, 2, 3], cpuDelay: 1.35,
+      crateInterval: 7.5, boss: { kind: 3, hpMult: 1.75, dmgMult: 1.3, name: 'إمبراطور الميكا' }, reward: 130
+    }
   ];
 
-  var UNIT_ORDER = ['sword', 'rocket', 'dino', 'mech'];
-  var UNITS = {
-    sword: { id: 'sword', name: 'محارب السيف', cost: 15, cd: 0.55, hp: 105, dmg: 23, rate: 0.62, range: 46, speed: 128, r: 20, armor: 0, hitsAir: false, flying: false, splash: 0, kb: 8, bounty: 5 },
-    rocket: { id: 'rocket', name: 'رامي الصواريخ', cost: 25, cd: 0.95, hp: 84, dmg: 28, rate: 1.0, range: 245, speed: 84, r: 20, armor: 0, hitsAir: true, flying: false, splash: 38, kb: 10, proj: 'missile', bounty: 7 },
-    dino: { id: 'dino', name: 'دبابة الديناصور', cost: 45, cd: 1.75, hp: 330, dmg: 35, rate: 0.98, range: 56, speed: 70, r: 28, armor: 0.2, hitsAir: false, flying: false, splash: 38, kb: 44, bounty: 11 },
-    mech: { id: 'mech', name: 'العملاق الآلي', cost: 75, cd: 3.0, hp: 590, dmg: 64, rate: 1.2, range: 96, airRange: 215, speed: 58, r: 34, armor: 0.25, hitsAir: true, flying: false, splash: 84, kb: 62, proj: 'laser', bounty: 16 },
-    balloon: { id: 'balloon', name: 'منطاد القنابل', cost: 30, cd: 3.0, hp: 82, dmg: 21, rate: 1.35, range: 145, speed: 60, r: 24, armor: 0, hitsAir: false, flying: true, splash: 32, kb: 6, proj: 'bomb', bounty: 10 },
-    boss: { id: 'boss', name: 'الزعيم المدرّع', cost: 110, cd: 99, hp: 620, dmg: 50, rate: 1.45, range: 90, airRange: 200, speed: 40, r: 42, armor: 0.2, hitsAir: true, flying: false, splash: 78, kb: 54, proj: 'laser', bounty: 25 }
-  };
-
-  var ARMORS = [
-    { id: 'cobalt', name: 'فرسان الياقوت', price: 0, main: '#1d4ed8', trim: '#fbbf24', glow: '#38bdf8', goldTrim: false },
-    { id: 'cyber', name: 'درع التيتانيوم', price: 30, main: '#0f766e', trim: '#22d3ee', glow: '#67e8f9', goldTrim: false },
-    { id: 'magma', name: 'لهب البركان', price: 50, main: '#b91c1c', trim: '#fb923c', glow: '#fde047', goldTrim: false },
-    { id: 'emerald', name: 'زمرد الديناصور', price: 75, main: '#15803d', trim: '#a3e635', glow: '#4ade80', goldTrim: false },
-    { id: 'golden', name: 'الدرع الذهبي', price: 110, main: '#6d28d9', trim: '#facc15', glow: '#fef08a', goldTrim: true }
+  var CASTLE_SKINS = [
+    { id: 'royal', name: 'القلعة الملكية', price: 0, main: 0x3b82f6, trim: 0xffcc00, roof: 0x1d4ed8, accent: '#3b82f6' },
+    { id: 'candy', name: 'قلعة الحلوى', price: 60, main: 0xff6b9d, trim: 0x64dfdf, roof: 0xd93870, accent: '#ff6b9d' },
+    { id: 'forest', name: 'قلعة الغابة', price: 120, main: 0x2ec4b6, trim: 0xffd166, roof: 0x15988b, accent: '#2ec4b6' },
+    { id: 'volcano', name: 'قلعة البركان', price: 200, main: 0xff7b29, trim: 0xffe066, roof: 0xc93b14, accent: '#ff7b29' },
+    { id: 'galaxy', name: 'قلعة المجرة', price: 320, main: 0x8b5cf6, trim: 0x38f2ff, roof: 0x4c1d95, accent: '#8b5cf6' }
   ];
 
-  var CANNONS = [
-    { id: 'iron', name: 'مدفع الحصن', price: 0, barrel: '#334155', tip: '#fbbf24', bolt: '#38bdf8' },
-    { id: 'plasma', name: 'قاذف البلازما', price: 30, barrel: '#0284c7', tip: '#67e8f9', bolt: '#22d3ee' },
-    { id: 'dragon', name: 'فكّ التنين', price: 55, barrel: '#991b1b', tip: '#f97316', bolt: '#fb923c' },
-    { id: 'missile', name: 'برج الصواريخ', price: 80, barrel: '#3f6212', tip: '#a3e635', bolt: '#84cc16' },
-    { id: 'nova', name: 'مدفع النجوم', price: 120, barrel: '#7e22ce', tip: '#fde047', bolt: '#facc15' }
+  var BANNER_SKINS = [
+    { id: 'star', name: 'علم النجمة', price: 0, icon: '⭐', color: 0xffd23f },
+    { id: 'crown', name: 'تاج الملك', price: 80, icon: '👑', color: 0xffbe0b },
+    { id: 'dino', name: 'قرن الديناصور', price: 150, icon: '🦖', color: 0x4cc9f0 },
+    { id: 'rocket', name: 'صاروخ الفضاء', price: 240, icon: '🚀', color: 0xff595e },
+    { id: 'trophy', name: 'كأس الأبطال', price: 360, icon: '🏆', color: 0xffd60a }
   ];
 
-  function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
-  function lerp(a, b, t) { return a + (b - a) * t; }
+  function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
 
-  function makeRng(seed) {
-    var s = (seed >>> 0) || 0x9e3779b9;
+  function mulberry32(seed) {
+    var s = (seed >>> 0) || 1;
     return function () {
-      s = (s + 0x6d2b79f5) | 0;
+      s = (s + 0x6d2b79f5) >>> 0;
       var t = Math.imul(s ^ (s >>> 15), 1 | s);
       t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
       return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
   }
 
-  function params(ddaLevel, diffId) {
-    var d = clamp(typeof ddaLevel === 'number' && ddaLevel === ddaLevel ? ddaLevel : 0.35, 0, 1);
-    var df = DIFFS[diffId] || DIFFS.normal;
+  /* --------------------------------------------------------------- Save helpers */
+  function defaultSave() {
     return {
-      dda: d, diff: df.id,
-      p1Energy: df.p1Energy * lerp(1.06, 0.96, d), p1Hp: df.p1Hp,
-      aiHp: df.aiHp * lerp(0.88, 1.1, d),
-      aiEnergy: df.aiEnergy * lerp(0.82, 1.06, d),
-      aiThink: df.aiThink * lerp(1.18, 0.86, d),
-      aimCone: df.aimCone, cannonMul: df.cannonMul, coinMul: df.coinMul
+      v: 3,
+      coins: 0,
+      bestScore: 0,
+      stars: [0, 0, 0, 0, 0, 0, 0, 0, 0],
+      unlockedStage: 0,
+      castleSkin: 0,
+      bannerSkin: 0,
+      ownedCastles: [1, 0, 0, 0, 0],
+      ownedBanners: [1, 0, 0, 0, 0],
+      wins: 0
     };
-  }
-
-  function makeSide(side, hpMax, startEnergy, eMul) {
-    var cds = { sword: 0, rocket: 0, dino: 0, mech: 0, balloon: 0, boss: 0 };
-    return {
-      side: side, hp: Math.round(hpMax), hpMax: Math.round(hpMax),
-      energy: startEnergy, energyMax: GEN_LEVELS[0].max, genLv: 0, eMul: eMul,
-      aim: -0.14, cannonCd: 0, shots: 0, superCharge: 0, supers: 0, cds: cds
-    };
-  }
-
-  function create(levelIdx, prm, opts) {
-    opts = opts || {};
-    var idx = clamp(levelIdx | 0, 0, LEVELS.length - 1);
-    var stg = LEVELS[idx], p = prm || params(0.35, opts.diff || 'normal');
-    var startE = opts.startEnergy != null ? opts.startEnergy : START_ENERGY;
-    return {
-      uid: 1, humans: 1, level: idx, stage: stg, worldIdx: stg.world,
-      padType: WORLDS[stg.world].pad, prm: p, rng: makeRng(opts.seed || (1337 + idx * 97)),
-      t: 0, done: false, winner: 0, passiveAi: !!opts.passiveAi,
-      sides: [
-        makeSide(0, stg.hpL * p.p1Hp, startE, p.p1Energy),
-        makeSide(1, stg.hpR * p.aiHp, 20, p.aiEnergy * (0.8 + idx * 0.024))
-      ],
-      spawned: [0, 0], kills: [0, 0], cratesPopped: 0, bossSpawned: false,
-      aiTimer: 2.2 * p.aiThink, airTimer: stg.airRate > 0 ? stg.airRate * 0.8 : 9999,
-      crateTimer: 3.6, ventTimer: 4.5, units: [], projs: [], crates: [], ev: []
-    };
-  }
-
-  function createVersus(opts) {
-    opts = opts || {};
-    var startE = opts.startEnergy != null ? opts.startEnergy : START_ENERGY;
-    var wIdx = clamp(opts.worldIdx | 0, 0, WORLDS.length - 1);
-    return {
-      uid: 1, humans: 2, level: 0, worldIdx: wIdx, padType: WORLDS[wIdx].pad,
-      stage: { id: 'vs', world: wIdx, name: 'مواجهة القلعتين', hpL: 820, hpR: 820, par: 75, pool: UNIT_ORDER, airRate: 0, boss: false, reward: 20 },
-      prm: params(0.5, 'normal'), rng: makeRng(opts.seed || 4242),
-      t: 0, done: false, winner: 0, passiveAi: true,
-      sides: [makeSide(0, 820, startE, 1.15), makeSide(1, 820, startE, 1.15)],
-      spawned: [0, 0], kills: [0, 0], cratesPopped: 0, bossSpawned: false,
-      aiTimer: 9999, airTimer: 9999, crateTimer: 5.0, ventTimer: 4.5,
-      units: [], projs: [], crates: [], ev: []
-    };
-  }
-
-  function summon(w, side, type, opts) {
-    if (!w || w.done) return false;
-    opts = opts || {};
-    var def = UNITS[type], s = w.sides[side];
-    if (!def || !s) return false;
-    if (!opts.free) {
-      if (s.cds[type] > 0 || s.energy < def.cost) {
-        w.ev.push({ t: 'deny', side: side, unit: type });
-        return false;
-      }
-      s.energy -= def.cost;
-      s.cds[type] = def.cd;
-    }
-    var hpScale = type === 'boss' ? 1 + w.worldIdx * 0.2 : (side === 1 && w.humans === 1 ? 0.9 + w.level * 0.028 : 1);
-    var dmgScale = type === 'boss' ? 1 + w.worldIdx * 0.1 : (side === 1 && w.humans === 1 ? 0.92 + w.level * 0.022 : 1);
-    var hp = Math.round(def.hp * hpScale);
-    var u = {
-      id: w.uid++, side: side, type: type,
-      x: side === 0 ? GATE_L + 10 : GATE_R - 10,
-      y: def.flying ? AIR_Y + (w.rng() - 0.5) * 8 : GROUND_Y, vy: 0,
-      r: def.r, hp: hp, hpMax: hp, dmg: def.dmg * dmgScale, rate: def.rate,
-      range: def.range, airRange: def.airRange || def.range, speed: def.speed,
-      armor: def.armor, hitsAir: def.hitsAir, flying: def.flying,
-      splash: def.splash, kb: def.kb, proj: def.proj || '', bounty: def.bounty,
-      atkCd: 0.15, anim: w.rng() * 6.28, hurtT: 0, atkT: 0, boostT: 0, flameT: 0, padUsed: false
-    };
-    w.units.push(u);
-    w.spawned[side]++;
-    w.ev.push({ t: 'summon', side: side, unit: type, x: u.x, y: u.y });
-    return u;
-  }
-
-  function upgradeGen(w, side) {
-    if (!w || w.done) return false;
-    var s = w.sides[side];
-    if (!s || s.genLv >= GEN_LEVELS.length - 1) return false;
-    var next = GEN_LEVELS[s.genLv + 1];
-    if (s.energy < next.cost) { w.ev.push({ t: 'deny', side: side, unit: 'gen' }); return false; }
-    s.energy -= next.cost;
-    s.genLv++;
-    s.energyMax = next.max;
-    w.ev.push({ t: 'upgrade', side: side, lv: s.genLv + 1 });
-    return true;
-  }
-
-  function cannonX(side) { return side === 0 ? CANNON_LX : CANNON_RX; }
-
-  function angleToTarget(side, tx, ty) {
-    var cx = cannonX(side);
-    var dx = side === 0 ? (tx - cx) : (cx - tx);
-    if (dx < 40) dx = 40;
-    var dy = ty - CANNON_Y;
-    var d = Math.sqrt(dx * dx + dy * dy);
-    var tFlight = d / 820;
-    return clamp(Math.atan2(dy - 0.5 * 230 * tFlight * tFlight, dx), AIM_MIN, AIM_MAX);
-  }
-
-  function setAim(w, side, angle) {
-    if (!w || !w.sides[side]) return 0;
-    return (w.sides[side].aim = clamp(angle, AIM_MIN, AIM_MAX));
-  }
-
-  function aimAtPoint(w, side, tx, ty) {
-    return (!w || !w.sides[side]) ? 0 : setAim(w, side, angleToTarget(side, tx, ty));
-  }
-
-  function bestAutoAim(w, side, cone) {
-    var s = w.sides[side], cx = cannonX(side), bestA = null, bestSc = -1e9, i, c, u, dist, a, diff, sc;
-    if (side === 0 || w.humans === 2) {
-      for (i = 0; i < w.crates.length; i++) {
-        c = w.crates[i];
-        dist = side === 0 ? (c.x - cx) : (cx - c.x);
-        if (dist > 55 && dist < 810) {
-          a = angleToTarget(side, c.x, c.y);
-          diff = Math.abs(a - s.aim);
-          if (diff <= cone && (sc = 280 - diff * 110 - dist * 0.08) > bestSc) { bestSc = sc; bestA = a; }
-        }
-      }
-    }
-    for (i = 0; i < w.units.length; i++) {
-      u = w.units[i];
-      if (u.side === side || u.hp <= 0) continue;
-      dist = side === 0 ? (u.x - cx) : (cx - u.x);
-      if (dist < 38 || dist > 800) continue;
-      a = angleToTarget(side, u.x, u.flying ? u.y : u.y - u.r * 0.5);
-      diff = Math.abs(a - s.aim);
-      if (diff <= cone && (sc = (u.flying ? 250 : 185) + (800 - dist) * 0.16 - diff * 100) > bestSc) {
-        bestSc = sc; bestA = a;
-      }
-    }
-    return bestA;
-  }
-
-  function fireCannon(w, side, opts) {
-    if (!w || w.done) return false;
-    opts = opts || {};
-    var s = w.sides[side];
-    if (!s || s.cannonCd > 0) return false;
-    if (opts.tx != null && opts.ty != null) aimAtPoint(w, side, opts.tx, opts.ty);
-    else if (opts.assist !== false) {
-      var snapped = bestAutoAim(w, side, opts.fullAuto ? 2.4 : (w.humans === 1 && side === 0 ? w.prm.aimCone : 0.36));
-      if (snapped != null) s.aim = snapped;
-    }
-    s.cannonCd = 0.62;
-    s.shots++;
-    var dir = side === 0 ? 1 : -1, spd = 820;
-    var cx = cannonX(side) + dir * 28, cy = CANNON_Y + Math.sin(s.aim) * 24;
-    var mul = (side === 0 && w.humans === 1) ? w.prm.cannonMul : (side === 1 && w.humans === 1 ? 0.65 : 1.0);
-    w.projs.push({
-      id: w.uid++, kind: 'cannon', side: side, x: cx, y: cy,
-      vx: Math.cos(s.aim) * spd * dir, vy: Math.sin(s.aim) * spd, g: 230,
-      dmg: 32 * mul, airDmg: 62 * mul, splash: 64, kb: 30, maxDist: 820, traveled: 0, life: 1.4
-    });
-    w.ev.push({ t: 'cannon', side: side, x: cx, y: cy, aim: s.aim });
-    return true;
-  }
-
-  function fireSuper(w, side) {
-    if (!w || w.done) return false;
-    var s = w.sides[side];
-    if (!s || s.superCharge < 100) return false;
-    s.superCharge = 0;
-    s.supers++;
-    var dir = side === 0 ? 1 : -1;
-    for (var i = 0; i < 6; i++) {
-      var tx = side === 0 ? (470 + i * 112) : (810 - i * 112);
-      var sx = tx - dir * 180, sy = -30 - i * 48, fl = 0.58 + i * 0.06;
-      w.projs.push({
-        id: w.uid++, kind: 'meteor', side: side, x: sx, y: sy,
-        vx: (tx - sx) / fl, vy: (GROUND_Y - sy) / fl, g: 0,
-        dmg: 58, airDmg: 80, castleDmg: 22, splash: 98, kb: 48, maxDist: 2000, traveled: 0, life: fl + 0.25
-      });
-    }
-    w.ev.push({ t: 'super', side: side });
-    return true;
-  }
-
-  function spawnCrate(w, x, y) {
-    var c = {
-      id: w.uid++, x: x != null ? x : Math.round(360 + w.rng() * 540),
-      y: y != null ? y : 128, vy: 20, phase: w.rng() * 6.28, r: 26, energy: 18, life: 11.5
-    };
-    w.crates.push(c);
-    w.ev.push({ t: 'crateSpawn', x: c.x, y: c.y });
-    return c;
-  }
-
-  function awardCrate(w, c, side) {
-    var s = w.sides[side];
-    if (!s) return;
-    s.energy = Math.min(s.energyMax, s.energy + c.energy);
-    s.superCharge = Math.min(100, s.superCharge + 22);
-    if (side === 0) w.cratesPopped++;
-    w.ev.push({ t: 'cratePop', side: side, x: c.x, y: c.y, energy: c.energy });
-  }
-
-  function popCrate(w, x, y, side) {
-    if (!w || w.done) return false;
-    side = side || 0;
-    for (var i = 0; i < w.crates.length; i++) {
-      var c = w.crates[i], dx = x - c.x, dy = y - c.y;
-      if (dx * dx + dy * dy <= 52 * 52) {
-        w.crates.splice(i, 1);
-        awardCrate(w, c, side);
-        return true;
-      }
-    }
-    return false;
-  }
-
-  function counterMult(attType, defUnit) {
-    if (attType === 'sword' && defUnit.type === 'rocket') return 1.35;
-    if (attType === 'rocket' && (defUnit.flying || defUnit.type === 'dino' || defUnit.type === 'boss')) return 1.45;
-    if (attType === 'dino' && defUnit.type === 'sword') return 1.35;
-    return 1.0;
-  }
-
-  function hurtUnit(w, target, rawDmg, kbDir, kbDist, attackerSide) {
-    if (target.hp <= 0) return;
-    var dmg = Math.max(2, rawDmg * (1 - (target.armor || 0)));
-    target.hp -= dmg;
-    target.hurtT = 0.16;
-    if (kbDist > 0) {
-      var resist = (target.type === 'boss' || target.type === 'mech') ? 0.35 : (target.type === 'dino' ? 0.55 : 1);
-      target.x = clamp(target.x + kbDir * kbDist * resist, GATE_L + 8, GATE_R - 8);
-    }
-    if (target.hp <= 0) {
-      target.hp = 0;
-      if (attackerSide === 0 || attackerSide === 1) {
-        w.kills[attackerSide]++;
-        var s = w.sides[attackerSide];
-        s.energy = Math.min(s.energyMax, s.energy + (target.bounty || 5) * 0.65);
-        s.superCharge = Math.min(100, s.superCharge + (target.bounty || 6));
-      }
-      w.ev.push({ t: 'kill', side: attackerSide, victimSide: target.side, unit: target.type, x: target.x, y: target.y });
-    }
-  }
-
-  function hurtCastle(w, targetSide, dmg) {
-    if (w.done) return;
-    var s = w.sides[targetSide];
-    s.hp = Math.max(0, Math.round(s.hp - dmg));
-    w.ev.push({ t: 'castleHit', side: targetSide, dmg: dmg, hp: s.hp });
-    if (s.hp <= 0) {
-      w.done = true;
-      w.winner = targetSide === 1 ? 1 : 2;
-      w.ev.push({ t: 'end', winner: w.winner });
-    }
-  }
-
-  function stepAi(w, dt) {
-    if (w.humans !== 1 || w.passiveAi || w.done) return;
-    var ai = w.sides[1], stg = w.stage;
-    if (stg.boss && !w.bossSpawned && (ai.hp <= ai.hpMax * 0.68 || w.t >= 24)) {
-      w.bossSpawned = true;
-      summon(w, 1, 'boss', { free: true });
-      w.ev.push({ t: 'boss', world: w.worldIdx });
-    }
-    if (stg.airRate > 0) {
-      w.airTimer -= dt;
-      if (w.airTimer <= 0) {
-        w.airTimer = stg.airRate * (0.85 + w.rng() * 0.35) * w.prm.aiThink;
-        summon(w, 1, 'balloon', { free: true });
-      }
-    }
-    if ((w.prm.diff === 'hero' || w.level >= 4) && ai.cannonCd <= 0) {
-      var nearR = 0;
-      for (var k = 0; k < w.units.length; k++) if (w.units[k].side === 0 && w.units[k].x > GATE_R - 260) nearR++;
-      if (nearR >= 2) fireCannon(w, 1, { fullAuto: true });
-    }
-    w.aiTimer -= dt;
-    if (w.aiTimer > 0) return;
-
-    var p1Tank = 0, p1Fast = 0, p1Total = 0;
-    for (var i = 0; i < w.units.length; i++) {
-      var u = w.units[i];
-      if (u.side === 0) {
-        p1Total++;
-        if (u.type === 'dino' || u.type === 'mech') p1Tank++;
-        else if (u.type === 'sword') p1Fast++;
-      }
-    }
-    var pool = stg.pool, pick = pool[Math.floor(w.rng() * pool.length)];
-    if (p1Tank > 0 && pool.indexOf('rocket') >= 0 && w.rng() < 0.65) pick = 'rocket';
-    else if (p1Fast >= 2 && pool.indexOf('dino') >= 0 && w.rng() < 0.6) pick = 'dino';
-    else if (w.prm.diff === 'hero' && pool.indexOf('mech') >= 0 && ai.energy >= 55 && p1Total <= 2) pick = 'mech';
-
-    if (ai.energy >= UNITS[pick].cost && ai.cds[pick] <= 0) {
-      summon(w, 1, pick);
-      w.aiTimer = (1.65 + w.rng() * 1.1) * w.prm.aiThink;
-    } else {
-      w.aiTimer = 0.45 * w.prm.aiThink;
-    }
-  }
-
-  function step(w, dt) {
-    if (!w || w.done || !(dt > 0)) return;
-    w.t += dt;
-
-    var sIdx, s, k, i, j, u, p, c;
-    for (sIdx = 0; sIdx < 2; sIdx++) {
-      s = w.sides[sIdx];
-      s.energy = Math.min(s.energyMax, s.energy + GEN_LEVELS[s.genLv].rate * s.eMul * dt);
-      s.superCharge = Math.min(100, s.superCharge + 2.6 * dt);
-      if (s.cannonCd > 0) s.cannonCd = Math.max(0, s.cannonCd - dt);
-      for (k in s.cds) if (s.cds[k] > 0) s.cds[k] = Math.max(0, s.cds[k] - dt);
-    }
-
-    w.crateTimer -= dt;
-    if (w.crateTimer <= 0 && w.crates.length < 2) { w.crateTimer = 6.0 + w.rng() * 1.8; spawnCrate(w); }
-    for (i = w.crates.length - 1; i >= 0; i--) {
-      c = w.crates[i];
-      c.life -= dt; c.phase += dt * 2.4;
-      if (c.y < 295) c.y += c.vy * dt;
-      c.x += Math.sin(c.phase) * 18 * dt;
-      if (c.life <= 0) w.crates.splice(i, 1);
-    }
-
-    if (w.padType === 'lava') {
-      w.ventTimer -= dt;
-      if (w.ventTimer <= 0) {
-        w.ventTimer = 4.8;
-        w.ev.push({ t: 'vent', x: PAD_X, y: GROUND_Y });
-        for (i = 0; i < w.units.length; i++) {
-          u = w.units[i];
-          if (!u.flying && Math.abs(u.x - PAD_X) < 68) { u.vy = -170; u.flameT = 3.2; }
-        }
-      }
-    }
-
-    stepAi(w, dt);
-
-    for (i = 0; i < w.units.length; i++) {
-      u = w.units[i];
-      if (u.hp <= 0) continue;
-      var dir = u.side === 0 ? 1 : -1, foeGate = u.side === 0 ? GATE_R : GATE_L;
-      u.anim += dt * (u.boostT > 0 ? 9 : 6);
-      if (u.hurtT > 0) u.hurtT = Math.max(0, u.hurtT - dt);
-      if (u.atkT > 0) u.atkT = Math.max(0, u.atkT - dt);
-      if (u.boostT > 0) u.boostT = Math.max(0, u.boostT - dt);
-      if (u.flameT > 0) u.flameT = Math.max(0, u.flameT - dt);
-      if (u.atkCd > 0) u.atkCd = Math.max(0, u.atkCd - dt);
-
-      if (!u.flying) {
-        if (u.y < GROUND_Y || u.vy !== 0) {
-          u.vy += 680 * dt; u.y += u.vy * dt;
-          if (u.y >= GROUND_Y) { u.y = GROUND_Y; u.vy = 0; }
-        }
-        if (!u.padUsed && Math.abs(u.x - PAD_X) < 28) {
-          if (w.padType === 'turbo') { u.padUsed = true; u.boostT = 2.8; w.ev.push({ t: 'pad', kind: 'turbo', x: u.x, y: u.y }); }
-          else if (w.padType === 'jump') { u.padUsed = true; u.vy = -265; u.boostT = 2.4; w.ev.push({ t: 'pad', kind: 'jump', x: u.x, y: u.y }); }
-        }
-      } else {
-        u.y = AIR_Y + Math.sin(u.anim * 0.7) * 8;
-      }
-
-      var bestFoe = null, bestDist = 1e9;
-      for (j = 0; j < w.units.length; j++) {
-        var f = w.units[j];
-        if (f.side === u.side || f.hp <= 0 || (f.flying && !u.hitsAir)) continue;
-        var d = (f.x - u.x) * dir, reach = (f.flying ? u.airRange : u.range) + f.r * 0.6;
-        if (d >= -18 && d <= reach && d < bestDist) { bestDist = d; bestFoe = f; }
-      }
-
-      var atGate = (foeGate - u.x) * dir <= u.range;
-      if (bestFoe || atGate) {
-        if (u.atkCd <= 0) {
-          var dmgNow = u.dmg * (u.flameT > 0 ? 1.25 : 1);
-          u.atkCd = u.rate * (u.boostT > 0 ? 0.72 : 1);
-          u.atkT = 0.22;
-          if (bestFoe && u.proj) {
-            var tx = bestFoe.x, ty = bestFoe.y - (bestFoe.flying ? 0 : bestFoe.r * 0.4);
-            var pdx = tx - u.x, pdy = ty - (u.y - u.r * 0.6), plen = Math.sqrt(pdx * pdx + pdy * pdy) || 1;
-            var pspd = u.proj === 'laser' ? 680 : (u.proj === 'bomb' ? 360 : 520);
-            w.projs.push({
-              id: w.uid++, kind: u.proj, unitType: u.type, side: u.side,
-              x: u.x + dir * 16, y: u.y - u.r * 0.6, vx: (pdx / plen) * pspd, vy: (pdy / plen) * pspd,
-              g: u.proj === 'bomb' ? 220 : 0, dmg: dmgNow, airDmg: dmgNow * 1.35,
-              splash: u.splash || 28, kb: u.kb, maxDist: 420, traveled: 0, life: 1.1
-            });
-            w.ev.push({ t: 'shoot', side: u.side, unit: u.type, x: u.x, y: u.y });
-          } else if (bestFoe) {
-            if (u.splash > 0) {
-              for (j = 0; j < w.units.length; j++) {
-                var f2 = w.units[j];
-                if (f2.side === u.side || f2.hp <= 0 || (f2.flying && !u.hitsAir)) continue;
-                if (Math.abs(f2.x - bestFoe.x) <= u.splash) hurtUnit(w, f2, dmgNow * counterMult(u.type, f2), dir, u.kb, u.side);
-              }
-              w.ev.push({ t: 'slam', side: u.side, unit: u.type, x: bestFoe.x, y: GROUND_Y });
-            } else {
-              hurtUnit(w, bestFoe, dmgNow * counterMult(u.type, bestFoe), dir, u.kb, u.side);
-              w.ev.push({ t: 'clash', side: u.side, x: bestFoe.x, y: bestFoe.y - 18 });
-            }
-          } else if (atGate) {
-            hurtCastle(w, u.side === 0 ? 1 : 0, dmgNow * 1.12);
-          }
-        }
-      } else {
-        u.x = clamp(u.x + dir * u.speed * (u.boostT > 0 ? 1.45 : 1) * dt, GATE_L + 6, GATE_R - 6);
-      }
-    }
-
-    for (i = w.projs.length - 1; i >= 0; i--) {
-      p = w.projs[i];
-      p.life -= dt; p.vy += p.g * dt;
-      var sx = p.vx * dt, sy = p.vy * dt;
-      p.x += sx; p.y += sy; p.traveled += Math.sqrt(sx * sx + sy * sy);
-
-      var hit = false;
-      if (p.kind === 'cannon' && (p.side === 0 || w.humans === 2)) {
-        for (j = w.crates.length - 1; j >= 0; j--) {
-          c = w.crates[j];
-          if ((p.x - c.x) * (p.x - c.x) + (p.y - c.y) * (p.y - c.y) <= (c.r + 18) * (c.r + 18)) {
-            w.crates.splice(j, 1); awardCrate(w, c, p.side); hit = true; break;
-          }
-        }
-      }
-      if (!hit) {
-        for (j = 0; j < w.units.length; j++) {
-          u = w.units[j];
-          if (u.side === p.side || u.hp <= 0 || (p.kind === 'bomb' && u.flying)) continue;
-          var uy = u.flying ? u.y : u.y - u.r * 0.65, rad = u.r + (p.kind === 'meteor' ? 24 : 16);
-          if ((p.x - u.x) * (p.x - u.x) + (p.y - uy) * (p.y - uy) <= rad * rad) { hit = true; break; }
-        }
-      }
-      if (!hit && (p.y >= GROUND_Y - 4 || p.traveled >= p.maxDist || p.life <= 0)) hit = true;
-
-      if (hit) {
-        var kbDir = p.side === 0 ? 1 : -1, hitAny = false;
-        for (j = 0; j < w.units.length; j++) {
-          u = w.units[j];
-          if (u.side === p.side || u.hp <= 0 || (p.kind === 'bomb' && u.flying)) continue;
-          var uy2 = u.flying ? u.y : u.y - u.r * 0.65;
-          if (Math.sqrt((p.x - u.x) * (p.x - u.x) + (p.y - uy2) * (p.y - uy2)) <= p.splash + u.r * 0.5) {
-            var baseD = u.flying ? (p.airDmg || p.dmg) : p.dmg;
-            if (p.unitType) baseD *= counterMult(p.unitType, u);
-            hurtUnit(w, u, baseD, kbDir, p.kb, p.side);
-            hitAny = true;
-          }
-        }
-        if (p.kind === 'cannon' && hitAny) w.sides[p.side].superCharge = Math.min(100, w.sides[p.side].superCharge + 8);
-        if (p.kind === 'meteor') {
-          var foeSide = p.side === 0 ? 1 : 0;
-          if (Math.abs(p.x - (foeSide === 1 ? GATE_R : GATE_L)) <= 135) hurtCastle(w, foeSide, p.castleDmg || 18);
-        }
-        w.ev.push({ t: 'boom', kind: p.kind, side: p.side, x: p.x, y: Math.min(GROUND_Y, p.y), hit: hitAny });
-        w.projs.splice(i, 1);
-      }
-    }
-
-    for (i = w.units.length - 1; i >= 0; i--) if (w.units[i].hp <= 0) w.units.splice(i, 1);
-  }
-
-  function freshSave() {
-    var lv = [];
-    for (var i = 0; i < LEVELS.length; i++) lv.push({ s: 0, t: 0 });
-    return { v: 2, diff: 'normal', coins: 0, lv: lv, armors: [1, 0, 0, 0, 0], cannons: [1, 0, 0, 0, 0], armor: 0, cannon: 0 };
   }
 
   function loadSave(raw) {
-    var base = freshSave();
-    if (!raw || typeof raw !== 'object' || Array.isArray(raw) || raw.v !== 2) return base;
-    if (DIFFS[raw.diff]) base.diff = raw.diff;
-    if (typeof raw.coins === 'number' && raw.coins >= 0 && raw.coins < 1e7) base.coins = Math.floor(raw.coins);
-    if (Array.isArray(raw.lv) && raw.lv.length === LEVELS.length) {
-      for (var i = 0; i < LEVELS.length; i++) {
-        var it = raw.lv[i];
-        if (it && typeof it === 'object') {
-          var st = clamp(it.s | 0, 0, 3);
-          var tm = typeof it.t === 'number' && it.t > 0 && it.t < 9999 ? Math.round(it.t * 10) / 10 : 0;
-          base.lv[i] = { s: st, t: st > 0 ? tm : 0 };
-        }
+    var s = defaultSave();
+    if (!raw || typeof raw !== 'object' || raw.v !== 3) return s;
+    s.coins = Math.max(0, (raw.coins | 0));
+    s.bestScore = Math.max(0, (raw.bestScore | 0));
+    s.wins = Math.max(0, (raw.wins | 0));
+    if (Array.isArray(raw.stars)) {
+      for (var i = 0; i < STAGES.length; i++) {
+        s.stars[i] = clamp(raw.stars[i] | 0, 0, 3);
       }
     }
-    if (Array.isArray(raw.armors) && raw.armors.length === ARMORS.length) {
-      for (var a = 1; a < ARMORS.length; a++) base.armors[a] = raw.armors[a] ? 1 : 0;
+    var derivedUnlocked = 0;
+    for (var j = 0; j < STAGES.length; j++) {
+      if (s.stars[j] > 0) derivedUnlocked = Math.min(STAGES.length - 1, j + 1);
     }
-    if (Array.isArray(raw.cannons) && raw.cannons.length === CANNONS.length) {
-      for (var c = 1; c < CANNONS.length; c++) base.cannons[c] = raw.cannons[c] ? 1 : 0;
+    s.unlockedStage = clamp(Math.max(raw.unlockedStage | 0, derivedUnlocked), 0, STAGES.length - 1);
+    if (Array.isArray(raw.ownedCastles)) {
+      for (var c = 0; c < CASTLE_SKINS.length; c++) s.ownedCastles[c] = c === 0 ? 1 : (raw.ownedCastles[c] ? 1 : 0);
     }
-    var ai = raw.armor | 0, ci = raw.cannon | 0;
-    if (ai >= 0 && ai < ARMORS.length && base.armors[ai]) base.armor = ai;
-    if (ci >= 0 && ci < CANNONS.length && base.cannons[ci]) base.cannon = ci;
-    return base;
-  }
-
-  function isOpen(save, idx) { return idx >= 0 && idx < LEVELS.length; }
-
-  function totalStars(save) {
-    var sum = 0;
-    if (!save || !Array.isArray(save.lv)) return 0;
-    for (var i = 0; i < save.lv.length; i++) sum += (save.lv[i].s | 0);
-    return sum;
-  }
-
-  function stars(w) {
-    if (!w || !w.done || w.winner !== 1) return 0;
-    var s = 1;
-    if (w.sides[0].hp / w.sides[0].hpMax >= 0.55) s++;
-    if (w.t <= w.stage.par) s++;
+    if (Array.isArray(raw.ownedBanners)) {
+      for (var b = 0; b < BANNER_SKINS.length; b++) s.ownedBanners[b] = b === 0 ? 1 : (raw.ownedBanners[b] ? 1 : 0);
+    }
+    var cs = raw.castleSkin | 0;
+    s.castleSkin = (cs >= 0 && cs < CASTLE_SKINS.length && s.ownedCastles[cs]) ? cs : 0;
+    var bs = raw.bannerSkin | 0;
+    s.bannerSkin = (bs >= 0 && bs < BANNER_SKINS.length && s.ownedBanners[bs]) ? bs : 0;
     return s;
   }
 
-  function scoreOf(w) {
-    if (!w) return 0;
-    var st = stars(w);
-    var hpB = Math.round((w.sides[0].hp / w.sides[0].hpMax) * 300);
-    var killB = w.kills[0] * 25 + w.cratesPopped * 30;
-    var timeB = w.winner === 1 ? Math.max(0, Math.round((120 - w.t) * 6)) : 0;
-    return st * 400 + hpB + killB + timeB;
+  function totalStars(save) {
+    var sum = 0;
+    for (var i = 0; i < save.stars.length; i++) sum += save.stars[i];
+    return sum;
   }
 
-  function applyResult(save, idx, st, timeSec, diffId) {
-    idx = clamp(idx | 0, 0, LEVELS.length - 1);
-    st = clamp(st | 0, 0, 3);
-    var rec = save.lv[idx], prev = rec.s, isBest = false;
-    if (st > 0) {
-      if (st > rec.s) { rec.s = st; isBest = true; }
-      if (rec.t === 0 || timeSec < rec.t) { rec.t = Math.round(timeSec * 10) / 10; isBest = true; }
+  function buyOrEquipSkin(save, kind, index) {
+    var list = kind === 'castle' ? CASTLE_SKINS : BANNER_SKINS;
+    var owned = kind === 'castle' ? save.ownedCastles : save.ownedBanners;
+    if (index < 0 || index >= list.length) return { ok: false, reason: 'invalid' };
+    if (owned[index]) {
+      if (kind === 'castle') save.castleSkin = index;
+      else save.bannerSkin = index;
+      return { ok: true, action: 'equip' };
     }
-    var df = DIFFS[diffId] || DIFFS.normal;
-    var earned = st > 0 ? Math.round((LEVELS[idx].reward + st * 6) * df.coinMul) : 6;
-    if (st > prev) earned += (st - prev) * 10;
-    save.coins += earned;
-    return { earned: earned, best: isBest, nextIdx: idx + 1 < LEVELS.length ? idx + 1 : 0 };
+    var price = list[index].price;
+    if (save.coins < price) return { ok: false, reason: 'coins' };
+    save.coins -= price;
+    owned[index] = 1;
+    if (kind === 'castle') save.castleSkin = index;
+    else save.bannerSkin = index;
+    return { ok: true, action: 'buy', spent: price };
   }
 
-  function buy(save, kind, idx) {
-    var list = kind === 'armor' ? ARMORS : kind === 'cannon' ? CANNONS : null;
-    var owned = kind === 'armor' ? save.armors : kind === 'cannon' ? save.cannons : null;
-    if (!list || !owned || idx < 0 || idx >= list.length) return '';
-    if (owned[idx]) { if (kind === 'armor') save.armor = idx; else save.cannon = idx; return 'wear'; }
-    if (save.coins < list[idx].price) return 'poor';
-    save.coins -= list[idx].price;
-    owned[idx] = 1;
-    if (kind === 'armor') save.armor = idx; else save.cannon = idx;
-    return 'bought';
+  function recordSoloResult(save, stageIndex, result) {
+    var prevBest = save.bestScore;
+    var isNewBest = false;
+    var coinsEarned = result.coins || 0;
+    save.coins += coinsEarned;
+    if (result.score > save.bestScore) {
+      save.bestScore = result.score;
+      isNewBest = result.score > prevBest;
+    }
+    if (result.winner === 0) {
+      save.wins += 1;
+      if (result.stars > save.stars[stageIndex]) save.stars[stageIndex] = result.stars;
+      if (stageIndex + 1 < STAGES.length && save.unlockedStage < stageIndex + 1) {
+        save.unlockedStage = stageIndex + 1;
+      }
+    }
+    return { isNewBest: isNewBest, coinsEarned: coinsEarned };
+  }
+
+  /* --------------------------------------------------------------- Ballistics */
+  // Computes exact parabolic launch velocity from cannon muzzle to target (tx, ty).
+  function solveCannonShot(side, tx, ty) {
+    var sx = side === 0 ? LEFT_CASTLE_X + 0.55 : RIGHT_CASTLE_X - 0.55;
+    var sy = CANNON_Y;
+    var clampedTx = side === 0 ? clamp(tx, -8.5, RIGHT_CASTLE_X + 0.4) : clamp(tx, LEFT_CASTLE_X - 0.4, 8.5);
+    var clampedTy = clamp(ty, 0.2, 8.6);
+    var dx = clampedTx - sx;
+    var dy = clampedTy - sy;
+    var dist = Math.sqrt(dx * dx + dy * dy);
+    var flightT = clamp(dist / 16.5, 0.36, 1.08);
+    var vx = dx / flightT;
+    var vy = (dy + 0.5 * GRAVITY * flightT * flightT) / flightT;
+    var pitch = Math.atan2(vy, Math.abs(vx));
+    return { sx: sx, sy: sy, tx: clampedTx, ty: clampedTy, vx: vx, vy: vy, flightT: flightT, pitch: pitch };
+  }
+
+  function sampleArc(side, tx, ty, steps) {
+    var sol = solveCannonShot(side, tx, ty);
+    var pts = [];
+    var n = steps || 10;
+    for (var i = 1; i <= n; i++) {
+      var u = i / n;
+      var t = sol.flightT * u;
+      var x = sol.sx + sol.vx * t;
+      var y = sol.sy + sol.vy * t - 0.5 * GRAVITY * t * t;
+      pts.push({ x: x, y: Math.max(0.15, y) });
+    }
+    return pts;
+  }
+
+  /* --------------------------------------------------------------- Simulation */
+  function create(opts) {
+    opts = opts || {};
+    var duo = !!opts.duo;
+    var demo = !!opts.demo;
+    var stageIndex = clamp(opts.stageIndex | 0, 0, STAGES.length - 1);
+    var stage = STAGES[stageIndex];
+    var dda = clamp(typeof opts.dda === 'number' ? opts.dda : 0.35, 0, 1);
+    var rng = mulberry32(opts.seed || (stageIndex * 7919 + (duo ? 31337 : 1337)));
+
+    // DDA subtly adapts solo enemy power & pacing (0 = gentler, 1 = spicy)
+    var cpuRegenMult = (duo || demo) ? 1.0 : (0.78 + dda * 0.44);
+    var cpuHpMult = (duo || demo) ? 1.0 : (0.88 + dda * 0.24);
+    var cpuDelayMult = (duo || demo) ? 1.0 : (1.28 - dda * 0.45);
+    var p1Regen = duo ? 10.5 : (demo ? 10.0 : stage.p1Regen);
+    var p2Regen = duo ? 10.5 : (demo ? 10.0 : stage.cpuRegen * cpuRegenMult);
+    var p1MaxHp = duo ? 280 : stage.p1Hp;
+    var p2MaxHp = duo ? 280 : Math.round(stage.cpuHp * (0.92 + dda * 0.16));
+
+    var unlocked0 = (duo || demo) ? [true, true, true, true] : [false, false, false, false];
+    if (!duo && !demo) {
+      for (var u = 0; u < stage.unlocks.length; u++) unlocked0[stage.unlocks[u]] = true;
+    }
+
+    var state = {
+      id: duo ? 'duo' : stage.id,
+      stageIndex: stageIndex,
+      worldIndex: duo ? (opts.worldIndex != null ? clamp(opts.worldIndex | 0, 0, WORLDS.length - 1) : 1) : stage.world,
+      duo: duo,
+      demo: demo,
+      dda: dda,
+      time: 0,
+      frames: 0,
+      winner: -1, // -1 ongoing, 0 left/P1, 1 right/P2-CPU
+      stars: 0,
+      score: 0,
+      coinsEarned: 0,
+      nextUid: 1,
+      sides: [
+        {
+          hp: p1MaxHp, maxHp: p1MaxHp, energy: START_ENERGY, regen: p1Regen,
+          spawned: 0, defeats: 0, cannonCd: 0, cannonRecoil: 0,
+          aimX: 1.5, aimY: 1.2, aimPitch: 0.48,
+          cannonShots: 0, cannonHits: 0, cratesPopped: 0,
+          unitCds: [0, 0, 0, 0], unlocked: unlocked0,
+          hurtTimer: 0, castleShake: 0
+        },
+        {
+          hp: p2MaxHp, maxHp: p2MaxHp, energy: duo ? START_ENERGY : 18, regen: p2Regen,
+          spawned: 0, defeats: 0, cannonCd: 0, cannonRecoil: 0,
+          aimX: -1.5, aimY: 1.2, aimPitch: 0.48,
+          cannonShots: 0, cannonHits: 0, cratesPopped: 0,
+          unitCds: [0, 0, 0, 0], unlocked: [true, true, true, true],
+          hurtTimer: 0, castleShake: 0
+        }
+      ],
+      units: [],
+      corks: [],
+      darts: [],
+      crates: [],
+      crateTimer: demo ? 5.5 : 4.2,
+      crateInterval: duo ? 9.5 : stage.crateInterval,
+      cpuTimer: demo ? 1.0 : Math.max(1.1, stage.cpuDelay * cpuDelayMult),
+      cpuDelay: stage.cpuDelay * cpuDelayMult,
+      cpuHpMult: cpuHpMult,
+      cpuCannonTimer: 7.5 - stageIndex * 0.45,
+      demoP1Timer: 0.9,
+      bossStagesLeft: (!duo && !demo && stage.boss) ? [0.68, 0.28] : [],
+      bossSpec: (!duo && !demo) ? stage.boss : null,
+      bossSpawnedCount: 0,
+      events: [],
+      _rng: rng
+    };
+
+    // Sync initial cannon pitches
+    state.sides[0].aimPitch = solveCannonShot(0, state.sides[0].aimX, state.sides[0].aimY).pitch;
+    state.sides[1].aimPitch = solveCannonShot(1, state.sides[1].aimX, state.sides[1].aimY).pitch;
+
+    return state;
+  }
+
+  function countSideUnits(st, side) {
+    var n = 0;
+    for (var i = 0; i < st.units.length; i++) if (st.units[i].side === side) n++;
+    return n;
+  }
+
+  function canSpawn(st, side, kind) {
+    if (st.winner !== -1) return false;
+    var s = st.sides[side];
+    var def = UNITS[kind];
+    if (!s || !def) return false;
+    if (!s.unlocked[kind]) return false;
+    if (s.energy < def.cost) return false;
+    if (s.unitCds[kind] > 0) return false;
+    if (countSideUnits(st, side) >= MAX_UNITS_PER_SIDE) return false;
+    return true;
+  }
+
+  function spawnUnit(st, side, kind, opts) {
+    opts = opts || {};
+    var free = !!opts.free;
+    var isBoss = !!opts.isBoss;
+    var s = st.sides[side];
+    var def = UNITS[kind];
+    if (!s || !def) return null;
+    if (!free && !canSpawn(st, side, kind)) return null;
+
+    if (!free) {
+      s.energy -= def.cost;
+      s.unitCds[kind] = def.cd;
+    }
+    s.spawned += 1;
+
+    var hpMult = side === 1 && !st.duo && !st.demo ? st.cpuHpMult : 1.0;
+    var dmgMult = 1.0;
+    var scale = def.scale;
+    if (isBoss && st.bossSpec) {
+      hpMult *= st.bossSpec.hpMult;
+      dmgMult *= st.bossSpec.dmgMult;
+      scale *= 1.38;
+    }
+    var laneZ = (st._rng() - 0.5) * 1.4;
+    var startX = side === 0 ? LEFT_GATE_X + 0.35 : RIGHT_GATE_X - 0.35;
+    var unit = {
+      uid: st.nextUid++,
+      side: side,
+      kind: kind,
+      x: startX,
+      y: 0,
+      z: laneZ,
+      vx: 0,
+      vy: 0,
+      hp: Math.round(def.hp * hpMult),
+      maxHp: Math.round(def.hp * hpMult),
+      dmg: Math.round(def.dmg * dmgMult),
+      speed: def.speed * (isBoss ? 0.85 : 1.0),
+      range: def.range * (isBoss ? 1.2 : 1.0),
+      radius: def.radius * (isBoss ? 1.3 : 1.0),
+      atkCd: 0,
+      atkMaxCd: def.atkCd,
+      atkAnim: 0,
+      hurtAnim: 0,
+      walkPhase: st._rng() * Math.PI * 2,
+      scale: scale,
+      isBoss: isBoss,
+      ranged: def.ranged,
+      projSpeed: def.projSpeed || 0,
+      splash: def.splash || 0,
+      knockback: def.knockback || 0,
+      score: def.score * (isBoss ? 3 : 1)
+    };
+    st.units.push(unit);
+    st.events.push({ type: isBoss ? 'bossSpawn' : 'spawn', side: side, kind: kind, x: unit.x, z: unit.z, uid: unit.uid });
+    return unit;
+  }
+
+  function setCannonAim(st, side, tx, ty) {
+    var s = st.sides[side];
+    if (!s) return;
+    s.aimX = side === 0 ? clamp(tx, -8.5, RIGHT_CASTLE_X + 0.3) : clamp(tx, LEFT_CASTLE_X - 0.3, 8.5);
+    s.aimY = clamp(ty, 0.4, 8.5);
+    s.aimPitch = solveCannonShot(side, s.aimX, s.aimY).pitch;
+  }
+
+  function nudgeCannonAim(st, side, dirX, dt) {
+    var s = st.sides[side];
+    if (!s || !dirX) return;
+    var speed = 13.5;
+    var nextX = s.aimX + dirX * speed * dt;
+    nextX = side === 0 ? clamp(nextX, -8.2, RIGHT_CASTLE_X) : clamp(nextX, LEFT_CASTLE_X, 8.2);
+    // Gentle vertical magnet toward any floating crate near the aimed X column!
+    var targetY = 1.05;
+    for (var i = 0; i < st.crates.length; i++) {
+      var cr = st.crates[i];
+      if (Math.abs(cr.x - nextX) < 2.2) {
+        targetY = cr.y;
+        break;
+      }
+    }
+    setCannonAim(st, side, nextX, targetY);
+  }
+
+  function fireCannon(st, side) {
+    if (st.winner !== -1) return false;
+    var s = st.sides[side];
+    if (!s || s.cannonCd > 0) return false;
+    var sol = solveCannonShot(side, s.aimX, s.aimY);
+    s.cannonCd = CANNON_COOLDOWN;
+    s.cannonRecoil = 1.0;
+    s.cannonShots += 1;
+    s.aimPitch = sol.pitch;
+    var cork = {
+      uid: st.nextUid++,
+      side: side,
+      x: sol.sx,
+      y: sol.sy,
+      z: 0,
+      vx: sol.vx,
+      vy: sol.vy,
+      life: 2.2,
+      rot: 0
+    };
+    st.corks.push(cork);
+    st.events.push({ type: 'cannonFire', side: side, x: sol.sx, y: sol.sy, pitch: sol.pitch });
+    return true;
+  }
+
+  function spawnCrate(st) {
+    if (st.crates.length >= 2) return null;
+    var x = (st._rng() - 0.5) * 11.5;
+    var crate = {
+      uid: st.nextUid++,
+      baseX: x,
+      x: x,
+      y: 9.8,
+      z: (st._rng() - 0.5) * 0.6,
+      vy: -1.15 - st._rng() * 0.3,
+      swayPhase: st._rng() * Math.PI * 2,
+      swayAmp: 0.7 + st._rng() * 0.45,
+      energy: CRATE_BONUS_ENERGY
+    };
+    st.crates.push(crate);
+    st.events.push({ type: 'crateSpawn', x: crate.x, y: crate.y });
+    return crate;
+  }
+
+  function damageCastle(st, victimSide, dmg, attackerSide) {
+    if (st.winner !== -1) return;
+    var s = st.sides[victimSide];
+    s.hp = Math.max(0, s.hp - dmg);
+    s.hurtTimer = 0.25;
+    s.castleShake = Math.min(1, s.castleShake + 0.65);
+    st.events.push({ type: 'castleHit', side: victimSide, dmg: dmg, hp: s.hp, attacker: attackerSide });
+
+    // Trigger stage boss waves at HP thresholds
+    if (victimSide === 1 && st.bossSpec && st.bossStagesLeft.length > 0) {
+      var ratio = s.hp / s.maxHp;
+      if (ratio <= st.bossStagesLeft[0]) {
+        st.bossStagesLeft.shift();
+        st.bossSpawnedCount += 1;
+        spawnUnit(st, 1, st.bossSpec.kind, { free: true, isBoss: true });
+      }
+    }
+
+    if (s.hp <= 0) {
+      finishMatch(st, attackerSide);
+    }
+  }
+
+  function finishMatch(st, winnerSide) {
+    if (st.winner !== -1) return;
+    st.winner = winnerSide;
+    var stage = STAGES[st.stageIndex];
+    if (!st.duo && !st.demo) {
+      if (winnerSide === 0) {
+        var hpRatio = st.sides[0].hp / st.sides[0].maxHp;
+        var stars = 1;
+        if (hpRatio >= 0.80 || (hpRatio >= 0.62 && st.time <= 65)) stars = 3;
+        else if (hpRatio >= 0.50) stars = 2;
+        st.stars = stars;
+        var timeBonus = Math.max(0, Math.round((120 - st.time) * 3));
+        var hpBonus = Math.round(hpRatio * 200);
+        st.score += 180 + timeBonus + hpBonus + stars * 80;
+        st.coinsEarned += stage.reward + stars * 10;
+      } else {
+        st.stars = 0;
+        st.coinsEarned += Math.max(8, Math.round(stage.reward * 0.25));
+      }
+    } else if (st.duo) {
+      st.stars = 3;
+      st.score += 200;
+    }
+    st.events.push({
+      type: 'matchEnd',
+      winner: winnerSide,
+      stars: st.stars,
+      score: st.score,
+      coins: st.coinsEarned
+    });
+  }
+
+  function applyUnitDamage(st, target, dmg, attackerSide, knockback, fromCannon) {
+    target.hp -= dmg;
+    target.hurtAnim = 0.22;
+    if (knockback > 0) {
+      var pushDir = attackerSide === 0 ? 1 : -1;
+      target.vx += pushDir * knockback * 3.0;
+      target.vy = Math.max(target.vy, 2.2 + knockback * 1.4);
+    }
+    st.events.push({
+      type: 'unitHit', uid: target.uid, side: target.side,
+      x: target.x, y: target.y + 0.8, dmg: dmg, fromCannon: !!fromCannon
+    });
+    if (target.hp <= 0) {
+      st.sides[attackerSide].defeats += 1;
+      if (attackerSide === 0 && !st.demo) {
+        st.score += target.score;
+        st.coinsEarned += target.isBoss ? 15 : 2;
+      }
+      st.events.push({
+        type: 'unitDefeat', uid: target.uid, side: target.side,
+        kind: target.kind, x: target.x, y: target.y + 0.6, z: target.z, isBoss: target.isBoss
+      });
+    }
+  }
+
+  function stepAiSide(st, side, dt) {
+    var s = st.sides[side];
+    if (side === 1 && !st.duo) {
+      st.cpuTimer -= dt;
+      if (st.cpuTimer <= 0) {
+        var stage = STAGES[st.stageIndex];
+        var pool = st.demo ? [0, 1, 2] : stage.cpuPool;
+        // Pick an affordable unit from pool (preferring stronger units when energy allows)
+        var picked = -1;
+        var tries = 3;
+        while (tries-- > 0) {
+          var cand = pool[Math.floor(st._rng() * pool.length)];
+          if (canSpawn(st, side, cand)) { picked = cand; break; }
+        }
+        if (picked === -1 && canSpawn(st, side, 0)) picked = 0;
+        if (picked !== -1) {
+          spawnUnit(st, side, picked);
+          st.cpuTimer = st.demo ? (1.6 + st._rng() * 1.2) : (st.cpuDelay * (0.75 + st._rng() * 0.55));
+        } else {
+          st.cpuTimer = 0.5;
+        }
+      }
+
+      // Rival castle occasionally fires its own cork cannon in higher stages (or demo)
+      if (st.stageIndex >= 1 || st.demo) {
+        st.cpuCannonTimer -= dt;
+        if (st.cpuCannonTimer <= 0 && s.cannonCd <= 0) {
+          // Aim at the furthest P1 unit or a parachute crate
+          var bestTarget = null;
+          var bestX = -999;
+          for (var i = 0; i < st.units.length; i++) {
+            var u = st.units[i];
+            if (u.side === 0 && u.x > bestX) { bestX = u.x; bestTarget = u; }
+          }
+          if (bestTarget && bestX > -7.5) {
+            var jitter = (st._rng() - 0.5) * (st.demo ? 2.5 : (2.8 - st.dda * 1.4));
+            setCannonAim(st, 1, bestTarget.x + jitter, 0.8);
+            fireCannon(st, 1);
+            st.cpuCannonTimer = st.demo ? 4.5 : Math.max(3.6, 8.2 - st.stageIndex * 0.5 - st.dda * 1.8);
+          } else {
+            st.cpuCannonTimer = 1.6;
+          }
+        }
+      }
+    } else if (side === 0 && st.demo) {
+      // Attract mode on title screen: friendly parade skirmish!
+      st.demoP1Timer -= dt;
+      if (st.demoP1Timer <= 0) {
+        var demoKinds = [0, 1, 2, 0, 1];
+        var dk = demoKinds[Math.floor(st._rng() * demoKinds.length)];
+        if (canSpawn(st, 0, dk)) spawnUnit(st, 0, dk);
+        else if (canSpawn(st, 0, 0)) spawnUnit(st, 0, 0);
+        st.demoP1Timer = 1.65 + st._rng() * 1.1;
+      }
+      if (s.cannonCd <= 0 && st.crates.length > 0 && st._rng() < 0.03) {
+        var cr = st.crates[0];
+        setCannonAim(st, 0, cr.x, cr.y);
+        fireCannon(st, 0);
+      }
+    }
+  }
+
+  function step(st, dt, input) {
+    st.events.length = 0;
+    if (st.winner !== -1) {
+      // Let castle shakes/recoils decay cleanly on result screen
+      for (var k = 0; k < 2; k++) {
+        st.sides[k].hurtTimer = Math.max(0, st.sides[k].hurtTimer - dt);
+        st.sides[k].castleShake = Math.max(0, st.sides[k].castleShake - dt * 2.5);
+        st.sides[k].cannonRecoil = Math.max(0, st.sides[k].cannonRecoil - dt * 4.5);
+      }
+      return st.events;
+    }
+
+    st.time += dt;
+    st.frames += 1;
+
+    // Input processing (optional per-step keyboard aim nudges)
+    if (input) {
+      if (input.aimDir1) nudgeCannonAim(st, 0, input.aimDir1, dt);
+      if (input.aimDir2) nudgeCannonAim(st, 1, input.aimDir2, dt);
+    }
+
+    // Energy regen & cooldowns
+    for (var si = 0; si < 2; si++) {
+      var side = st.sides[si];
+      side.energy = Math.min(MAX_ENERGY, side.energy + side.regen * dt);
+      side.cannonCd = Math.max(0, side.cannonCd - dt);
+      side.cannonRecoil = Math.max(0, side.cannonRecoil - dt * 5.0);
+      side.hurtTimer = Math.max(0, side.hurtTimer - dt);
+      side.castleShake = Math.max(0, side.castleShake - dt * 3.0);
+      for (var c = 0; c < 4; c++) side.unitCds[c] = Math.max(0, side.unitCds[c] - dt);
+    }
+
+    // AI & Demo spawning
+    stepAiSide(st, 1, dt);
+    if (st.demo) stepAiSide(st, 0, dt);
+
+    // Demo immortality (title diorama never ends)
+    if (st.demo) {
+      if (st.sides[0].hp < 100) st.sides[0].hp = st.sides[0].maxHp;
+      if (st.sides[1].hp < 100) st.sides[1].hp = st.sides[1].maxHp;
+    }
+
+    // Floating parachute energy crates
+    st.crateTimer -= dt;
+    if (st.crateTimer <= 0) {
+      spawnCrate(st);
+      st.crateTimer = st.crateInterval * (0.85 + st._rng() * 0.35);
+    }
+    for (var ci = st.crates.length - 1; ci >= 0; ci--) {
+      var cr = st.crates[ci];
+      cr.swayPhase += dt * 2.2;
+      cr.y += cr.vy * dt;
+      cr.x = cr.baseX + Math.sin(cr.swayPhase) * cr.swayAmp;
+      if (cr.y <= 0.55) {
+        // Touches ground: small poof & disappears
+        st.events.push({ type: 'crateExpire', x: cr.x, y: 0.55 });
+        st.crates.splice(ci, 1);
+      }
+    }
+
+    // Update cork cannonballs
+    for (var pi = st.corks.length - 1; pi >= 0; pi--) {
+      var pk = st.corks[pi];
+      pk.life -= dt;
+      pk.vy -= GRAVITY * dt;
+      pk.x += pk.vx * dt;
+      pk.y += pk.vy * dt;
+      pk.rot += dt * 9.0;
+
+      // 1) Check parachute crate pop!
+      var hitCrate = false;
+      for (var cj = st.crates.length - 1; cj >= 0; cj--) {
+        var crate = st.crates[cj];
+        var cdx = pk.x - crate.x;
+        var cdy = pk.y - crate.y;
+        if (cdx * cdx + cdy * cdy <= CRATE_HIT_RADIUS * CRATE_HIT_RADIUS) {
+          var owner = st.sides[pk.side];
+          owner.energy = Math.min(MAX_ENERGY, owner.energy + crate.energy);
+          owner.cannonHits += 1;
+          owner.cratesPopped += 1;
+          if (pk.side === 0 && !st.demo) {
+            st.score += 45;
+            st.coinsEarned += CRATE_BONUS_COINS;
+          }
+          st.events.push({
+            type: 'cratePop', side: pk.side, x: crate.x, y: crate.y,
+            energy: crate.energy, coins: pk.side === 0 ? CRATE_BONUS_COINS : 0
+          });
+          st.crates.splice(cj, 1);
+          st.corks.splice(pi, 1);
+          hitCrate = true;
+          break;
+        }
+      }
+      if (hitCrate) continue;
+
+      // 2) Direct mid-air hit on enemy unit
+      var enemySide = pk.side === 0 ? 1 : 0;
+      var hitUnit = false;
+      for (var uj = 0; uj < st.units.length; uj++) {
+        var eu = st.units[uj];
+        if (eu.side !== enemySide || eu.hp <= 0) continue;
+        var udx = pk.x - eu.x;
+        var udy = pk.y - (eu.y + 0.85 * eu.scale);
+        var hr = eu.radius + 0.65;
+        if (udx * udx + udy * udy <= hr * hr) {
+          hitUnit = true;
+          break;
+        }
+      }
+
+      // 3) Hit enemy castle directly
+      var hitEnemyCastle = (enemySide === 1 && pk.x >= RIGHT_GATE_X - 0.1 && pk.y <= 5.2) ||
+                           (enemySide === 0 && pk.x <= LEFT_GATE_X + 0.1 && pk.y <= 5.2);
+
+      // 4) Ground impact or direct unit/castle hit
+      if (hitUnit || hitEnemyCastle || pk.y <= 0.32 || pk.life <= 0) {
+        var impactX = pk.x;
+        var impactY = Math.max(0.32, pk.y);
+        var landedHits = 0;
+        for (var uk = 0; uk < st.units.length; uk++) {
+          var u2 = st.units[uk];
+          if (u2.side !== enemySide || u2.hp <= 0) continue;
+          if (Math.abs(u2.x - impactX) <= CANNON_SPLASH + u2.radius * 0.5) {
+            applyUnitDamage(st, u2, CANNON_DMG_UNIT, pk.side, 1.35, true);
+            landedHits++;
+          }
+        }
+        if (hitEnemyCastle || Math.abs(impactX - (enemySide === 1 ? RIGHT_GATE_X : LEFT_GATE_X)) <= 1.3) {
+          damageCastle(st, enemySide, CANNON_DMG_CASTLE, pk.side);
+          landedHits++;
+        }
+        if (landedHits > 0) {
+          st.sides[pk.side].cannonHits += 1;
+          if (pk.side === 0 && !st.demo) st.score += landedHits * 12;
+          st.events.push({ type: 'cannonHit', side: pk.side, x: impactX, y: impactY, count: landedHits });
+        } else {
+          st.events.push({ type: 'cannonMiss', side: pk.side, x: impactX, y: impactY });
+        }
+        st.corks.splice(pi, 1);
+      }
+    }
+
+    // Update ranged foam darts
+    for (var di = st.darts.length - 1; di >= 0; di--) {
+      var dr = st.darts[di];
+      dr.life -= dt;
+      dr.x += dr.vx * dt;
+      var targetSide = dr.side === 0 ? 1 : 0;
+      var hit = false;
+      for (var du = 0; du < st.units.length; du++) {
+        var tu = st.units[du];
+        if (tu.side !== targetSide || tu.hp <= 0) continue;
+        if (Math.abs(dr.x - tu.x) <= tu.radius + 0.35) {
+          applyUnitDamage(st, tu, dr.dmg, dr.side, 0.2, false);
+          hit = true;
+          break;
+        }
+      }
+      if (!hit) {
+        if ((targetSide === 1 && dr.x >= RIGHT_GATE_X) || (targetSide === 0 && dr.x <= LEFT_GATE_X)) {
+          damageCastle(st, targetSide, dr.dmg, dr.side);
+          hit = true;
+        }
+      }
+      if (hit || dr.life <= 0) st.darts.splice(di, 1);
+    }
+
+    // Update units: movement, knockback physics, combat
+    for (var ui = 0; ui < st.units.length; ui++) {
+      var u = st.units[ui];
+      if (u.hp <= 0) continue;
+      u.atkCd = Math.max(0, u.atkCd - dt);
+      u.atkAnim = Math.max(0, u.atkAnim - dt * 3.8);
+      u.hurtAnim = Math.max(0, u.hurtAnim - dt);
+
+      // Knockback velocity + hop decay
+      if (Math.abs(u.vx) > 0.05 || u.y > 0 || u.vy > 0) {
+        u.x = clamp(u.x + u.vx * dt, LEFT_GATE_X + 0.2, RIGHT_GATE_X - 0.2);
+        u.vx *= Math.pow(0.06, dt);
+        u.vy -= GRAVITY * 0.9 * dt;
+        u.y += u.vy * dt;
+        if (u.y <= 0) { u.y = 0; u.vy = 0; }
+      }
+
+      // Find nearest enemy unit ahead in range
+      var dir = u.side === 0 ? 1 : -1;
+      var foeSide = u.side === 0 ? 1 : 0;
+      var foe = null;
+      var foeDist = 999;
+      for (var fi = 0; fi < st.units.length; fi++) {
+        var candU = st.units[fi];
+        if (candU.side !== foeSide || candU.hp <= 0) continue;
+        var ahead = (candU.x - u.x) * dir;
+        if (ahead >= -0.45 && ahead < foeDist) {
+          foeDist = ahead;
+          foe = candU;
+        }
+      }
+
+      var castleX = u.side === 0 ? RIGHT_GATE_X : LEFT_GATE_X;
+      var castleDist = (castleX - u.x) * dir;
+      var effectiveRange = u.range + (foe ? foe.radius : 0.35);
+
+      if (foe && foeDist <= effectiveRange) {
+        // Attack enemy unit
+        if (u.atkCd <= 0) {
+          u.atkCd = u.atkMaxCd;
+          u.atkAnim = 1.0;
+          if (u.ranged) {
+            st.darts.push({
+              uid: st.nextUid++, side: u.side,
+              x: u.x + dir * 0.55, y: 0.95, z: u.z,
+              vx: dir * u.projSpeed, dmg: u.dmg, life: 1.2
+            });
+            st.events.push({ type: 'dartFire', side: u.side, x: u.x, z: u.z });
+          } else {
+            if (u.splash > 0) {
+              for (var si2 = 0; si2 < st.units.length; si2++) {
+                var su = st.units[si2];
+                if (su.side !== foeSide || su.hp <= 0) continue;
+                if (Math.abs(su.x - foe.x) <= u.splash) {
+                  applyUnitDamage(st, su, u.dmg, u.side, u.knockback, false);
+                }
+              }
+            } else {
+              applyUnitDamage(st, foe, u.dmg, u.side, u.knockback, false);
+            }
+            st.events.push({ type: 'meleeAttack', side: u.side, kind: u.kind, x: foe.x, z: foe.z });
+          }
+        }
+      } else if (castleDist <= u.range + 0.55) {
+        // Attack enemy castle!
+        if (u.atkCd <= 0) {
+          u.atkCd = u.atkMaxCd;
+          u.atkAnim = 1.0;
+          if (u.ranged) {
+            st.darts.push({
+              uid: st.nextUid++, side: u.side,
+              x: u.x + dir * 0.55, y: 0.95, z: u.z,
+              vx: dir * u.projSpeed, dmg: u.dmg, life: 1.2
+            });
+            st.events.push({ type: 'dartFire', side: u.side, x: u.x, z: u.z });
+          } else {
+            damageCastle(st, foeSide, u.dmg, u.side);
+          }
+        }
+      } else if (u.y <= 0.02) {
+        // March forward!
+        u.x = clamp(u.x + dir * u.speed * dt, LEFT_GATE_X + 0.2, RIGHT_GATE_X - 0.2);
+        u.walkPhase += dt * (u.speed * 4.2);
+      }
+    }
+
+    // Remove defeated units
+    for (var ri = st.units.length - 1; ri >= 0; ri--) {
+      if (st.units[ri].hp <= 0) st.units.splice(ri, 1);
+    }
+
+    return st.events;
   }
 
   return {
-    W: W, H: H, GROUND_Y: GROUND_Y, AIR_Y: AIR_Y, GATE_L: GATE_L, GATE_R: GATE_R, PAD_X: PAD_X,
-    CANNON_LX: CANNON_LX, CANNON_RX: CANNON_RX, CANNON_Y: CANNON_Y,
-    AIM_MIN: AIM_MIN, AIM_MAX: AIM_MAX, START_ENERGY: START_ENERGY,
-    GEN_LEVELS: GEN_LEVELS, DIFFS: DIFFS, DIFF_ORDER: DIFF_ORDER,
-    WORLDS: WORLDS, LEVELS: LEVELS, UNIT_ORDER: UNIT_ORDER, UNITS: UNITS,
-    ARMORS: ARMORS, CANNONS: CANNONS,
-    params: params, create: create, createVersus: createVersus,
-    summon: summon, upgradeGen: upgradeGen,
-    setAim: setAim, aimAtPoint: aimAtPoint, fireCannon: fireCannon,
-    fireSuper: fireSuper, spawnCrate: spawnCrate, popCrate: popCrate,
-    step: step, freshSave: freshSave, loadSave: loadSave, isOpen: isOpen,
-    totalStars: totalStars, stars: stars, scoreOf: scoreOf,
-    applyResult: applyResult, buy: buy
+    LANE_MIN: LANE_MIN,
+    LANE_MAX: LANE_MAX,
+    LEFT_CASTLE_X: LEFT_CASTLE_X,
+    RIGHT_CASTLE_X: RIGHT_CASTLE_X,
+    LEFT_GATE_X: LEFT_GATE_X,
+    RIGHT_GATE_X: RIGHT_GATE_X,
+    CANNON_Y: CANNON_Y,
+    GRAVITY: GRAVITY,
+    MAX_ENERGY: MAX_ENERGY,
+    START_ENERGY: START_ENERGY,
+    MAX_UNITS_PER_SIDE: MAX_UNITS_PER_SIDE,
+    CANNON_COOLDOWN: CANNON_COOLDOWN,
+    UNITS: UNITS,
+    WORLDS: WORLDS,
+    STAGES: STAGES,
+    CASTLE_SKINS: CASTLE_SKINS,
+    BANNER_SKINS: BANNER_SKINS,
+    defaultSave: defaultSave,
+    loadSave: loadSave,
+    totalStars: totalStars,
+    buyOrEquipSkin: buyOrEquipSkin,
+    recordSoloResult: recordSoloResult,
+    solveCannonShot: solveCannonShot,
+    sampleArc: sampleArc,
+    create: create,
+    canSpawn: canSpawn,
+    spawnUnit: spawnUnit,
+    setCannonAim: setCannonAim,
+    nudgeCannonAim: nudgeCannonAim,
+    fireCannon: fireCannon,
+    spawnCrate: spawnCrate,
+    step: step
   };
 });

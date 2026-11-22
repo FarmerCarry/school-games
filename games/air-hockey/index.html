@@ -6,184 +6,116 @@
 <title>هوكي الهواء</title>
 <link rel="icon" type="image/svg+xml" href="../../favicon.svg">
 <link rel="stylesheet" href="../../shared/game.css">
-<style>
-body{background:#050716}
-#game{cursor:crosshair}
-#ui{position:absolute;left:0;top:0;width:1280px;height:720px;transform-origin:0 0;pointer-events:none;z-index:10;overflow:hidden}
-#ui [hidden],.scr[hidden],#pauseBtn[hidden]{display:none!important}
-.scr{position:absolute;inset:0;pointer-events:auto;display:flex;flex-direction:column;align-items:center}
-button{font-family:var(--sg-font)}
-.btn{font-weight:700;border:3px solid rgba(255,255,255,.22);border-radius:999px;cursor:pointer;color:#fff;padding:9px 26px;font-size:23px;box-shadow:0 6px 0 rgba(0,0,0,.45),inset 0 3px 0 rgba(255,255,255,.32);transition:transform .09s ease,filter .09s ease;text-shadow:0 2px 0 rgba(0,0,0,.35);display:inline-flex;align-items:center;justify-content:center;gap:9px}
-.btn:hover{transform:translateY(-3px) scale(1.03);filter:brightness(1.08)}
-.btn:active{transform:translateY(3px) scale(.98);box-shadow:0 2px 0 rgba(0,0,0,.4)}
-.btn:focus-visible,.tab:focus-visible,.seg:focus-visible,.bot:focus-visible,.item:focus-visible{outline:3px solid #fff06a;outline-offset:3px}
-.b-yellow{background:linear-gradient(180deg,#fff26b,#ff9d00);color:#301800;border-color:#fff6a8;text-shadow:0 1px 0 rgba(255,255,255,.45)}
-.b-cyan{background:linear-gradient(180deg,#62f4ff,#0095e8);color:#032238;border-color:#b5fbff;text-shadow:0 1px 0 rgba(255,255,255,.35)}
-.b-purple{background:linear-gradient(180deg,#a66bff,#5e22d6);border-color:#d6b8ff}
-.b-green{background:linear-gradient(180deg,#63f79e,#11a858);color:#042e17;border-color:#b8ffd4;text-shadow:0 1px 0 rgba(255,255,255,.35)}
-.b-slate{background:linear-gradient(180deg,#2b3975,#18224d);color:#eaf4ff;border-color:rgba(120,220,255,.4)}
-.b-small{font-size:20px;padding:8px 22px}
-#scr-title{background:radial-gradient(ellipse at 50% 56%,rgba(5,7,22,.32),rgba(5,7,22,.88) 74%)}
-.coinbar{position:absolute;left:20px;top:14px;display:flex;gap:10px;direction:ltr}
-.pill{background:rgba(7,12,38,.82);border:2px solid rgba(0,229,255,.4);border-radius:999px;padding:5px 16px 5px 9px;font-size:21px;font-weight:700;display:flex;align-items:center;gap:8px;color:#fff;box-shadow:0 4px 12px rgba(0,0,0,.4)}
-.coin{width:25px;height:25px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff8b5,#ffc400 55%,#d48200);box-shadow:inset 0 0 0 3px #e09b00;display:inline-block;position:relative;flex:none}
-.coin::after{content:'';position:absolute;left:8px;top:5px;width:9px;height:15px;border-radius:3px;border:2px solid #ad6900}
-.logo{margin:10px 0 0;font-size:76px;font-weight:800;line-height:1.08;color:#fff;text-shadow:0 0 16px rgba(0,229,255,.75),0 5px 0 #0a4ec2,0 10px 0 #071b4d,0 16px 28px rgba(0,0,0,.65)}
-.logo .hk{color:#fff06a}.logo .air{color:#5ef2ff}
-.tag{margin-top:4px;font-size:19px;font-weight:700;color:#bfefff;background:rgba(6,14,44,.72);border:1.5px solid rgba(0,229,255,.32);padding:3px 18px;border-radius:999px}
-.tabs{display:flex;gap:8px;margin-top:10px;background:rgba(5,10,32,.75);padding:5px;border-radius:999px;border:2px solid rgba(0,229,255,.28)}
-.tab{font-size:20px;font-weight:700;color:#cfe8ff;background:0 0;border:none;border-radius:999px;padding:6px 24px;cursor:pointer}
-.tab.on{background:linear-gradient(180deg,#5ef2ff,#0095e8);color:#032238;box-shadow:0 3px 0 rgba(0,0,0,.35)}
-.tab:hover:not(.on){background:rgba(255,255,255,.1)}
-.midarea{height:214px;margin-top:10px;display:flex;align-items:center;justify-content:center}
-.bots{display:flex;gap:14px}
-.bot{width:214px;height:208px;border-radius:22px;background:linear-gradient(180deg,rgba(24,35,88,.95),rgba(10,15,44,.96));border:3px solid rgba(110,200,255,.24);color:#fff;cursor:pointer;display:flex;flex-direction:column;align-items:center;padding:6px 8px;position:relative;transition:transform .12s ease,border-color .12s;font:inherit}
-.bot:hover{transform:translateY(-4px);border-color:rgba(110,235,255,.65)}
-.bot.sel{border-color:#fff06a;transform:translateY(-5px) scale(1.03);box-shadow:0 0 0 4px rgba(255,240,106,.25),0 12px 26px rgba(0,0,0,.5)}
-.bot canvas{width:98px;height:98px;pointer-events:none}
-.bot .nm{font-size:22px;font-weight:700;line-height:1.15;margin-top:2px}
-.bot .lv{font-size:15px;font-weight:700;padding:2px 14px;border-radius:999px;color:#161824;margin-top:4px}
-.bot .rec{font-size:14px;color:#b8dcff;margin-top:5px;font-weight:600}
-.bot .cup{position:absolute;top:8px;left:10px;width:30px;height:30px}
-.twop{display:flex;gap:24px;direction:ltr}
-.pcard{width:356px;height:200px;border-radius:22px;padding:12px 16px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;direction:rtl;border:3px solid rgba(255,255,255,.28);background:rgba(12,20,58,.86)}
-.pcard h3{margin:0;font-size:26px}.pcard .side{font-size:16px;opacity:.92}
-.keys-row{display:flex;align-items:center;gap:14px;direction:ltr;margin-top:2px}
-.keys{display:grid;grid-template-columns:repeat(3,42px);grid-template-rows:40px 40px;gap:5px;direction:ltr}
-.keys .sg-key{width:42px;height:38px;font-size:19px;margin:0;padding:0;display:inline-flex;align-items:center;justify-content:center}
-.keys .k-up{grid-column:2;grid-row:1}.keys .k1{grid-column:1;grid-row:2}.keys .k2{grid-column:2;grid-row:2}.keys .k3{grid-column:3;grid-row:2}
-.boost-tip{direction:rtl;font-size:15px;font-weight:700;color:#fff06a;display:flex;flex-direction:column;align-items:center;gap:4px}
-.opts{display:flex;gap:12px;margin-top:12px;align-items:center;flex-wrap:wrap;justify-content:center}
-.opt{display:flex;align-items:center;gap:6px;background:rgba(6,11,34,.82);border:2px solid rgba(0,229,255,.24);border-radius:999px;padding:4px 8px}
-.opt .lbl{font-size:17px;font-weight:700;padding:0 6px;color:#cfe8ff}
-.seg{font-size:17px;font-weight:700;min-width:42px;border:none;border-radius:999px;padding:5px 12px;cursor:pointer;background:rgba(255,255,255,.1);color:#fff}
-.seg:hover:not(.on){background:rgba(255,255,255,.2)}
-.seg.on{background:#fff06a;color:#361d00}
-.seg.ar.on{background:linear-gradient(180deg,#5ef2ff,#0095e8);color:#032238}
-.seg.chaos{padding:5px 16px}
-.seg.chaos.on{background:linear-gradient(180deg,#ff9d2e,#ff3d1f);color:#fff;box-shadow:0 0 12px rgba(255,106,0,.55)}
-.playrow{display:flex;gap:16px;align-items:center;margin-top:14px}
-.bigplay{font-size:36px;padding:10px 58px;animation:pulse 1.5s ease-in-out infinite}
-@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
-.bigplay:hover{animation:none}
-.howto{position:absolute;bottom:12px;display:flex;gap:18px;font-size:16px;font-weight:600;color:#eaf6ff;background:rgba(5,10,32,.85);border:1.5px solid rgba(0,229,255,.25);padding:6px 20px;border-radius:999px;white-space:nowrap;align-items:center}
-.howto .k{display:inline-flex;align-items:center;gap:5px}
-.howto .sg-key{font-size:14px;min-width:26px;padding:1px 7px;display:inline-flex;align-items:center;justify-content:center}
-.dim{background:rgba(4,7,22,.72);justify-content:center}
-.panel{background:linear-gradient(180deg,#1b2868,#0d143b);border:3px solid rgba(0,229,255,.45);border-radius:28px;padding:20px 38px;text-align:center;box-shadow:0 0 40px rgba(0,229,255,.22),0 24px 60px rgba(0,0,0,.6);color:#fff;animation:popin .28s cubic-bezier(.2,1.5,.4,1);min-width:480px;position:relative}
-@keyframes popin{from{transform:scale(.75);opacity:0}to{transform:scale(1);opacity:1}}
-.panel h2{margin:0;font-size:56px;line-height:1.12;color:#fff06a;text-shadow:0 4px 0 #d9480f,0 10px 20px rgba(0,0,0,.45)}
-.panel h2.lose{color:#8ee8ff;text-shadow:0 4px 0 #1c4ed8,0 10px 20px rgba(0,0,0,.45)}
-.panel .sub{margin:4px 0 0;font-size:21px;color:#d6ecff}
-.panel .btns{margin-top:14px;display:flex;gap:12px;justify-content:center}
-.hint{font-size:15px;opacity:.82;margin-top:10px}
-.final{direction:ltr;display:flex;align-items:center;justify-content:center;gap:18px;font-size:54px;font-weight:700;line-height:1.1;margin-top:4px}
-.final .dash{opacity:.55;font-size:44px}
-.stats{direction:ltr;margin:8px auto 0;border-collapse:collapse;font-size:19px;min-width:430px}
-.stats td{padding:2px 12px}.stats td.v{font-weight:700;font-size:21px;width:88px}.stats td.n{direction:rtl;opacity:.9;font-size:17px}
-.stats tr+tr td{border-top:1px solid rgba(255,255,255,.1)}.stats th{font-size:17px;padding:2px 12px;direction:rtl}
-.earn{display:inline-flex;align-items:center;gap:8px;font-size:26px;font-weight:700;color:#fff06a;margin-top:6px;direction:ltr}
-.badges{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:6px;max-width:560px}
-.badge{display:inline-block;padding:4px 15px;border-radius:999px;background:#ff5722;font-weight:700;font-size:18px}
-.badges.many .badge{font-size:15px;padding:3px 12px}
-.badge.gold{background:linear-gradient(180deg,#fff06a,#ffa800);color:#3a1f00}
-.full{background:radial-gradient(ellipse at 50% 35%,rgba(18,28,84,.95),rgba(5,7,22,.98))}
-.hdr{display:flex;align-items:center;justify-content:space-between;width:900px;margin-top:20px}
-.hdr h1{margin:0;font-size:48px;color:#fff06a;text-shadow:0 4px 0 #0a4ec2,0 8px 18px rgba(0,0,0,.45)}
-.grid{display:grid;grid-template-columns:repeat(4,240px);gap:16px;margin-top:22px}
-.item{height:216px;border-radius:20px;background:linear-gradient(180deg,#212e70,#111842);border:3px solid rgba(110,200,255,.22);color:#fff;display:flex;flex-direction:column;align-items:center;padding:8px 6px;cursor:pointer;transition:transform .1s;position:relative;font:inherit}
-.item:hover{transform:translateY(-4px);border-color:rgba(110,235,255,.6)}
-.item.eq{border-color:#3ddc84;box-shadow:0 0 0 4px rgba(61,220,132,.25)}
-.item canvas{width:180px;height:106px;pointer-events:none}
-.item .in{font-size:19px;font-weight:700;margin-top:6px}
-.item .pr{margin-top:6px;font-size:16px;font-weight:700;padding:4px 14px;border-radius:999px;background:#fff06a;color:#3a1f00;display:flex;align-items:center;gap:6px;direction:ltr}
-.item .pr .coin{width:19px;height:19px}.item .pr .coin::after{left:6px;top:4px;width:7px;height:11px}
-.item .pr.own{background:#dff4ff;color:#102042;direction:rtl}
-.item .pr.eqd{background:#3ddc84;color:#043018;direction:rtl}
-.item.poor .pr{background:#525b88;color:#d8e0ff}
-.shake{animation:shk .32s}@keyframes shk{0%,100%{transform:translateX(0)}25%{transform:translateX(-7px)}50%{transform:translateX(7px)}75%{transform:translateX(-5px)}}
-.agrid{display:grid;grid-template-columns:repeat(2,548px);gap:10px 20px;margin-top:18px}
-.aw{display:flex;align-items:center;gap:12px;background:rgba(7,12,38,.68);border:2.5px solid rgba(120,200,255,.16);border-radius:16px;padding:6px 14px;height:64px}
-.aw.got{background:linear-gradient(90deg,rgba(255,240,106,.2),rgba(10,18,52,.7));border-color:rgba(255,240,106,.65)}
-.aw .ic{width:42px;height:42px;flex:none}.aw:not(.got) .ic{filter:grayscale(1) brightness(.55)}
-.aw .t{font-size:19px;font-weight:700;line-height:1.15}.aw .d{font-size:14px;color:#b8dcff;line-height:1.2}
-.aw .rw{margin-right:auto;font-size:16px;font-weight:700;color:#fff06a;direction:ltr;display:flex;align-items:center;gap:5px}
-#toasts{position:absolute;top:96px;left:0;right:0;display:flex;flex-direction:column;align-items:center;gap:8px;pointer-events:none;z-index:30}
-.toast{background:linear-gradient(180deg,#fff06a,#ffb300);color:#381d00;font-weight:700;font-size:18px;padding:5px 18px;border-radius:999px;box-shadow:0 6px 0 rgba(0,0,0,.4);animation:toastin .35s cubic-bezier(.2,1.5,.4,1),toastout .35s ease-in 2.6s forwards;display:flex;align-items:center;gap:10px}
-@keyframes toastin{from{transform:translateY(-26px) scale(.7);opacity:0}to{transform:none;opacity:1}}
-@keyframes toastout{to{transform:translateY(-18px);opacity:0}}
-#pauseBtn{position:fixed;top:10px;right:62px;z-index:20;width:44px;height:44px;border-radius:50%;border:2px solid rgba(255,255,255,.28);background:rgba(5,10,32,.6);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;padding:0}
-#pauseBtn:hover{background:rgba(15,28,76,.85)}
-#pauseBtn i{display:block;width:5px;height:16px;background:#fff;border-radius:2px}
-.sg-save-status,.sg-save-status[data-compact="true"]{--k:min(100vw / 1280, 100vh / 720);--u:min(1px, 100vw / 1078, 100vh / 606);top:calc(8 * var(--u));bottom:auto;inset-inline:auto calc(8 * var(--u));margin-inline:0;padding:calc(4 * var(--u)) calc(6 * var(--u));font-size:calc(14 * var(--u))}
-.sg-save-status:not([data-compact="true"]){max-width:calc(124 * var(--u));padding-inline:calc(8 * var(--u));font-size:calc(16 * var(--u));line-height:1.4;text-align:center}
-.sg-save-status button{padding:calc(2 * var(--u)) calc(8 * var(--u))}
-.sg-save-status[data-compact="true"] span::before{font-size:calc(18 * var(--u));margin-inline-end:calc(4 * var(--u))}
-body:has(#scr-title:not([hidden])) .sg-save-status{inset-inline:62px auto}
-body:has(#scr-shop:not([hidden])) .sg-save-status{top:auto;bottom:calc(12 * var(--u))}
-</style>
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
-<canvas id="game" tabindex="0" aria-label="هوكي الهواء"></canvas>
+<!-- Icons: every button is a picture, so a child who cannot read yet can play. -->
+<svg class="defs" aria-hidden="true" focusable="false" width="0" height="0">
+  <symbol id="i-play" viewBox="0 0 64 64"><path d="M22 11 Q18 9 18 14 L18 50 Q18 55 22 53 L52 35 Q56 32 52 29 Z"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 64 64"><rect x="15" y="12" width="12" height="40" rx="5"/><rect x="37" y="12" width="12" height="40" rx="5"/></symbol>
+  <symbol id="i-again" viewBox="0 0 64 64"><path d="M50 30 A19 19 0 1 1 41 15" fill="none" stroke="currentColor" stroke-width="9" stroke-linecap="round"/><path d="M33 4 L52 13 L37 27 Z"/></symbol>
+  <symbol id="i-home" viewBox="0 0 64 64"><path d="M8 32 L32 10 L56 32 L49 32 L49 54 L37 54 L37 40 L27 40 L27 54 L15 54 L15 32 Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></symbol>
+  <symbol id="i-next" viewBox="0 0 64 64"><path d="M12 12 L36 32 L12 52 Z M32 12 L56 32 L32 52 Z" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/></symbol>
+  <symbol id="i-back" viewBox="0 0 64 64"><path d="M40 10 L18 32 L40 54" fill="none" stroke="currentColor" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-duo" viewBox="0 0 64 64"><circle cx="20" cy="22" r="10" fill="#3fa9ff" stroke="#1c2250" stroke-width="3.5"/><path d="M4 54 Q4 36 20 36 Q36 36 36 54 Z" fill="#3fa9ff" stroke="#1c2250" stroke-width="3.5" stroke-linejoin="round"/><circle cx="44" cy="22" r="10" fill="#ff4f5e" stroke="#1c2250" stroke-width="3.5"/><path d="M28 54 Q28 36 44 36 Q60 36 60 54 Z" fill="#ff4f5e" stroke="#1c2250" stroke-width="3.5" stroke-linejoin="round"/></symbol>
+  <symbol id="i-brush" viewBox="0 0 64 64"><path d="M32 6 C14 6 4 20 6 34 C8 46 18 50 24 46 C30 42 26 36 32 34 C38 32 46 40 54 34 C62 28 56 6 32 6 Z" fill="#ffffff" stroke="#1c2250" stroke-width="3.5" stroke-linejoin="round"/><circle cx="20" cy="22" r="5" fill="#ff4f7a"/><circle cx="34" cy="16" r="5" fill="#ffd23f"/><circle cx="46" cy="24" r="5" fill="#3ee39a"/><circle cx="18" cy="35" r="5" fill="#3fa9ff"/></symbol>
+  <symbol id="i-star" viewBox="0 0 64 64"><path d="M32 5 L39 23.3 L58.6 24.4 L43.4 36.7 L48.5 55.6 L32 45 L15.5 55.6 L20.6 36.7 L5.4 24.4 L25 23.3 Z" stroke-linejoin="round"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 64 64"><path d="M20 28 L20 20 A12 12 0 0 1 44 20 L44 28" fill="none" stroke="currentColor" stroke-width="7"/><rect x="12" y="28" width="40" height="30" rx="7"/></symbol>
+  <symbol id="i-mouse" viewBox="0 0 64 64"><rect x="14" y="4" width="36" height="56" rx="18" fill="#ffffff" stroke="#1c2250" stroke-width="4"/><path d="M32 4 L32 26 M14 26 L50 26" stroke="#1c2250" stroke-width="4"/><rect x="29" y="11" width="6" height="10" rx="3" fill="#ff4f7a"/></symbol>
+</svg>
+
+<canvas id="game" tabindex="0" aria-label="هوكي الهواء. حرّك المضرب بالفأرة أو بالأزرار W A S D واضرب القرص إلى مرمى الخصم."></canvas>
+
+<!-- A 1280x720 layer laid exactly over the canvas (scaled by game.js). -->
 <div id="ui">
-<div id="scr-title" class="scr">
-<div class="coinbar"><div class="pill"><span class="coin"></span><span class="coins">0</span></div></div>
-<h1 class="logo"><span class="hk">هوكي</span> <span class="air">الهواء</span></h1>
-<div class="tag">حلبة الليزر الآلية وأقراص القوة الخارقة!</div>
-<div class="tabs"><button type="button" class="tab" id="tab1">لاعب ضد آلي</button><button type="button" class="tab" id="tab2">لاعبان</button></div>
-<div class="midarea">
-<div class="bots" id="bots"></div>
-<div class="twop" id="twop" hidden>
-<div class="pcard p1"><h3>اللاعب 1</h3><div class="side">الجانب الأيسر</div><div class="keys-row"><div class="keys"><span class="sg-key k-up">W</span><span class="sg-key k1">A</span><span class="sg-key k2">S</span><span class="sg-key k3">D</span></div><div class="boost-tip"><span class="sg-key">Space</span><span>اندفاع تيربو!</span></div></div></div>
-<div class="pcard p2"><h3>اللاعب 2</h3><div class="side">الجانب الأيمن</div><div class="keys-row"><div class="keys"><span class="sg-key k-up">↑</span><span class="sg-key k1">←</span><span class="sg-key k2">↓</span><span class="sg-key k3">→</span></div><div class="boost-tip"><span class="sg-key">Enter</span><span>اندفاع تيربو!</span></div></div></div>
+  <div id="hud" hidden>
+    <button type="button" id="pauseBtn" class="ah-btn ah-round" aria-label="استراحة" title="استراحة (Esc)"><svg aria-hidden="true"><use href="#i-pause"/></svg></button>
+    <div id="board" dir="ltr">
+      <div class="side s0"><div class="face" id="face0"></div><div class="who"><b id="name0">أنت</b><div class="pips" id="pips0"></div></div><div class="num" id="score0">0</div></div>
+      <div class="side s1"><div class="num" id="score1">0</div><div class="who"><b id="name1"></b><div class="pips" id="pips1"></div></div><div class="face" id="face1"></div></div>
+    </div>
+    <div class="badge b0" id="badge0" hidden></div>
+    <div class="badge b1" id="badge1" hidden></div>
+    <div id="matchPoint" hidden>نقطة الفوز!</div>
+  </div>
+
+  <div id="pops" aria-hidden="true"></div>
+  <div id="count" aria-hidden="true"></div>
+
+  <!-- The wordless coach: the mouse and the keys that move your mallet. -->
+  <div id="ghost" aria-hidden="true" hidden>
+    <svg class="mouse"><use href="#i-mouse"/></svg>
+    <span class="or">أو</span>
+    <span class="keys" dir="ltr"><kbd class="up">W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span>
+  </div>
+
+  <section id="scrTitle" class="screen" aria-label="هوكي الهواء">
+    <h1 class="logo"><span class="l1">هوكي</span><span class="l2">الهواء</span></h1>
+    <div class="chip" id="titleStars" aria-label="النجوم"><svg aria-hidden="true"><use href="#i-star"/></svg><b>0</b></div>
+    <div id="ladder" role="group" aria-label="الخصوم"></div>
+    <button type="button" id="btnPlay" class="ah-btn ah-play ring" aria-label="العب"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
+    <div class="small">
+      <button type="button" id="btnDuo" class="ah-btn ah-round big" aria-label="لاعبان" title="لاعبان على لوحة مفاتيح واحدة"><svg aria-hidden="true"><use href="#i-duo"/></svg></button>
+      <button type="button" id="btnSkins" class="ah-btn ah-round big" aria-label="الألوان" title="المضارب والأقراص والطاولات"><svg aria-hidden="true"><use href="#i-brush"/></svg></button>
+    </div>
+    <div class="keyline" aria-hidden="true"><svg class="mouse"><use href="#i-mouse"/></svg><span dir="ltr"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span><span class="sep">·</span><span class="duo-keys" dir="ltr"><kbd>W A S D</kbd> + <kbd>↑ ← ↓ →</kbd></span></div>
+  </section>
+
+  <div id="vs" aria-hidden="true" hidden>
+    <div class="vs-card l"><div class="face" id="vsFace0"></div><b id="vsName0"></b></div>
+    <div class="vs-word">ضد</div>
+    <div class="vs-card r"><div class="face" id="vsFace1"></div><b id="vsName1"></b></div>
+  </div>
+
+  <section id="scrPause" class="screen dim" aria-label="استراحة" hidden>
+    <div class="card">
+      <h2>استراحة</h2>
+      <div class="row">
+        <button type="button" id="btnHome" class="ah-btn ah-round big" aria-label="القائمة" title="القائمة"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
+        <button type="button" id="btnResume" class="ah-btn ah-go" aria-label="تابع" title="تابع (Esc)"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
+        <button type="button" id="btnRestart" class="ah-btn ah-round big" aria-label="من جديد" title="من جديد (R)"><svg aria-hidden="true"><use href="#i-again"/></svg></button>
+      </div>
+    </div>
+  </section>
+
+  <section id="scrResult" class="screen" aria-label="النتيجة" hidden>
+    <div class="card result">
+      <div class="res-faces" dir="ltr"><div class="face" id="resFace0"></div><div class="res-score"><b id="resMine">0</b><i>-</i><b id="resTheirs">0</b></div><div class="face" id="resFace1"></div></div>
+      <h2 id="resTitle"></h2>
+      <div class="stars" id="resStars" dir="ltr"><svg><use href="#i-star"/></svg><svg><use href="#i-star"/></svg><svg><use href="#i-star"/></svg></div>
+      <div class="ribbon" id="resUnlock" hidden></div>
+      <div class="row">
+        <button type="button" id="btnResHome" class="ah-btn ah-round big" aria-label="القائمة" title="القائمة"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
+        <button type="button" id="btnAgain" class="ah-btn ah-go" aria-label="العب مرة أخرى" title="العب مرة أخرى (Enter)"><svg aria-hidden="true"><use href="#i-again"/></svg></button>
+        <button type="button" id="btnNext" class="ah-btn ah-go next" aria-label="الخصم التالي" title="الخصم التالي"><svg aria-hidden="true"><use href="#i-next"/></svg></button>
+      </div>
+    </div>
+  </section>
+
+  <section id="scrSkins" class="screen" aria-label="الألوان" hidden>
+    <button type="button" id="btnSkinsBack" class="ah-btn ah-round" aria-label="رجوع" title="رجوع (Esc)"><svg aria-hidden="true"><use href="#i-back"/></svg></button>
+    <div class="chip" id="skinStars" aria-label="النجوم"><svg aria-hidden="true"><use href="#i-star"/></svg><b>0</b></div>
+    <div class="shelf">
+      <div class="shelf-row"><h3>المضرب</h3><div class="swatches" id="rowM" role="group" aria-label="المضرب"></div></div>
+      <div class="shelf-row"><h3>القرص</h3><div class="swatches" id="rowP" role="group" aria-label="القرص"></div></div>
+      <div class="shelf-row"><h3>الطاولة</h3><div class="swatches" id="rowT" role="group" aria-label="الطاولة"></div></div>
+    </div>
+  </section>
+
+  <section id="scrError" class="screen dim" hidden>
+    <div class="card"><h2>تعذّر تشغيل الرسوم ثلاثية الأبعاد على هذا الجهاز.</h2></div>
+  </section>
+  <div id="contextNotice" class="notice" role="status" hidden>توقفت الرسوم لحظة… انتظر قليلًا.</div>
 </div>
-</div>
-<div class="opts">
-<div class="opt" id="arenaBar"><span class="lbl">الحلبة:</span></div>
-<div class="opt"><span class="lbl">الفوز:</span><button type="button" class="seg g" data-g="5">5</button><button type="button" class="seg g" data-g="7">7</button><button type="button" class="seg g" data-g="10">10</button></div>
-<div class="opt"><button type="button" class="seg chaos" id="chaosBtn">أقراص القوة: مفعّلة ⚡</button></div>
-</div>
-<div class="playrow">
-<button type="button" class="btn b-purple b-small" id="btnShop">المتجر</button>
-<button type="button" class="btn b-yellow bigplay" id="btnPlay">انطلق للعب!</button>
-<button type="button" class="btn b-cyan b-small" id="btnAwards">الإنجازات <span id="awCount" dir="ltr"></span></button>
-</div>
-<div class="howto" id="howto1">
-<span class="k"><span class="sg-key">الفأرة</span> أو <span dir="ltr"><span class="sg-key">WASD</span>/<span class="sg-key">↑↓←→</span></span> الحركة</span>
-<span class="k"><span class="sg-key">Space</span> ضربة تيربو</span>
-<span class="k"><span class="sg-key">P</span> إيقاف</span>
-<span class="k"><span class="sg-key">M</span> الصوت</span>
-</div>
-<div class="howto" id="howto2" hidden>
-<span class="k"><span dir="ltr"><span class="sg-key">WASD</span> + <span class="sg-key">Space</span></span> اللاعب 1</span>
-<span class="k"><span dir="ltr"><span class="sg-key">↑↓←→</span> + <span class="sg-key">Enter</span></span> اللاعب 2</span>
-<span class="k"><span class="sg-key">P</span> إيقاف</span>
-<span class="k"><span class="sg-key">M</span> الصوت</span>
-</div>
-</div>
-<div id="scr-pause" class="scr dim" hidden>
-<div class="panel"><h2>استراحة</h2><div class="btns"><button type="button" class="btn b-green" id="btnResume">تابع اللعب</button><button type="button" class="btn b-cyan" id="btnRestart">من جديد</button><button type="button" class="btn b-slate" id="btnMenu1">القائمة</button></div><div class="hint"><span class="sg-key">P</span> أو <span class="sg-key">Esc</span> للمتابعة · <span class="sg-key">R</span> من جديد</div></div>
-</div>
-<div id="scr-over" class="scr dim" hidden>
-<div class="panel" id="overPanel"><h2 id="ovTitle">انتصار ساحق!</h2><div class="sub" id="ovSub"></div><div class="final" id="ovScore"></div><table class="stats" id="ovStats"></table><div><span class="earn" id="ovEarn"></span></div><div class="badges" id="ovBadges"></div><div class="btns"><button type="button" class="btn b-yellow" id="btnAgain">العب مرة أخرى</button><button type="button" class="btn b-slate" id="btnMenu2">القائمة</button></div><div class="hint"><span class="sg-key">Enter</span> أو <span class="sg-key">R</span> للعب مرة أخرى</div></div>
-</div>
-<div id="scr-shop" class="scr full" hidden>
-<div class="hdr"><h1>ترسانة السايبر</h1><div class="tabs"><button type="button" class="tab" data-k="mallet">المضارب</button><button type="button" class="tab" data-k="table">الحلبات</button><button type="button" class="tab" data-k="puck">الأقراص</button></div><div style="display:flex;gap:10px;align-items:center"><div class="pill" style="direction:ltr"><span class="coin"></span><span class="coins">0</span></div><button type="button" class="btn b-slate b-small" id="shopBack">رجوع</button></div></div>
-<div class="grid" id="shopGrid"></div>
-</div>
-<div id="scr-awards" class="scr full" hidden>
-<div class="hdr"><h1>قاعة الإنجازات</h1><div class="pill" style="direction:ltr"><span id="awProg">0/14</span></div><button type="button" class="btn b-slate b-small" id="awBack">رجوع</button></div>
-<div class="agrid" id="awGrid"></div>
-</div>
-<div id="toasts"></div>
-</div>
-<button id="pauseBtn" type="button" aria-label="إيقاف مؤقت" hidden><i></i><i></i></button>
+<div id="live" class="sr" aria-live="polite"></div>
 
 <script src="../../shared/kit.js"></script>
-<script src="../../shared/artkit.js"></script>
 <script src="../../shared/juice.js"></script>
+<script src="../../lib/three/three.min.js"></script>
+<script src="engine.js"></script>
+<script src="ai.js"></script>
 <script src="data.js"></script>
-<script src="art.js"></script>
+<script src="scene.js"></script>
 <script src="game.js"></script>
 </body>
 </html>

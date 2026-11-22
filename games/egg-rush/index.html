@@ -9,134 +9,148 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<canvas id="game" tabindex="0" aria-label="سباق البيض"></canvas>
+<svg class="defs" aria-hidden="true" focusable="false" width="0" height="0">
+  <symbol id="i-play" viewBox="0 0 64 64"><path d="M22 11 Q18 9 18 14 L18 50 Q18 55 22 53 L52 35 Q56 32 52 29 Z"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 64 64"><rect x="15" y="12" width="12" height="40" rx="5"/><rect x="37" y="12" width="12" height="40" rx="5"/></symbol>
+  <symbol id="i-again" viewBox="0 0 64 64"><path d="M50 30 A19 19 0 1 1 41 15" fill="none" stroke="currentColor" stroke-width="9" stroke-linecap="round"/><path d="M33 4 L52 13 L37 27 Z"/></symbol>
+  <symbol id="i-home" viewBox="0 0 64 64"><path d="M8 32 L32 10 L56 32 L49 32 L49 54 L37 54 L37 40 L27 40 L27 54 L15 54 L15 32 Z"/></symbol>
+  <symbol id="i-map" viewBox="0 0 64 64"><path d="M6 15 L22 8 L42 15 L58 8 L58 49 L42 56 L22 49 L6 56 Z"/><circle cx="32" cy="30" r="6" fill="#ff5d6c"/></symbol>
+  <symbol id="i-star" viewBox="0 0 64 64"><path d="M32 5 L39 23.3 L58.6 24.4 L43.4 36.7 L48.5 55.6 L32 45 L15.5 55.6 L20.6 36.7 L5.4 24.4 L25 23.3 Z" stroke-linejoin="round"/></symbol>
+  <symbol id="i-egg" viewBox="0 0 64 64"><path d="M32 4 C46 4 54 26 54 38 C54 52 44 60 32 60 C20 60 10 52 10 38 C10 26 18 4 32 4 Z"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 64 64"><path d="M20 28 L20 20 A12 12 0 0 1 44 20 L44 28" fill="none" stroke="currentColor" stroke-width="7"/><rect x="12" y="28" width="40" height="30" rx="7"/></symbol>
+  <symbol id="i-next" viewBox="0 0 64 64"><path d="M14 32 L44 32 M32 16 L48 32 L32 48" fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-left" viewBox="0 0 64 64"><path d="M40 12 L20 32 L40 52" fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-right" viewBox="0 0 64 64"><path d="M24 12 L44 32 L24 52" fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-two" viewBox="0 0 64 64"><circle cx="21" cy="20" r="9"/><path d="M6 52 Q6 33 21 33 Q36 33 36 52 Z"/><circle cx="43" cy="20" r="9"/><path d="M28 52 Q28 33 43 33 Q58 33 58 52 Z"/></symbol>
+  <symbol id="i-shirt" viewBox="0 0 64 64"><path d="M22 8 L32 14 L42 8 L58 18 L52 30 L46 27 L46 56 L18 56 L18 27 L12 30 L6 18 Z" stroke-linejoin="round"/></symbol>
+  <symbol id="i-flag" viewBox="0 0 64 64"><rect x="12" y="6" width="6" height="54" rx="3"/><path d="M18 8 L54 8 L46 21 L54 34 L18 34 Z"/></symbol>
+  <symbol id="i-cup" viewBox="0 0 64 64"><path d="M18 8 L46 8 L46 22 Q46 38 32 38 Q18 38 18 22 Z"/><path d="M18 14 L8 14 Q8 28 20 28 M46 14 L56 14 Q56 28 44 28" fill="none" stroke="currentColor" stroke-width="5"/><rect x="28" y="38" width="8" height="10"/><rect x="18" y="48" width="28" height="8" rx="3"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 64 64"><circle cx="32" cy="34" r="24" fill="#ffffff" stroke="#1c2250" stroke-width="5"/><path d="M32 20 L32 35 L42 41" fill="none" stroke="#1c2250" stroke-width="5" stroke-linecap="round"/><rect x="26" y="3" width="12" height="7" rx="3" fill="#1c2250"/></symbol>
+</svg>
+
+<canvas id="gl" tabindex="0" aria-label="سباق البيض: اركض بالملعقة وحافظ على البيضة. الأسهم لليمين واليسار للتوازن، السهم للأعلى للإسراع، المسافة للقفز."></canvas>
 
 <div id="ui">
-  <!-- Active Play HUD -->
+  <!-- In-race HUD -->
   <div id="hud" hidden>
-    <button type="button" id="btnPause" class="er-hud-btn" aria-label="إيقاف مؤقت" title="إيقاف مؤقت (P)">❚❚</button>
-    <div class="er-hud-bar">
-      <div class="er-pill er-pill-eggs" id="hudEggs">🥚 0 / 5</div>
-      <div class="er-pill er-pill-chain" id="hudChain">⚡ تيربو السلسلة 1.0×</div>
-      <div class="er-pill er-pill-time" id="hudTime">⏱️ 1:20</div>
-      <div class="er-pill er-pill-score" id="hudScore">⭐ 0 · 🪙 0</div>
+    <button type="button" id="btnPause" class="er-btn er-round" aria-label="استراحة" title="استراحة (P أو Esc)"><svg aria-hidden="true"><use href="#i-pause"/></svg></button>
+    <div class="place p0" id="place0"><b>1</b><small dir="ltr">/4</small></div>
+    <div class="place p1" id="place1" hidden><b>1</b><small dir="ltr">/4</small></div>
+    <div class="prog" id="prog" aria-hidden="true"><div class="bar"></div><div class="ticks" id="ticks"></div><svg class="flag"><use href="#i-flag"/></svg><div class="dots" id="dots"></div></div>
+    <div class="chips">
+      <div class="chip gold"><svg aria-hidden="true"><use href="#i-egg"/></svg><b id="hudGold">0</b></div>
+      <div class="chip"><svg aria-hidden="true"><use href="#i-clock"/></svg><b id="hudTime" dir="ltr">0:00</b></div>
     </div>
+    <div class="meter m0" id="meter0" aria-hidden="true">
+      <svg viewBox="0 0 300 160" class="arc"><defs><linearGradient id="mg" x1="0" x2="1"><stop offset="0" stop-color="#ff4d4d"/><stop offset=".22" stop-color="#ffd23f"/><stop offset=".4" stop-color="#5ee36a"/><stop offset=".6" stop-color="#5ee36a"/><stop offset=".78" stop-color="#ffd23f"/><stop offset="1" stop-color="#ff4d4d"/></linearGradient></defs>
+        <path d="M30 150 A120 120 0 0 1 270 150" fill="none" stroke="#1c2250" stroke-width="34" stroke-linecap="round"/><path d="M30 150 A120 120 0 0 1 270 150" fill="none" stroke="url(#mg)" stroke-width="22" stroke-linecap="round"/></svg>
+      <div class="needle"><svg class="egg" viewBox="0 0 64 64"><use href="#i-egg"/></svg></div>
+      <span class="kc l" dir="ltr">←</span><span class="kc r" dir="ltr">→</span>
+    </div>
+    <div class="meter m1" id="meter1" aria-hidden="true" hidden>
+      <svg viewBox="0 0 300 160" class="arc"><path d="M30 150 A120 120 0 0 1 270 150" fill="none" stroke="#1c2250" stroke-width="34" stroke-linecap="round"/><path d="M30 150 A120 120 0 0 1 270 150" fill="none" stroke="url(#mg)" stroke-width="22" stroke-linecap="round"/></svg>
+      <div class="needle"><svg class="egg" viewBox="0 0 64 64"><use href="#i-egg"/></svg></div>
+      <span class="kc l" dir="ltr">←</span><span class="kc r" dir="ltr">→</span>
+    </div>
+    <div class="tag t0" id="tag0" hidden>1</div><div class="tag t1" id="tag1" hidden>2</div>
+    <div class="splitline" id="splitline" hidden></div>
+    <div class="count" id="count" hidden></div>
+    <div class="hint" id="hint0" hidden></div>
+    <div class="hint" id="hint1" hidden></div>
+    <div id="pops"></div>
   </div>
 
-  <!-- First-visit quick rule coach (dismisses immediately on any arrow/WASD/Space/click) -->
-  <div id="introCard" class="er-intro" hidden>
-    <div class="er-intro-box sg-panel">
-      <div class="er-badge">دليل الانطلاق السريع</div>
-      <h2 class="er-intro-title">اجمع سلاسل البيض واشحن التيربو!</h2>
-      <div class="er-intro-steps">
-        <div class="er-step"><b>🥚 سلسلة التيربو</b><span>احمل 2 أو 3 بيضات معاً لتزداد سرعتك وتتفجّر المكافآت في الحاضنة!</span></div>
-        <div class="er-step"><b>🦆 اندفاعة وخداع</b><span>اضغط <span class="sg-key" dir="ltr">Space</span> أو انقر للاندفاع السريع ورمي بطة صفّارة تلهي الحراس!</span></div>
-        <div class="er-step"><b>🌿 اختبئ وانطلق</b><span>اختبئ داخل القش والأدغال، ولا قلق من اللمس: مجرّد قفزة كرتونية سريعة!</span></div>
-      </div>
-      <div class="er-intro-go">اضغط أي سهم أو <span class="sg-key" dir="ltr">WASD</span> أو انقر للانطلاق فوراً!</div>
+  <!-- Title -->
+  <section id="scrTitle" class="screen" aria-label="سباق البيض">
+    <h1 class="logo"><span>سباق</span><span class="l2">البيض</span><svg class="logo-egg" viewBox="0 0 64 64" aria-hidden="true"><use href="#i-egg"/></svg></h1>
+    <div class="tchips">
+      <div class="chip"><svg aria-hidden="true"><use href="#i-star"/></svg><b id="titleStars">0</b></div>
+      <div class="chip gold"><svg aria-hidden="true"><use href="#i-egg"/></svg><b id="titleEggs">0</b></div>
     </div>
-  </div>
+    <button type="button" id="btnPlay" class="er-btn er-play" aria-label="العب"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
+    <div class="side">
+      <button type="button" id="btnDuo" class="er-btn er-side" aria-pressed="false" aria-label="لاعبان" title="لاعبان"><svg aria-hidden="true"><use href="#i-two"/></svg><span>لاعبان</span></button>
+      <button type="button" id="btnSkins" class="er-btn er-side" aria-label="الأزياء" title="الأزياء"><svg aria-hidden="true"><use href="#i-shirt"/></svg><span>الأزياء</span></button>
+    </div>
+    <p class="keys solo" id="keysSolo"><span dir="ltr"><kbd>←</kbd><kbd>→</kbd></span> توازن <span class="sep"></span><kbd dir="ltr">↑</kbd> أسرع <span class="sep"></span><kbd class="wide">مسافة</kbd> قفز</p>
+    <p class="keys duo" id="keysDuo" hidden><b class="p1">1</b> <span dir="ltr"><kbd>A</kbd><kbd>W</kbd><kbd>D</kbd></span> <kbd class="wide">مسافة</kbd> <span class="sep"></span> <b class="p2">2</b> <span dir="ltr"><kbd>←</kbd><kbd>↑</kbd><kbd>→</kbd></span> <kbd class="wide">Enter</kbd></p>
+  </section>
 
-  <!-- Title Screen -->
-  <section id="scrTitle" class="er-screen">
-    <div class="er-title-card sg-panel">
-      <div class="er-top-row">
-        <span class="er-badge">مغامرة الديناصورات والمزرعة الآلية</span>
-        <span class="er-wallet">⭐ <b id="titleStars">0</b> · 🪙 <b id="titleCoins">0</b></span>
+  <!-- Track map -->
+  <section id="scrMap" class="screen" aria-label="المضامير" hidden>
+    <button type="button" id="mapHome" class="er-btn er-round corner" aria-label="البداية"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
+    <div class="tchips top">
+      <div class="chip"><svg aria-hidden="true"><use href="#i-star"/></svg><b id="mapStars">0</b></div>
+      <div class="chip gold"><svg aria-hidden="true"><use href="#i-egg"/></svg><b id="mapEggs">0</b></div>
+    </div>
+    <div id="worlds"></div>
+  </section>
+
+  <!-- Skins -->
+  <section id="scrSkins" class="screen" aria-label="الأزياء" hidden>
+    <button type="button" id="skinsBack" class="er-btn er-round corner" aria-label="رجوع"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
+    <div class="tchips top"><div class="chip gold"><svg aria-hidden="true"><use href="#i-egg"/></svg><b id="skinEggs">0</b></div></div>
+    <div class="pickers">
+      <div class="picker" id="pickRunner" data-row="0">
+        <button type="button" class="er-btn er-arrow" data-dir="1" aria-label="التالي"><svg aria-hidden="true"><use href="#i-right"/></svg></button>
+        <div class="pname"><svg aria-hidden="true"><use href="#i-shirt"/></svg><b>رياضي</b></div>
+        <button type="button" class="er-btn er-arrow" data-dir="-1" aria-label="السابق"><svg aria-hidden="true"><use href="#i-left"/></svg></button>
+        <button type="button" class="er-btn buy" hidden><svg aria-hidden="true"><use href="#i-lock"/></svg><b>5</b><svg class="e" aria-hidden="true"><use href="#i-egg"/></svg></button>
       </div>
-
-      <h1 class="sg-title er-logo">سباق البيض</h1>
-      <p class="er-tagline">كوّن سلسلة بيض متوهجة لسرعة التيربو، واخدع تي ريكس والحراس الآليين بالبطة الصفّارة!</p>
-
-      <div class="er-selectors">
-        <div class="er-sel-group">
-          <span class="er-sel-lbl">طور اللعب</span>
-          <div class="er-chips" id="modeBar" role="group" aria-label="طور اللعب">
-            <button type="button" class="er-chip on" data-mode="solo" id="modeSolo">لاعب 1</button>
-            <button type="button" class="er-chip" data-mode="coop" id="modeCoop">لاعبان · تعاون</button>
-            <button type="button" class="er-chip" data-mode="vs" id="modeVs">لاعبان · سباق</button>
-          </div>
-        </div>
-        <div class="er-sel-group">
-          <span class="er-sel-lbl">الصعوبة</span>
-          <div class="er-chips" id="diffBar" role="group" aria-label="مستوى الصعوبة">
-            <button type="button" class="er-chip" data-diff="easy">سهل</button>
-            <button type="button" class="er-chip on" data-diff="normal">متوسط</button>
-            <button type="button" class="er-chip" data-diff="hero">بطل</button>
-          </div>
-        </div>
-      </div>
-      <p class="er-diff-desc" id="diffDesc">حراس يقظون · سلاسل تيربو ثلاثية · خدع البطة الصفّارة!</p>
-
-      <div class="er-worlds" id="worldGrid" role="group" aria-label="العوالم المفتوحة"></div>
-
-      <div class="er-actions">
-        <button type="button" id="btnPlay" class="sg-btn good er-btn-play">انطلق للسباق!</button>
-        <button type="button" id="btnShop" class="sg-btn secondary er-btn-shop">خزانة الأبطال · 🪙 <b id="shopBtnCoins">0</b></button>
-      </div>
-
-      <div class="er-howto" id="howtoSolo">
-        <span>الحركة: <span class="sg-key" dir="ltr">WASD</span> أو الأسهم أو الفأرة</span>
-        <span>تيربو + بطة الخداع: <span class="sg-key" dir="ltr">Space</span> أو نقر</span>
-        <span>إيقاف: <span class="sg-key" dir="ltr">P</span></span>
-      </div>
-      <div class="er-howto" id="howtoDuo" hidden>
-        <span>لاعب 1: <span class="sg-key" dir="ltr">WASD</span> + <span class="sg-key" dir="ltr">Space</span></span>
-        <span>لاعب 2: <span class="sg-key" dir="ltr">←↑↓→</span> + <span class="sg-key" dir="ltr">Enter</span></span>
-        <span>إيقاف: <span class="sg-key" dir="ltr">P</span></span>
+      <div class="picker" id="pickEgg" data-row="1">
+        <button type="button" class="er-btn er-arrow" data-dir="1" aria-label="التالي"><svg aria-hidden="true"><use href="#i-right"/></svg></button>
+        <div class="pname"><svg aria-hidden="true"><use href="#i-egg"/></svg><b>أبيض</b></div>
+        <button type="button" class="er-btn er-arrow" data-dir="-1" aria-label="السابق"><svg aria-hidden="true"><use href="#i-left"/></svg></button>
+        <button type="button" class="er-btn buy" hidden><svg aria-hidden="true"><use href="#i-lock"/></svg><b>5</b><svg class="e" aria-hidden="true"><use href="#i-egg"/></svg></button>
       </div>
     </div>
   </section>
 
-  <!-- Costume Barn Shop -->
-  <section id="scrShop" class="er-screen" hidden>
-    <div class="er-shop-card sg-panel">
-      <div class="er-top-row">
-        <h2 class="sg-title er-modal-title">خزانة الأبطال</h2>
-        <span class="er-wallet">رصيدك: 🪙 <b id="shopCoins">0</b></span>
-      </div>
-      <p class="er-tagline">افقس البيض واجمع العملات الذهبية لارتداء أروع الأزياء الخارقة!</p>
-      <div class="er-skins" id="skinGrid"></div>
-      <div class="er-actions">
-        <button type="button" id="btnShopBack" class="sg-btn secondary">رجوع للقائمة</button>
+  <!-- Pause -->
+  <section id="scrPause" class="screen dim" aria-label="استراحة" hidden>
+    <div class="card">
+      <button type="button" id="btnResume" class="er-btn er-go" aria-label="تابع"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
+      <div class="row">
+        <button type="button" id="btnHome" class="er-btn er-round big" aria-label="المضامير"><svg aria-hidden="true"><use href="#i-map"/></svg></button>
+        <button type="button" id="btnRestart" class="er-btn er-round big" aria-label="ابدأ من جديد"><svg aria-hidden="true"><use href="#i-again"/></svg></button>
       </div>
     </div>
   </section>
 
-  <!-- Pause Overlay -->
-  <section id="scrPause" class="er-screen" hidden>
-    <div class="er-modal sg-panel">
-      <h2 class="sg-title er-modal-title">استراحة</h2>
-      <p class="er-tagline" id="pauseSub">خذ نفساً واستعد لإكمال السلسلة!</p>
-      <div class="er-stack">
-        <button type="button" id="btnResume" class="sg-btn good">متابعة اللعب</button>
-        <button type="button" id="btnRestart" class="sg-btn">إعادة المرحلة</button>
-        <button type="button" id="btnMenu" class="sg-btn secondary">القائمة الرئيسية</button>
+  <!-- Result -->
+  <section id="scrResult" class="screen" aria-label="النتيجة" hidden>
+    <div class="rcard">
+      <h2 id="resTitle">المركز الأول!</h2>
+      <div class="stars" id="resStars">
+        <div class="st"><svg class="big"><use href="#i-star"/></svg><svg class="why"><use href="#i-flag"/></svg></div>
+        <div class="st"><svg class="big"><use href="#i-star"/></svg><svg class="why"><use href="#i-cup"/></svg></div>
+        <div class="st"><svg class="big"><use href="#i-star"/></svg><svg class="why"><use href="#i-egg"/></svg></div>
+      </div>
+      <div class="rrow">
+        <div class="chip"><svg aria-hidden="true"><use href="#i-clock"/></svg><b id="resTime" dir="ltr">0:00</b></div>
+        <div class="chip gold"><svg aria-hidden="true"><use href="#i-egg"/></svg><b id="resEggs" dir="ltr">+0</b></div>
+      </div>
+      <div class="best" id="resBest" hidden>رقم قياسي جديد!</div>
+      <div class="row">
+        <button type="button" id="resMap" class="er-btn er-round big" aria-label="المضامير"><svg aria-hidden="true"><use href="#i-map"/></svg></button>
+        <button type="button" id="resNext" class="er-btn er-go" aria-label="التالي"><svg aria-hidden="true"><use href="#i-next"/></svg></button>
+        <button type="button" id="resAgain" class="er-btn er-round big" aria-label="العب مجدداً"><svg aria-hidden="true"><use href="#i-again"/></svg></button>
       </div>
     </div>
   </section>
 
-  <!-- Result Overlay -->
-  <section id="scrResult" class="er-screen" hidden>
-    <div class="er-modal sg-panel">
-      <div class="er-badge" id="resBadge">نتيجة الجولة</div>
-      <h2 class="sg-title er-modal-title" id="resTitle">فقس خارق!</h2>
-      <div class="er-stars" id="resStars">★ ★ ★</div>
-      <p class="er-res-stats" id="resStats"></p>
-      <div class="er-actions">
-        <button type="button" id="btnNext" class="sg-btn good">المرحلة التالية</button>
-        <button type="button" id="btnAgain" class="sg-btn">العب مجدداً</button>
-        <button type="button" id="btnResShop" class="sg-btn secondary">خزانة الأبطال</button>
-        <button type="button" id="btnResMenu" class="sg-btn secondary">القائمة</button>
-      </div>
-    </div>
+  <section id="scrError" class="screen dim" hidden>
+    <div class="card msg">هذه اللعبة تحتاج إلى رسوم ثلاثية الأبعاد (WebGL)، وهي غير متاحة على هذا الجهاز.</div>
   </section>
+  <div id="contextNotice" class="notice" hidden>لحظة… نعيد رسم السباق</div>
 </div>
+<div id="live" class="sr" aria-live="polite"></div>
 
 <script src="../../shared/kit.js"></script>
-<script src="../../shared/artkit.js"></script>
 <script src="../../shared/juice.js"></script>
+<script src="../../lib/three/three.min.js"></script>
 <script src="engine.js"></script>
+<script src="art.js"></script>
 <script src="game.js"></script>
 </body>
 </html>

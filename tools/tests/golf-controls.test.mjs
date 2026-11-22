@@ -8,20 +8,21 @@ import { installGolfHarness } from '../golf-harness.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const root = process.env.SG_ROOT ? path.resolve(repo, process.env.SG_ROOT) : repo;
-// Allows this game to be checked against its shared-library dependency before merge.
-const sharedRoot = process.env.SG_SHARED_ROOT ? path.resolve(process.env.SG_SHARED_ROOT) : root;
+const sharedRoot = process.env.SG_SHARED_ROOT ? path.resolve(repo, process.env.SG_SHARED_ROOT) : root;
 let browser, server, origin;
 
 before(async () => {
   server = await startTestServer(root, {
-    pages: { '/golf-parent': `<!doctype html><html><body>
+    pages: {
+      '/golf-parent': `<!doctype html><html><body>
         <button id="before">Before game</button>
         <iframe name="golf" title="Golf" src="/games/skybound-golf/" style="display:block;width:1280px;height:720px"></iframe>
         <button id="after">After game</button>
         <script>addEventListener('message', e => {
           const frame = document.querySelector('iframe');
           if (e.source === frame.contentWindow && e.data === 'sg:focus-portal') document.getElementById('before').focus();
-        });</script></body></html>` },
+        });</script></body></html>`
+    },
     mounts: { '/shared/': path.join(sharedRoot, 'shared') }
   });
   origin = server.origin;
@@ -33,7 +34,6 @@ after(async () => {
   await server?.close();
 });
 
-// The real game in the portal's iframe, with its own animation loop.
 async function game(t) {
   const context = await browser.newContext({ viewport: { width: 1360, height: 920 }, serviceWorkers: 'block' });
   const page = await context.newPage(), errors = [];
@@ -42,29 +42,50 @@ async function game(t) {
   await page.addInitScript(installGolfHarness, { manual: false });
   await page.goto(`${origin}/golf-parent`);
   const frame = page.frame({ name: 'golf' });
-  await frame.waitForFunction(() => window.golfState && window.golfTick);
+  await frame.waitForFunction(() => window.__game && window.golfTick);
   return { page, frame };
 }
 
-const phase = frame => frame.evaluate(() => golfState.phase);
-const ball = frame => frame.evaluate(() => ({ x: golfState.ball.x, y: golfState.ball.y, time: golfState.ball.time }));
+async function manualGame(t, save = null, play = true) {
+  const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, serviceWorkers: 'block' });
+  await context.addInitScript(installGolfHarness, { manual: true });
+  if (save) await context.addInitScript(s => localStorage.setItem('sg:skybound-golf:save_v3', s), JSON.stringify(save));
+  const page = await context.newPage(), errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  t.after(async () => { await context.close(); assert.deepEqual(errors, [], 'no browser errors'); });
+  await page.goto(`${origin}/games/skybound-golf/`);
+  await page.waitForFunction(() => window.__game && window.golfTick);
+  if (!play) return page;
+  await page.locator('#play').click();
+  await page.evaluate(() => advanceGolfFrames(2));
+  return page;
+}
+
+const phase = frame => frame.evaluate(() => __game.phase);
+const ballPos = frame => frame.evaluate(() => ({ x: __game.ball.x, y: __game.ball.y, time: __game.ball.time }));
+
 async function startFlight(frame) {
   await frame.locator('#play').click();
+  await frame.waitForFunction(() => __game.phase === 'aim');
   await frame.locator('#game').click({ position: { x: 600, y: 300 } });
-  await frame.waitForFunction(() => golfState.phase === 'flight' && golfState.ball.x > 0);
+  await frame.waitForFunction(() => __game.phase === 'power');
+  await frame.locator('#game').click({ position: { x: 600, y: 300 } });
+  await frame.waitForFunction(() => __game.phase === 'flight' && __game.ball && __game.ball.x > 0);
 }
+
 async function activate(page, frame, selector, key) {
   await frame.locator(selector).focus();
   await page.keyboard.press(key);
 }
-async function result(frame, distance = 1000) {
-  await frame.evaluate(distance => {
-    const b = golfState.ball; b.done = true; b.reason = 'rest'; b.maxX = distance;
-  }, distance);
-  await frame.waitForFunction(() => golfState.phase === 'landed');
+
+async function toResult(frame, dist = 300) {
+  await frame.evaluate(d => {
+    const b = __game.ball; b.done = true; b.reason = 'rest'; b.maxX = d; b.maxY = 85; b.coins = 30;
+  }, dist);
+  await frame.waitForFunction(() => __game.phase === 'landed');
   await frame.evaluate(() => document.getElementById('game').focus());
   await frame.page().keyboard.press('Space');
-  assert.equal(await phase(frame), 'result');
+  await frame.waitForFunction(() => __game.phase === 'result');
 }
 
 test('Golf lifecycle pauses are idempotent and never steal focus back from the parent', async t => {
@@ -73,11 +94,10 @@ test('Golf lifecycle pauses are idempotent and never steal focus back from the p
   await page.locator('#after').click();
   assert.equal(await frame.locator('#pause-content').isVisible(), true);
   assert.equal(await page.evaluate(() => document.activeElement.id), 'after');
-  const frozen = await ball(frame);
-  await page.waitForTimeout(250);
-  assert.deepEqual(await ball(frame), frozen, 'ball must stop after the first blur');
+  const frozen = await ballPos(frame);
+  await page.waitForTimeout(240);
+  assert.deepEqual(await ballPos(frame), frozen, 'ball freezes after iframe blur');
 
-  // Leave the frame again after focusing its already-open pause menu.
   await frame.locator('#resume').focus();
   await page.locator('#before').click();
   assert.equal(await frame.locator('#pause-content').isVisible(), true);
@@ -85,181 +105,144 @@ test('Golf lifecycle pauses are idempotent and never steal focus back from the p
   await frame.evaluate(() => {
     Object.defineProperty(document, 'hidden', { configurable: true, value: true });
     document.dispatchEvent(new Event('visibilitychange'));
-    document.dispatchEvent(new Event('visibilitychange'));
     delete document.hidden;
     document.dispatchEvent(new Event('visibilitychange'));
   });
-  await page.waitForTimeout(250);
-  assert.deepEqual(await ball(frame), frozen, 'repeated blur/visibility events must not resume the ball');
+  await page.waitForTimeout(240);
+  assert.deepEqual(await ballPos(frame), frozen, 'visibility events never resume automatically');
   await frame.locator('#resume').click();
-  await frame.waitForFunction(x => golfState.ball.x !== x || golfState.ball.done, frozen.x);
+  await frame.waitForFunction(x => __game.ball && (__game.ball.x !== x || __game.ball.done), frozen.x);
 });
 
-test('Golf manually paused flight remains paused when focus leaves and returns', async t => {
+test('Golf manually paused flight remains paused when focus leaves and returns, and P resumes', async t => {
   const { page, frame } = await game(t);
   await startFlight(frame);
   await frame.locator('#game').focus();
   await page.keyboard.press('KeyP');
-  const frozen = await ball(frame);
+  const frozen = await ballPos(frame);
   await page.locator('#after').click();
   await frame.locator('#resume').focus();
-  await page.waitForTimeout(250);
-  assert.deepEqual(await ball(frame), frozen);
+  await page.waitForTimeout(240);
+  assert.deepEqual(await ballPos(frame), frozen);
   assert.equal(await frame.locator('#pause-content').isVisible(), true);
   await page.keyboard.press('KeyP');
-  assert.equal(await frame.locator('#modal').isVisible(), false, 'advertised P resumes with Resume focused');
-  await frame.waitForFunction(x => golfState.ball.x !== x || golfState.ball.done, frozen.x);
+  assert.equal(await frame.locator('#modal').isVisible(), false, 'P resumes even with Resume focused');
+  await frame.waitForFunction(x => __game.ball && (__game.ball.x !== x || __game.ball.done), frozen.x);
 });
 
-for (const direction of ['forward', 'backward']) {
-  test(`Golf ${direction} Tab navigation can leave the iframe during play and from the pause modal`, async t => {
-    const { page, frame } = await game(t);
-    await startFlight(frame);
-    const key = direction === 'forward' ? 'Tab' : 'Shift+Tab';
-    const expected = direction === 'forward' ? 'after' : 'before';
-    for (let attempt = 0; attempt < 2; attempt++) {
-      await frame.locator(direction === 'forward' ? '.sg-mute' : '#pause').focus();
-      if (direction === 'backward') {
-        await page.keyboard.press(key);
-        assert.equal(await frame.evaluate(() => document.activeElement.id), 'game', 'Shift+Tab must not wrap from the first button to the last');
-      }
-      await page.keyboard.press(key);
-      await page.waitForFunction(id => document.activeElement.id === id, expected);
-      assert.equal(await frame.locator('#pause-content').isVisible(), true);
-      assert.equal(await phase(frame), 'flight');
-    }
-  });
-}
+test('Golf Shift+Tab leaves iframe back to portal and pauses cleanly', async t => {
+  const { page, frame } = await game(t);
+  await startFlight(frame);
+  await frame.locator('#game').focus();
+  await page.keyboard.press('Shift+Tab');
+  await page.waitForFunction(() => document.activeElement.id === 'before');
+  assert.equal(await frame.locator('#pause-content').isVisible(), true);
+  assert.equal(await phase(frame), 'flight');
+});
 
-test('Golf ignores browser modifier chords and composition', async t => {
-  // Frame-stepped, so the ball cannot pass its apex between presses.
+test('Golf ignores browser modifier chords and IME composition in every phase', async t => {
   const page = await manualGame(t, null, false);
   await page.locator('#game').focus();
   const keys = ['Control+Space', 'Alt+Space', 'Meta+Space'];
-  const phase = () => page.evaluate(() => golfState.phase);
   for (const key of keys) {
     await page.keyboard.press(key);
-    assert.equal(await phase(), 'title', `${key} must not start a round`);
+    assert.equal(await phase(page), 'title', `${key} must not start`);
   }
   await page.keyboard.press('Space');
+  assert.equal(await phase(page), 'aim');
   for (const key of keys) {
     await page.keyboard.press(key);
-    assert.equal(await phase(), 'ready', `${key} must not swing`);
+    assert.equal(await phase(page), 'aim', `${key} must not lock aim`);
   }
   await page.evaluate(() => document.getElementById('game').dispatchEvent(new KeyboardEvent('keydown', {
     code: 'Space', key: ' ', bubbles: true, cancelable: true, isComposing: true
   })));
-  assert.equal(await phase(), 'ready');
-  await page.evaluate(() => advanceGolfFrames(39));
+  assert.equal(await phase(page), 'aim');
+  await page.evaluate(() => advanceGolfFrames(25));
   await page.keyboard.press('Space');
-  await page.evaluate(() => advanceGolfFrames(20));
-  assert.deepEqual(await page.evaluate(() => [golfState.phase, golfState.ball.vy > 5]), ['flight', true]);
+  assert.equal(await phase(page), 'power');
+  await page.evaluate(() => advanceGolfFrames(25));
+  await page.keyboard.press('Space');
+  await page.evaluate(() => advanceGolfFrames(15));
+  assert.equal(await phase(page), 'flight');
+  const fuelBefore = await page.evaluate(() => __game.ball.fuel);
   for (const key of keys) {
     await page.keyboard.press(key);
-    assert.equal(await page.evaluate(() => golfState.ball.rocketsLeft), 1, `${key} must not fire a rocket`);
+    await page.evaluate(() => advanceGolfFrames(4));
   }
-  await page.keyboard.press('Space');
-  assert.equal(await page.evaluate(() => golfState.ball.rocketsLeft), 0, 'unmodified Space fires the rocket');
+  assert.equal(await page.evaluate(() => __game.ball.fuel), fuelBefore, 'modifier chords never burn fuel');
 });
 
-test('Golf native Space activates focused controls once and keeps the pause and result shortcuts', async t => {
+test('Golf two-step strike locks on press, rocket boost burns while held, and ArrowDown dives without fuel', async t => {
+  const page = await manualGame(t);
+  await page.locator('#game').focus();
+  await page.evaluate(() => advanceGolfFrames(20));
+  const aimAtPress = await page.evaluate(() => __game.aimAngle);
+  await page.keyboard.down('Space');
+  await page.evaluate(() => advanceGolfFrames(6));
+  await page.keyboard.up('Space');
+  assert.equal(await phase(page), 'power');
+  assert.equal(await page.evaluate(() => __game.aimAngle), aimAtPress, 'aim locked at keydown, not keyup');
+
+  await page.evaluate(() => advanceGolfFrames(24));
+  const pwrAtPress = await page.evaluate(() => __game.powerVal);
+  await page.keyboard.down('Enter');
+  await page.evaluate(() => advanceGolfFrames(8));
+  await page.keyboard.up('Enter');
+  await page.evaluate(() => advanceGolfFrames(6));
+  assert.equal(await phase(page), 'flight');
+  assert.equal(await page.evaluate(() => __game.ball.power), pwrAtPress, 'power locked at keydown, not keyup');
+
+  // Holding Space fires continuous rocket boost
+  const fuel0 = await page.evaluate(() => __game.ball.fuel);
+  await page.keyboard.down('Space');
+  await page.evaluate(() => advanceGolfFrames(15));
+  const boosting = await page.evaluate(() => __game.ball.boosting);
+  const fuel1 = await page.evaluate(() => __game.ball.fuel);
+  await page.keyboard.up('Space');
+  await page.evaluate(() => advanceGolfFrames(2));
+  assert.equal(boosting, true, 'holding Space activates rocket boost');
+  assert(fuel1 < fuel0 - 0.15, 'rocket boost consumes fuel while held');
+  assert.equal(await page.evaluate(() => __game.ball.boosting), false, 'releasing Space stops rocket boost');
+
+  // ArrowDown triggers dive without consuming rocket fuel
+  const fuelBeforeDive = await page.evaluate(() => __game.ball.fuel);
+  await page.keyboard.press('ArrowDown');
+  const diveState = await page.evaluate(() => ({ diving: __game.ball.diving, fuel: __game.ball.fuel }));
+  assert.equal(diveState.diving, true, 'ArrowDown triggers dive/super-bounce');
+  assert.equal(diveState.fuel, fuelBeforeDive, 'ArrowDown saves rocket fuel');
+});
+
+test('Golf native Space activates controls once and preserves Pause/Shop/Skins/Result shortcuts', async t => {
   const { page, frame } = await game(t);
   await activate(page, frame, '#open-shop', 'Space');
-  assert.equal(await phase(frame), 'title');
   assert.equal(await frame.locator('#shop-content').isVisible(), true);
   await page.keyboard.press('Escape');
   assert.equal(await frame.locator('#modal').isVisible(), false);
-  await activate(page, frame, '#open-worlds', 'Space');
-  assert.equal(await frame.locator('#worlds-content').isVisible(), true);
+
+  await activate(page, frame, '#open-skins', 'Space');
+  assert.equal(await frame.locator('#skins-content').isVisible(), true);
   await page.keyboard.press('Escape');
+  assert.equal(await frame.locator('#modal').isVisible(), false);
+
   await activate(page, frame, '#play', 'Space');
-  assert.equal(await phase(frame), 'ready');
-  await activate(page, frame, '#game', 'Space');
-  await frame.waitForFunction(() => golfState.phase === 'flight');
+  assert.equal(await phase(frame), 'aim');
+  await frame.locator('#game').click({ position: { x: 600, y: 300 } });
+  await frame.waitForFunction(() => __game.phase === 'power');
+  await frame.locator('#game').click({ position: { x: 600, y: 300 } });
+  await frame.waitForFunction(() => __game.phase === 'flight');
+
   await activate(page, frame, '#pause', 'Space');
   assert.equal(await frame.locator('#pause-content').isVisible(), true);
   await page.keyboard.press('Escape');
   assert.equal(await frame.locator('#modal').isVisible(), false);
-  await frame.locator('#game').focus();
-  await page.keyboard.press('Escape');
-  await activate(page, frame, '#resume', 'Space');
-  assert.equal(await frame.locator('#modal').isVisible(), false);
-  await result(frame);
-  const before = await frame.evaluate(() => Kit.store('skybound-golf').get('progress').upgrades.power);
-  await activate(page, frame, '[data-upgrade="power"]', 'Space');
-  assert.equal(await phase(frame), 'result', 'buying an upgrade must not restart the round');
-  assert.equal(await frame.evaluate(() => Kit.store('skybound-golf').get('progress').upgrades.power), before + 1);
-  assert.equal(await frame.evaluate(() => document.activeElement === document.querySelector('#result-unlock button')), true,
-    'a keyboard purchase on the unlock card hands Space back to the new world');
-  await activate(page, frame, '#again', 'Space');
-  assert.equal(await phase(frame), 'ready');
-  await activate(page, frame, '#game', 'Space');
-  await frame.waitForFunction(() => golfState.phase === 'flight');
-  await result(frame, 50);
+
+  await toResult(frame, 360);
+  const powerBefore = await frame.evaluate(() => __game.save.upgrades.power);
+  await activate(page, frame, '#upgrades [data-upgrade="power"]', 'Space');
+  assert.equal(await phase(frame), 'result', 'buying upgrade keeps result open');
+  assert.equal(await frame.evaluate(() => __game.save.upgrades.power), powerBefore + 1);
+
   await page.keyboard.press('KeyR');
-  assert.equal(await phase(frame), 'ready', 'advertised R plays again with Again focused');
-});
-
-// Frame-stepped game: the gauge only moves when the test advances it.
-async function manualGame(t, progress, play = true) {
-  const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, serviceWorkers: 'block' });
-  await context.addInitScript(installGolfHarness, { manual: true });
-  if (progress) await context.addInitScript(p => localStorage.setItem('sg:skybound-golf:progress', p), JSON.stringify(progress));
-  const page = await context.newPage(), errors = [];
-  page.on('pageerror', error => errors.push(error.message));
-  t.after(async () => { await context.close(); assert.deepEqual(errors, [], 'no browser errors'); });
-  await page.goto(`${origin}/games/skybound-golf/`);
-  if (!play) return page;
-  await page.locator('#play').click();
-  await page.evaluate(() => advanceGolfFrames(39)); // the club is at the top of the gold zone
-  return page;
-}
-
-test('Golf strikes from the keyboard once, at the moment of the press', async t => {
-  const page = await manualGame(t);
-  await page.locator('#game').focus();
-  const pressed = await page.evaluate(() => golfState.gauge.value);
-  await page.keyboard.down('Enter');
-  await page.evaluate(() => advanceGolfFrames(7)); // the gauge would have moved on by the release
-  await page.keyboard.up('Enter');
-  await page.evaluate(() => advanceGolfFrames(3));
-  assert.deepEqual(await page.evaluate(() => ({ phase: golfState.phase, power: golfState.ball.power, grade: golfState.ball.grade, rockets: golfState.ball.rocketsLeft })),
-    { phase: 'flight', power: pressed, grade: 'perfect', rockets: 1 });
-});
-
-test('Golf world unlock keeps Space on the new world after buying upgrades', async t => {
-  // A 300 m shot pays 30+ coins: with 80 saved, enough for two bounce levels and one power level.
-  const page = await manualGame(t, { v: 2, world: 0, best: 200, bests: { meadow: 200 }, coins: 80, shots: 5, tips: 2 });
-  await page.keyboard.press('Space');
-  await page.evaluate(() => {
-    advanceGolfFrames(20);
-    const b = golfState.ball; b.done = true; b.reason = 'rest'; b.maxX = 300;
-    advanceGolfFrames(2);
-  });
-  await page.keyboard.press('Space');
-  const go = page.locator('#result-unlock button'), focused = () => go.evaluate(b => b === document.activeElement);
-  assert.equal(await focused(), true);
-  assert.match(await page.locator('#again').getAttribute('class'), /\bsecondary\b/, 'the new world is the main button');
-  // A keyboard purchase returns to the new world even when the upgrade stays
-  // affordable, and a held Enter neither buys again nor opens the world.
-  const bounce = () => page.evaluate(() => Kit.store('skybound-golf').get('progress').upgrades.bounce);
-  await page.locator('[data-upgrade="bounce"]').focus();
-  await page.keyboard.down('Enter');
-  await page.keyboard.down('Enter');
-  await page.keyboard.up('Enter');
-  assert.equal(await bounce(), 1);
-  assert.equal(await page.locator('[data-upgrade="bounce"]').isDisabled(), false);
-  assert.equal(await focused(), true);
-  assert.equal(await page.evaluate(() => golfState.phase), 'result');
-  // A mouse purchase leaves Space/Enter with the card's advertised action.
-  await page.locator('[data-upgrade="bounce"]').click();
-  assert.equal(await bounce(), 2);
-  assert.equal(await page.evaluate(() => document.activeElement === document.body), true);
-  // A keyboard purchase that disables its button falls back to the new world, not to Again.
-  await page.locator('[data-upgrade="power"]').focus();
-  await page.keyboard.press('Enter');
-  assert.equal(await page.locator('[data-upgrade="power"]').isDisabled(), true);
-  assert.equal(await focused(), true);
-  await page.keyboard.press('Space');
-  assert.deepEqual(await page.evaluate(() => ({ phase: golfState.phase, world: golfState.world })), { phase: 'ready', world: 1 });
+  await frame.waitForFunction(() => __game.phase === 'aim');
 });

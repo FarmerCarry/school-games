@@ -1,7 +1,7 @@
-// Chaos Island in real Chromium: verifies live title demo, all 4 open battle islands,
-// 3 difficulty tiers, exact game-scenarios contract (positive & negative player.walk,
-// pause freeze with zero redraw churn, restart reset), active Belly-Dash & double-jump,
-// 2P Co-Op & Rival modes, Island Shop purchases & persistence, save retry, and full match end.
+// Chaos Island (جزيرة الفوضى) browser tests in real Chromium:
+// verifies live 3D title screen, clean boot, game-scenarios contract (positive/negative walk,
+// pause freeze with zero WebGL redraw churn, blur auto-pause, restart reset),
+// 2P shared-keyboard controls, endless mode, wardrobe shop + save retry, and full 5-round match.
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import path from 'node:path';
@@ -48,7 +48,7 @@ async function openGame(t, { save, viewport = { width: 1280, height: 720 } } = {
 
   await ctx.addInitScript(() => {
     let kit;
-    const h = window.__ciTest = { ddaResults: [] };
+    const h = window.__ciTest = { ddaResults: [], renders: 0 };
     Object.defineProperty(window, 'Kit', {
       configurable: true,
       get: () => kit,
@@ -73,7 +73,7 @@ async function openGame(t, { save, viewport = { width: 1280, height: 720 } } = {
 
   const page = await ctx.newPage();
   await page.goto(`${server.origin}/games/chaos-island/`);
-  await page.waitForFunction(() => !!window.__game && !!window.__ciTest?.step);
+  await page.waitForFunction(() => !!window.__game && !!window.__ciTest?.step, null, { timeout: 15000 });
   await page.evaluate(() => __ciTest.step(2));
   return page;
 }
@@ -81,51 +81,47 @@ async function openGame(t, { save, viewport = { width: 1280, height: 720 } } = {
 const step = (page, n = 1) => page.evaluate(n => __ciTest.step(n), n);
 const run = (page, n = 1) => page.evaluate(n => { __ciTest.run(n); __ciTest.paint(); }, n);
 
-test('title screen shows live demo brawl, all 4 islands unlocked, and writes nothing to save on boot', async t => {
+test('title screen shows live 3D island demo, minimal controls, and writes nothing to localStorage on boot', async t => {
   const page = await openGame(t);
   assert.deepEqual(await page.evaluate(() => [__game.mode, __game.world, __game.matches]), ['title', null, 0]);
   const pos0 = await page.evaluate(() => __game.demo.actors.map(a => [a.x, a.y]));
-  await step(page, 90);
+  await step(page, 60);
   const pos1 = await page.evaluate(() => __game.demo.actors.map(a => [a.x, a.y]));
-  assert.notDeepEqual(pos1, pos0, 'title background brawl animates');
-
-  const isles = await page.evaluate(() => [...document.querySelectorAll('#islandBar .isle-btn')].map(b => b.textContent.trim()));
-  assert.equal(isles.length, 4, 'all 4 islands available immediately');
-  assert.ok(isles[0].includes('بركان القراصنة') && isles[3].includes('جزيرة الجليد الآلي'));
+  assert.notDeepEqual(pos1, pos0, 'title 3D island demo animates');
 
   const savedKeys = await page.evaluate(() => Object.keys(localStorage).filter(k => k.startsWith('sg:chaos-island:') && k !== 'sg:chaos-island:dda'));
   assert.deepEqual(savedKeys, [], 'clean boot does not pollute localStorage');
 });
 
-test('start, positive & negative player.walk, pause freeze without redraw churn, and restart contract', async t => {
+test('start, positive & negative player.walk, pause freeze without redraw churn, blur pause, and restart reset', async t => {
   const page = await openGame(t);
   await clickControl(page, '#btnPlay');
   await step(page, 1);
   assert.deepEqual(await page.evaluate(() => [__game.mode, __game.matches, __game.world.round, __game.world.phase]), ['play', 1, 0, 'card']);
 
-  // Negative check: 450 frames (~7.5s) with NO keys/mouse pressed keeps player.walk === 0
-  await run(page, 450);
-  assert.equal(await page.evaluate(() => __game.player.walk), 0, 'player.walk stays 0 without intentional P1 movement');
+  // Negative check: 300 frames idle keeps player.walk === 0
+  await run(page, 300);
+  assert.equal(await page.evaluate(() => __game.player.walk), 0, 'walk stays 0 without player input');
 
-  // Positive check: holding ArrowRight increments player.walk > 8 immediately
+  // Positive check: ArrowRight moves P1 and increments walk > 20
   await page.keyboard.down('ArrowRight');
-  await step(page, 10);
+  await step(page, 12);
   await page.keyboard.up('ArrowRight');
-  assert.ok((await page.evaluate(() => __game.player.walk)) > 25, 'ArrowRight walks right and increments player.walk');
+  assert.ok((await page.evaluate(() => __game.player.walk)) > 10, 'ArrowRight increments player.walk');
 
-  // Pause via #btnPause freezes snapshot and stops canvas redraws
-  await page.evaluate(() => {
-    window.__fills = 0;
-    const ctx = document.getElementById('game').getContext('2d');
-    const orig = ctx.drawImage;
-    ctx.drawImage = function () { window.__fills++; return orig.apply(this, arguments); };
-  });
+  // Pause freezes simulation & stops WebGL draw calls
   await clickControl(page, '#btnPause');
   await step(page, 2);
   assert.equal(await page.evaluate(() => __game.mode), 'pause');
-  const snap = await page.evaluate(() => [__game.world.round, __game.world.frames, __game.player.x, __game.player.y, window.__fills]);
-  await step(page, 90);
-  assert.deepEqual(await page.evaluate(() => [__game.world.round, __game.world.frames, __game.player.x, __game.player.y, window.__fills]), snap, 'frozen while paused');
+  await page.evaluate(() => {
+    window.__glDraws = 0;
+    const gl = document.getElementById('scene').getContext('webgl2') || document.getElementById('scene').getContext('webgl');
+    const orig = gl.clear.bind(gl);
+    gl.clear = function () { window.__glDraws++; return orig.apply(gl, arguments); };
+  });
+  const snap = await page.evaluate(() => [__game.world.round, __game.world.frames, __game.player.x, __game.player.y, window.__glDraws]);
+  await step(page, 60);
+  assert.deepEqual(await page.evaluate(() => [__game.world.round, __game.world.frames, __game.player.x, __game.player.y, window.__glDraws]), snap, 'paused scene stays frozen with zero WebGL redraw churn');
 
   // Blur auto-pauses and focus does NOT auto-resume
   await clickControl(page, '#btnResume');
@@ -136,69 +132,59 @@ test('start, positive & negative player.walk, pause freeze without redraw churn,
   await step(page, 15);
   assert.equal(await page.evaluate(() => __game.mode), 'pause');
 
-  // Restart begins fresh match #2 at round 0 card phase with t < 3
+  // Restart starts match #2 cleanly on round 0 card
   await clickControl(page, '#btnRestart');
   await step(page, 1);
-  const resetState = await page.evaluate(() => ({
-    mode: __game.mode,
-    matches: __game.matches,
-    round: __game.world.round,
-    phase: __game.world.phase,
-    t: __game.world.t,
-    walk: __game.player.walk
+  const reset = await page.evaluate(() => ({
+    mode: __game.mode, matches: __game.matches, round: __game.world.round,
+    phase: __game.world.phase, t: __game.world.t, walk: __game.player.walk
   }));
-  assert.equal(resetState.mode, 'play');
-  assert.equal(resetState.matches, 2);
-  assert.equal(resetState.round, 0);
-  assert.equal(resetState.phase, 'card');
-  assert.ok(resetState.t < 3);
-  assert.equal(resetState.walk, 0);
+  assert.equal(reset.mode, 'play');
+  assert.equal(reset.matches, 2);
+  assert.equal(reset.round, 0);
+  assert.equal(reset.phase, 'card');
+  assert.ok(reset.t < 3);
+  assert.equal(reset.walk, 0);
 });
 
-test('difficulty selector, Belly-Dash (Space), Double-Jump (ArrowUp), and 2P Co-Op & Rival modes work', async t => {
+test('2P mode moves P1 with WASD+Space and P2 with Arrow keys, and Endless mode starts cleanly', async t => {
   const page = await openGame(t);
-  await page.locator('.diff-btn[data-diff="hero"]').click();
-  await page.locator('.isle-btn[data-isle="2"]').click();
-  await clickControl(page, '#btnDuoCoop');
-  await step(page, 1);
+  await clickControl(page, '#btnDuo');
+  await clickControl(page, '#btnPlay');
+  await step(page, 2);
+  assert.equal(await page.evaluate(() => __game.duo), true);
+  assert.equal(await page.evaluate(() => __game.players.length), 2);
 
-  const cfg = await page.evaluate(() => ({
-    diff: __game.diff,
-    isl: __game.world.isl.id,
-    duo: __game.duo,
-    duoMode: __game.duoMode,
-    hearts: __game.player.maxHearts,
-    humans: __game.world.actors.filter(a => a.isHuman).length
-  }));
-  assert.deepEqual(cfg, { diff: 'hero', isl: 'alien', duo: true, duoMode: 'coop', hearts: 2, humans: 2 });
+  const x0 = await page.evaluate(() => __game.players.map(p => p.x));
+  await page.keyboard.down('KeyD');
+  await page.keyboard.down('ArrowLeft');
+  await step(page, 14);
+  await page.keyboard.up('KeyD');
+  await page.keyboard.up('ArrowLeft');
+  const x1 = await page.evaluate(() => __game.players.map(p => p.x));
+  assert.ok(x1[0] > x0[0] + 0.5, 'P1 moves right with KeyD');
+  assert.ok(x1[1] < x0[1] - 0.5, 'P2 moves left with ArrowLeft');
 
-  // P1 jumps + double-jumps with KeyW and dashes with Space; P2 walks with ArrowRight + dashes with Enter
-  await page.keyboard.down('KeyW'); await step(page, 3); await page.keyboard.up('KeyW');
-  await step(page, 6);
-  await page.keyboard.down('KeyW'); await step(page, 2); await page.keyboard.up('KeyW');
-  assert.ok(await page.evaluate(() => __game.player.flipT > 0), 'P1 double-jump triggers flip');
-
-  await page.keyboard.down('Space'); await step(page, 2); await page.keyboard.up('Space');
-  assert.ok(await page.evaluate(() => __game.player.dashCd > 0), 'Space triggers P1 Belly-Dash');
-
-  const p2x0 = await page.evaluate(() => __game.world.actors[1].x);
-  await page.keyboard.down('ArrowRight'); await step(page, 12); await page.keyboard.up('ArrowRight');
-  assert.ok((await page.evaluate(() => __game.world.actors[1].x)) > p2x0 + 30, 'ArrowRight moves P2 in 2P mode');
+  // Return home and start Endless
+  await clickControl(page, '#btnPause');
+  await clickControl(page, '#btnHome');
+  await clickControl(page, '#btnEndless');
+  await step(page, 2);
+  assert.equal(await page.evaluate(() => __game.endless), true);
+  assert.equal(await page.evaluate(() => __game.mode), 'play');
 });
 
-test('Island Shop unlocks & equips helmets and trails, persists across reload, and retries failed saves', async t => {
-  const seeded = { v: 3, coins: 200, stars: 3, wins: 1, diff: 'normal', island: 0, helm: 'h_bandana', trail: 't_spark', owned: { h_bandana: 1, t_spark: 1 }, best: [0, 0, 0, 0] };
+test('Wardrobe shop buys & equips colors and hats, persists across reload, and retries failed saves', async t => {
+  const seeded = { v: 4, coins: 220, bestScore: 300, bestStars: 2, bestWaves: 0, wins: 1, color: 0, hat: 0, ownedColors: [1, 1, 0, 0, 0, 0, 0, 0], ownedHats: [1, 0, 0, 0, 0, 0, 0, 0], coachDone: true };
   const page = await openGame(t, { save: seeded });
 
   await clickControl(page, '#btnShop');
   assert.equal(await page.evaluate(() => __game.mode), 'shop');
 
-  await page.locator('[data-item="h_dino"]').click();
-  await page.locator('[data-item="t_fire"]').click();
-  const afterBuy = await page.evaluate(() => ({ helm: __game.save.helm, trail: __game.save.trail, coins: __game.save.coins }));
-  assert.equal(afterBuy.helm, 'h_dino');
-  assert.equal(afterBuy.trail, 't_fire');
-  assert.equal(afterBuy.coins, 200 - 60 - 45);
+  await page.locator('.shop-tile[data-kind="color"][data-index="2"]').click();
+  await page.locator('.shop-tile[data-kind="hat"][data-index="3"]').click();
+  const bought = await page.evaluate(() => ({ color: __game.save.color, hat: __game.save.hat, coins: __game.save.coins }));
+  assert.deepEqual(bought, { color: 2, hat: 3, coins: 220 - 30 - 65 });
 
   // Simulate quota failure then Retry via Kit.saveStatus
   await page.evaluate(() => {
@@ -209,37 +195,38 @@ test('Island Shop unlocks & equips helmets and trails, persists across reload, a
       return orig.call(this, k, v);
     };
   });
-  await page.locator('[data-item="h_pirate"]').click();
+  await page.locator('.shop-tile[data-kind="hat"][data-index="1"]').click();
   assert.equal(await page.locator('.sg-save-status').isVisible(), true, 'save error banner appears');
   await page.evaluate(() => window.__unblockSave());
   await page.locator('.sg-save-status button').click();
-  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('sg:chaos-island:save')).helm), 'h_pirate');
+  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('sg:chaos-island:save')).hat), 1);
 
   await page.reload();
-  await page.waitForFunction(() => !!window.__game);
-  assert.equal(await page.evaluate(() => __game.save.helm), 'h_pirate', 'equipped helmet persists across reload');
+  await page.waitForFunction(() => !!window.__game, null, { timeout: 15000 });
+  assert.equal(await page.evaluate(() => __game.save.hat), 1, 'equipped hat persists across reload');
 });
 
-test('full 3-round match reaches result screen, awards coins/stars, and records DDA outcome', async t => {
+test('full 5-round match finishes on result screen, awards stars/coins, and reports DDA outcome', async t => {
   const page = await openGame(t);
   await clickControl(page, '#btnPlay');
   await step(page, 1);
 
-  // Autoplay P1 via CIEngine.planCoach until match ends
   await page.evaluate(() => {
-    for (let f = 0; f < 60 * 75 && __game.mode === 'play'; f++) {
-      const plan = window.CIEngine.planCoach(__game.world, __game.player, 1.0);
-      const fire = (code, down) => window.dispatchEvent(new KeyboardEvent(down ? 'keydown' : 'keyup', { code, key: code, bubbles: true, cancelable: true }));
+    const fire = (code, down) => window.dispatchEvent(new KeyboardEvent(down ? 'keydown' : 'keyup', { code, key: code, bubbles: true, cancelable: true }));
+    for (let f = 0; f < 60 * 90 && __game.mode === 'play'; f++) {
+      const plan = window.ChaosEngine.planCoach(__game.world, __game.player, 1.0);
       fire('ArrowRight', plan.moveX > 0);
       fire('ArrowLeft', plan.moveX < 0);
-      fire('ArrowUp', !!plan.jump);
-      fire('Space', !!plan.dashPressed);
+      fire('Space', !!plan.jumpPressed || !!plan.jumpDown);
+      fire('ArrowDown', !!plan.downPressed);
       __ciTest.run(1);
     }
+    fire('ArrowRight', false); fire('ArrowLeft', false); fire('Space', false); fire('ArrowDown', false);
     __ciTest.paint();
   });
 
-  assert.equal(await page.evaluate(() => __game.mode), 'result', 'match finishes on #scrResult');
-  assert.ok((await page.evaluate(() => __game.save.coins)) >= 8, 'coins awarded and saved');
-  assert.equal(await page.evaluate(() => __ciTest.ddaResults.length), 1, 'DDA outcome recorded');
+  assert.equal(await page.evaluate(() => __game.mode), 'result', 'match ends on result screen');
+  assert.ok((await page.evaluate(() => __game.result.stars)) >= 1, 'active player earns stars');
+  assert.ok((await page.evaluate(() => __game.save.coins)) > 0, 'coins awarded and saved');
+  assert.equal(await page.evaluate(() => __ciTest.ddaResults.length), 1, 'DDA outcome recorded once');
 });

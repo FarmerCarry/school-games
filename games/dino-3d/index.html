@@ -9,119 +9,210 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body data-mode="title">
-<!-- Icons: every button is a picture, so a child who cannot read yet can play. -->
 <svg class="defs" aria-hidden="true" focusable="false" width="0" height="0">
-  <symbol id="i-play" viewBox="0 0 64 64"><path d="M22 11 Q18 9 18 14 L18 50 Q18 55 22 53 L52 35 Q56 32 52 29 Z"/></symbol>
+  <symbol id="i-play" viewBox="0 0 64 64"><path d="M21 11 Q17 9 17 14 L17 50 Q17 55 21 53 L52 35 Q56 32 52 29 Z"/></symbol>
   <symbol id="i-pause" viewBox="0 0 64 64"><rect x="15" y="12" width="12" height="40" rx="5"/><rect x="37" y="12" width="12" height="40" rx="5"/></symbol>
-  <symbol id="i-again" viewBox="0 0 64 64"><path d="M50 30 A19 19 0 1 1 41 15" fill="none" stroke="currentColor" stroke-width="9" stroke-linecap="round"/><path d="M33 4 L52 13 L37 27 Z"/></symbol>
-  <symbol id="i-map" viewBox="0 0 64 64"><path d="M6 15 L22 8 L42 15 L58 8 L58 49 L42 56 L22 49 L6 56 Z"/><path d="M22 10 L22 47 M42 17 L42 54" stroke="#2a2140" stroke-width="4" opacity=".35"/><circle cx="32" cy="30" r="6" fill="#ff5d6c"/></symbol>
+  <symbol id="i-again" viewBox="0 0 64 64"><path d="M50 30 A19 19 0 1 1 41 15" fill="none" stroke="currentColor" stroke-width="8.5" stroke-linecap="round"/><path d="M33 4 L52 13 L37 27 Z"/></symbol>
+  <symbol id="i-map" viewBox="0 0 64 64"><path d="M6 15 L22 8 L42 15 L58 8 L58 49 L42 56 L22 49 L6 56 Z"/><path d="M22 10 L22 47 M42 17 L42 54" stroke="#24304a" stroke-width="4" opacity=".3"/><circle cx="32" cy="30" r="6.5" fill="#ff5277"/></symbol>
   <symbol id="i-home" viewBox="0 0 64 64"><path d="M8 32 L32 10 L56 32 L49 32 L49 54 L37 54 L37 40 L27 40 L27 54 L15 54 L15 32 Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></symbol>
-  <symbol id="i-hat" viewBox="0 0 64 64"><path d="M18 6 Q32 2 46 6 L44 40 L20 40 Z" stroke="#2a2140" stroke-width="3.5" stroke-linejoin="round"/><path d="M4 44 Q32 34 60 44 Q60 54 32 54 Q4 54 4 44 Z" stroke="#2a2140" stroke-width="3.5" stroke-linejoin="round"/><path d="M20 30 L44 30 L44 39 L20 39 Z" fill="#ff5d6c"/></symbol>
-  <symbol id="i-star" viewBox="0 0 64 64"><path d="M32 5 L39 23.3 L58.6 24.4 L43.4 36.7 L48.5 55.6 L32 45 L15.5 55.6 L20.6 36.7 L5.4 24.4 L25 23.3 Z" stroke-linejoin="round"/></symbol>
-  <symbol id="i-lock" viewBox="0 0 64 64"><path d="M20 28 L20 20 A12 12 0 0 1 44 20 L44 28" fill="none" stroke="currentColor" stroke-width="7"/><rect x="12" y="28" width="40" height="30" rx="7"/></symbol>
-  <symbol id="i-egg" viewBox="0 0 64 64"><path d="M32 4 C48 4 56 30 56 40 C56 54 45 61 32 61 C19 61 8 54 8 40 C8 30 16 4 32 4 Z" fill="#fff6e0" stroke="#2a2140" stroke-width="5"/><circle cx="24" cy="30" r="5" fill="#5ec8ff"/><circle cx="40" cy="42" r="6" fill="#ff7eb6"/><circle cx="36" cy="20" r="3.5" fill="#7be05a"/></symbol>
-  <symbol id="i-heart" viewBox="0 0 64 64"><path d="M32 57 C14 44 4 34 4 21 C4 11 12 5 20 5 C26 5 30 8 32 13 C34 8 38 5 44 5 C52 5 60 11 60 21 C60 34 50 44 32 57 Z" stroke="#2a2140" stroke-width="5" stroke-linejoin="round"/></symbol>
+  <symbol id="i-hat" viewBox="0 0 64 64"><path d="M18 10 Q32 4 46 10 L44 39 L20 39 Z" stroke="#24304a" stroke-width="3.5" stroke-linejoin="round"/><path d="M5 43 Q32 33 59 43 Q59 53 32 53 Q5 53 5 43 Z" stroke="#24304a" stroke-width="3.5" stroke-linejoin="round"/><path d="M20 30 L44 30 L44 38 L20 38 Z" fill="#ff5277"/></symbol>
+  <symbol id="i-star" viewBox="0 0 64 64"><path d="M32 5 L39 23 L59 24 L43 37 L48 56 L32 45 L16 56 L21 37 L5 24 L25 23 Z" stroke-linejoin="round"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 64 64"><path d="M20 28 L20 20 A12 12 0 0 1 44 20 L44 28" fill="none" stroke="currentColor" stroke-width="7"/><rect x="12" y="28" width="40" height="30" rx="8"/></symbol>
+  <symbol id="i-egg" viewBox="0 0 64 64"><path d="M32 4 C48 4 56 30 56 40 C56 54 45 61 32 61 C19 61 8 54 8 40 C8 30 16 4 32 4 Z" fill="#fff6db" stroke="#24304a" stroke-width="5"/><circle cx="24" cy="30" r="5" fill="#38b6ff"/><circle cx="40" cy="42" r="6" fill="#ff6ba9"/><circle cx="36" cy="20" r="3.5" fill="#45d167"/></symbol>
+  <symbol id="i-heart" viewBox="0 0 64 64"><path d="M32 57 C14 44 4 34 4 21 C4 11 12 5 20 5 C26 5 30 8 32 13 C34 8 38 5 44 5 C52 5 60 11 60 21 C60 34 50 44 32 57 Z" stroke="#24304a" stroke-width="5" stroke-linejoin="round"/></symbol>
   <symbol id="i-inf" viewBox="0 0 64 64"><path d="M32 32 C26 22 20 18 14 18 C7 18 3 24 3 32 C3 40 7 46 14 46 C20 46 26 42 32 32 C38 22 44 18 50 18 C57 18 61 24 61 32 C61 40 57 46 50 46 C44 46 38 42 32 32 Z" fill="none" stroke="currentColor" stroke-width="8" stroke-linejoin="round"/></symbol>
-  <symbol id="i-dino" viewBox="0 0 64 64"><path d="M10 54 L10 30 Q10 12 30 12 L44 12 Q58 12 58 26 L58 34 Q58 40 50 40 L34 40 L34 54 Z" stroke="#2a2140" stroke-width="4.5" stroke-linejoin="round"/><circle cx="40" cy="24" r="6.5" fill="#fff"/><circle cx="42" cy="25" r="3.6" fill="#2a2140"/><path d="M14 16 L20 6 L24 14 M24 12 L31 4 L33 12" fill="none" stroke="#2a2140" stroke-width="4" stroke-linejoin="round"/><path d="M46 34 L54 34" stroke="#2a2140" stroke-width="3.5" stroke-linecap="round"/></symbol>
-  <symbol id="i-nest" viewBox="0 0 64 64"><ellipse cx="32" cy="44" rx="28" ry="12" fill="#b07a4a" stroke="#2a2140" stroke-width="4.5"/><path d="M22 40 C22 26 28 20 32 20 C36 20 42 26 42 40 Z" fill="#fff6e0" stroke="#2a2140" stroke-width="4"/><path d="M8 42 L20 48 M56 42 L44 48 M26 52 L38 50" stroke="#7a4f2a" stroke-width="3.5" stroke-linecap="round"/></symbol>
-  <symbol id="i-bolt" viewBox="0 0 64 64"><path d="M36 3 L12 36 L29 36 L24 61 L52 24 L34 24 Z" stroke="#2a2140" stroke-width="4.5" stroke-linejoin="round"/></symbol>
-  <symbol id="i-mouse" viewBox="0 0 64 64"><rect x="16" y="6" width="32" height="52" rx="16" fill="#fff" stroke="#2a2140" stroke-width="4"/><path d="M32 8 L32 26 M17 26 L47 26" stroke="#2a2140" stroke-width="3.5"/><rect x="29" y="13" width="6" height="10" rx="3" fill="#ffd23f"/></symbol>
-  <symbol id="i-hand" viewBox="0 0 80 100"><g fill="#2a2140" stroke="#2a2140" stroke-width="9" stroke-linejoin="round"><rect x="22" y="5" width="17" height="54" rx="8.5"/><rect x="37" y="36" width="15" height="30" rx="7.5"/><rect x="50" y="40" width="14" height="28" rx="7"/><rect x="14" y="46" width="52" height="48" rx="19"/></g><g fill="#fff"><rect x="22" y="5" width="17" height="54" rx="8.5"/><rect x="37" y="36" width="15" height="30" rx="7.5"/><rect x="50" y="40" width="14" height="28" rx="7"/><rect x="14" y="46" width="52" height="48" rx="19"/></g></symbol>
+  <symbol id="i-dino" viewBox="0 0 64 64"><path d="M12 54 L12 30 Q12 12 31 12 L44 12 Q57 12 57 25 L57 34 Q57 40 49 40 L34 40 L34 54 Z" stroke="#24304a" stroke-width="4.5" stroke-linejoin="round"/><circle cx="40" cy="24" r="6.5" fill="#fff"/><circle cx="42" cy="25" r="3.6" fill="#24304a"/><path d="M15 16 L21 6 L25 14 M26 12 L33 4 L35 12" fill="none" stroke="#24304a" stroke-width="4" stroke-linejoin="round"/></symbol>
+  <symbol id="i-nest" viewBox="0 0 64 64"><ellipse cx="32" cy="44" rx="27" ry="12" fill="#c4813d" stroke="#24304a" stroke-width="4.5"/><path d="M22 40 C22 26 28 20 32 20 C36 20 42 26 42 40 Z" fill="#fff6db" stroke="#24304a" stroke-width="4"/></symbol>
+  <symbol id="i-roar" viewBox="0 0 64 64"><path d="M36 4 L12 36 L29 36 L24 60 L52 24 L34 24 Z" stroke="#24304a" stroke-width="4.5" stroke-linejoin="round"/></symbol>
 </svg>
 
-<canvas id="scene" tabindex="0" aria-label="الديناصور ثلاثي الأبعاد. مسافة للقفز، والسهم إلى الأسفل للانحناء، والسهم إلى اليمين للزئير."></canvas>
+<canvas id="scene" tabindex="0" aria-label="الديناصور ثلاثي الأبعاد: مسافة أو السهم للأعلى للقفز، والسهم للأسفل للانزلاق، والسهم لليمين للزئير."></canvas>
 
-<!-- A 1280x720 layer laid over the middle of the 3D view (scaled by game.js). -->
 <div id="ui">
+  <!-- Minimal Poki Title Screen over Live 3D Dino -->
   <section id="title" class="screen" aria-label="الديناصور ثلاثي الأبعاد">
-    <h1 class="logo"><span class="l1">الديناصور</span><span class="l2">ثلاثي الأبعاد</span></h1>
-    <div class="chip stars-chip" aria-label="النجوم"><svg aria-hidden="true"><use href="#i-star"/></svg><b id="title-stars">0</b></div>
-    <div class="title-row">
-      <button type="button" id="btn-wardrobe" class="btn round side pink" aria-label="الخزانة"><svg aria-hidden="true"><use href="#i-hat"/></svg></button>
-      <button type="button" id="play" class="btn play ring" aria-label="العب"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
-      <button type="button" id="btn-endless" class="btn round side orange" aria-label="جري بلا نهاية"><svg aria-hidden="true"><use href="#i-inf"/></svg></button>
+    <div class="top-stats">
+      <div class="pill star-pill" aria-label="النجوم"><svg aria-hidden="true"><use href="#i-star"/></svg><b id="title-stars" dir="ltr">0</b></div>
+      <div class="pill egg-pill" aria-label="البيض"><svg aria-hidden="true"><use href="#i-egg"/></svg><b id="title-eggs" dir="ltr">0</b></div>
+      <div class="pill best-pill" id="title-best-pill" hidden><svg aria-hidden="true"><use href="#i-inf"/></svg><b id="title-best" dir="ltr">0</b><span>م</span></div>
+    </div>
+
+    <header class="hero-logo">
+      <h1 class="logo-text">الديناصور ثلاثي الأبعاد</h1>
+    </header>
+
+    <div class="title-actions">
+      <div class="action-row">
+        <button type="button" id="btn-map" class="icon-btn map-btn" aria-label="خريطة العوالم" title="خريطة العوالم">
+          <svg aria-hidden="true"><use href="#i-map"/></svg>
+          <span>العوالم</span>
+        </button>
+
+        <button type="button" id="play" class="play-hero" aria-label="العب">
+          <svg aria-hidden="true"><use href="#i-play"/></svg>
+          <span>العب</span>
+        </button>
+
+        <button type="button" id="btn-endless" class="icon-btn endless-btn" aria-label="جري بلا نهاية" title="جري بلا نهاية">
+          <svg aria-hidden="true"><use href="#i-inf"/></svg>
+          <span>لا نهائي</span>
+        </button>
+
+        <button type="button" id="btn-wardrobe" class="icon-btn wardrobe-btn" aria-label="خزانة المظهر" title="خزانة المظهر">
+          <svg aria-hidden="true"><use href="#i-hat"/></svg>
+          <span>المظهر</span>
+        </button>
+      </div>
+
+      <div class="keys-bar">
+        <span class="k-item"><span dir="ltr"><span class="sg-key">مسافة</span> <span class="sg-key">↑</span></span> قفز</span>
+        <span class="k-sep">•</span>
+        <span class="k-item"><span dir="ltr"><span class="sg-key">↓</span></span> انزلاق</span>
+        <span class="k-sep">•</span>
+        <span class="k-item"><span dir="ltr"><span class="sg-key">→</span> <span class="sg-key">Shift</span></span> زئير</span>
+      </div>
     </div>
   </section>
 
-  <section id="map" class="screen" aria-label="الخريطة" hidden>
-    <button type="button" id="map-home" class="btn round corner" aria-label="البداية"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
-    <div class="chip stars-chip" aria-label="النجوم"><svg aria-hidden="true"><use href="#i-star"/></svg><b id="map-stars">0</b></div>
-    <div id="cards"></div>
+  <!-- World Map (5 Distinct Worlds x 3 Stages) -->
+  <section id="map" class="screen glass-dim" aria-label="خريطة العوالم" hidden>
+    <button type="button" id="map-home" class="corner-btn" aria-label="العودة للرئيسية"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
+    <div class="screen-top">
+      <h2 class="screen-title">رحلة العودة للعش</h2>
+      <div class="pill star-pill"><svg aria-hidden="true"><use href="#i-star"/></svg><span dir="ltr"><b id="map-stars">0</b> / 45</span></div>
+    </div>
+    <div id="cards" class="world-grid"></div>
   </section>
 
-  <section id="endless" class="screen" aria-label="جري بلا نهاية" hidden>
-    <button type="button" id="endless-home" class="btn round corner" aria-label="البداية"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
-    <div class="card endless-card">
-      <h2><svg aria-hidden="true"><use href="#i-inf"/></svg><span>جري بلا نهاية</span></h2>
-      <p class="far">الأفضل <b id="far-best" dir="ltr">0</b> م</p>
-      <button type="button" id="endless-go" class="btn play ring" aria-label="ابدأ الجري"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
-      <button type="button" id="code-btn" class="btn small" aria-expanded="false">رمز</button>
-      <form id="code-row" hidden novalidate>
-        <input id="code-input" type="text" inputmode="numeric" maxlength="4" autocomplete="off" dir="ltr" placeholder="0000" aria-label="رمز من أربعة أرقام">
-        <button type="submit" id="code-go" class="btn small go" aria-label="العب بالرمز"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
-        <p id="code-error" role="alert" hidden>أربعة أرقام، مثل 0042</p>
+  <!-- Endless Run Setup -->
+  <section id="endless" class="screen glass-dim" aria-label="جري بلا نهاية" hidden>
+    <button type="button" id="endless-home" class="corner-btn" aria-label="العودة للرئيسية"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
+    <div class="modal-card endless-card">
+      <div class="card-badge endless-badge"><svg aria-hidden="true"><use href="#i-inf"/></svg></div>
+      <h2 class="card-title">جري بلا نهاية</h2>
+      <p class="best-line">أبعد مسافة: <b id="far-best" dir="ltr">0</b> م</p>
+      <button type="button" id="endless-go" class="play-hero small-hero" aria-label="ابدأ الجري">
+        <svg aria-hidden="true"><use href="#i-play"/></svg><span>انطلق!</span>
+      </button>
+      <button type="button" id="code-btn" class="chip-btn" aria-expanded="false">تحدّي برمز سباق</button>
+      <form id="code-row" class="code-form" hidden novalidate>
+        <input id="code-input" type="text" inputmode="numeric" maxlength="4" autocomplete="off" dir="ltr" placeholder="0042" aria-label="رمز من أربعة أرقام">
+        <button type="submit" id="code-go" class="go-mini" aria-label="ابدأ بالرمز"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
+        <p id="code-error" class="code-err" role="alert" hidden>أدخل 4 أرقام مثل 0042</p>
       </form>
     </div>
   </section>
 
+  <!-- Live 3D Wardrobe -->
+  <section id="wardrobe" class="screen" aria-label="خزانة المظهر" hidden>
+    <button type="button" id="wardrobe-back" class="corner-btn" aria-label="رجوع"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
+    <div class="wardrobe-panel">
+      <div class="wardrobe-head">
+        <h2>مظهر الديناصور</h2>
+        <div class="pill egg-pill"><svg aria-hidden="true"><use href="#i-egg"/></svg><b id="bank" dir="ltr">0</b></div>
+      </div>
+      <div class="shelf-label">الألوان</div>
+      <div class="shelf" id="colors" role="group" aria-label="ألوان الديناصور"></div>
+      <div class="shelf-label">القبعات</div>
+      <div class="shelf" id="hats" role="group" aria-label="قبعات الديناصور"></div>
+    </div>
+  </section>
+
+  <!-- Crisp Minimal In-Game HUD -->
   <div id="hud" hidden>
     <div class="hud-left">
-      <div class="hearts" id="hearts"><i></i><i></i><i></i></div>
-      <div class="chip egg-chip" id="egg-chip"><svg aria-hidden="true"><use href="#i-egg"/></svg><b id="hud-eggs" dir="ltr">0</b></div>
+      <div class="hearts" id="hearts" aria-label="القلوب"><i></i><i></i><i></i></div>
+      <div class="pill egg-pill hud-egg"><svg aria-hidden="true"><use href="#i-egg"/></svg><b id="hud-eggs" dir="ltr">0</b></div>
+      <div class="combo-pill" id="combo" hidden>×<b id="combo-n" dir="ltr">2</b></div>
     </div>
-    <div class="trip" id="trip" dir="ltr"><i class="fill" id="trip-fill"></i><svg class="nest" aria-hidden="true"><use href="#i-nest"/></svg><svg class="me" id="trip-me" aria-hidden="true"><use href="#i-dino"/></svg></div>
-    <div class="meters" id="meters" hidden><b id="hud-m" dir="ltr">0</b><span>م</span><small>الأفضل <b id="hud-far" dir="ltr">0</b></small></div>
-    <div class="code-tag" id="code-tag" hidden>رمز <b id="code-now" dir="ltr"></b></div>
-    <div class="roar" id="roar"><svg class="bolt" aria-hidden="true"><use href="#i-bolt"/></svg><div class="bar"><i id="roar-fill"></i></div><span class="sg-key" dir="ltr">→</span></div>
-    <div class="coach" id="coach" hidden></div>
-    <div class="intro" id="intro" hidden></div>
-    <div class="banner" id="banner" hidden></div>
+
+    <div class="hud-center">
+      <div class="world-pill" id="world-tag">الصحراء الذهبية • 1-1</div>
+      <div class="trip" id="trip" dir="ltr">
+        <div class="trip-track"><i class="trip-fill" id="trip-fill"></i></div>
+        <svg class="trip-dino" id="trip-me" aria-hidden="true"><use href="#i-dino"/></svg>
+        <svg class="trip-nest" aria-hidden="true"><use href="#i-nest"/></svg>
+      </div>
+      <div class="meters-pill" id="meters" hidden>
+        <b id="hud-m" dir="ltr">0</b><span>م</span>
+        <small>الأفضل <b id="hud-far" dir="ltr">0</b></small>
+      </div>
+      <div class="code-pill" id="code-tag" hidden>رمز <b id="code-now" dir="ltr"></b></div>
+    </div>
+
+    <div class="roar-hud" id="roar">
+      <svg class="roar-icon" aria-hidden="true"><use href="#i-roar"/></svg>
+      <div class="roar-bar"><i id="roar-fill"></i></div>
+      <span class="roar-key sg-key" dir="ltr">→</span>
+      <span class="roar-ready-tag" id="roar-label">زئير جاهز!</span>
+    </div>
+
+    <div class="coach-hint" id="coach" hidden></div>
+    <div class="world-banner" id="banner" hidden></div>
     <div id="floats" aria-hidden="true"></div>
   </div>
 
-  <section id="pause-screen" class="screen dim" aria-label="استراحة" hidden>
-    <div class="card">
-      <button type="button" id="resume" class="btn play" aria-label="تابع اللعب"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
-      <div class="row">
-        <button type="button" id="pause-menu" class="btn round big" aria-label="القائمة"><svg aria-hidden="true"><use href="#i-map"/></svg></button>
-        <button type="button" id="restart" class="btn round big" aria-label="ابدأ من جديد"><svg aria-hidden="true"><use href="#i-again"/></svg></button>
+  <!-- Pause Overlay -->
+  <section id="pause-screen" class="screen glass-dim" aria-label="إيقاف مؤقت" hidden>
+    <div class="modal-card pause-card">
+      <h2 class="card-title">استراحة</h2>
+      <button type="button" id="resume" class="play-hero small-hero" aria-label="متابعة اللعب">
+        <svg aria-hidden="true"><use href="#i-play"/></svg><span>متابعة</span>
+      </button>
+      <div class="modal-row">
+        <button type="button" id="restart" class="round-btn amber" aria-label="إعادة المرحلة" title="إعادة (R)">
+          <svg aria-hidden="true"><use href="#i-again"/></svg>
+        </button>
+        <button type="button" id="pause-menu" class="round-btn sky" aria-label="خريطة العوالم" title="العوالم">
+          <svg aria-hidden="true"><use href="#i-map"/></svg>
+        </button>
+        <button type="button" id="pause-home" class="round-btn soft" aria-label="الشاشة الرئيسية" title="الرئيسية">
+          <svg aria-hidden="true"><use href="#i-home"/></svg>
+        </button>
       </div>
-      <p class="keys"><span dir="ltr"><span class="sg-key">P</span></span> <span dir="ltr"><span class="sg-key">R</span></span></p>
+      <p class="modal-keys"><span dir="ltr"><span class="sg-key">P</span></span> متابعة • <span dir="ltr"><span class="sg-key">R</span></span> إعادة</p>
     </div>
   </section>
 
-  <section id="result" class="screen" aria-label="النتيجة" hidden>
-    <div class="card result">
-      <h2 id="res-title">رائع!</h2>
-      <div class="stars3" id="res-stars" aria-hidden="true"><svg><use href="#i-star"/></svg><svg><use href="#i-star"/></svg><svg><use href="#i-star"/></svg></div>
-      <div class="res-eggs" id="res-eggs"><svg aria-hidden="true"><use href="#i-egg"/></svg><b id="res-n" dir="ltr">0</b></div>
-      <div class="res-far" id="res-far" hidden><b id="res-m" dir="ltr">0</b> م</div>
-      <div class="newbest" id="res-best" hidden><svg aria-hidden="true"><use href="#i-star"/></svg><span>رقم جديد!</span></div>
-      <button type="button" class="btn gift" id="res-gift" aria-label="شيء جديد في الخزانة" hidden><svg aria-hidden="true"><use href="#i-hat"/></svg><span>جديد!</span></button>
-      <div class="row">
-        <button type="button" id="result-menu" class="btn round big" aria-label="القائمة"><svg aria-hidden="true"><use href="#i-map"/></svg></button>
-        <button type="button" id="next" class="btn play" aria-label="المرحلة التالية"><svg aria-hidden="true"><use href="#i-play"/></svg><span class="sg-key" dir="ltr">→</span></button>
-        <button type="button" id="again" class="btn round big" aria-label="مرة أخرى"><svg aria-hidden="true"><use href="#i-again"/></svg><span class="sg-key" dir="ltr">R</span></button>
+  <!-- Victory / Game Over Result Screen -->
+  <section id="result" class="screen glass-dim" aria-label="النتيجة" hidden>
+    <div class="modal-card result-card">
+      <h2 id="res-title" class="card-title">رائع!</h2>
+      <div class="stars-row" id="res-stars" aria-hidden="true">
+        <svg><use href="#i-star"/></svg>
+        <svg><use href="#i-star"/></svg>
+        <svg><use href="#i-star"/></svg>
+      </div>
+      <div class="res-stats">
+        <div class="pill egg-pill big-pill"><svg aria-hidden="true"><use href="#i-egg"/></svg><b id="res-n" dir="ltr">0</b></div>
+        <div class="pill dist-pill big-pill" id="res-far" hidden><b id="res-m" dir="ltr">0</b><span>م</span></div>
+      </div>
+      <div class="newbest-tag" id="res-best" hidden><svg aria-hidden="true"><use href="#i-star"/></svg><span>رقم قياسي جديد!</span></div>
+      <button type="button" class="gift-btn" id="res-gift" hidden>
+        <svg aria-hidden="true"><use href="#i-hat"/></svg><span id="res-gift-txt">مظهر جديد مفتوح!</span>
+      </button>
+      <div class="modal-row">
+        <button type="button" id="result-menu" class="round-btn sky" aria-label="خريطة العوالم"><svg aria-hidden="true"><use href="#i-map"/></svg></button>
+        <button type="button" id="next" class="play-hero small-hero" aria-label="المرحلة التالية"><svg aria-hidden="true"><use href="#i-play"/></svg><span id="next-label">التالي</span></button>
+        <button type="button" id="again" class="round-btn amber" aria-label="مرة أخرى" title="مرة أخرى (R)"><svg aria-hidden="true"><use href="#i-again"/></svg></button>
       </div>
     </div>
   </section>
 
-  <section id="wardrobe" class="screen" aria-label="الخزانة" hidden>
-    <button type="button" id="wardrobe-back" class="btn round corner" aria-label="رجوع"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
-    <div class="closet">
-      <div class="chip egg-chip"><svg aria-hidden="true"><use href="#i-egg"/></svg><b id="bank" dir="ltr">0</b></div>
-      <div class="shelf" id="colors" role="group" aria-label="الألوان"></div>
-      <div class="shelf hats" id="hats" role="group" aria-label="القبعات"></div>
+  <!-- Arabic WebGL Fallback -->
+  <section id="scrError" class="screen glass-dim" aria-label="تعذّر تشغيل الرسوم ثلاثية الأبعاد" hidden>
+    <div class="modal-card">
+      <h2 class="card-title">تعذّر تشغيل الرسوم ثلاثية الأبعاد</h2>
+      <p class="err-copy">متصفحك لا يدعم WebGL حاليًا أو توقف العرض ثلاثي الأبعاد.<br>أعد تحميل الصفحة أو جرّب لعبة أخرى.</p>
     </div>
   </section>
 
-  <section id="error-screen" class="screen dim" hidden>
-    <div class="card"><h2>تعذّر تشغيل اللعبة</h2><p>الرسوم ثلاثية الأبعاد غير متاحة الآن.<br>أعد فتح اللعبة أو اختر لعبة أخرى.</p></div>
-  </section>
-  <div id="context-notice" class="notice" role="status" hidden>توقفت الرسوم لحظة… انتظر قليلًا.</div>
-  <svg id="ghost" aria-hidden="true" hidden><use href="#i-hand"/></svg>
+  <div id="context-notice" class="ctx-notice" role="status" hidden>توقفت الرسوم لحظة… جارٍ الاستعادة.</div>
 </div>
-<button type="button" id="pause-button" class="pause-button" aria-label="استراحة" title="استراحة (P / Esc)" hidden><svg aria-hidden="true"><use href="#i-pause"/></svg></button>
+
+<button type="button" id="pause-button" class="pause-fab" aria-label="إيقاف مؤقت" title="إيقاف مؤقت (P / Esc)" hidden>
+  <svg aria-hidden="true"><use href="#i-pause"/></svg>
+</button>
 <div id="live" class="sr" aria-live="polite"></div>
 
 <script src="../../shared/kit.js"></script>

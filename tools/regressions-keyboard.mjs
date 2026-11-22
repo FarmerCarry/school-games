@@ -13,12 +13,6 @@ function stateOfGame() {
       turn: surface.dataset.turn, winner: surface.dataset.winner,
       paused: !document.getElementById('pauseLayer').hidden });
   }
-  if (!g && window.GolfArt && document.getElementById('title-screen')) {
-    // Golf exposes its screens in the DOM instead of a production debug API.
-    // A leaked shortcut can start a shot or open an overlay, both observable here.
-    const screens = ['title-screen', 'hud', 'modal', 'pause-content', 'result-content', 'worlds-content', 'shop-content'];
-    return JSON.stringify({ phase: document.getElementById('ui').dataset.phase, ...Object.fromEntries(screens.map(id => [id, !document.getElementById(id).hidden])) });
-  }
   if (!g && window.Dino3DGame) {
     // Dino's visible screens and score reflect start/pause/restart without
     // depending on private engine state or an additional production debug API.
@@ -52,9 +46,7 @@ export async function testNativeControlGame({ browser, origin, slug }) {
   page.on('pageerror', e => errors.push(e.message));
   try {
     await page.goto(`${origin}/games/${slug}/`, { waitUntil: 'load' });
-    await page.waitForFunction(slug => !!window.Kit && (slug === 'skybound-golf'
-      ? !!window.GolfArt && !!window.GolfPhysics && !!document.getElementById('title-screen')
-      : slug === 'dino-3d' ? !!window.Dino3DGame
+    await page.waitForFunction(slug => !!window.Kit && (slug === 'dino-3d' ? !!window.Dino3DGame
       : !!window.__game || !!document.getElementById('gameBoard')?.dataset.moves), slug);
     await page.evaluate(() => {
       const panel = document.createElement('div');
@@ -118,10 +110,10 @@ export async function testPortalKeyboard({ browser, origin }) {
     await page.goto(`${origin}/#/play/air-hockey`);
     await page.waitForSelector('#stage iframe');
     const frame = page.frames().find(f => f.url().includes('/games/air-hockey/'));
-    await frame.waitForSelector('#tab1');
-    await frame.locator('#tab1').focus();
+    await frame.waitForSelector('#btnPlay');
+    await frame.locator('#btnPlay').focus();
     await page.keyboard.press('Tab');
-    assert.notEqual(await frame.evaluate(() => document.activeElement.id), 'tab1', 'game menu Tab changes focus');
+    assert.notEqual(await frame.evaluate(() => document.activeElement.id), 'btnPlay', 'game menu Tab changes focus');
     await focusSurface(frame);
     await page.evaluate(() => window.postMessage('sg:focus-portal', '*'));
     await page.waitForTimeout(80);

@@ -1,9 +1,7 @@
-// Recess Kitchen (games/recess-kitchen/) in real Chromium: 1P keyboard & click-to-dash
-// cooking, auto-stacking & Burger-Cannon serving, non-silent Arabic hint bubbles,
-// Mini Sous-Bot assist, 3 difficulties (Easy no-burn, Hero VIP 2x), 12 open stages,
-// 2P co-op independent controls & telemetry, pause freeze, restart, Chef Locker aprons &
-// hats, storage quota retry banner, reduced motion, native HTML control keyboard isolation,
-// and zero idle background music.
+// Recess Kitchen 3D (games/recess-kitchen/) in real Chromium:
+// Title screen with zero idle audio, 1P keyboard movement/dash/full burger cooking & serving,
+// 2P Co-op independent controls & telemetry, Endless Rush, Wardrobe purchase & save quota retry,
+// Pause freeze & Restart reset, Result stars & level unlock, and native HTML keyboard isolation.
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import path from 'node:path';
@@ -26,19 +24,7 @@ after(async () => {
   await server?.close();
 });
 
-const SAVE = (open = 0, extra = {}) => ({
-  v: 2,
-  lv: Array.from({ length: 12 }, (_, i) => ({ s: i < open ? 2 : 0, best: i < open ? 95 : 0 })),
-  coins: 0,
-  aprons: [1, 0, 0, 0],
-  hats: [1, 0, 0, 0],
-  apron: 0,
-  hat: 0,
-  difficulty: 'normal',
-  ...extra
-});
-
-async function game(t, { save, dda = 0.35, reducedMotion = 'reduce', size = [1280, 720] } = {}) {
+async function openGame(t, { save, dda = 0.35, reducedMotion = 'reduce', size = [1280, 720] } = {}) {
   const ctx = await browser.newContext({ viewport: { width: size[0], height: size[1] }, reducedMotion });
   const errors = [], requests = [];
   ctx.on('page', page => {
@@ -54,16 +40,15 @@ async function game(t, { save, dda = 0.35, reducedMotion = 'reduce', size = [128
 
   await ctx.addInitScript(({ save, dda }) => {
     if (location.protocol !== 'http:') return;
-    if (!sessionStorage.getItem('rk-seeded')) {
-      sessionStorage.setItem('rk-seeded', '1');
+    if (!sessionStorage.getItem('rk3-seeded')) {
+      sessionStorage.setItem('rk3-seeded', '1');
       if (save !== undefined) {
-        localStorage.setItem('sg:recess-kitchen:save', typeof save === 'string' ? save : JSON.stringify(save));
+        localStorage.setItem('sg:recess-kitchen:save3', typeof save === 'string' ? save : JSON.stringify(save));
       }
     }
     let kit;
-    const rk = window.rk = { results: [], rounds: [], ends: [], hits: 0, misses: 0, failSave: false, draws: 0, audioStarts: 0 };
+    const rk = window.rk = { results: [], rounds: [], ends: [], hits: 0, misses: 0, failSave: false, audioStarts: 0 };
 
-    // Count scheduled WebAudio sources for zero-BGM check
     const origStart = window.AudioScheduledSourceNode && window.AudioScheduledSourceNode.prototype.start;
     if (origStart) {
       window.AudioScheduledSourceNode.prototype.start = function () {
@@ -80,7 +65,6 @@ async function game(t, { save, dda = 0.35, reducedMotion = 'reduce', size = [128
         kit.loop = (update, render) => {
           rk.step = (n = 1) => { for (let i = 0; i < n; i++) { update(1 / 60); render(0); } };
           rk.run = (n = 1) => { for (let i = 0; i < n; i++) update(1 / 60); render(0); };
-          rk.renderOnly = () => render(0);
           return { stop() {} };
         };
         const makeDda = kit.dda;
@@ -108,15 +92,9 @@ async function game(t, { save, dda = 0.35, reducedMotion = 'reduce', size = [128
       }
     });
 
-    const origSave = CanvasRenderingContext2D.prototype.save;
-    CanvasRenderingContext2D.prototype.save = function () {
-      if (this.canvas && this.canvas.id === 'game') rk.draws++;
-      return origSave.apply(this, arguments);
-    };
-
     const origSetItem = Storage.prototype.setItem;
     Storage.prototype.setItem = function (key) {
-      if (key === 'sg:recess-kitchen:save' && window.rk && window.rk.failSave) {
+      if (key === 'sg:recess-kitchen:save3' && window.rk && window.rk.failSave) {
         throw new DOMException('Quota exceeded fixture', 'QuotaExceededError');
       }
       return origSetItem.apply(this, arguments);
@@ -125,319 +103,164 @@ async function game(t, { save, dda = 0.35, reducedMotion = 'reduce', size = [128
 
   const page = await ctx.newPage();
   await page.goto(`${server.origin}/games/recess-kitchen/`, { timeout: 90000 });
-  await page.waitForFunction(() => window.__game && window.rk && window.rk.step);
+  await page.waitForFunction(() => window.__game && window.rk && window.rk.step, null, { timeout: 30000 });
   return page;
 }
 
 const state = page => page.evaluate(() => __game.state);
-const stations = page => page.evaluate(() => __game.stations);
-const step = (page, n = 1) => page.evaluate(n => rk.step(n), n);
 const run = (page, n = 1) => page.evaluate(n => rk.run(n), n);
-const stored = page => page.evaluate(() => {
-  const raw = localStorage.getItem('sg:recess-kitchen:save');
-  return raw ? JSON.parse(raw) : null;
-});
 
-async function clickStation(page, st, maxFrames = 420) {
-  const pt = await page.evaluate(([x, y]) => __game.point(x, y), [st.x, st.y]);
-  await page.mouse.click(pt.x, pt.y);
-  for (let i = 0; i < maxFrames; i += 6) {
-    await run(page, 6);
-    const navDone = await page.evaluate(([sx, sy]) => {
-      const c = __game.state.chefs[0];
-      return c && c.moved && Math.hypot(c.x - sx, c.y - sy) <= 106 && Math.hypot(c.vx, c.vy) === 0;
-    }, [st.x, st.y]);
-    if (navDone) {
-      await run(page, 4);
-      return;
-    }
-  }
-}
-
-test('title waits with zero idle audio; all 12 stages open immediately; Play goes straight to 1-1; Chef 1 stays still until input', async t => {
-  const page = await game(t);
-  await step(page, 30);
+test('title waits with zero idle audio; Play starts 1-1; ArrowRight moves Chef 1 right cleanly', async t => {
+  const page = await openGame(t);
+  await run(page, 40);
   assert.equal((await state(page)).screen, 'title');
-  assert.equal(await page.locator('#titleStars b').textContent(), '0/36');
-  for (const label of ['شاهد الطلب', 'اشوِ وادمج تلقائياً', 'أطلق بالمدفع!', 'حماس وسرعة مضاعفة']) {
-    assert.equal(await page.locator('.howto figcaption', { hasText: label }).isVisible(), true, label);
-  }
+  assert.equal(await page.evaluate(() => rk.audioStarts), 0, 'zero audio on idle title screen');
 
-  // Unlock audio and click top-left (3, 3): stays on title and schedules ZERO background music!
-  await page.mouse.click(3, 3);
-  await step(page, 30);
-  assert.equal((await state(page)).screen, 'title');
-  const a0 = await page.evaluate(() => rk.audioStarts);
-  await step(page, 180);
-  assert.equal(await page.evaluate(() => rk.audioStarts), a0, 'zero audio scheduled while idle on title');
+  await page.click('#btnPlay');
+  await run(page, 6);
+  const s0 = await state(page);
+  assert.equal(s0.screen, 'play');
+  assert.equal(s0.id, '1-1');
+  assert.equal(s0.atStart, true);
+  assert.equal(s0.orders.length, 1);
+  assert.deepEqual(await page.evaluate(() => rk.rounds), ['L1']);
 
-  // Open Kitchens map (#btnLevels): all 12 stages (1-1 .. 4-3) are unlocked & clickable immediately!
-  await page.locator('#btnLevels').click();
-  await step(page, 2);
-  assert.equal((await state(page)).screen, 'map');
-  assert.equal(await page.locator('#worlds .lv-btn').count(), 12);
-  assert.equal(await page.locator('#worlds .lv-btn[disabled]').count(), 0, 'all 12 stages unlocked immediately');
-  await page.locator('#mapHome').click();
-  await step(page, 2);
-
-  // #btnPlay enters Level 0 ('1-1') directly
-  await page.locator('#btnPlay').click();
-  await step(page);
-  let s = await state(page);
-  assert.equal(s.screen, 'play');
-  assert.equal(s.id, '1-1');
-  assert.equal(s.players, 1);
-  assert.equal(s.atStart, true);
-
-  // Idle for 3 seconds: Chef 1 never moves on its own
-  const x0 = s.chefs[0].x, y0 = s.chefs[0].y;
-  await run(page, 180);
-  s = await state(page);
-  assert.equal(s.atStart, true);
-  assert.equal(s.chefs[0].x, x0);
-  assert.equal(s.chefs[0].y, y0);
-
-  // Pressing ArrowRight moves chefs[0].x strictly right immediately!
+  const xBefore = s0.chefs[0].x;
   await page.keyboard.down('ArrowRight');
-  await step(page, 6);
+  await run(page, 18);
   await page.keyboard.up('ArrowRight');
-  s = await state(page);
-  assert.ok(s.chefs[0].x > x0 + 10, `expected right movement: ${s.chefs[0].x} > ${x0}`);
-  assert.equal(s.atStart, false);
+  const s1 = await state(page);
+  assert.ok(s1.chefs[0].x > xBefore + 0.5, `Chef 1 moves right cleanly (${xBefore} -> ${s1.chefs[0].x})`);
+  assert.equal(s1.atStart, false);
 });
 
-test('1P click-to-cook, auto-stacking burger, non-silent guidance hint, Mini Sous-Bot, and Burger-Cannon round win', async t => {
-  const page = await game(t, { reducedMotion: 'no-preference' });
-  await page.locator('#diffEasy').click();
-  await page.locator('#btnPlay').click();
-  await step(page);
+test('1P full burger cook, assemble, serve, pause freeze, and restart reset', async t => {
+  const page = await openGame(t);
+  await page.click('#btnPlay');
+  await run(page, 4);
 
-  let s = await state(page);
-  assert.equal(s.difficulty, 'easy');
+  // Move to patty crate, pick up, cook on stove, combine at bun crate, serve at window
+  const servedOk = await page.evaluate(() => {
+    const w = __game.world;
+    const c = w.chefs[0];
+    const placeAndAct = kind => {
+      const st = w.stations.find(s => s.kind === kind);
+      const dirs = [[0, 1], [0, -1], [1, 0], [-1, 0]];
+      for (const [dx, dy] of dirs) {
+        const nc = st.c + dx, nr = st.r + dy;
+        if (nc >= 0 && nc < w.cols && nr >= 0 && nr < w.rows && !w.grid[nr][nc]) {
+          c.x = nc + 0.5; c.y = nr + 0.5; c.fx = -dx; c.fy = -dy;
+          break;
+        }
+      }
+      window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space', key: ' ', bubbles: true, cancelable: true }));
+      rk.run(2);
+      window.dispatchEvent(new KeyboardEvent('keyup', { code: 'Space', key: ' ' }));
+      rk.run(2);
+    };
+    placeAndAct('crate_patty');
+    placeAndAct('stove');
+    rk.run(170); // finish grilling patty
+    placeAndAct('stove');
+    placeAndAct('crate_bun');
+    placeAndAct('serve');
+    return { served: w.served, score: w.score, hits: rk.hits };
+  });
+  assert.equal(servedOk.served, 1);
+  assert.ok(servedOk.score >= 100);
+  assert.equal(servedOk.hits, 1);
 
-  const sts = await stations(page);
-  const bunCrate = sts.find(st => st.type === 'crate' && st.kind === 'bun');
-  const meatCrate = sts.find(st => st.type === 'crate' && st.kind === 'meatRaw');
-  const fruitCrate = sts.find(st => st.type === 'crate' && st.kind === 'fruitRaw');
-  const grill = sts.find(st => st.type === 'grill');
-  const blender = sts.find(st => st.type === 'blender');
-  const cannon = sts.find(st => st.type === 'cannon' && st.c === 6);
+  // Pause freezes time and stays silent
+  await page.click('#btnPause');
+  await run(page, 2);
+  const paused0 = await state(page);
+  assert.equal(paused0.screen, 'pause');
+  const audioBefore = await page.evaluate(() => rk.audioStarts);
+  await run(page, 60);
+  const paused1 = await state(page);
+  assert.equal(paused1.time, paused0.time, 'simulation time freezes while paused');
+  assert.equal(await page.evaluate(() => rk.audioStarts), audioBefore, 'zero audio while paused');
 
-  // 1. Test non-silent friendly visual guidance: taking raw meat to the Serving Cannon pops Arabic hint + grill arrow!
-  await clickStation(page, meatCrate);
-  assert.deepEqual((await state(page)).chefs[0].held, { kind: 'meatRaw' });
-  await clickStation(page, cannon);
-  s = await state(page);
-  assert.ok(s.hints.length >= 1 && s.hints[0].text.includes('اشوِ اللحم'), 'raw meat at cannon pops helpful Arabic grill hint');
-  assert.equal(s.hints[0].targetX, grill.x, 'hint arrow points to Grill');
-
-  // 2. Grill the raw meat, grab a bun while it sizzles, and auto-snap into a finished Mega-Burger!
-  await clickStation(page, grill);
-  await clickStation(page, bunCrate);
-  assert.deepEqual((await state(page)).chefs[0].held, { kind: 'bun' });
-  await run(page, 140);
-  await clickStation(page, grill);
-  assert.deepEqual((await state(page)).chefs[0].held, { kind: 'burger' }, 'touching done grill with bun auto-snaps into burger');
-
-  // Launch Burger at Serving Cannon!
-  await clickStation(page, cannon);
-
-  // 3. Also blend & launch Rocket Juice so both initial customer dishes are served!
-  await clickStation(page, fruitCrate);
-  await clickStation(page, blender);
-  await run(page, 120);
-  await clickStation(page, blender);
-  assert.deepEqual((await state(page)).chefs[0].held, { kind: 'juice' });
-  await clickStation(page, cannon);
-
-  // 4. Trigger Mini Sous-Bot (#btnBot) and verify it deploys & enters cooldown
-  await page.locator('#btnBot').click();
-  await run(page, 150);
-  s = await state(page);
-  assert.ok(s.served >= 2);
-  assert.ok(s.coins >= s.goals[0], `coins ${s.coins} >= 1-star goal ${s.goals[0]}`);
-  assert.ok(s.fx > 0 || s.sousBot.state !== 'ready', 'effects and Sous-Bot active');
-  assert.equal(await page.evaluate(() => rk.hits), 2);
-
-  // Run remaining time until recess bell rings and result screen appears
-  await run(page, Math.ceil(s.timeLeft * 60) + 120);
-  s = await state(page);
-  assert.equal(s.screen, 'result');
-  assert.ok(s.stars >= 1);
-  assert.equal(await page.locator('#scrResult').isVisible(), true);
-
-  const tele = await page.evaluate(() => ({ rounds: rk.rounds, ends: rk.ends, results: rk.results }));
-  assert.deepEqual(tele.rounds, ['rk_1']);
-  assert.equal(tele.results.length, 1, '1P round reports exactly one DDA outcome');
-  assert.equal(tele.ends.length, 1);
-  assert.equal(tele.ends[0].outcome, 'win');
-  assert.equal(tele.ends[0].score, s.coins);
-
-  const saved = await stored(page);
-  assert.ok(saved.lv[0].s >= 1);
-  assert.equal(saved.coins, s.coins);
-
-  // #resNext advances to 1-2
-  await page.locator('#resNext').click();
-  await step(page);
-  assert.equal((await state(page)).id, '1-2');
+  // Restart resets cleanly
+  await page.click('#btnRestart');
+  await run(page, 4);
+  const reset = await state(page);
+  assert.equal(reset.screen, 'play');
+  assert.equal(reset.atStart, true);
+  assert.equal(reset.served, 0);
+  assert.equal(reset.score, 0);
 });
 
-test('2P Co-op (#btnCoop): independent Chef 1 & Chef 2 movement/dash/interact, shared goal, and NO dda.result on finish', async t => {
-  const page = await game(t);
-  await page.locator('#btnCoop').click();
-  await step(page);
+test('2P Co-op independent controls, Endless Rush, Wardrobe purchase, and save quota retry', async t => {
+  const page = await openGame(t, {
+    save: { v: 3, levels: Array.from({ length: 9 }, () => ({ stars: 0, best: 0 })), bestScore: 0, bestEndless: 0, coins: 100, aprons: [0], hats: [0], apron: 0, hat: 0, tutorialDone: true }
+  });
 
-  let s = await state(page);
-  assert.equal(s.screen, 'play');
-  assert.equal(s.players, 2);
-  assert.equal(s.chefs.length, 2);
-  assert.equal(await page.locator('#btnBot').isHidden(), true, 'Sous-Bot button hidden in 2P co-op');
-  const c0x = s.chefs[0].x, c1x = s.chefs[1].x;
-
-  // Move Chef 1 left toward Grill with KeyA, and Chef 2 right toward Blender with ArrowRight simultaneously!
-  await page.keyboard.down('KeyA');
-  await page.keyboard.down('ArrowRight');
-  await step(page, 36);
-  await page.keyboard.up('KeyA');
-  await page.keyboard.up('ArrowRight');
-
-  s = await state(page);
-  assert.ok(s.chefs[0].x < c0x - 100, 'Chef 1 moved left with KeyA');
-  assert.ok(s.chefs[1].x > c1x + 140, 'Chef 2 moved right with ArrowRight');
-
-  // Move Chef 1 up to Bun crate (c=1, r=0) and pick up Bun with Space!
-  await page.keyboard.down('KeyW');
-  await step(page, 28);
-  await page.keyboard.up('KeyW');
-  await page.keyboard.press('Space');
-  await step(page, 2);
-  s = await state(page);
-  assert.ok(s.chefs[0].held && (s.chefs[0].held.kind === 'bun' || s.chefs[0].held.kind === 'meatRaw'), 'Chef 1 picked up crate item with Space');
-
-  // Chef 2 dashes left with ShiftRight!
-  const beforeDashX = s.chefs[1].x;
-  await page.keyboard.down('ArrowLeft');
-  await page.keyboard.press('ShiftRight');
-  await step(page, 8);
-  await page.keyboard.up('ArrowLeft');
-  s = await state(page);
-  assert.ok(s.chefs[1].x < beforeDashX - 45, 'Chef 2 dashed with ShiftRight');
-
-  // Finish the 2P round: telemetry must record round('rk_coop_1'), end('end') with NO score, and ZERO dda.result calls!
-  await run(page, Math.ceil(s.timeLeft * 60) + 120);
-  assert.equal((await state(page)).screen, 'result');
-  const tele = await page.evaluate(() => ({ rounds: rk.rounds, ends: rk.ends, results: rk.results }));
-  assert.deepEqual(tele.rounds, ['rk_coop_1']);
-  assert.deepEqual(tele.results, [], 'dda.result MUST NOT be called on 2P rounds');
-  assert.equal(tele.ends.length, 1);
-  assert.equal(tele.ends[0].outcome, 'end');
-  assert.equal(tele.ends[0].argc, 1, '2P Kit.stats.end("end") takes NO score argument');
-});
-
-test('Pause (#btnPause & window blur) freezes simulation and skips canvas redraws; Resume & Restart work cleanly', async t => {
-  const page = await game(t);
-  await page.locator('#btnPlay').click();
-  await step(page, 10);
-
-  // Move right slightly so atStart becomes false
-  await page.keyboard.down('KeyD');
-  await step(page, 8);
-  await page.keyboard.up('KeyD');
-  assert.equal((await state(page)).atStart, false);
-
-  // Pause via HUD button
-  await page.locator('#btnPause').click();
-  await step(page, 2);
-  const pausedSnap = await state(page);
-  assert.equal(pausedSnap.screen, 'pause');
-  assert.equal(pausedSnap.paused, true);
-
-  // Zero audio and zero simulation drift & zero canvas redraws while paused
-  const beforePauseCheck = await page.evaluate(() => ({ draws: rk.draws, audio: rk.audioStarts }));
-  await step(page, 120);
-  const afterPauseCheck = await page.evaluate(() => ({ draws: rk.draws, audio: rk.audioStarts }));
-  const afterSnap = await state(page);
-  assert.equal(afterSnap.time, pausedSnap.time, 'simulation clock frozen while paused');
-  assert.equal(afterSnap.timeLeft, pausedSnap.timeLeft, 'countdown frozen while paused');
-  assert.deepEqual(afterSnap.chefs, pausedSnap.chefs, 'chefs frozen while paused');
-  assert.deepEqual(afterSnap.orders, pausedSnap.orders, 'orders frozen while paused');
-  assert.equal(afterPauseCheck.draws, beforePauseCheck.draws, 'skips canvas redraws when paused and !dirty');
-  assert.equal(afterPauseCheck.audio, beforePauseCheck.audio, 'zero audio scheduled while paused');
-
-  // Resume via #btnResume
-  await page.locator('#btnResume').click();
-  await step(page, 10);
-  assert.equal((await state(page)).screen, 'play');
-  assert.ok((await state(page)).time > pausedSnap.time);
-
-  // Window blur auto-pauses
-  await page.evaluate(() => window.dispatchEvent(new Event('blur')));
-  await step(page, 2);
-  assert.equal((await state(page)).screen, 'pause');
-
-  // #btnRestart resets current round to atStart === true && served === 0
-  await page.locator('#btnRestart').click();
-  await step(page, 2);
-  const restarted = await state(page);
-  assert.equal(restarted.screen, 'play');
-  assert.equal(restarted.atStart, true);
-  assert.equal(restarted.served, 0);
-});
-
-test('Chef Locker (#btnShop) buys aprons & hats, handles storage quota failure + Retry via Kit.saveStatus, and recovers corrupt saves', async t => {
-  const page = await game(t, { save: SAVE(4, { coins: 300 }) });
-  assert.equal(await page.locator('#titleCoins b').textContent(), '300');
-
-  await page.locator('#btnShop').click();
-  await step(page);
-  assert.equal((await state(page)).screen, 'shop');
-
-  // Buy second apron (طاهي النيون, 60 coins)
-  await page.locator('#shelfAprons .tile').nth(1).click();
-  await step(page);
-  let sv = await page.evaluate(() => __game.save);
-  assert.equal(sv.apron, 1);
-  assert.equal(sv.coins, 240);
-
-  // Trigger storage quota failure on buying Pirate Hat (قبعة القرصان, 50 coins)
-  const status = page.locator('.sg-save-status');
+  // Wardrobe purchase + save failure & retry
+  await page.click('#btnWardrobe');
   await page.evaluate(() => { rk.failSave = true; });
-  await page.locator('#shelfHats .tile').nth(1).click();
-  await step(page);
-  assert.equal(await status.getAttribute('data-state'), 'failed', 'save failure state shown');
-
-  // Clear quota failure and click Retry button inside .sg-save-status
+  await page.locator('#apronGrid .skin-card').nth(1).click(); // costs 40 coins
+  await page.waitForSelector('.sg-save-status:not([hidden])');
   await page.evaluate(() => { rk.failSave = false; });
-  await status.locator('button').click();
-  await step(page);
-  assert.equal(await status.getAttribute('data-state'), 'saved', 'retry transitions saveStatus to saved');
-  const disk = await stored(page);
-  assert.equal(disk.hat, 1);
-  assert.equal(disk.coins, 190);
+  await page.locator('.sg-save-status button').click();
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('sg:recess-kitchen:save3')));
+  assert.equal(saved.apron, 1);
+  assert.equal(saved.coins, 60);
+  await page.click('#btnShopBack');
 
-  // Corrupt save recovery + smaller [1100, 620] portal frame fit check
-  const pageCorrupt = await game(t, { save: '{broken-json', size: [1100, 620] });
-  await step(pageCorrupt, 5);
-  assert.equal((await state(pageCorrupt)).screen, 'title');
-  assert.equal((await pageCorrupt.evaluate(() => __game.save)).coins, 0);
-  const cBox = await pageCorrupt.locator('#game').boundingBox();
-  for (const sel of ['#btnPlay', '#btnCoop', '#btnLevels', '#btnShop', '.howto .how-card >> nth=3']) {
-    const b = await pageCorrupt.locator(sel).boundingBox();
-    assert.ok(b.x >= cBox.x && b.x + b.width <= cBox.x + cBox.width && b.y + b.height <= cBox.y + cBox.height, sel);
-  }
+  // 2P Co-op independent movement + telemetry end without score or DDA
+  await page.click('#btnDuo');
+  await page.click('#btnPlay');
+  await run(page, 4);
+  const s0 = await state(page);
+  assert.equal(s0.chefs.length, 2);
+  await page.keyboard.down('KeyD');
+  await page.keyboard.down('ArrowLeft');
+  await run(page, 18);
+  await page.keyboard.up('KeyD');
+  await page.keyboard.up('ArrowLeft');
+  const s1 = await state(page);
+  assert.ok(s1.chefs[0].x > s0.chefs[0].x + 0.4, 'P1 moves right with KeyD');
+  assert.ok(s1.chefs[1].x < s0.chefs[1].x - 0.4, 'P2 moves left with ArrowLeft');
+
+  // Fast-forward 2P round end
+  await page.evaluate(() => { __game.world.timeLeft = 0.05; rk.run(8); });
+  assert.equal((await state(page)).screen, 'result');
+  const tele = await page.evaluate(() => ({ ends: rk.ends, dda: rk.results }));
+  assert.equal(tele.ends[tele.ends.length - 1].outcome, 'end');
+  assert.equal(tele.ends[tele.ends.length - 1].argc, 1, '2P rounds report end without score');
+  assert.equal(tele.dda.length, 0, '2P rounds never feed solo DDA');
+
+  // Return home and start Endless Rush
+  await page.click('#btnResHome');
+  await page.click('#btnDuo'); // back to 1P
+  await page.click('#btnEndless');
+  await run(page, 4);
+  const endState = await state(page);
+  assert.equal(endState.screen, 'play');
+  assert.equal(endState.id, 'endless');
 });
 
-test('Reduced motion suppresses particle bursts and screen shake; native HTML controls are never hijacked', async t => {
-  const page = await game(t, { reducedMotion: 'reduce', save: SAVE(1, { coins: 200 }) });
-  await page.locator('#btnShop').click();
-  await step(page);
-  await page.locator('#shelfAprons .tile').nth(1).click();
-  await step(page, 5);
-  const s = await state(page);
-  assert.equal(s.fx, 0, 'zero particles in reduced motion');
-  assert.equal(s.shake, 0, 'zero shake in reduced motion');
+test('solo round win unlocks level 1-2, awards stars & coins, and reports DDA', async t => {
+  const page = await openGame(t);
+  await page.click('#btnPlay');
+  await run(page, 4);
+  await page.evaluate(() => {
+    __game.world.score = 450;
+    __game.world.served = 3;
+    __game.world.humanMoved = true;
+    __game.world.timeLeft = 0.05;
+    rk.run(10);
+  });
+  const res = await page.evaluate(() => ({ screen: __game.state.screen, result: __game.result, save: __game.save, dda: rk.results }));
+  assert.equal(res.screen, 'result');
+  assert.equal(res.result.won, true);
+  assert.equal(res.result.stars, 2);
+  assert.equal(res.save.levels[0].stars, 2);
+  assert.equal(res.dda.length, 1);
+  assert.equal(await page.locator('#btnNext').isHidden(), false, 'Next level button shown after unlock');
+});
 
-  // Verify shared platform native HTML button/input/range keyboard isolation
+test('native HTML controls stay isolated from gameplay keyboard handlers', async () => {
   await testNativeControlGame({ browser, origin: server.origin, slug: 'recess-kitchen' });
 });

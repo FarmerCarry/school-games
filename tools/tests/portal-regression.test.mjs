@@ -35,7 +35,7 @@ async function openGame(page, slug) {
   await page.goto(`${origin}${base}#/play/${slug}`);
   await page.waitForFunction(s => {
     const frame = document.querySelector('#stage iframe');
-    return frame?.contentWindow?.Kit && frame.contentDocument.readyState === 'complete' && frame.src.includes(`/games/${s}/`);
+    return frame && !frame.hasAttribute('inert') && frame.contentWindow?.Kit && frame.contentDocument.readyState === 'complete' && frame.src.includes(`/games/${s}/`);
   }, slug);
   return page.frames().find(frame => frame.url().endsWith(`/games/${slug}/index.html`));
 }

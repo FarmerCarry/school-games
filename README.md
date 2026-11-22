@@ -3,7 +3,7 @@
 A light, ad-free games website **in Arabic** for children aged 5–11: a small Poki-style portal
 with original browser games, all written from scratch for this site. The site and all of its
 games are in Arabic, laid out right-to-left. The games scale from a 5-year-old who has never
-held a mouse to an 11-year-old expert (23 of the 52 games—including Bubble Bop, Road Hopper,
+held a mouse to an 11-year-old expert (27 of the 52 games—including Bubble Bop, Road Hopper,
 Dino 3D, Beat Dash, Math Gates, Word Garden, Shortcut Factory, Robo Swarm and Balloon Blast—adapt
 their difficulty dynamically via `Kit.dda` to how children play on each PC), and none of them
 plays background music.
@@ -46,7 +46,7 @@ nothing. Details, the exact fields and how to turn it off: [`docs/TELEMETRY.md`]
 | ضربة الطلاء | Splat Strike (3D paint-blaster arena vs bots) | 1 | تصويب، تحدي الروبوتات |
 | مقلاع الألوان | Splat Catapult (slingshot paint forts + 2-player duel) | 1-2 | تصويب، ألغاز، لاعبان |
 | عدّاء السكة | Rail Rush | 1 | جري |
-| الديناصور ثلاثي الأبعاد | Dino 3D (voxel dinosaur journey) | 1 | جري، أركيد |
+| الديناصور ثلاثي الأبعاد | Dino 3D (smooth low-poly 3D dinosaur journey) | 1 | جري، أركيد |
 | بوابات الحساب | Math Gates (three-lane crowd runner for practising math) | 1 | جري، ألغاز |
 | منحدر النيون | Neon Slope | 1 | جري، أركيد |
 | نفق السرعة | Tunnel Blitz | 1 | جري، أركيد |
@@ -54,31 +54,31 @@ nothing. Details, the exact fields and how to turn it off: [`docs/TELEMETRY.md`]
 | الخطّاف الطائر | Swing Hook | 1 | أركيد |
 | جنون الدراجات | Moto Madness | 1 | سباقات |
 | ملك الانزلاق | Drift King | 1 | سباقات |
-| سباق المكاتب | Desk Karts (top-down school desk micro-kart racing) | 1-2 | سباقات، لاعبان، أركيد |
-| النار والجليد | Fire & Ice | 1-2 | لاعبان، ألغاز |
+| سباق المكاتب | Desk Karts (3D Micro Machines-style school-desk toy kart racing) | 1-2 | سباقات، لاعبان، أركيد |
+| النار والجليد | Fire & Ice (2.5D Three.js temple co-op puzzle platformer across 15 levels) | 1-2 | لاعبان، ألغاز |
 | هجوم الروبوتات | Robo Swarm | 1-2 | تصويب، تحدي الروبوتات، لاعبان |
 | معركة البالونات | Balloon Blast | 1-2 | تحدي الروبوتات، لاعبان |
 | دبابات الألوان | Paint Tanks | 1-3 | لاعبان، تحدي الروبوتات |
 | مصارعة السومو | Sumo Bonk | 1-2 | لاعبان، رياضة |
-| هوكي الهواء | Air Hockey | 1-2 | لاعبان، رياضة |
+| هوكي الهواء | Air Hockey (3D neon table) | 1-2 | لاعبان، رياضة |
 | سلة الرؤوس الكبيرة | Hoop Heads | 1-2 | رياضة، لاعبان |
 | كرة القدم المجنونة | Wacky Soccer | 1-2 | رياضة، لاعبان |
 | حفلة البلياردو | Pool Party | 1-2 | رياضة، لاعبان |
 | ضربة إلى الفضاء | Skybound Golf | 1 | رياضة، أركيد |
 | سوق الحيوانات | Critter Mart | 1 | بناء وإدارة |
 | إمبراطورية البيتزا | Pizza Empire | 1 | بناء وإدارة |
-| مطبخ الفسحة | Recess Kitchen (co-op school canteen rush) | 1-2 | لاعبان، أركيد، بناء وإدارة |
-| سباق البيض | Egg Rush (sneak and freeze in the farmyard) | 1-2 | لاعبان، أركيد |
+| مطبخ الفسحة | Recess Kitchen (3D isometric co-op school canteen rush) | 1-2 | لاعبان، أركيد، بناء وإدارة |
+| سباق البيض | Egg Rush (3D school sports-day egg-and-spoon race) | 1-2 | لاعبان، جري، أركيد |
 | بحيرة الحظ | Lucky Lake (fishing) | 1-2 | لاعبان، أركيد |
 | عالم المكعبات | Block World | 1 | بناء وإدارة، أركيد |
 | حرّاس الكعكة | Cake Guards (tower defense) | 1 | استراتيجية |
-| قلعة الألعاب | Toy Castle Clash (tug-of-war toy strategy + 2-player battle) | 1-2 | استراتيجية، لاعبان، تحدي الروبوتات |
+| قلعة الألعاب | Toy Castle (3D tabletop toy-brick castle tug-of-war + 2-player battle) | 1-2 | استراتيجية، لاعبان، تحدي الروبوتات |
 | انفجار المكعبات | Block Burst | 1 | ألغاز |
 | دمج 2048 | 2048 | 1 | ألغاز |
-| سلّة الفواكه | Juicy Drop (one-button physics fruit-merge jar) | 1 | ألغاز، أركيد، تحديات |
-| جزيرة الفوضى | Chaos Island (survive the island's silly disasters) | 1-2 | لاعبان، أركيد |
+| سلّة الفواكه | Juicy Drop (2.5D 3D-fruit merge jar) | 1 | ألغاز، أركيد، تحديات |
+| جزيرة الفوضى | Chaos Island (3D tropical island disaster survival) | 1-2 | لاعبان، أركيد |
 | حبل الحلوى | Munch Rope | 1 | ألغاز |
-| القلم السحري | Magic Crayon (draw physics bridges and ramps in a notebook) | 1 | ألغاز، أركيد |
+| القلم السحري | Magic Crayon (2.5D 3D toy diorama: draw crayon bridges, boost & bounce tracks for a monster truck) | 1 | ألغاز، أركيد |
 | اندفاع المتاهة | Maze Dash | 1 | أركيد |
 | عبور الطريق | Road Hopper | 1 | أركيد |
 | المراحل الماكرة | Sneaky Levels | 1 | أركيد |
@@ -94,16 +94,15 @@ The original arcade games save best scores and unlocks in the browser, and have 
 
 **فقاعات بوب (Bubble Bop)** is the «ابدأ من هنا» starter game for a 6-year-old who has never used a mouse or keyboard. It is a real arcade game with no words to read, no way to lose and no timer in its levels. Bop, a round glowing friend, floats with the mouse pointer. Eleven worlds teach one input each through play. The first five: touch bubbles with Bop to pop them (no click needed), click on or near balloons, press the long Space bar so a frog catches fireflies, move a basket under falling fruit with ← → (or A/D), and a party world that mixes these four. The next six: drag baby turtles to the pool of their colour, double-click sleeping clams to find pearls, press and hold the button (or Space) to blow a bubble until it fills a ring, steer a submarine to starfish with all four arrows (or WASD), press the letter a balloon carries, and a grand party world that mixes these five. The letter world draws an on-screen keyboard like the school's own (Latin letter top-left, Arabic letter bottom-right, F and J bumps); keys are found by their place, so either input language works, and the key to press always glows. It starts with F and J, then the home row and the rows above and below. Each world has three short levels (one to three stars) and a 60-second party round with combos, gold targets and a best score; the map shows worlds 1–5 and 6–11 on two pages turned with big arrows. Hit areas are bigger than the pictures, targets drift towards Bop, mashing and stray keys never cost anything, and an on-screen mouse, Space bar, arrow keys and keyboard light up with the real ones. A wordless hand shows the move after a few idle seconds and repeats while the child waits. Difficulty follows the child (Kit.dda): a 6–7-year-old starts with huge, slow targets, a generous double-click gap and hold window and turtles that can also be carried with two clicks, a 10–11-year-old with a brisk challenge, and each world adapts to how the last level went. Stars (up to 99) unlock colours and hats for Bop. Two optional picture cards show how to hold the mouse and where the keys are. P or Esc pauses. Progress stays in this browser, and saves from the five-world version keep all their stars.
 
-**الديناصور ثلاثي الأبعاد (Dino 3D)** is a voxel journey runner: a baby dinosaur runs home to its
-family through five worlds (desert, jungle, snowy mountains, volcano island and a starry night),
-three levels each, and each world brings one new obstacle. Space or ↑ jumps (hold for a higher
-jump), ↓ ducks, a click also jumps, and → or Shift is a roar dash once fruit has filled its meter:
-it smashes crates and skims over goo. A bump is a comic tumble that costs a heart; levels give
-one to three stars for finishing, collecting eggs and keeping hearts, and eggs unlock colours and
-hats. Endless mode is open from the start; its small «رمز» button takes a four-digit course code
-so a class can practise the same obstacle layout on the same game version. P/Esc pauses. Its
-original geometry and synthesized sounds use the bundled Three.js library and work offline,
-including the downloaded Windows folder.
+**الديناصور ثلاثي الأبعاد (Dino 3D)** is a smooth low-poly 3D journey runner: a cute little dinosaur
+runs home to reunite with its dino family across five distinct worlds (Golden Desert, Lush Jungle,
+Snowy Peaks, Volcano Valley and the Royal Family Nest), three stages each, plus an Endless Run mode
+with optional four-digit course codes. Space/↑/W or click jumps (with coyote time, jump buffering,
+variable hop height and bouncy mushroom double-bounces), ↓/S ducks under swooping pterosaurs and low
+arches (or fast-falls in midair), and →/D/Shift unleashes a glowing sonic-ring Roar that smashes
+crates, cracked boulders and obstacles into confetti. Levels award 1–3 stars and eggs unlock 6
+smooth dino colours and 6 cute 3D hats. P/Esc pauses, `Kit.dda` adapts obstacle cadence, and
+software WebGL automatically drops MSAA, scales to 0.75× and fence-paces menus.
 
 **عدّاء المفاتيح (Key Runner)** teaches where every key is. A little runner hops across giant
 keycap stones printed like the school's Dell Arabic keyboard (Latin letter top-left, Arabic letter
@@ -114,12 +113,12 @@ child never falls: the runner waits at the edge. Keys are read by their place, s
 either input language. Two players race on split lanes, one on the left half of the keyboard and
 one on the right. Esc pauses, because P is a letter here.
 
-**سباق البيض (Egg Rush)** is a top-down sneak-and-freeze game. A farm kid (arrows or WASD) carries
-eggs from sleeping guards' nests to the home nest, where each hatches into a baby that joins a
-parade behind the kid. A guard that stirs shows «؟» first; when it looks, standing still is safe
-and moving in its cone means a comic bump and the egg rolls back. Five farms (hens, ducks,
-penguins, ostriches and a dino mum) with four yards each add water, ice, cover, patrols and golden
-eggs. Two players race on the same keyboard.
+**سباق البيض (Egg Rush)** is a 3D school sports-day egg-and-spoon race built with Three.js. Chunky
+cartoon runners sprint down colourful tracks holding a spoon with a wobbling egg: lean with ← → / A D
+to balance the egg, hold ↑ / W to run faster (which makes it wobble more), and jump over hurdles,
+puddles, sprinklers, rolling balls and crossing chickens with Space. Dropping the egg pops it into a
+comic splat and respawns you at the last checkpoint. Nine tracks across three worlds (schoolyard, farm
+and beach/snow), golden eggs, runner and egg skins, `Kit.dda` tuning, and 2-player local racing.
 
 **بحيرة الحظ (Lucky Lake)** is a fishing game where the fish are visible under the water. Aim with
 the mouse (or the arrows) and click or press Space to cast, wait for the «!» bite, then hold to
@@ -127,16 +126,7 @@ keep the fish inside the reel bar's green zone. Five places from the village pon
 lagoon each have three picture goals (stars); there are 33 species and funny junk, a fish book and
 rod upgrades. Two players fish against the clock from a dock and a boat (Space and Enter).
 
-**جزيرة الفوضى (Chaos Island)** is a disaster-survival party platformer on one island in side view.
-Each round a picture card announces one silly disaster and the move that beats it: climb above a
-jelly flood, step away from the shadows of marshmallow meteors, walk against the wind or go inside
-the house, jump rolling snowballs on ice, keep off cracking platforms in a quake, leave the lit
-column under a thunder cloud, dodge beach balls, and hide indoors from a little tornado. A hit is a
-cartoon bonk that costs one of three hearts; at none you float as a little ghost until the next
-round. Cute computer islanders play the same rules, and a podium ends the match. Four islands
-(beach, snow, candy, sky) give one to three stars by rounds survived, and coins buy hats, colours
-and capes. Arrows or WASD move and jump, ↓/S drops through a platform; two players share the
-island on WASD and the arrows.
+**جزيرة الفوضى (Chaos Island)** is a 3D tropical-island disaster-survival party game built with Three.js. Viewed from an angled elevated 3D camera that frames the whole floating island for 1–2 players at once, each round announces one of six telegraphed disasters with a big picture banner: meteor showers (pulsing red target rings), rising lava floods (climb crates, rope bridge, bamboo hut or lighthouse), a swirling tornado (duck into the central stone shelter or run opposite), lightning storms, giant rolling coconuts, and earthquake magma cracks. Platforming includes coyote time, jump buffering, drop-through bridges, a bouncy tiki drum, and playful bumping. Survive a 5-round match for 1–3 stars and coins (standing still never earns stars), test your stamina in endless survival mode, and unlock character colours and 3D hats. P1 moves with WASD + W/Space jump, P2 with the arrow keys (in solo play either arrows or WASD + Space work), and `Kit.dda` adapts solo disaster intensity.
 
 **حرّاس الكعكة (Cake Guards)** is a tower defense game played with the mouse. Jelly blobs march
 along candy roads towards a birthday cake; click a round pad beside the road to build a popcorn
@@ -164,15 +154,13 @@ computer matches. The final two puzzles ask you to pot a ball and leave the cue-
 inside a marked circle: practise backspin to draw it back, or topspin to follow through.
 Existing puzzle stars and unlocks carry over, and the galaxy table still unlocks at 30 stars.
 
-**ضربة إلى الفضاء (Skybound Golf)** is a one-button golf launcher. Press Space or click when the
-backswing reaches the gold zone, then use the same button in flight: in the air it fires a rocket,
-just before landing it makes a super bounce (also across water). Collect coins, pop balloons, fly
-through boost rings and roll into a hole for a bonus. Coins buy eight upgrades (power, bounce,
-rockets, magnet, rocket thrust, a wider gold zone, skipping over water and extra treasure coins)
-and ball styles; the shop shows all eight, and the result card offers the four cheapest still to
-buy. Longer shots unlock five worlds from the meadow to the moon, and rockets can carry the ball to
-the edge of space. Progress saves locally; saves from the earlier version keep
-their coins, best distance and balls, and get their upgrade coins back.
+**ضربة إلى الفضاء (Skybound Golf)** is a 3D one-button arcade golf launcher in three.js. Press
+Space or click once to lock the launch angle on the glowing arc, press again to hit the golden
+power sweet-spot, then hold in mid-air to fire the rocket boost (or tap near the ground / press ↓
+for a super-bounce dive). Rocket seamlessly from the sunny tee meadow through fluffy clouds,
+hot-air balloons, biplanes, blimps, stratosphere aurora, and outer space filled with bouncy UFOs,
+satellites, asteroids, ringed planets, and Moon/Mars milestones. Earn coins for Club Power, Rocket
+Fuel, Bounciness, and Coin Magnet/Lucky Boosts upgrades plus five unlockable 3D golf balls.
 
 **أصابع البرق (Lightning Fingers)** is a typing game for children. Pick «عربي» or «English», then type
 the word on a cloud before it reaches the little town: the first letter picks the cloud, the next
@@ -202,17 +190,15 @@ right key lights up after a short wait (at once after two wrong tries). Five wor
 and two-word phrases; for the youngest tiers hamza forms, ة/ه and ى/ي count as the same letter, and
 the B key's «لا» counts. Seeds buy plants and decorations for the garden screen.
 
-**مصنع الاختصارات (Shortcut Factory)** teaches the shortcuts children use at school. Toys ride
-conveyor belts and order cards ask for them: pick toys with a click, Shift+click, Tab, the arrows or
-Ctrl+A, then Ctrl+C / Ctrl+V on the copy machine, Ctrl+X to move, Delete to recycle, Ctrl+Z / Ctrl+Y
-to undo and redo (also the mess of «بُرغي», a cheeky gremlin), Enter to ship a box and Ctrl+S to
-stamp the day. Each new shortcut gets a short demo with big keycaps, shown just when it is first
-needed (Ctrl+V right after the first Ctrl+C), and an Arabic voice (when the PC has one) says what to
-press for children who cannot read yet. The first two worlds are calm, for 5 to 7 year olds: the
-belts stand still, there is no clock, a slow day costs no star, the copy workshop asks for one kind
-of toy at a time with one box on the floor, and Ctrl+S waits for its last day. The other three
-worlds end with timed rushes. Shortcuts work by key position, so Ctrl+C works with Arabic input;
-browser keys such as Ctrl+W are never used.
+**مصنع الاختصارات (Shortcut Factory)** is a 3D toy factory in Three.js that teaches real computer
+keyboard shortcuts. Toys ride a conveyor belt beneath a friendly robot arm toward delivery boxes with
+picture orders: click or use arrows to select a toy, then press real `Ctrl+C` (copy to hologram
+clipboard), `Ctrl+V` (paste onto the belt), `Ctrl+X` (cut), `Delete` (recycle broken toys),
+`Ctrl+Z` / `Ctrl+Y` (undo/redo and foil the cheeky gremlin), `Ctrl+A` (select all), and `Ctrl+S`
+(seal a finished box). Twelve levels across three factory halls introduce one shortcut at a time with
+a glowing on-screen keyboard and ghost hand hint, plus an endless Rush mode, robot-arm skins, and
+`Kit.dda` pacing. Shortcuts work by physical key position (Arabic/English layouts) and never use
+browser-reserved keys such as Ctrl+W.
 
 **ابحث وكبّر (Seek & Zoom)** is a hidden-object game with an always-visible movable magnifying glass
 over a fixed full-screen world. Five busy scenes drawn in code (park, market, beach, toy room, space
@@ -251,40 +237,48 @@ balloons (three-way split, heavy drop, bouncy rubber and rainbow splash). Four w
 scale trajectory guide length and fort sturdiness to the PC (`Kit.dda`), and two classmates can take
 turns in a hotseat fort duel on the same PC. Coins buy balloon skins and slingshot frames.
 
-**مطبخ الفسحة (Recess Kitchen)** is a cooperative school-canteen rush for one or two players.
-Hungry classmates line up at the window with picture bubbles (cheese sandwiches, toasted subs,
-fresh juice and fruit cups): grab ingredients, chop, toast or blend them without letting the toaster
-smoke, and serve orders in streak combos before the recess bell rings. Twelve levels across four
-school canteens can be played solo (arrows, WASD or click-to-walk) or by two chefs sharing one
-keyboard (WASD + Space/E and Arrows + Enter/Shift). Coins unlock aprons and funny chef hats.
+**مطبخ الفسحة (Recess Kitchen)** is a sunlit 3D isometric cooperative school-canteen rush for one or
+two players. Picture order tickets line the top bar (burgers, cheeseburgers, fresh salads, crispy
+fries, pizza slices and fruit juice): grab ingredients from crates, chop on animated cutting boards,
+sizzle on stoves with a forgiving burn-warning grace window, blend fresh fruit juice, assemble onto
+plates and serve through the conveyor window in combo streaks. Nine handcrafted kitchens across three
+canteens plus Endless Rush can be played solo (arrows/WASD + Space/E + Shift/Q dash, paced by
+`Kit.dda`) or by two chefs sharing one keyboard (WASD + Space/E + Q and Arrows + Enter/. + /). Stars
+and coins unlock colorful aprons and chef hats.
 
-**سباق المكاتب (Desk Karts)** is a top-down micro-kart racer across giant school desks. Race toy
-eraser and ruler karts around pencil barriers, ruler ramps, glue puddles, bouncy erasers and turbo
-tape strips across eight 3-lap tracks in four classrooms. One player races three bots (arrows, WASD
-or holding the mouse button to steer), or two players share the whole-track camera on WASD + Q and
-Arrows + Enter with rubber-banded bots and playful item pickups. Coins unlock kart paints and toppers.
+**سباق المكاتب (Desk Karts)** is a sunlit 3D three.js Micro Machines-style toy kart racer across giant
+school desks. Race chunky toy karts with spinning wheels, bobbing helmets, Blue/Gold drift mini-turbos
+and exhaust flames around yellow pencil and wooden ruler barriers, stacked textbook jump ramps, bouncy
+pink erasers, glossy ink-spill puddles and golden boost pads across six 3-lap circuits in two cups
+(Math Desk, Art Table, Science Bench, Library Stack, Geometry Loop, Principal's Mega Desk). Solo play
+uses an elevated overhead chase camera (`↑↓←→` / `WASD` + `Space`/`Shift` drift & items) against
+`Kit.dda`-tuned CPU racers; local 2P shares one keyboard (`WASD` + `Space` vs Arrows + `Enter`/`/`)
+with a smooth framing zoom camera and automatic catch-up warp. Stars and coins unlock 4 kart bodies
+and 6 vibrant paints.
 
-**قلعة الألعاب (Toy Castle Clash)** is a tug-of-war toy strategy game. Two cardboard castles face
-each other across a playroom rug while wind-up energy ticks up: summon rubber ducks, shield bears,
-paper planes, spring frogs and toy trains with 1–5 or clicks, pop floating star bubbles for bonus
-energy, upgrade your wind-up key (`6` or `U`) and fire the castle's confetti cannon (`Space`) to push
-back crowds. Twelve campaign levels across four playrooms adapt with `Kit.dda`, and two players can
-duel symmetrically on one keyboard (`1–5` or `Q–T`, `F`, `Space` vs `6–0` or `U–[`, `H`, `Enter`).
+**قلعة الألعاب (Toy Castle)** is a 3D three.js tabletop toy-diorama tug-of-war battle game. Two
+colourful plastic-brick castles face each other across Playroom Carpet, Block Castle, and Space Desk
+arenas while energy refills automatically: summon Foam Knights, Toy Blasters, Wind-Up Dino Tanks and
+towering Mega Mechs with `1–4` (or `Q/W/E/R` or clicks), and aim each castle's top-mounted Cork Cannon
+with the mouse or `A`/`D` + `Space` to bonk rival squads and pop floating parachute energy crates.
+Nine short campaign battles across three worlds feature crowned bosses, 1–3 stars, coins, unlockable
+castle paints & roof toppers and `Kit.dda` scaling, plus symmetric two-player local battles on one
+keyboard (`1–4`/`Q–R`, `A`/`D`, `S`/`Space` vs `7–0`/`U–P`, `←`/`→`, `↓`/`Enter`).
 
-**القلم السحري (Magic Crayon)** is a freehand physics puzzle in a school notebook. Draw ramps,
-bridges, hooks and seesaws with the mouse (or arrows + Shift) using washable crayon wax, then press
-Space so «كرّوم», a smiling marble, rolls across gaps, trampoline erasers, desk-fan gusts and purple
-slime puddles into the golden star cup. Undo (`Z` or right-click) and instant retry (`R`, keeping a
-faint ghost trace of your last try) encourage experimenting across 20 levels in four notebooks, and
-stars reward thrifty ink use.
+**القلم السحري (Magic Crayon)** is a 2.5D three.js physics puzzle set inside sunny toy dioramas.
+Draw chunky 3D waxy crayon tubes with the mouse — Bridge (`1`), Turbo Boost (`2`), and Spring
+Bounce (`3`) — then press `Space` to launch a smiling 3D toy monster truck over gaps, ramps, crates,
+bumpers and hazards to grab three spinning stars and reach the waving checkered flag. Undo (`Z` or
+right-click) and instant restart (`R`) support experimenting across 21 handcrafted levels in three
+themed worlds (Notebook Desk, Playroom Blocks and low-gravity Space Poster), with adaptive ink and
+gravity assist (`Kit.dda`) and six unlockable 3D monster truck skins.
 
-**سلّة الفواكه (Juicy Drop)** is a one-button Suika-style physics merge puzzle. Move the little
-helper cloud with the mouse or ← → and click or press Space to drop smiling berries, plums, oranges
-and melons into a glass jar: matching fruits pop together into the next bigger fruit up to the
-golden watermelon, and quick chains charge a jar shake (`S` or `↓`) that nudges stuck pieces
-together. Twelve stage goals across three worlds (including ice cubes melted by nearby merges and
-floating bubbles) sit alongside an open Endless high-score jar, with jar themes and fruit faces in
-the shop.
+**سلّة الفواكه (Juicy Drop)** is a 2.5D Suika-style physics merge puzzle rendered in Three.js inside a
+sunny kitchen scene. Move the cute smiling cloud with the mouse or ← → and click or press Space to
+drop glossy 3D fruits with faces into a glass jar: matching fruits pop together into the next bigger
+fruit all the way to the giant watermelon, while merge combos earn lightning charges (`S`) that pop
+the smallest fruits to free space. Includes next-fruit preview, fruit-wheel guide, unlockable jar
+skins, best-score celebration, and `Kit.dda` pacing.
 
 ## Putting it online (GitHub Pages, free)
 

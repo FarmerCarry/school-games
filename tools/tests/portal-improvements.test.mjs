@@ -66,7 +66,7 @@ test('verified update waits through real game menus, play, pause and search focu
   assert.equal(await page.evaluate(() => SGUpdateSafe()), false, 'title/menu still owns the iframe session');
   assert.equal(await page.locator('#offlineUpdate').count(), 0, 'manual update banner is gone');
   await clickControl(frame, '#btnPlay');
-  await frame.waitForFunction(() => !__game.state().demo && ['countdown', 'play', 'goal'].includes(__game.state().scene));
+  await frame.waitForFunction(() => !__game.state().demo && __game.state().screen === 'play');
   assert.equal(await page.evaluate(() => window.portalLiveSentinel), 'same-portal-doc');
   await frame.locator('#pauseBtn').click();
   await frame.waitForFunction(() => __game.state().paused);
@@ -266,12 +266,12 @@ test('leaving portal fullscreen pauses the still-visible game', async t => {
     return iframe.clientWidth === innerWidth && iframe.clientHeight === innerHeight && iframe.contentWindow.innerWidth === innerWidth && iframe.contentWindow.innerHeight === innerHeight;
   });
   await clickControl(frame, '#btnPlay');
-  await frame.waitForFunction(() => !window.__game.state().demo && ['countdown', 'play', 'goal'].includes(window.__game.state().scene));
+  await frame.waitForFunction(() => !window.__game.state().demo && window.__game.state().screen === 'play');
   await page.evaluate(() => document.exitFullscreen());
   await frame.waitForFunction(() => window.__game.state().paused);
-  const position = await frame.evaluate(() => window.__game.state().pucks);
-  await frame.evaluate(() => window.__game.sim(2));
-  assert.deepEqual(await frame.evaluate(() => window.__game.state().pucks), position);
+  const frozen = await frame.evaluate(() => ({ pucks: window.__game.state().pucks, t: window.__game.state().t }));
+  await page.waitForTimeout(250);
+  assert.deepEqual(await frame.evaluate(() => ({ pucks: window.__game.state().pucks, t: window.__game.state().t })), frozen);
 });
 
 test('portal metadata preserves board controls at classroom laptop height and numeric ranges read left-to-right', async t => {

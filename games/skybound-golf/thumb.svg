@@ -1,71 +1,81 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400">
-<defs>
-<linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
-<stop offset="0" stop-color="#090724"/>
-<stop offset="0.52" stop-color="#281b6e"/>
-<stop offset="1" stop-color="#2b95f0"/>
-</linearGradient>
-<linearGradient id="flame" x1="0" y1="1" x2="1" y2="0">
-<stop offset="0" stop-color="#ff1744"/>
-<stop offset="0.55" stop-color="#ff9100"/>
-<stop offset="1" stop-color="#fff59d"/>
-</linearGradient>
-<radialGradient id="ball" cx="0.35" cy="0.3" r="0.7">
-<stop offset="0" stop-color="#ffffff"/>
-<stop offset="0.65" stop-color="#eef4ff"/>
-<stop offset="1" stop-color="#b8c6e6"/>
-</radialGradient>
-</defs>
-<rect width="400" height="400" rx="44" fill="url(#sky)"/>
-<!-- Stars -->
-<g fill="#fff9db">
-<circle cx="48" cy="46" r="2.5"/><circle cx="116" cy="34" r="2"/><circle cx="196" cy="52" r="3"/>
-<circle cx="272" cy="32" r="2"/><circle cx="348" cy="58" r="2.8"/><circle cx="72" cy="118" r="2"/>
-<circle cx="338" cy="138" r="2.2"/><circle cx="154" cy="96" r="1.8"/>
-</g>
-<!-- Ringed Space Planet -->
-<g transform="translate(88,88) rotate(-16)">
-<ellipse cx="0" cy="0" rx="52" ry="13" fill="none" stroke="#ffd9a0" stroke-width="7"/>
-<circle cx="0" cy="0" r="28" fill="#ff8f4d" stroke="#1b1640" stroke-width="5"/>
-<path d="M-52,0 A52,13 0 0,0 52,0" fill="none" stroke="#ffd9a0" stroke-width="7"/>
-</g>
-<!-- Alien UFO Drone -->
-<g transform="translate(310,118) rotate(11)">
-<path d="M-24,-4 A24,22 0 0,1 24,-4 Z" fill="#b3e5fc" stroke="#1b1640" stroke-width="4.5"/>
-<circle cx="0" cy="-12" r="7" fill="#69f0ae"/>
-<ellipse cx="0" cy="2" rx="44" ry="15" fill="#ab47bc" stroke="#1b1640" stroke-width="5"/>
-<circle cx="-22" cy="3" r="5" fill="#76ff03" stroke="#1b1640" stroke-width="2.5"/>
-<circle cx="0" cy="5" r="5" fill="#ffd600" stroke="#1b1640" stroke-width="2.5"/>
-<circle cx="22" cy="3" r="5" fill="#00e5ff" stroke="#1b1640" stroke-width="2.5"/>
-</g>
-<!-- Green Hills & Launch Ground -->
-<path d="M0,318 Q105,278 215,312 T400,296 L400,400 L0,400 Z" fill="#359e56" stroke="#1b1640" stroke-width="5"/>
-<path d="M0,342 Q125,314 260,346 T400,334 L400,400 L0,400 Z" fill="#5ad949" stroke="#1b1640" stroke-width="5"/>
-<!-- Exploding TNT Crate -->
-<g transform="translate(88,284) rotate(-12)">
-<polygon points="0,-46 14,-18 44,-26 22,-2 42,22 12,18 0,44 -14,18 -42,24 -22,-2 -40,-26 -12,-18" fill="#ffd600" stroke="#1b1640" stroke-width="4"/>
-<rect x="-26" y="-24" width="52" height="48" rx="8" fill="#e53935" stroke="#1b1640" stroke-width="4.5"/>
-<rect x="-26" y="-9" width="52" height="18" fill="#fff3cd" stroke="#1b1640" stroke-width="3.5"/>
-<text x="0" y="5" text-anchor="middle" direction="rtl" font-family="Fredoka, sans-serif" font-weight="700" font-size="13" fill="#1b1640">ديناميت</text>
-</g>
-<!-- Turbo Booster Ring -->
-<g transform="translate(206,192) rotate(32)">
-<ellipse cx="0" cy="0" rx="22" ry="54" fill="none" stroke="#1b1640" stroke-width="15"/>
-<ellipse cx="0" cy="0" rx="22" ry="54" fill="none" stroke="#00e5ff" stroke-width="8"/>
-</g>
-<!-- Rocket Flame Trail + Fiery Golf Ball -->
-<path d="M88,284 Q158,236 246,154 L222,130 Q144,218 88,284 Z" fill="url(#flame)" stroke="#1b1640" stroke-width="5" stroke-linejoin="round"/>
-<g transform="translate(248,144)">
-<circle cx="0" cy="0" r="42" fill="url(#ball)" stroke="#1b1640" stroke-width="6"/>
-<path d="M-36,-18 H36 M-36,18 H36" stroke="#ff3d57" stroke-width="9" stroke-linecap="round"/>
-<circle cx="-12" cy="-14" r="9" fill="#ffffff" opacity="0.8"/>
-<circle cx="10" cy="-2" r="10" fill="#00e5ff" stroke="#1b1640" stroke-width="4"/>
-</g>
-<!-- Gold Coins -->
-<g stroke="#1b1640" stroke-width="4" fill="#ffd000">
-<circle cx="152" cy="148" r="12"/><circle cx="326" cy="212" r="13"/>
-</g>
-<!-- Arabic RTL Title Banner -->
-<rect x="24" y="324" width="352" height="58" rx="22" fill="#25175c" stroke="#1b1640" stroke-width="5"/>
-<text x="200" y="363" text-anchor="middle" direction="rtl" font-family="Fredoka, 'Noto Sans Arabic', sans-serif" font-weight="700" font-size="36" fill="#ffd000" stroke="#1b1640" stroke-width="7" paint-order="stroke fill">ضربة إلى الفضاء</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0b1038"/>
+      <stop offset="38%" stop-color="#2c44a8"/>
+      <stop offset="72%" stop-color="#3eb8ff"/>
+      <stop offset="100%" stop-color="#7ce4ff"/>
+    </linearGradient>
+    <linearGradient id="flame" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#fff8a8"/>
+      <stop offset="45%" stop-color="#ffaa22"/>
+      <stop offset="100%" stop-color="#ff3d1a" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#fff9c4"/>
+      <stop offset="55%" stop-color="#ffdc38"/>
+      <stop offset="100%" stop-color="#ff941a"/>
+    </linearGradient>
+  </defs>
+  <!-- Sky to Outer Space backdrop -->
+  <rect width="400" height="400" fill="url(#sky)"/>
+  <!-- Aurora ribbon -->
+  <path d="M-20 120 Q120 72 240 116 T420 92 L420 132 Q260 156 140 118 T-20 156 Z" fill="#38ffaa" opacity="0.24"/>
+  <!-- Twinkling space stars -->
+  <g fill="#fff8c4">
+    <circle cx="48" cy="44" r="3.5"/><circle cx="118" cy="28" r="2.5"/><circle cx="196" cy="54" r="3"/>
+    <circle cx="288" cy="34" r="4"/><circle cx="352" cy="68" r="3"/><circle cx="78" cy="96" r="2.5"/>
+    <circle cx="332" cy="118" r="2.5"/><circle cx="162" cy="86" r="2"/>
+  </g>
+  <!-- Ringed Saturn planet in upper-left -->
+  <g transform="translate(86,86)">
+    <circle r="28" fill="#ff784f" stroke="#22194f" stroke-width="4"/>
+    <path d="M-46 6 Q0 24 46 -6" fill="none" stroke="#ffe16b" stroke-width="8" stroke-linecap="round"/>
+  </g>
+  <!-- Cute glowing UFO in upper-right -->
+  <g transform="translate(312,92) rotate(10)">
+    <ellipse cx="0" cy="4" rx="40" ry="12" fill="#d4e2f4" stroke="#1e2452" stroke-width="4"/>
+    <path d="M-20 0 A20 18 0 0 1 20 0 Z" fill="#5ceeff" stroke="#1e2452" stroke-width="4"/>
+    <circle cx="-22" cy="6" r="4" fill="#ffe14d"/>
+    <circle cx="0" cy="9" r="4" fill="#ff52d9"/>
+    <circle cx="22" cy="6" r="4" fill="#ffe14d"/>
+  </g>
+  <!-- Fluffy clouds -->
+  <g fill="#ffffff" opacity="0.95">
+    <circle cx="64" cy="236" r="26"/><circle cx="94" cy="232" r="32"/><circle cx="126" cy="240" r="22"/>
+    <circle cx="304" cy="212" r="24"/><circle cx="336" cy="206" r="30"/><circle cx="366" cy="216" r="22"/>
+  </g>
+  <!-- Golden Boost Ring -->
+  <g transform="translate(216,162) rotate(-26)">
+    <ellipse cx="0" cy="0" rx="58" ry="22" fill="none" stroke="#ff9d1a" stroke-width="14"/>
+    <ellipse cx="0" cy="0" rx="58" ry="22" fill="none" stroke="#ffe44d" stroke-width="8"/>
+  </g>
+  <!-- Lush 3D rolling green hills at bottom -->
+  <path d="M0 318 Q105 272 225 314 T400 296 L400 400 L0 400 Z" fill="#32b84c"/>
+  <path d="M0 338 Q140 296 270 336 T400 326 L400 400 L0 400 Z" fill="#54e058"/>
+  <!-- Cute red flag on meadow hill -->
+  <line x1="78" y1="322" x2="78" y2="262" stroke="#ffffff" stroke-width="5" stroke-linecap="round"/>
+  <polygon points="78,262 118,274 78,288" fill="#ff3e4d" stroke="#1d2452" stroke-width="3" stroke-linejoin="round"/>
+  <!-- Rocket-flame arc trail from tee to sky -->
+  <path d="M112 318 Q186 248 258 144" fill="none" stroke="url(#flame)" stroke-width="34" stroke-linecap="round"/>
+  <path d="M116 314 Q188 246 254 148" fill="none" stroke="#fff7a8" stroke-width="12" stroke-linecap="round"/>
+  <!-- Giant gleaming Rocket Golf Ball -->
+  <g transform="translate(262,136)">
+    <circle r="38" fill="#ffffff" stroke="#1c2559" stroke-width="6"/>
+    <path d="M-30 -6 A34 34 0 0 1 28 -16" fill="none" stroke="#e4eefc" stroke-width="7" stroke-linecap="round"/>
+    <circle cx="-11" cy="-10" r="4.5" fill="#cfdcf2"/>
+    <circle cx="8" cy="-14" r="4.5" fill="#cfdcf2"/>
+    <circle cx="14" cy="4" r="4.5" fill="#cfdcf2"/>
+    <circle cx="-5" cy="9" r="4.5" fill="#cfdcf2"/>
+    <circle cx="-18" cy="10" r="4" fill="#cfdcf2"/>
+    <circle cx="0" cy="0" r="38" fill="none" stroke="#ffd426" stroke-width="4" stroke-dasharray="10 8"/>
+  </g>
+  <!-- Sparkling stars around the ball -->
+  <polygon points="184,116 189,128 202,130 192,138 195,150 184,143 173,150 176,138 166,130 179,128" fill="#ffe44d" stroke="#1c2559" stroke-width="3"/>
+  <polygon points="326,162 330,171 340,172 332,179 334,188 326,183 318,188 320,179 312,172 322,171" fill="#ffe44d" stroke="#1c2559" stroke-width="2.5"/>
+  <!-- Chunky Arabic Title Banner -->
+  <g transform="translate(200,368)">
+    <rect x="-166" y="-34" width="332" height="58" rx="29" fill="#131c4a" stroke="#ffd426" stroke-width="5"/>
+    <text x="0" y="9" text-anchor="middle" direction="rtl" font-family="Fredoka, 'Baloo Bhaijaan 2', sans-serif" font-weight="700" font-size="38" fill="url(#gold)">ضربة إلى الفضاء</text>
+  </g>
 </svg>

@@ -1,181 +1,167 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ar" dir="rtl">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>القلم السحري</title>
-<link rel="icon" type="image/svg+xml" href="../../favicon.svg">
-<link rel="stylesheet" href="../../shared/game.css">
-<link rel="stylesheet" href="style.css">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>القلم السحري</title>
+  <link rel="stylesheet" href="../../shared/game.css">
+  <link rel="stylesheet" href="style.css">
 </head>
-<body>
-<svg class="defs" aria-hidden="true" focusable="false" width="0" height="0">
-  <symbol id="i-play" viewBox="0 0 64 64"><path d="M22 11 Q18 9 18 14 L18 50 Q18 55 22 53 L52 35 Q56 32 52 29 Z"/></symbol>
-  <symbol id="i-pause" viewBox="0 0 64 64"><rect x="15" y="12" width="12" height="40" rx="5"/><rect x="37" y="12" width="12" height="40" rx="5"/></symbol>
-  <symbol id="i-again" viewBox="0 0 64 64"><path d="M50 30 A19 19 0 1 1 41 15" fill="none" stroke="currentColor" stroke-width="9" stroke-linecap="round"/><path d="M33 4 L52 13 L37 27 Z"/></symbol>
-  <symbol id="i-undo" viewBox="0 0 64 64"><path d="M24 22 L10 33 L24 44" fill="none" stroke="currentColor" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/><path d="M13 33 H38 A14 14 0 0 1 38 55 H28" fill="none" stroke="currentColor" stroke-width="8" stroke-linecap="round"/></symbol>
-  <symbol id="i-levels" viewBox="0 0 64 64"><rect x="6" y="10" width="15" height="15" rx="4"/><rect x="25" y="10" width="15" height="15" rx="4"/><rect x="44" y="10" width="15" height="15" rx="4"/><rect x="6" y="36" width="15" height="15" rx="4"/><rect x="25" y="36" width="15" height="15" rx="4"/><rect x="44" y="36" width="15" height="15" rx="4"/></symbol>
-  <symbol id="i-home" viewBox="0 0 64 64"><path d="M8 32 L32 10 L56 32 L49 32 L49 54 L37 54 L37 40 L27 40 L27 54 L15 54 L15 32 Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></symbol>
-  <symbol id="i-star" viewBox="0 0 64 64"><path d="M32 5 L39 23.3 L58.6 24.4 L43.4 36.7 L48.5 55.6 L32 45 L15.5 55.6 L20.6 36.7 L5.4 24.4 L25 23.3 Z" stroke-linejoin="round"/></symbol>
-  <symbol id="i-bolt" viewBox="0 0 64 64"><path d="M36 6 L14 35 H31 L26 58 L50 27 H33 Z" stroke-linejoin="round"/></symbol>
-  <symbol id="i-wrench" viewBox="0 0 64 64"><path d="M44 10 A14 14 0 0 0 31 29 L12 48 A6 6 0 0 0 21 56 L40 37 A14 14 0 0 0 54 20 L45 29 L38 22 Z"/></symbol>
-  <symbol id="i-crayon" viewBox="0 0 64 64"><g transform="translate(32 32) rotate(-36)"><rect x="-9" y="-16" width="18" height="34" rx="4" stroke="#0f172a" stroke-width="4"/><path d="M-9 -16 L0 -30 L9 -16 Z" stroke="#0f172a" stroke-width="4" stroke-linejoin="round"/><rect x="-7" y="-8" width="14" height="5" fill="#fff" opacity=".85"/><rect x="-7" y="6" width="14" height="5" fill="#fff" opacity=".85"/></g></symbol>
-</svg>
+<body data-screen="title">
+  <canvas id="scene" tabindex="0" aria-label="ساحة اللعب ثلاثية الأبعاد للقلم السحري"></canvas>
 
-<canvas id="game" tabindex="0" aria-label="القلم السحري"></canvas>
-
-<div id="ui">
-  <!-- Active Stunt Gameplay HUD -->
+  <!-- Minimal, vibrant HUD -->
   <div id="hud" hidden>
-    <button type="button" id="btnPause" class="mc-btn mc-round" aria-label="استراحة" title="استراحة"><svg aria-hidden="true"><use href="#i-pause"/></svg></button>
-    <button type="button" id="btnRetry" class="mc-btn mc-round" aria-label="إعادة" title="إعادة"><svg aria-hidden="true"><use href="#i-again"/></svg></button>
-    <button type="button" id="btnUndo" class="mc-btn mc-round" aria-label="تراجع" title="تراجع"><svg aria-hidden="true"><use href="#i-undo"/></svg></button>
+    <div class="hud-top">
+      <div class="hud-left">
+        <button id="btnPause" class="icon-btn" type="button" aria-label="إيقاف مؤقت" title="استراحة (P / Esc)">⏸</button>
+        <button id="btnReset" class="icon-btn" type="button" aria-label="إعادة المرحلة" title="إعادة (R)">↻</button>
+        <div class="stage-pill">
+          <span id="hudStage" dir="ltr">1-1</span>
+          <span class="hud-stars" id="hudStars" aria-label="النجوم">
+            <i class="st">★</i><i class="st">★</i><i class="st">★</i>
+          </span>
+        </div>
+      </div>
 
-    <div class="ink-bar" role="group" aria-label="أقلام القوة السحرية">
-      <button type="button" id="ink0" class="mc-btn ink-btn ink-blue active" aria-label="قلم الجسر">
-        <svg aria-hidden="true"><use href="#i-crayon"/></svg><span>الجسر</span><span class="sg-key" dir="ltr">1</span>
-      </button>
-      <button type="button" id="ink1" class="mc-btn ink-btn ink-turbo" aria-label="قلم التيربو">
-        <svg aria-hidden="true"><use href="#i-crayon"/></svg><span>التيربو</span><span class="sg-key" dir="ltr">2</span>
-      </button>
-      <button type="button" id="ink2" class="mc-btn ink-btn ink-spring" aria-label="قلم القفز">
-        <svg aria-hidden="true"><use href="#i-crayon"/></svg><span>القفز</span><span class="sg-key" dir="ltr">3</span>
-      </button>
+      <div class="ink-meter" aria-label="حبر القلم">
+        <span class="ink-ico" aria-hidden="true">🖍️</span>
+        <div class="ink-track">
+          <div id="inkFill" class="ink-fill"></div>
+        </div>
+        <b id="inkPct" dir="ltr">100%</b>
+      </div>
+      <!-- Space reserved top-right for Kit.muteButton() -->
+      <div class="mute-spacer" aria-hidden="true"></div>
     </div>
 
-    <button type="button" id="btnLaunch" class="mc-btn mc-launch ring" aria-label="انطلق">
-      <svg aria-hidden="true"><use href="#i-play"/></svg><span id="lblLaunch">انطلق!</span><span class="sg-key" dir="ltr">Space</span>
-    </button>
+    <div id="banner" class="toast" hidden></div>
 
-    <div id="sbxBar" class="sbx-bar" hidden>
-      <button type="button" data-prop="wood" class="mc-btn sbx-btn">+ صندوق</button>
-      <button type="button" data-prop="tnt" class="mc-btn sbx-btn sbx-tnt">+ متفجر</button>
-      <button type="button" data-prop="ring" class="mc-btn sbx-btn sbx-ring">+ حلقة تيربو</button>
-      <button type="button" data-prop="cannon" class="mc-btn sbx-btn sbx-can">+ مدفع</button>
-      <button type="button" id="btnClearInk" class="mc-btn sbx-btn">مسح الخطوط</button>
+    <div class="hud-dock">
+      <div class="crayon-bar" role="group" aria-label="أنواع الأقلام">
+        <button id="ink0" class="crayon-btn c0 active" type="button" data-crayon="0">
+          <span class="c-dot"></span>
+          <span class="c-lbl">جسر</span>
+          <span class="sg-key mini">1</span>
+        </button>
+        <button id="ink1" class="crayon-btn c1" type="button" data-crayon="1">
+          <span class="c-dot"></span>
+          <span class="c-lbl">تيربو</span>
+          <span class="sg-key mini">2</span>
+        </button>
+        <button id="ink2" class="crayon-btn c2" type="button" data-crayon="2">
+          <span class="c-dot"></span>
+          <span class="c-lbl">نابض</span>
+          <span class="sg-key mini">3</span>
+        </button>
+      </div>
+
+      <button id="btnUndo" class="dock-btn undo" type="button" title="تراجع (Z)">
+        <span>↩</span>
+        <span class="sg-key mini">Z</span>
+      </button>
+
+      <button id="btnLaunch" class="dock-btn go" type="button">
+        <span id="launchLbl">انطلق!</span>
+        <span class="sg-key mini">مسافة</span>
+      </button>
     </div>
   </div>
 
-  <!-- Title Screen -->
-  <section id="scrTitle" class="screen" aria-label="القلم السحري">
-    <div class="chips">
-      <div class="chip" id="titleStars" aria-label="النجوم"><svg aria-hidden="true"><use href="#i-star"/></svg><b dir="ltr">0/45</b></div>
-      <div class="chip" id="titleCoins" aria-label="العملات"><i class="coin"></i><b dir="ltr">0</b></div>
+  <!-- Minimal Poki-style Title Screen over live 3D diorama -->
+  <section id="scrTitle" class="overlay title-ov" aria-label="القلم السحري">
+    <div class="title-wrap">
+      <div class="title-badge">⭐ <b id="titleStars" dir="ltr">0/63</b></div>
+      <h1 class="game-logo">القلم السحري</h1>
+
+      <button id="btnPlay" class="play-hero" type="button">▶ العب!</button>
+
+      <div class="title-actions">
+        <button id="btnLevels" class="pill-btn" type="button">🗺️ المراحل</button>
+        <button id="btnGarage" class="pill-btn" type="button">🚙 الشاحنات</button>
+      </div>
+
+      <div class="keys-line">
+        <span><span dir="ltr"><span class="sg-key">اسحب</span></span> ارسم</span>
+        <span><span dir="ltr"><span class="sg-key">مسافة</span></span> انطلق</span>
+        <span><span dir="ltr"><span class="sg-key">1–3</span></span> الألوان</span>
+        <span><span dir="ltr"><span class="sg-key">Z</span></span> تراجع</span>
+      </div>
     </div>
-
-    <header class="hero">
-      <h1 class="logo">القلم السحري</h1>
-      <p class="subtitle">عربة كرّوم النفاثة وحلبة القفزات الخارقة!</p>
-    </header>
-
-    <div class="tier-row" id="tierRow" role="group" aria-label="مستوى التحدي">
-      <button type="button" data-tier="easy" class="mc-btn tier-btn">سهل</button>
-      <button type="button" data-tier="normal" class="mc-btn tier-btn active">متوسط</button>
-      <button type="button" data-tier="hero" class="mc-btn tier-btn">بطل</button>
-    </div>
-
-    <div class="howto" aria-label="طريقة اللعب">
-      <figure class="card">
-        <div class="card-badge blue">3 أقلام سحرية</div>
-        <figcaption>ارسم جسورًا وتيربو ومنصات قفز حتى أثناء الانطلاق!</figcaption>
-      </figure>
-      <figure class="card">
-        <div class="card-badge orange">انطلاق وقفزة هوائية</div>
-        <figcaption>اضغط <span class="sg-key" dir="ltr">Space</span> للانطلاق وحطّم الصناديق!</figcaption>
-      </figure>
-      <figure class="card">
-        <div class="card-badge green">15 مرحلة مفتوحة</div>
-        <figcaption>اجمع النجوم الذهبية واعبر بوابة الفوز المخططة!</figcaption>
-      </figure>
-    </div>
-
-    <div class="title-actions">
-      <button type="button" id="btnLevels" class="mc-btn nav-btn nav-yellow" aria-label="المراحل">
-        <svg aria-hidden="true"><use href="#i-levels"/></svg><span>المراحل</span>
-      </button>
-      <button type="button" id="btnPlay" class="mc-btn play-main ring" aria-label="العب الآن">
-        <svg aria-hidden="true"><use href="#i-play"/></svg><span>انطلق!</span>
-      </button>
-      <button type="button" id="btnSandbox" class="mc-btn nav-btn nav-cyan" aria-label="الملعب الحر">
-        <svg aria-hidden="true"><use href="#i-bolt"/></svg><span>الملعب الحر</span>
-      </button>
-      <button type="button" id="btnGarage" class="mc-btn nav-btn nav-purple" aria-label="ورشة العربات">
-        <svg aria-hidden="true"><use href="#i-wrench"/></svg><span>ورشة العربات</span>
-      </button>
-    </div>
-  </section>
-
-  <!-- Open 15-Stage Selector -->
-  <section id="scrMap" class="screen" aria-label="المراحل" hidden>
-    <button type="button" id="mapHome" class="mc-btn mc-round top-back" aria-label="الرئيسية"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
-    <div class="chip map-chip" id="mapStars" aria-label="النجوم"><svg aria-hidden="true"><use href="#i-star"/></svg><b dir="ltr">0/45</b></div>
-    <button type="button" id="mapSandbox" class="mc-btn map-sbx"><svg aria-hidden="true"><use href="#i-bolt"/></svg><span>الملعب الحر اللانهائي</span></button>
-    <div id="worlds"></div>
-  </section>
-
-  <!-- Stunt Garage -->
-  <section id="scrGarage" class="screen" aria-label="ورشة العربات" hidden>
-    <button type="button" id="garageBack" class="mc-btn mc-round top-back" aria-label="رجوع"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
-    <div class="chip map-chip" id="garageCoins" aria-label="العملات"><i class="coin"></i><b dir="ltr">0</b></div>
-    <h2 class="sec-title">ورشة العربات النفاثة</h2>
-    <div class="shelf" id="shelfPods"></div>
-    <h2 class="sec-title sec-sub">آثار القلم السحري</h2>
-    <div class="shelf" id="shelfTrails"></div>
   </section>
 
   <!-- Pause Overlay -->
-  <section id="scrPause" class="screen dim" aria-label="استراحة" hidden>
-    <div class="panel">
-      <h2>استراحة المتسابق</h2>
-      <div class="row">
-        <button type="button" id="btnResume" class="mc-btn panel-go" aria-label="متابعة">
-          <svg aria-hidden="true"><use href="#i-play"/></svg><span>متابعة</span>
-        </button>
-      </div>
-      <div class="row">
-        <button type="button" id="btnRestart" class="mc-btn panel-sec" aria-label="إعادة المرحلة">
-          <svg aria-hidden="true"><use href="#i-again"/></svg><span>إعادة</span><span class="sg-key" dir="ltr">R</span>
-        </button>
-        <button type="button" id="btnMap" class="mc-btn panel-sec" aria-label="المراحل">
-          <svg aria-hidden="true"><use href="#i-levels"/></svg><span>المراحل</span>
-        </button>
+  <section id="scrPause" class="overlay" hidden aria-label="استراحة">
+    <div class="card">
+      <h2 class="card-title">استراحة</h2>
+      <p id="pauseStage" class="card-sub"></p>
+      <div class="card-btns">
+        <button id="btnResume" class="sg-btn good" type="button">متابعة</button>
+        <button id="btnRestart" class="sg-btn" type="button">إعادة</button>
+        <button id="btnMap" class="sg-btn secondary" type="button">المراحل</button>
+        <button id="btnHome" class="sg-btn secondary" type="button">الرئيسية</button>
       </div>
     </div>
   </section>
 
-  <!-- Win Overlay -->
-  <section id="scrWin" class="screen dim" aria-label="فوز" hidden>
-    <div class="panel win-panel">
-      <div class="ribbon" id="winBest" hidden>رقم قياسي في الحبر!</div>
-      <h2 id="winTitle">قفزة أسطورية!</h2>
-      <div class="stars3" id="winStars" aria-hidden="true">
-        <svg><use href="#i-star"/></svg><svg><use href="#i-star"/></svg><svg><use href="#i-star"/></svg>
+  <!-- Win / Level Clear Overlay -->
+  <section id="scrWin" class="overlay" hidden aria-label="أحسنت!">
+    <div class="card win-card">
+      <div id="winBadge" class="new-best" hidden>رقم جديد! 🎉</div>
+      <h2 id="winTitle" class="card-title">أحسنت!</h2>
+      <div id="winStars" class="big-stars" aria-label="النجوم المكتسبة">
+        <span class="bstar">★</span><span class="bstar">★</span><span class="bstar">★</span>
       </div>
-      <div class="facts">
-        <span class="fact" id="winPicked"><svg class="st-ico" aria-hidden="true"><use href="#i-star"/></svg><b dir="ltr">0/3</b></span>
-        <span class="fact" id="winInk"><span>الحبر:</span><b dir="ltr">0 / 0</b></span>
-        <span class="fact" id="winCoins"><i class="coin"></i><b dir="ltr">+0</b></span>
-      </div>
-      <div class="row">
-        <button type="button" id="winNext" class="mc-btn panel-go ring" aria-label="المرحلة التالية">
-          <svg aria-hidden="true"><use href="#i-play"/></svg><span>التالية</span><span class="sg-key" dir="ltr">Enter</span>
-        </button>
-        <button type="button" id="winAgain" class="mc-btn panel-sec" aria-label="مرة أخرى">
-          <svg aria-hidden="true"><use href="#i-again"/></svg><span>إعادة</span><span class="sg-key" dir="ltr">R</span>
-        </button>
-        <button type="button" id="winMap" class="mc-btn panel-sec" aria-label="المراحل">
-          <svg aria-hidden="true"><use href="#i-levels"/></svg><span>المراحل</span>
-        </button>
+      <div id="winUnlock" class="unlock-note" hidden></div>
+      <div class="card-btns">
+        <button id="btnNext" class="sg-btn good" type="button">المرحلة التالية ▶</button>
+        <button id="btnReplay" class="sg-btn" type="button">إعادة</button>
+        <button id="winMap" class="sg-btn secondary" type="button">المراحل</button>
       </div>
     </div>
   </section>
-</div>
-<div id="live" class="sr" aria-live="polite"></div>
 
-<script src="../../shared/kit.js"></script>
-<script src="../../shared/juice.js"></script>
-<script src="../../shared/artkit.js"></script>
-<script src="engine.js"></script>
-<script src="game.js"></script>
+  <!-- Level Select Overlay (3 themed worlds x 7 stages) -->
+  <section id="scrLevels" class="overlay" hidden aria-label="المراحل">
+    <div class="card wide-card">
+      <div class="card-head">
+        <h2 class="card-title">المراحل</h2>
+        <button id="levelsBack" class="icon-btn close-btn" type="button" aria-label="إغلاق">✕</button>
+      </div>
+      <div id="worldTabs" class="world-tabs" role="tablist"></div>
+      <div id="levelGrid" class="level-grid"></div>
+    </div>
+  </section>
+
+  <!-- Truck Skins Garage Overlay -->
+  <section id="scrGarage" class="overlay" hidden aria-label="الشاحنات">
+    <div class="card wide-card">
+      <div class="card-head">
+        <h2 class="card-title">🚙 الشاحنات</h2>
+        <span class="garage-stars">⭐ <b id="garageStars" dir="ltr">0</b></span>
+        <button id="garageBack" class="icon-btn close-btn" type="button" aria-label="إغلاق">✕</button>
+      </div>
+      <div id="skinGrid" class="skin-grid"></div>
+    </div>
+  </section>
+
+  <!-- WebGL unavailable fallback -->
+  <section id="scrError" class="overlay" hidden aria-label="تعذر التشغيل">
+    <div class="card">
+      <h2 class="card-title">تعذّر تشغيل العرض ثلاثي الأبعاد</h2>
+      <p class="card-sub">يرجى تفعيل WebGL في المتصفح ثم إعادة المحاولة.</p>
+      <button id="btnErrorReload" class="sg-btn" type="button">أعد المحاولة</button>
+    </div>
+  </section>
+
+  <div id="contextNotice" class="toast" hidden>جاري استعادة الرسوم ثلاثية الأبعاد...</div>
+  <div id="live" class="sr-only" aria-live="polite"></div>
+
+  <script src="../../shared/kit.js"></script>
+  <script src="../../shared/juice.js"></script>
+  <script src="../../lib/three/three.min.js"></script>
+  <script src="engine.js"></script>
+  <script src="art.js"></script>
+  <script src="game.js"></script>
 </body>
 </html>

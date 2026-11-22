@@ -1,231 +1,153 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>مطبخ الفسحة</title>
-<link rel="icon" type="image/svg+xml" href="../../favicon.svg">
-<link rel="stylesheet" href="../../shared/game.css">
-<link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>مطبخ الفسحة</title>
+  <link rel="stylesheet" href="../../shared/game.css">
+  <link rel="stylesheet" href="style.css">
 </head>
-<body>
-<svg class="defs" aria-hidden="true" focusable="false" width="0" height="0">
-  <symbol id="i-play" viewBox="0 0 64 64"><path d="M22 11 Q18 9 18 14 L18 50 Q18 55 22 53 L52 35 Q56 32 52 29 Z"/></symbol>
-  <symbol id="i-pause" viewBox="0 0 64 64"><rect x="15" y="12" width="12" height="40" rx="5"/><rect x="37" y="12" width="12" height="40" rx="5"/></symbol>
-  <symbol id="i-again" viewBox="0 0 64 64"><path d="M50 30 A19 19 0 1 1 41 15" fill="none" stroke="currentColor" stroke-width="9" stroke-linecap="round"/><path d="M33 4 L52 13 L37 27 Z"/></symbol>
-  <symbol id="i-levels" viewBox="0 0 64 64"><rect x="6" y="10" width="15" height="15" rx="4"/><rect x="25" y="10" width="15" height="15" rx="4"/><rect x="44" y="10" width="15" height="15" rx="4"/><rect x="6" y="36" width="15" height="15" rx="4"/><rect x="25" y="36" width="15" height="15" rx="4"/><rect x="44" y="36" width="15" height="15" rx="4"/></symbol>
-  <symbol id="i-home" viewBox="0 0 64 64"><path d="M8 32 L32 10 L56 32 L49 32 L49 54 L37 54 L37 40 L27 40 L27 54 L15 54 L15 32 Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></symbol>
-  <symbol id="i-star" viewBox="0 0 64 64"><path d="M32 5 L39 23.3 L58.6 24.4 L43.4 36.7 L48.5 55.6 L32 45 L15.5 55.6 L20.6 36.7 L5.4 24.4 L25 23.3 Z" stroke-linejoin="round"/></symbol>
-  <symbol id="i-coop" viewBox="0 0 64 64">
-    <circle cx="22" cy="24" r="10" fill="#ffd6a5" stroke="#1b1640" stroke-width="4"/>
-    <path d="M8 52 C8 39 36 39 36 52 Z" fill="#38bdf8" stroke="#1b1640" stroke-width="4" stroke-linejoin="round"/>
-    <circle cx="43" cy="24" r="10" fill="#ffcad4" stroke="#1b1640" stroke-width="4"/>
-    <path d="M29 52 C29 39 57 39 57 52 Z" fill="#fb923c" stroke="#1b1640" stroke-width="4" stroke-linejoin="round"/>
-  </symbol>
-  <symbol id="i-shop" viewBox="0 0 64 64">
-    <path d="M16 30 C10 16 22 9 32 15 C42 9 54 16 48 30 Z" fill="#ffffff" stroke="#1b1640" stroke-width="4" stroke-linejoin="round"/>
-    <rect x="17" y="29" width="30" height="10" rx="4" fill="#ffcc00" stroke="#1b1640" stroke-width="4"/>
-    <path d="M19 42 L45 42 L49 56 L15 56 Z" fill="#ef476f" stroke="#1b1640" stroke-width="4" stroke-linejoin="round"/>
-  </symbol>
-  <symbol id="i-bot" viewBox="0 0 64 64">
-    <line x1="32" y1="8" x2="32" y2="18" stroke="#1b1640" stroke-width="5" stroke-linecap="round"/>
-    <circle cx="32" cy="8" r="5" fill="#00f5d4" stroke="#1b1640" stroke-width="3.5"/>
-    <rect x="14" y="18" width="36" height="30" rx="10" fill="#38bdf8" stroke="#1b1640" stroke-width="4"/>
-    <circle cx="25" cy="31" r="4.5" fill="#fff"/><circle cx="39" cy="31" r="4.5" fill="#fff"/>
-    <path d="M24 40 Q32 45 40 40" fill="none" stroke="#1b1640" stroke-width="3.5" stroke-linecap="round"/>
-  </symbol>
-</svg>
+<body data-mode="title">
+  <canvas id="scene" tabindex="0" aria-label="ساحة مطبخ الفسحة ثلاثية الأبعاد"></canvas>
 
-<canvas id="game" tabindex="0" aria-label="مطبخ الفسحة"></canvas>
+  <!-- In-game HUD -->
+  <div id="hud" class="hud" hidden>
+    <div class="hud-top">
+      <div class="hud-stats">
+        <button id="btnPause" class="icon-btn" type="button" aria-label="استراحة" title="استراحة (P / Esc)">⏸</button>
+        <div class="pill stage-pill"><span id="hudStage" dir="ltr">1-1</span></div>
+        <div class="pill score-pill">
+          <span class="ico">⭐</span><b id="hudScore">0</b>
+          <span class="star-dots" id="hudStars" aria-hidden="true"><i>★</i><i>★</i><i>★</i></span>
+        </div>
+        <div class="pill time-pill" id="hudTimeWrap"><span class="ico">⏱</span><b id="hudTime">90</b></div>
+        <div class="pill combo-pill" id="hudCombo" hidden>🔥 <b id="hudComboVal" dir="ltr">×2</b></div>
+      </div>
 
-<div id="ui">
-  <div id="hud" hidden>
-    <button type="button" id="btnPause" class="rk-btn rk-round hud-pause" aria-label="استراحة" title="استراحة (P)">
-      <svg aria-hidden="true"><use href="#i-pause"/></svg>
-    </button>
-    <button type="button" id="btnBot" class="rk-btn hud-bot" aria-label="الروبوت المساعد" title="الروبوت المساعد (F)">
-      <svg aria-hidden="true"><use href="#i-bot"/></svg>
-      <span id="botLabel">المساعد الآلي</span>
-      <span class="sg-key" dir="ltr" aria-hidden="true">F</span>
-    </button>
+      <div id="ordersBar" class="orders-bar" aria-label="طلبات الزبائن"></div>
+    </div>
+
+    <div id="toast" class="toast" hidden role="status"></div>
+
+    <div id="ghostHint" class="ghost-hint" hidden>
+      <span id="ghostText">ابدأ بشريحة اللحم واشوها</span>
+      <span class="ghost-keys" dir="ltr"><span class="sg-key">←</span><span class="sg-key">→</span><span class="sg-key">↑</span><span class="sg-key">↓</span> <span class="sg-key">مسافة</span></span>
+    </div>
   </div>
 
-  <section id="scrTitle" class="screen" aria-label="مطبخ الفسحة">
-    <div class="top-bar">
-      <div class="chip" id="titleStars" aria-label="النجوم"><svg aria-hidden="true"><use href="#i-star"/></svg><b dir="ltr">0/36</b></div>
-      <div class="chip" id="titleCoins" aria-label="العملات"><i class="coin"></i><b dir="ltr">0</b></div>
-    </div>
+  <!-- Minimal vibrant Title overlay (live 3D kitchen behind it) -->
+  <div id="scrTitle" class="overlay overlay-title">
+    <div class="title-hero">
+      <div class="logo-badge" aria-hidden="true">👨‍🍳🍔</div>
+      <h1 class="game-logo">مطبخ الفسحة</h1>
 
-    <div class="hero-card">
-      <div class="badge-pill">تيربو المقصف ومدفع البرجر!</div>
-      <h1 class="logo">مطبخ الفسحة</h1>
-
-      <div class="howto" aria-label="طريقة اللعب">
-        <figure class="how-card">
-          <svg viewBox="0 0 180 108" aria-hidden="true">
-            <rect x="18" y="14" width="96" height="60" rx="18" fill="#fffdf7" stroke="#1b1640" stroke-width="4.5"/>
-            <ellipse cx="48" cy="44" rx="17" ry="11" fill="#f4a261" stroke="#1b1640" stroke-width="3.5"/>
-            <circle cx="84" cy="44" r="12" fill="#8d4618" stroke="#1b1640" stroke-width="3.5"/>
-            <circle cx="142" cy="64" r="24" fill="#38bdf8" stroke="#1b1640" stroke-width="4.5"/>
-            <circle cx="134" cy="60" r="4" fill="#fff"/><circle cx="150" cy="60" r="4" fill="#fff"/>
-            <path d="M134 71 Q142 78 150 71" fill="none" stroke="#1b1640" stroke-width="3.5" stroke-linecap="round"/>
-          </svg>
-          <figcaption>شاهد الطلب</figcaption>
-        </figure>
-
-        <figure class="how-card">
-          <svg viewBox="0 0 180 108" aria-hidden="true">
-            <rect x="20" y="34" width="62" height="54" rx="12" fill="#475569" stroke="#1b1640" stroke-width="4.5"/>
-            <circle cx="51" cy="58" r="16" fill="#9c4221" stroke="#1b1640" stroke-width="3.5"/>
-            <path d="M44 26 Q48 16 44 10 M58 26 Q62 16 58 10" fill="none" stroke="#fb923c" stroke-width="4" stroke-linecap="round"/>
-            <rect x="98" y="34" width="62" height="54" rx="12" fill="#ffe8c2" stroke="#1b1640" stroke-width="4.5"/>
-            <ellipse cx="129" cy="64" rx="20" ry="10" fill="#f4a261" stroke="#1b1640" stroke-width="3.5"/>
-            <ellipse cx="129" cy="55" rx="18" ry="8" fill="#8d4618" stroke="#1b1640" stroke-width="3.5"/>
-            <ellipse cx="129" cy="46" rx="20" ry="10" fill="#f6bd60" stroke="#1b1640" stroke-width="3.5"/>
-          </svg>
-          <figcaption>اشوِ وادمج تلقائياً</figcaption>
-        </figure>
-
-        <figure class="how-card">
-          <svg viewBox="0 0 180 108" aria-hidden="true">
-            <rect x="22" y="54" width="66" height="36" rx="12" fill="#ef476f" stroke="#1b1640" stroke-width="4.5"/>
-            <path d="M68 54 L94 34 L106 50 L82 72 Z" fill="#ffd166" stroke="#1b1640" stroke-width="4.5" stroke-linejoin="round"/>
-            <circle cx="134" cy="34" r="18" fill="#f4a261" stroke="#1b1640" stroke-width="4"/>
-            <path d="M100 38 Q114 28 118 32" fill="none" stroke="#3ddc84" stroke-width="5" stroke-linecap="round"/>
-          </svg>
-          <figcaption>أطلق بالمدفع!</figcaption>
-        </figure>
-
-        <figure class="how-card">
-          <svg viewBox="0 0 180 108" aria-hidden="true">
-            <path d="M48 84 L68 26 L92 54 L114 18 L134 84 Z" fill="#ff9f1c" stroke="#1b1640" stroke-width="4.5" stroke-linejoin="round"/>
-            <use href="#i-star" x="66" y="38" width="48" height="48" fill="#ffee32" stroke="#1b1640" stroke-width="4"/>
-          </svg>
-          <figcaption>حماس وسرعة مضاعفة</figcaption>
-        </figure>
+      <div class="title-stats">
+        <span class="mini-pill" id="titleStars">⭐ <b>0/27</b></span>
+        <span class="mini-pill" id="titleCoins">🪙 <b>0</b></span>
+        <span class="mini-pill" id="titleBest">🏆 <b>0</b></span>
       </div>
 
-      <div class="diff-row" role="group" aria-label="مستوى التحدي">
-        <button type="button" class="diff-pill" data-diff="easy" id="diffEasy"><b>سهل</b><small>بلا احتراق</small></button>
-        <button type="button" class="diff-pill active" data-diff="normal" id="diffNormal"><b>متوسط</b><small>تحدي متوازن</small></button>
-        <button type="button" class="diff-pill" data-diff="hero" id="diffHero"><b>بطل</b><small>طلبات ذهبية ×2</small></button>
-      </div>
-
-      <div class="controls-strip">
-        <span>تحرك: <span class="sg-key" dir="ltr">WASD</span> أو <span class="sg-key" dir="ltr">↑↓←→</span> أو انقر أي طاولة</span>
-        <span>تفاعل: <span class="sg-key" dir="ltr">Space</span></span>
-        <span>اندفاع تيربو: <span class="sg-key" dir="ltr">Shift</span></span>
-      </div>
+      <button id="btnPlay" class="play-btn" type="button">▶ العب الآن</button>
 
       <div class="title-actions">
-        <button type="button" id="btnShop" class="rk-btn rk-side" aria-label="خزانة الطهاة">
-          <svg aria-hidden="true"><use href="#i-shop"/></svg><span>خزانة الطهاة</span>
-        </button>
-        <button type="button" id="btnPlay" class="rk-btn rk-play ring" aria-label="العب" title="العب (Enter)">
-          <svg aria-hidden="true"><use href="#i-play"/></svg><span>العب</span>
-        </button>
-        <button type="button" id="btnCoop" class="rk-btn rk-coop" aria-label="لاعبان">
-          <svg aria-hidden="true"><use href="#i-coop"/></svg><span>لاعبان</span>
-        </button>
-        <button type="button" id="btnLevels" class="rk-btn rk-side" aria-label="المطابخ">
-          <svg aria-hidden="true"><use href="#i-levels"/></svg><span>المطابخ</span>
-        </button>
+        <button id="btnDuo" class="chip-btn" type="button" aria-pressed="false">👤 لاعب واحد</button>
+        <button id="btnLevels" class="chip-btn" type="button">🗺️ المطابخ</button>
+        <button id="btnEndless" class="chip-btn" type="button">∞ الاندفاع</button>
+        <button id="btnWardrobe" class="chip-btn" type="button">👒 الأزياء</button>
+      </div>
+
+      <div id="controlsBar" class="controls-strip"></div>
+    </div>
+  </div>
+
+  <!-- Canteen Levels selector -->
+  <div id="scrLevels" class="overlay" hidden>
+    <div class="card card-wide">
+      <div class="card-head">
+        <h2>🗺️ اختر المطبخ</h2>
+        <span class="mini-pill" id="levelsStars">⭐ <b>0/27</b></span>
+      </div>
+      <div id="levelsGrid" class="canteens-list"></div>
+      <div class="card-foot">
+        <button id="btnLevelsEndless" class="sg-btn good" type="button">∞ الاندفاع اللانهائي</button>
+        <button id="btnLevelsBack" class="sg-btn secondary" type="button">رجوع</button>
       </div>
     </div>
-  </section>
+  </div>
 
-  <section id="scrMap" class="screen dim" aria-label="المطابخ" hidden>
-    <div class="map-wrap">
-      <div class="map-head">
-        <button type="button" id="mapHome" class="rk-btn rk-round" aria-label="الرئيسية" title="الرئيسية (Esc)">
-          <svg aria-hidden="true"><use href="#i-home"/></svg>
-        </button>
-        <h2 class="sec-title">اختر المطبخ والمرحلة</h2>
-        <div class="map-tools">
-          <button type="button" id="mapMode" class="rk-btn rk-mode" aria-label="عدد اللاعبين">
-            <svg aria-hidden="true"><use href="#i-coop"/></svg><span id="mapModeTxt">لاعب واحد</span>
-          </button>
-          <div class="chip" id="mapStars" aria-label="النجوم"><svg aria-hidden="true"><use href="#i-star"/></svg><b dir="ltr">0/36</b></div>
-        </div>
+  <!-- Chef Wardrobe (Aprons & Hats) -->
+  <div id="scrWardrobe" class="overlay" hidden>
+    <div class="card card-wide">
+      <div class="card-head">
+        <h2>👨‍🍳 أزياء الطاهي</h2>
+        <span class="mini-pill" id="shopCoins">🪙 <b>0</b></span>
       </div>
-      <div id="worlds" class="worlds-grid"></div>
-    </div>
-  </section>
-
-  <section id="scrShop" class="screen dim" aria-label="خزانة الطهاة" hidden>
-    <div class="shop-wrap">
-      <div class="map-head">
-        <button type="button" id="shopBack" class="rk-btn rk-round" aria-label="رجوع" title="رجوع (Esc)">
-          <svg aria-hidden="true"><use href="#i-home"/></svg>
-        </button>
-        <h2 class="sec-title">خزانة الطهاة</h2>
-        <div class="chip" id="shopCoins" aria-label="العملات"><i class="coin"></i><b dir="ltr">0</b></div>
+      <div class="wardrobe-section">
+        <h3>المريلة</h3>
+        <div id="apronGrid" class="skin-grid"></div>
       </div>
-      <h3 class="shelf-lbl">الأزياء والمرايل</h3>
-      <div class="shelf" id="shelfAprons"></div>
-      <h3 class="shelf-lbl">القبعات والخوذ</h3>
-      <div class="shelf" id="shelfHats"></div>
-    </div>
-  </section>
-
-  <section id="scrPause" class="screen dim" aria-label="استراحة" hidden>
-    <div class="modal-card">
-      <h2>استراحة</h2>
-      <p class="pause-tip">المقصف بانتظارك يا شيف!</p>
-      <div class="modal-btns">
-        <button type="button" id="btnResume" class="rk-btn rk-go" aria-label="تابع اللعب" title="تابع (P)">
-          <svg aria-hidden="true"><use href="#i-play"/></svg><span>تابع</span>
-        </button>
-        <button type="button" id="btnRestart" class="rk-btn rk-amber" aria-label="ابدأ من جديد" title="إعادة (R)">
-          <svg aria-hidden="true"><use href="#i-again"/></svg><span>إعادة</span>
-          <span class="sg-key" dir="ltr" aria-hidden="true">R</span>
-        </button>
+      <div class="wardrobe-section">
+        <h3>القبعة</h3>
+        <div id="hatGrid" class="skin-grid"></div>
       </div>
-      <div class="modal-btns sub">
-        <button type="button" id="btnMap" class="rk-btn rk-sub" aria-label="المطابخ">
-          <svg aria-hidden="true"><use href="#i-levels"/></svg><span>المطابخ</span>
-        </button>
-        <button type="button" id="btnPauseHome" class="rk-btn rk-sub" aria-label="الرئيسية">
-          <svg aria-hidden="true"><use href="#i-home"/></svg><span>الرئيسية</span>
-        </button>
+      <div class="card-foot">
+        <button id="btnShopBack" class="sg-btn secondary" type="button">رجوع</button>
       </div>
     </div>
-  </section>
+  </div>
 
-  <section id="scrResult" class="screen dim" aria-label="النتيجة" hidden>
-    <div class="modal-card result-card">
-      <div class="ribbon" id="resBest" hidden>رقم قياسي جديد!</div>
-      <h2 id="resTitle">أبدعت يا شيف!</h2>
-      <div class="stars3" id="resStars" aria-hidden="true">
-        <svg><use href="#i-star"/></svg><svg><use href="#i-star"/></svg><svg><use href="#i-star"/></svg>
-      </div>
-      <div class="facts">
-        <div class="fact"><span>الطلبات</span><b id="resServed" dir="ltr">0</b></div>
-        <div class="fact"><span>أعلى حماس</span><b id="resStreak" dir="ltr">×1</b></div>
-        <div class="fact gold"><span>العملات</span><b id="resCoins" dir="ltr">+0</b></div>
-      </div>
-      <div class="modal-btns">
-        <button type="button" id="resNext" class="rk-btn rk-go ring" aria-label="المرحلة التالية">
-          <svg aria-hidden="true"><use href="#i-play"/></svg><span>التالي</span>
-          <span class="sg-key" dir="ltr" aria-hidden="true">Enter</span>
-        </button>
-        <button type="button" id="resAgain" class="rk-btn rk-amber" aria-label="مرة أخرى">
-          <svg aria-hidden="true"><use href="#i-again"/></svg><span>إعادة</span>
-          <span class="sg-key" dir="ltr" aria-hidden="true">R</span>
-        </button>
-        <button type="button" id="resMap" class="rk-btn rk-sub" aria-label="المطابخ">
-          <svg aria-hidden="true"><use href="#i-levels"/></svg><span>المطابخ</span>
-        </button>
+  <!-- Pause overlay -->
+  <div id="scrPause" class="overlay" hidden>
+    <div class="card">
+      <h2>⏸ استراحة</h2>
+      <p class="card-sub" id="pauseSub">مطبخ الفسحة جاهز لعودتك!</p>
+      <div class="btn-col">
+        <button id="btnResume" class="sg-btn good" type="button">▶ متابعة</button>
+        <button id="btnRestart" class="sg-btn" type="button">🔄 إعادة المرحلة</button>
+        <button id="btnHome" class="sg-btn secondary" type="button">🏠 القائمة الرئيسية</button>
       </div>
     </div>
-  </section>
-</div>
-<div id="live" class="sr" aria-live="polite"></div>
+  </div>
 
-<script src="../../shared/kit.js"></script>
-<script src="../../shared/artkit.js"></script>
-<script src="../../shared/juice.js"></script>
-<script src="engine.js"></script>
-<script src="game.js"></script>
+  <!-- Result overlay -->
+  <div id="scrResult" class="overlay" hidden>
+    <div class="card">
+      <div id="resNewBest" class="new-best" hidden>🏆 رقم قياسي جديد!</div>
+      <h2 id="resTitle">أحسنت يا شيف!</h2>
+      <div id="resStars" class="res-stars" aria-label="النجوم">
+        <span class="star" data-i="1">★</span>
+        <span class="star" data-i="2">★</span>
+        <span class="star" data-i="3">★</span>
+      </div>
+      <div class="res-grid">
+        <div class="res-box"><span>النقاط</span><b id="resScore">0</b></div>
+        <div class="res-box"><span>الطلبات</span><b id="resServed">0</b></div>
+        <div class="res-box"><span>العملات</span><b id="resCoins" dir="ltr">+0</b></div>
+      </div>
+      <div class="btn-row">
+        <button id="btnNext" class="sg-btn good" type="button" hidden>التالي ◀</button>
+        <button id="btnAgain" class="sg-btn" type="button">العب مجددًا</button>
+        <button id="btnResHome" class="sg-btn secondary" type="button">الرئيسية</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- WebGL unavailable fallback -->
+  <div id="scrError" class="overlay" hidden>
+    <div class="card">
+      <h2>⚠️ تعذّر تشغيل العرض ثلاثي الأبعاد</h2>
+      <p class="card-sub">متصفح هذا الجهاز لا يدعم WebGL حاليًا. جرّب تحديث الصفحة أو فتحها في متصفح أحدث.</p>
+    </div>
+  </div>
+
+  <div id="ctxNotice" class="toast toast-warn" hidden>جاري استعادة رسومات المطبخ...</div>
+  <div id="live" class="sr-only" aria-live="polite"></div>
+
+  <script src="../../shared/kit.js"></script>
+  <script src="../../shared/juice.js"></script>
+  <script src="../../lib/three/three.min.js"></script>
+  <script src="engine.js"></script>
+  <script src="art.js"></script>
+  <script src="game.js"></script>
 </body>
 </html>

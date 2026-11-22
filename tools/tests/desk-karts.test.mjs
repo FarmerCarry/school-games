@@ -1,8 +1,8 @@
-// Desk Karts (سباق المكاتب) in real Chromium: zoomed-in chase & 2P framing camera,
-// idle P1 stationary guarantee (p1Dist === 0 & time === 0), smart easy auto-gas + pointer
-// steering, hop-drift sparks, full 3-lap win + stars + DDA, 4 cups / 12 open tracks,
-// 2P mode + warp catch-up, pause freeze + zero paused redraws, restart, garage + quota retry,
-// and [1100, 620] responsive fit with zero console/page/network errors.
+// Desk Karts 3D (سباق المكاتب) in real Chromium: sunlit 3D desk racer,
+// idle P1 stationary guarantee (p1Dist === 0 & time === 0), ArrowUp acceleration,
+// drift sparks, pause freeze + zero paused redraws, restart reset, 2 cups / 6 circuits,
+// full 3-lap 1P finish + stars + DDA + save reload, 2P local controls, garage + quota retry,
+// and 1100x620 responsive fit with zero console/page/network errors.
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import path from 'node:path';
@@ -24,18 +24,18 @@ after(async () => {
 });
 
 const SAVE = (extra = {}) => ({
-  v: 2,
-  diff: 'normal',
+  v: 3,
   coins: 0,
-  kart: 0,
-  flame: 0,
-  karts: [1, 0, 0, 0, 0],
-  flames: [1, 0, 0, 0, 0],
-  tracks: Array.from({ length: 12 }, () => ({ s: 0, t: 0 })),
+  bestScore: 0,
+  body: 0,
+  paint: 0,
+  bodies: [1, 0, 0, 0],
+  paints: [1, 1, 0, 0, 0, 0],
+  tracks: Array.from({ length: 6 }, () => ({ stars: 0, bestScore: 0, bestTime: 0, bestPlace: 0 })),
   ...extra
 });
 
-async function game(t, { save, dda = 0.15, reducedMotion = 'reduce', size = [1280, 720] } = {}) {
+async function openGame(t, { save, dda = 0.25, reducedMotion = 'reduce', size = [1280, 720] } = {}) {
   const ctx = await browser.newContext({ viewport: { width: size[0], height: size[1] }, reducedMotion });
   const errors = [], requests = [];
   ctx.on('page', page => {
@@ -51,19 +51,14 @@ async function game(t, { save, dda = 0.15, reducedMotion = 'reduce', size = [128
 
   await ctx.addInitScript(({ save, dda }) => {
     if (location.protocol !== 'http:') return;
-    if (!sessionStorage.getItem('dk-seeded')) {
-      sessionStorage.setItem('dk-seeded', '1');
+    if (!sessionStorage.getItem('dk3-seeded')) {
+      sessionStorage.setItem('dk3-seeded', '1');
       if (save !== undefined) {
-        localStorage.setItem('sg:desk-karts:save', typeof save === 'string' ? save : JSON.stringify(save));
+        localStorage.setItem('sg:desk-karts:save3', typeof save === 'string' ? save : JSON.stringify(save));
       }
     }
     let kit;
-    const dk = window.dk = { results: [], failSave: false, draws: 0 };
-    const origFillRect = CanvasRenderingContext2D.prototype.fillRect;
-    CanvasRenderingContext2D.prototype.fillRect = function () {
-      dk.draws++;
-      return origFillRect.apply(this, arguments);
-    };
+    const dk = window.dk = { results: [], failSave: false };
     Object.defineProperty(window, 'Kit', {
       configurable: true,
       get: () => kit,
@@ -88,7 +83,7 @@ async function game(t, { save, dda = 0.15, reducedMotion = 'reduce', size = [128
     });
     const write = Storage.prototype.setItem;
     Storage.prototype.setItem = function (key) {
-      if (key === 'sg:desk-karts:save' && window.dk && window.dk.failSave) {
+      if (key === 'sg:desk-karts:save3' && window.dk && window.dk.failSave) {
         throw new DOMException('Full storage fixture', 'QuotaExceededError');
       }
       return write.apply(this, arguments);
@@ -97,7 +92,7 @@ async function game(t, { save, dda = 0.15, reducedMotion = 'reduce', size = [128
 
   const page = await ctx.newPage();
   await page.goto(`${server.origin}/games/desk-karts/`, { timeout: 90000 });
-  await page.waitForFunction(() => window.__game && window.dk.step);
+  await page.waitForFunction(() => window.__game && window.dk.step, null, { timeout: 25000 });
   return page;
 }
 
@@ -105,51 +100,32 @@ const state = page => page.evaluate(() => __game.state);
 const step = (page, n = 1) => page.evaluate(n => dk.step(n), n);
 const run = (page, n = 1) => page.evaluate(n => dk.run(n), n);
 const stored = page => page.evaluate(() => {
-  const raw = localStorage.getItem('sg:desk-karts:save');
+  const raw = localStorage.getItem('sg:desk-karts:save3');
   return raw ? JSON.parse(raw) : null;
 });
-const pagePoint = (page, x, y) => page.evaluate(([x, y]) => __game.point(x, y), [x, y]);
 
-async function driveRace1P(page, maxChunks = 520) {
+async function driveRace1P(page, maxChunks = 620) {
   await page.keyboard.down('ArrowUp');
   let steerHeld = '';
   try {
     for (let c = 0; c < maxChunks; c++) {
-      const decision = await page.evaluate(() => {
+      const dec = await page.evaluate(() => {
         const st = __game.state;
-        if (st.finished || st.screen !== 'play') return { done: true };
-        const k = st.karts[0];
-        const info = __game.trackInfo;
-        const wrapS = s => { s = s % info.len; return s < 0 ? s + info.len : s; };
-        const targetS = wrapS(k.s + 130 + k.speed * 0.22);
-        let wantOff = 0;
-        for (const hz of info.hazards) {
-          const ds = wrapS(hz.s - k.s);
-          if (ds > 0 && ds < 210) wantOff = hz.off >= 0 ? -info.hw * 0.45 : info.hw * 0.45;
-        }
-        for (const co of info.coils) {
-          const ds = wrapS(co.s - k.s);
-          if (ds > 0 && ds < 210) wantOff = co.off >= 0 ? -info.hw * 0.48 : info.hw * 0.48;
-        }
-        const aim = __game.at(targetS);
-        const tx = aim.x + aim.nx * wantOff, ty = aim.y + aim.ny * wantOff;
-        let diff = Math.atan2(ty - k.y, tx - k.x) - k.ang;
+        if (st.finished || st.screen !== 'play' || !st.aim) return { done: true };
+        const p = st.karts[0];
+        let diff = Math.atan2(st.aim.z - p.z, st.aim.x - p.x) - p.ang;
         while (diff > Math.PI) diff -= Math.PI * 2;
         while (diff < -Math.PI) diff += Math.PI * 2;
-        return {
-          done: false,
-          dir: diff > 0.10 ? 'ArrowRight' : diff < -0.10 ? 'ArrowLeft' : '',
-          useItem: !!k.item
-        };
+        return { done: false, steer: diff > 0.12 ? 'ArrowRight' : (diff < -0.12 ? 'ArrowLeft' : ''), useItem: !!p.item };
       });
-      if (decision.done) break;
-      if (decision.dir !== steerHeld) {
+      if (dec.done) break;
+      if (dec.steer !== steerHeld) {
         if (steerHeld) await page.keyboard.up(steerHeld);
-        steerHeld = decision.dir;
-        if (steerHeld) await page.keyboard.down(steerHeld);
+        if (dec.steer) await page.keyboard.down(dec.steer);
+        steerHeld = dec.steer;
       }
-      if (decision.useItem) await page.keyboard.press('Space');
-      await run(page, 8);
+      if (dec.useItem) await page.keyboard.press('Space');
+      await run(page, 6);
     }
   } finally {
     if (steerHeld) await page.keyboard.up(steerHeld);
@@ -157,176 +133,133 @@ async function driveRace1P(page, maxChunks = 520) {
   }
 }
 
-test('title screen loads cleanly; #btnPlay starts Track 1-1 immediately; idle P1 stays at p1Dist === 0 & time === 0 while AI bots race', async t => {
-  const page = await game(t);
-  await step(page, 15);
-  assert.equal((await state(page)).screen, 'title');
-  assert.equal(await page.locator('#titleStars b').textContent(), '0/36');
-  for (const label of ['القيادة والتوجيه', 'مفاجآت الصناديق', '3 دورات للفوز']) {
-    assert.ok(await page.locator('.howto figcaption', { hasText: label }).isVisible(), label);
-  }
-  assert.ok(await page.locator('#btnTwo').isVisible(), '2P button visible');
+test('title demo, idle P1 stationary guarantee, ArrowUp launch, drift boost, pause freeze (0 redraws), and restart', async t => {
+  const page = await openGame(t, { size: [1100, 620] });
 
-  await page.locator('#btnPlay').click();
-  await step(page);
-  let s = await state(page);
-  assert.equal(s.screen, 'play');
-  assert.equal(s.id, '1-1');
-  assert.equal(s.humans, 1);
-  assert.equal(s.p1Dist, 0);
-  assert.equal(s.time, 0);
+  // Clean title & responsive 1100x620 fit (no scrollbars)
+  const fit = await page.evaluate(() => ({
+    screen: __game.state.screen,
+    scrollX: document.documentElement.scrollWidth <= window.innerWidth,
+    scrollY: document.documentElement.scrollHeight <= window.innerHeight
+  }));
+  assert.equal(fit.screen, 'title');
+  assert.equal(fit.scrollX && fit.scrollY, true, 'fits 1100x620 cleanly with zero scrollbars');
 
-  // Advance 5 seconds untouched: AI bots drive far ahead, P1 remains strictly parked at 0!
-  await run(page, 60 * 5);
-  s = await state(page);
-  assert.equal(s.p1Dist, 0, 'idle P1 never moves or gets bumped');
-  assert.equal(s.time, 0, 'idle P1 race timer stays 0');
-  assert.equal(s.p1Inputs, 0);
-  assert.ok(s.worldTime > 4.5, 'worldTime advances');
-  assert.ok(s.karts[1].dist > 600, 'AI bots actively race');
+  // Start track 1-1 -> stays stationary until player presses gas
+  await page.click('#btnPlay');
+  await step(page, 30);
+  let st = await state(page);
+  assert.equal(st.screen, 'play');
+  assert.equal(st.id, '1-1');
+  assert.equal(st.p1Dist, 0, 'P1 remains stationary with no input');
+  assert.equal(st.time, 0, 'clock stays 0 until launch');
 
-  // Holding ArrowUp immediately accelerates P1 forward and chase camera tracks P1!
-  const camBefore = s.cam.x;
+  // Hold ArrowUp -> accelerates cleanly
   await page.keyboard.down('ArrowUp');
   await run(page, 40);
+  st = await state(page);
+  assert.ok(st.p1Dist > 6, `ArrowUp moves kart forward (${st.p1Dist.toFixed(1)})`);
+  assert.ok(st.time > 0.5);
+
+  // Hold drift + turn -> charges drift sparks & releases mini-turbo
+  await page.keyboard.down('ArrowLeft');
+  await page.keyboard.down('Space');
+  await run(page, 50);
+  const midDrift = await state(page);
+  assert.equal(midDrift.karts[0].drifting, true, 'drift engaged');
+  assert.ok(midDrift.karts[0].driftStage >= 1, 'drift sparks charged');
+  await page.keyboard.up('Space');
+  await page.keyboard.up('ArrowLeft');
   await page.keyboard.up('ArrowUp');
-  s = await state(page);
-  assert.ok(s.p1Dist > 90, `ArrowUp drove P1 forward: ${s.p1Dist}`);
-  assert.ok(s.time > 0.5);
-  assert.ok(s.cam.x > camBefore + 40, 'zoomed-in dynamic chase camera follows P1');
+  await step(page, 2);
+  st = await state(page);
+  assert.ok(st.karts[0].boostT > 0.3, 'drift release grants mini-turbo');
+
+  // Pause freezes simulation AND stops redraws
+  await page.click('#btnPause');
+  await step(page, 2);
+  const pausedA = await state(page);
+  assert.equal(pausedA.screen, 'pause');
+  await step(page, 40);
+  const pausedB = await state(page);
+  assert.equal(pausedB.worldTime, pausedA.worldTime, 'worldTime frozen on pause');
+  assert.equal(pausedB.p1Dist, pausedA.p1Dist, 'p1Dist frozen on pause');
+  assert.equal(pausedB.draws, pausedA.draws, 'zero redundant redraws while paused');
+
+  // Restart resets track 1-1 cleanly to p1Dist === 0 & time === 0
+  await page.click('#btnRestart');
+  await step(page, 10);
+  const reset = await state(page);
+  assert.equal(reset.screen, 'play');
+  assert.equal(reset.id, '1-1');
+  assert.equal(reset.p1Dist, 0);
+  assert.equal(reset.time, 0);
 });
 
-test('smart dual steering: easy auto-gas cruises after first tap, and pointer steering drives toward held cursor', async t => {
-  const page = await game(t, { reducedMotion: 'no-preference' });
-  await page.locator('#btnPlay').click();
-  await step(page);
+test('full 3-lap race finish records stars, coins, DDA result, and persists across reload', async t => {
+  const page = await openGame(t, { save: SAVE({ coins: 20 }), dda: 0.20 });
+  await page.click('#btnPlay');
+  await driveRace1P(page);
+  await step(page, 4);
 
-  // Hovering mouse without pressing button does NOT move P1.
-  const ahead = await page.evaluate(() => __game.at(240));
-  const pt = await pagePoint(page, ahead.x, ahead.y);
-  await page.mouse.move(pt.x, pt.y);
-  await run(page, 30);
-  assert.equal((await state(page)).p1Dist, 0, 'hover alone does not start P1');
+  const st = await state(page);
+  assert.equal(st.screen, 'result', 'reached result overlay after 3 laps');
+  assert.equal(st.finished, true);
+  assert.ok(st.save.coins > 20, 'earned race coins');
+  assert.ok(st.save.tracks[0].stars >= 1, 'earned track stars');
 
-  // Holding mouse button steers & accelerates P1 smoothly toward cursor; releasing on easy keeps cruising!
-  await page.mouse.down();
-  await run(page, 25);
-  await page.mouse.up();
-  const midDist = (await state(page)).p1Dist;
-  assert.ok(midDist > 35, 'pointer down drove P1');
+  const ddaCount = await page.evaluate(() => dk.results.length);
+  assert.equal(ddaCount, 1, 'reported exactly one DDA outcome');
 
-  await run(page, 35);
-  assert.ok((await state(page)).p1Dist > midDist + 70, 'easy auto-gas keeps cruising after first input');
+  const savedBeforeReload = await stored(page);
+  assert.equal(savedBeforeReload.v, 3);
+  assert.ok(savedBeforeReload.bestScore > 0);
+
+  // Reload page and confirm persistence
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForFunction(() => window.__game && window.dk.step, null, { timeout: 25000 });
+  const afterReload = await state(page);
+  assert.equal(afterReload.save.coins, savedBeforeReload.coins);
+  assert.equal(afterReload.save.bestScore, savedBeforeReload.bestScore);
 });
 
-test('full 3-lap race completion awards stars, coins, persists save, updates DDA, and opens next track', async t => {
-  const page = await game(t, { save: SAVE({ diff: 'normal' }), dda: 0.1 });
-  await page.locator('#btnPlay').click();
-  await step(page);
+test('circuits modal opens all 6 tracks (Cup 2-3), 2P local controls move both karts, and garage quota retry recovers', async t => {
+  const page = await openGame(t, { save: SAVE({ coins: 120 }) });
 
-  await driveRace1P(page, 600);
-  const s = await state(page);
-  assert.equal(s.screen, 'result');
-  assert.equal(s.finished, true);
-  assert.equal(s.karts[0].rank, 1);
+  // Open Circuits modal -> 6 cards across 2 cups -> launch 2-3 (Principal's Mega Desk)
+  await page.click('#btnTracks');
+  const cardCount = await page.locator('#tracksGrid .track-card').count();
+  assert.equal(cardCount, 6, 'all 6 circuits displayed');
+  await page.locator('#tracksGrid .track-card[data-idx="5"]').click();
+  await step(page, 4);
+  let st = await state(page);
+  assert.equal(st.screen, 'play');
+  assert.equal(st.id, '2-3');
 
-  const sv = await stored(page);
-  assert.equal(sv.tracks[0].s, 3);
-  assert.ok(sv.coins >= 10);
-  const ddaResults = await page.evaluate(() => dk.results);
-  assert.deepEqual(ddaResults, [1]);
+  // Return home -> test Garage purchase with QuotaExceededError -> Retry recovers save!
+  await page.click('#btnPause');
+  await page.click('#btnHome');
+  await page.click('#btnGarage');
+  await page.evaluate(() => { dk.failSave = true; });
+  await page.locator('#bodyGrid .shop-item').nth(1).click(); // Buy Pencil Rocket (60 coins)
+  await page.waitForSelector('.sg-save-status:not([hidden])');
+  await page.evaluate(() => { dk.failSave = false; });
+  await page.locator('.sg-save-status button').click();
+  const savedAfterRetry = await stored(page);
+  assert.equal(savedAfterRetry.body, 1, 'save retry persisted purchased kart body');
+  assert.equal(savedAfterRetry.coins, 60);
+  await page.click('#btnGarageBack');
 
-  await page.locator('#resNext').click();
-  await step(page);
-  assert.equal((await state(page)).id, '1-2');
-});
-
-test('all 4 classroom cups & all 12 tracks (1-1..4-3) are open immediately, plus 2P mode with catch-up warp', async t => {
-  const page = await game(t, { save: SAVE({ diff: 'normal' }) });
-  await page.locator('#btnLevels').click();
-  await step(page);
-  assert.equal((await state(page)).screen, 'map');
-  assert.equal(await page.locator('.cup-card').count(), 4);
-  assert.equal(await page.locator('.track-btn').count(), 12);
-
-  // Jump straight to final boss track 4-3 in 2P mode!
-  await page.locator('#btnMapMode').click();
-  await page.locator('.track-btn[data-track="11"]').click();
-  await step(page);
-  let s = await state(page);
-  assert.equal(s.screen, 'play');
-  assert.equal(s.id, '4-3');
-  assert.equal(s.humans, 2);
-  assert.equal(s.karts[0].dist, 0);
-  assert.equal(s.karts[1].dist, 0);
-
-  // Drive both P1 (ArrowUp) and P2 (KeyW)
-  await page.keyboard.down('ArrowUp');
+  // 2P local mode: W moves P1, ArrowUp moves P2
+  await page.click('#btnDuo');
+  await page.click('#btnPlay');
   await page.keyboard.down('KeyW');
+  await page.keyboard.down('ArrowUp');
   await run(page, 35);
   await page.keyboard.up('KeyW');
   await page.keyboard.up('ArrowUp');
-  s = await state(page);
-  assert.ok(s.karts[0].dist > 60 && s.karts[1].dist > 60, 'both human karts accelerate independently');
-});
-
-test('pause freezes simulation with zero redraw churn; restart resets p1Dist === 0 & time === 0', async t => {
-  const page = await game(t, { save: SAVE({ diff: 'normal' }) });
-  await page.locator('#btnPlay').click();
-  await step(page);
-
-  await page.keyboard.down('ArrowUp');
-  await run(page, 35);
-  await page.keyboard.up('ArrowUp');
-  assert.ok((await state(page)).p1Dist > 60);
-
-  await page.locator('#btnPause').click();
-  await step(page, 1); // draws single paused frame
-  const snapA = await state(page);
-  assert.equal(snapA.screen, 'pause');
-  const drawsAtPause = await page.evaluate(() => dk.draws);
-
-  await step(page, 30);
-  const snapB = await state(page);
-  const drawsAfterIdlePause = await page.evaluate(() => dk.draws);
-  assert.deepEqual(snapB, snapA, 'world state 100% frozen while paused');
-  assert.equal(drawsAfterIdlePause, drawsAtPause, 'zero canvas redraws while paused');
-
-  await page.locator('#btnResume').click();
-  await run(page, 10);
-  assert.equal((await state(page)).screen, 'play');
-  assert.ok((await state(page)).worldTime > snapA.worldTime);
-
-  await page.locator('#btnPause').click();
-  await step(page);
-  await page.locator('#btnRestart').click();
-  await step(page);
-  const resetState = await state(page);
-  assert.equal(resetState.screen, 'play');
-  assert.equal(resetState.p1Dist, 0);
-  assert.equal(resetState.time, 0);
-});
-
-test('kart garage purchases, storage quota retry banner, corrupt save recovery, and [1100, 620] fit', async t => {
-  const page = await game(t, { save: SAVE({ coins: 40 }), size: [1100, 620] });
-  await step(page, 5);
-
-  // Verify title panel fits inside [1100, 620] with no clipping off viewport
-  const titleBox = await page.locator('#scrTitle .panel').boundingBox();
-  assert.ok(titleBox.y >= 0 && titleBox.y + titleBox.height <= 620, 'title panel fits vertically in 1100x620');
-
-  await page.locator('#btnShop').click();
-  await step(page);
-  assert.equal((await state(page)).screen, 'shop');
-
-  // Simulate storage quota failure on purchase, then recover via retry!
-  await page.evaluate(() => { dk.failSave = true; });
-  await page.locator('#shelfKarts [data-idx="1"]').click();
-  assert.ok(await page.locator('.sg-save-status').isVisible(), 'save failure banner shown');
-
-  await page.evaluate(() => { dk.failSave = false; });
-  await page.locator('.sg-save-status button').click();
-  const sv = await stored(page);
-  assert.equal(sv.kart, 1);
-  assert.equal(sv.karts[1], 1);
+  st = await state(page);
+  assert.equal(st.duo, true);
+  assert.ok(st.karts[0].speed > 10, 'P1 accelerates with W in 2P mode');
+  assert.ok(st.karts[1].speed > 10, 'P2 accelerates with ArrowUp in 2P mode');
 });
