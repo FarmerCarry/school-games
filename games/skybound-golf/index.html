@@ -10,78 +10,148 @@
 </head>
 <body>
 <canvas id="game" tabindex="0" aria-label="ملعب ضربة إلى الفضاء"></canvas>
+<div id="popups" class="popups" aria-hidden="true"></div>
+
 <main id="ui" data-phase="title">
-<div id="hud" class="hud" hidden>
-<div class="hud-left">
-<div class="chip run-coins" aria-label="عملات هذه الضربة"><i class="coin-ico" aria-hidden="true"></i><b id="run-coins">0</b></div>
-<div id="rockets" class="rockets" aria-label="الصواريخ"></div>
-<span id="hud-diff" class="hud-diff"></span>
-</div>
-<div id="distance" class="distance"><b id="meters" dir="ltr">0</b><span>متر</span></div>
-<div id="altimeter" class="altimeter" aria-hidden="true">
-<span class="alt-goal">الفضاء</span>
-<div class="alt-track"><div id="alt-fill" class="alt-fill"></div><i id="alt-ball" class="alt-ball"></i></div>
-<span class="alt-value"><b id="alt-meters">0</b> م</span>
-</div>
-<p id="hint" class="hint" hidden></p>
-</div>
-<button id="pause" class="round-button pause-button" type="button" aria-label="إيقاف مؤقت" title="إيقاف مؤقت (P / Esc)" hidden><i class="pause-icon" aria-hidden="true"></i></button>
-<div id="toast" class="toast" role="status" hidden></div>
-<section id="title-screen" class="title-screen">
-<div class="smash-badge">قاذفة الكرات الصاروخية!</div>
-<h1 class="logo"><span class="logo-top">ضربة إلى</span><span class="logo-main">الفضاء</span></h1>
-<div class="title-stats">
-<span class="chip"><i class="coin-ico" aria-hidden="true"></i><b id="coins">0</b></span>
-<span class="chip">أفضل مسافة: <b id="best-meters" dir="ltr">0</b> م</span>
-</div>
-<div id="difficulty-bar" class="diff-bar" role="group" aria-label="مستوى التحدي">
-<button type="button" class="diff-btn" data-difficulty="easy" aria-pressed="false">سهل</button>
-<button type="button" class="diff-btn" data-difficulty="normal" aria-pressed="true">متوسط</button>
-<button type="button" class="diff-btn" data-difficulty="hero" aria-pressed="false">بطل <small dir="ltr">×1.35</small></button>
-</div>
-<button id="play" class="button primary play" type="button">انطلق!<i class="play-icon" aria-hidden="true"></i></button>
-<div class="title-actions">
-<button id="open-shop" class="button secondary" type="button">المتجر</button>
-<button id="open-worlds" class="button secondary" type="button">العوالم <small id="world-label"></small></button>
-</div>
-<ul class="howto">
-<li><span dir="ltr"><span class="sg-key">مسافة</span> <span class="sg-key">انقر</span></span> اضرب في <b class="gold">الذهبي</b> وحطّم الديناميت!</li>
-<li>في الهواء: <b>صاروخ</b> · قرب الأرض أو <span class="sg-key">↓</span>: <b>قفزة خارقة</b></li>
-</ul>
-<p id="journey" class="journey"></p>
-</section>
-<section id="modal" class="modal" hidden aria-modal="true" role="dialog" aria-labelledby="modal-heading">
-<div id="panel" class="panel">
-<button id="close-modal" class="close-button" type="button" aria-label="رجوع">×</button>
-<h2 id="modal-heading"></h2>
-<div id="result-content" hidden>
-<p id="result-note" class="result-note"></p>
-<div class="result-distance"><b id="result-meters" dir="ltr">0</b><span>متر</span></div>
-<div id="result-coins" class="result-coins"></div>
-<p id="result-unlock" class="result-unlock" hidden></p>
-</div>
-<div id="shop-content" hidden>
-<div class="shop-wallet chip"><i class="coin-ico" aria-hidden="true"></i><b id="shop-coins">0</b></div>
-<div id="upgrades" class="upgrades"></div>
-<div id="skins-content"><h3>شكل الكرة الصاروخية</h3><div id="skins" class="skins"></div></div>
-</div>
-<div id="worlds-content" class="worlds" hidden></div>
-<div id="pause-content" hidden>
-<p class="pause-copy">استراحة البطل… الكرة الصاروخية بانتظارك!</p>
-<button id="resume" class="button primary" type="button">تابع اللعب</button>
-<button id="restart" class="button secondary" type="button">ضربة جديدة</button>
-</div>
-<div class="modal-actions">
-<button id="again" class="button primary" type="button" hidden>ضربة أخرى</button>
-<button id="menu" class="button text-button" type="button">القائمة الرئيسية</button>
-</div>
-<p id="modal-tip" class="modal-tip"></p>
-</div>
-</section>
-<p id="announce" class="sr-only" aria-live="polite"></p>
+  <!-- Minimal Gameplay HUD -->
+  <div id="hud" class="hud" hidden>
+    <div class="hud-left">
+      <div class="pill coin-pill" aria-label="العملات">
+        <span class="ico">🪙</span>
+        <b id="run-coins" dir="ltr">0</b>
+      </div>
+      <div class="fuel-wrap" aria-label="وقود الصاروخ">
+        <span class="ico">🚀</span>
+        <div class="fuel-track"><div id="fuel-fill" class="fuel-fill"></div></div>
+      </div>
+    </div>
+
+    <div class="hud-center">
+      <div class="dist-box">
+        <b id="meters" dir="ltr">0</b>
+        <span>م</span>
+      </div>
+      <div id="layer-pill" class="layer-pill">☀️ المرج المشمس</div>
+    </div>
+
+    <div id="altimeter" class="altimeter" aria-hidden="true">
+      <span class="alt-top">🛸</span>
+      <div class="alt-track">
+        <div id="alt-fill" class="alt-fill"></div>
+        <i id="alt-dot" class="alt-dot"></i>
+      </div>
+      <span class="alt-num"><b id="alt-meters" dir="ltr">0</b>م</span>
+    </div>
+  </div>
+
+  <button id="pause" class="round-btn pause-btn" type="button" aria-label="إيقاف مؤقت" title="إيقاف مؤقت (P / Esc)" hidden>⏸</button>
+  <div id="toast" class="toast" role="status" hidden></div>
+  <div id="ghost-hint" class="ghost-hint" hidden>
+    <span class="ghost-keys" dir="ltr"><span class="sg-key">مسافة</span> / <span class="sg-key">انقر</span></span>
+    <span id="ghost-text">اختر الزاوية!</span>
+  </div>
+
+  <!-- Minimal Poki-style Title Screen over live 3D Tee Scene -->
+  <section id="title-screen" class="title-screen">
+    <div class="title-top">
+      <div class="title-pills">
+        <span class="pill coin-pill"><span class="ico">🪙</span><b id="title-coins" dir="ltr">0</b></span>
+        <span class="pill best-pill"><span class="ico">🏆</span><b id="best-meters" dir="ltr">0</b><small>م</small></span>
+        <span class="pill ms-pill" id="title-milestone">☁️ 250م</span>
+      </div>
+      <h1 class="logo">ضربة إلى الفضاء</h1>
+    </div>
+
+    <div class="title-bottom">
+      <div class="title-cta">
+        <button id="play" class="btn-play" type="button">
+          <span>العب!</span>
+          <span class="play-tri" aria-hidden="true">▶</span>
+        </button>
+        <div class="title-sub-btns">
+          <button id="open-skins" class="btn-icon" type="button" title="الكرات">⚽ <span>الكرات</span></button>
+          <button id="open-shop" class="btn-icon" type="button" title="الترقيات">⚡ <span>الترقيات</span></button>
+        </div>
+      </div>
+      <div class="controls-line">
+        <span dir="ltr"><span class="sg-key">مسافة</span> / <span class="sg-key">انقر</span></span>
+        <span>صوّب · اضرب · صاروخ!</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Unified Modal for Pause / Result / Skins / Upgrades -->
+  <section id="modal" class="modal" hidden aria-modal="true" role="dialog" aria-labelledby="modal-heading">
+    <div id="panel" class="panel">
+      <button id="close-modal" class="close-btn" type="button" aria-label="إغلاق">×</button>
+      <h2 id="modal-heading" class="modal-heading"></h2>
+
+      <!-- Pause Content -->
+      <div id="pause-content" class="pause-content" hidden>
+        <button id="resume" class="sg-btn good big-action" type="button">تابع اللعب</button>
+        <div class="btn-row">
+          <button id="restart" class="sg-btn" type="button">ضربة جديدة</button>
+          <button id="pause-menu" class="sg-btn secondary" type="button">الرئيسية</button>
+        </div>
+      </div>
+
+      <!-- Result + Visual Incremental Upgrade Bar -->
+      <div id="result-content" class="result-content" hidden>
+        <div id="res-record" class="record-banner" hidden>🎉 رقم قياسي جديد!</div>
+        <div id="res-stars" class="res-stars" aria-label="النجوم"></div>
+        <div class="res-stats">
+          <div class="res-stat primary">
+            <span class="lbl">المسافة</span>
+            <b id="result-meters" dir="ltr">0</b><small>م</small>
+          </div>
+          <div class="res-stat">
+            <span class="lbl">أقصى ارتفاع</span>
+            <b id="result-alt" dir="ltr">0</b><small>م</small>
+          </div>
+          <div class="res-stat gold">
+            <span class="lbl">العملات</span>
+            <b id="result-coins" dir="ltr">+0</b>
+          </div>
+        </div>
+        <div id="res-milestone" class="res-milestone"></div>
+        <div id="result-wallet" class="wallet-row">
+          <span>🪙 رصيدك: <b id="res-wallet-val" dir="ltr">0</b></span>
+        </div>
+        <div id="upgrades" class="upgrades-bar"></div>
+        <div class="result-actions">
+          <button id="again" class="sg-btn good big-action" type="button">ضربة أخرى ▶</button>
+          <button id="res-skins" class="sg-btn" type="button">⚽ الكرات</button>
+          <button id="menu" class="sg-btn secondary" type="button">الرئيسية</button>
+        </div>
+      </div>
+
+      <!-- Quick Upgrades Modal from Title -->
+      <div id="shop-content" class="shop-content" hidden>
+        <div class="wallet-row"><span>🪙 رصيدك: <b id="shop-coins" dir="ltr">0</b></span></div>
+        <div id="shop-upgrades" class="upgrades-bar"></div>
+      </div>
+
+      <!-- 3D Golf Ball Skins Modal -->
+      <div id="skins-content" class="skins-content" hidden>
+        <div class="wallet-row"><span>🪙 رصيدك: <b id="skins-coins" dir="ltr">0</b></span></div>
+        <div id="skins-grid" class="skins-grid"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- WebGL Fallback & Context Notice -->
+  <section id="webgl-error" class="modal" hidden>
+    <div class="panel">
+      <h2 class="modal-heading">تعذّر تشغيل العرض ثلاثي الأبعاد</h2>
+      <p class="err-copy">متصفحك لا يدعم الرسوم ثلاثية الأبعاد (WebGL) حاليًا. جرّب تحديث الصفحة أو تفعيل تسريع الرسوم.</p>
+    </div>
+  </section>
+  <div id="ctx-notice" class="toast" hidden>جاري استعادة الرسوم…</div>
+  <p id="announce" class="sr-only" aria-live="polite"></p>
 </main>
+
+<script src="../../lib/three/three.min.js"></script>
 <script src="../../shared/kit.js"></script>
-<script src="../../shared/artkit.js"></script>
 <script src="../../shared/juice.js"></script>
 <script src="physics.js"></script>
 <script src="art.js"></script>

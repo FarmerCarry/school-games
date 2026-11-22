@@ -1,473 +1,972 @@
-(function(root){
-'use strict';
-var CHUNK=80,SPACE=250,RAD=0.55,T_MAX=55,A_WIN=0.6,P_WIN=0.2,L_WIN=0.1;
-var P_PWR=0.9,G_PWR=0.72,OK_PWR=0.45,BLEND=5,LIM=1e7;
+/* Skybound Golf (ضربة إلى الفضاء) — Pure deterministic 2D-plane arcade golf physics,
+ * procedural altitude-layered course generator, upgrades, milestones & save sanitization.
+ * Zero DOM, zero Kit, zero Math.random(). UMD export for browser & Node verification. */
+(function (root) {
+  'use strict';
 
-var DIFFS={
-easy:{id:'easy',name:'سهل',label:'سهل (5–7)',gaugePeriod:1.75,perfectBonus:0.08,armWindow:0.8,perfectWindow:0.28,rocketBoost:1.18,gravityMul:0.92,wind:1.1,coinMul:1},
-normal:{id:'normal',name:'متوسط',label:'متوسط',gaugePeriod:1.3,perfectBonus:0,armWindow:A_WIN,perfectWindow:P_WIN,rocketBoost:1,gravityMul:1,wind:0,coinMul:1},
-hero:{id:'hero',name:'بطل',label:'بطل ×1.35',gaugePeriod:0.94,perfectBonus:-0.02,armWindow:0.52,perfectWindow:0.16,rocketBoost:1.05,gravityMul:1.08,wind:-2.0,coinMul:1.35}
-};
-var DIFF_IDS=['easy','normal','hero'];
-var worlds=[
-{id:'meadow',name:'سهول الصواريخ',unlock:0,gravity:19,hills:[3.2,1.6,5],ground:'grass',prop:'tree',slots:{green:3,sand:3,water:2,pad:4,prop:4,none:2}},
-{id:'desert',name:'وادي الرمال',unlock:250,gravity:17.5,hills:[4.5,2,7],ground:'dune',prop:'cactus',slots:{green:3,sand:5,water:2,pad:3,prop:4,none:2}},
-{id:'snow',name:'قمم الثلج',unlock:550,gravity:16,hills:[5.5,2.4,10],ground:'snow',prop:'pine',slots:{green:3,ice:4,sand:1,pad:4,prop:4,none:2}},
-{id:'volcano',name:'جبل البركان',unlock:900,gravity:15.2,hills:[4.6,2.5,8.2],ground:'rock',prop:'spire',slots:{green:2,sand:2,water:3,pad:4,prop:4,none:2}},
-{id:'space',name:'مدار المجرة',unlock:1400,gravity:13.5,hills:[3,2.2,6],ground:'moon',prop:'crystal',slots:{green:3,crater:4,pad:4,prop:3,none:2}}
-];
-var SURF={grass:[0,0.88,6.5],dune:[-0.02,0.86,7],snow:[-0.03,0.87,6],rock:[0.03,0.9,5.2],moon:[-0.01,0.91,4.5],green:[-0.08,0.85,4.5],sand:[-0.3,0.45,26],ice:[-0.05,0.98,1.2],pad:[0,0.9,6]};
-var PROPS={tree:[6.0,2.4,0.38],cactus:[3.8,1.55,0.42],pine:[5.5,2.1,0.35],spire:[4.6,1.9,0.65],crystal:[3.4,1.6,0.8]};
-var skins=[
-{id:'classic',name:'كلاسيكية',price:0},{id:'gold',name:'ذهبية',price:250},
-{id:'rocket',name:'صاروخية',price:550},{id:'fire',name:'كرة اللهب',price:950},
-{id:'dino',name:'ديناصور',price:1500},{id:'cyber',name:'سايبر',price:2400}
-];
-var UPS={
-power:{max:12,base:30,growth:1.36},bounce:{max:10,base:25,growth:1.4},
-rockets:{max:5,base:60,growth:1.9},magnet:{max:5,base:40,growth:1.8},
-thrust:{max:5,base:50,growth:1.75},aim:{max:4,base:45,growth:1.8},
-skip:{max:4,base:35,growth:1.7},treasure:{max:5,base:80,growth:2}
-};
-var KINDS=['power','bounce','rockets','magnet','thrust','aim','skip','treasure'];
+  var M = Math;
+  var DEG2RAD = M.PI / 180;
+  var BALL_R = 0.65;
+  var CHUNK_W = 48;
+  var MAX_TIME = 60;
+  var PERFECT_ANGLE_MIN = 38;
+  var PERFECT_ANGLE_MAX = 54;
 
-function clp(x,a,b){return x<a?a:x>b?b:x;}
-function fin(x,fb){return typeof x==='number'&&Number.isFinite(x)?x:fb;}
-function sm(v){return v*v*(3 - 2*v);}
-function diffOf(id){return DIFFS[id]||DIFFS.normal;}
-function hsh(c,n){var x=Math.sin(n*127.1+c.seed*311.7)*43758.5453;return x - Math.floor(x);}
+  var LAYERS = [
+    { id: 'meadow', name: 'المرج المشمس', minY: 0, icon: '☀️' },
+    { id: 'clouds', name: 'الغيوم والمناطيد', minY: 42, icon: '🎈' },
+    { id: 'sky', name: 'السماء العالية', minY: 110, icon: '✈️' },
+    { id: 'aurora', name: 'الشفق القطبي', minY: 205, icon: '🌌' },
+    { id: 'space', name: 'الفضاء الخارجي', minY: 310, icon: '🛸' }
+  ];
 
-function createCourse(idx,diff){
-idx=clp(Math.floor(fin(idx,0)),0,worlds.length - 1);
-var d=diffOf(diff);
-return{worldIndex:idx,world:worlds[idx],diff:d,difficulty:d.id,seed:11+idx*29,chunks:{},cached:0,layouts:{},laidOut:0};
-}
+  var MILESTONES = [
+    { id: 'cloud_gate', dist: 250, name: 'بوابة الغيوم', bonus: 40, icon: '☁️' },
+    { id: 'air_club', dist: 600, name: 'نادي الطائرات', bonus: 90, icon: '✈️' },
+    { id: 'moon', dist: 1200, name: 'هبوط القمر', bonus: 180, icon: '🌙' },
+    { id: 'mars', dist: 2400, name: 'كوكب المريخ', bonus: 400, icon: '🪐' }
+  ];
 
-function baseH(c,x){
-if(x<=22)return 0;
-var a=c.world.hills,s=c.seed,f=sm(clp((x - 22)/70,0,1));
-return f*(a[0]*Math.sin(x*0.019+s*0.37)+a[1]*Math.sin(x*0.053+s*1.3)+a[2]*(Math.sin(x*0.0061+s)- Math.sin(s)));
-}
+  var UPGRADES = [
+    { id: 'power', name: 'قوة الضربة', short: 'القوة', max: 12, base: 25, mult: 1.46, icon: '⚡' },
+    { id: 'fuel', name: 'وقود الصاروخ', short: 'الصاروخ', max: 10, base: 30, mult: 1.48, icon: '🚀' },
+    { id: 'bounce', name: 'الارتداد', short: 'الارتداد', max: 10, base: 25, mult: 1.46, icon: '🏀' },
+    { id: 'magnet', name: 'المغناطيس والحظ', short: 'المغناطيس', max: 10, base: 35, mult: 1.48, icon: '🧲' }
+  ];
 
-function mkFlat(c,t,x,hw){
-var f={type:t,x:x,hw:hw,level:baseH(c,x)-(t==='water'?0.7:0)};
-if(t==='green')f.holeX=x+2.2;
-if(t==='crater')f.depth=1.6+hw*0.18;
-return f;
-}
+  var SKINS = [
+    { id: 'classic', name: 'الكلاسيكية', cost: 0, primary: 0xffffff, accent: 0xffcc00, trail: 0xfff4b8 },
+    { id: 'fireball', name: 'كرة النار', cost: 120, primary: 0xff551a, accent: 0xffdd33, trail: 0xff7722 },
+    { id: 'disco', name: 'كرة الديسكو', cost: 250, primary: 0x3ef2ff, accent: 0xff4fd8, trail: 0xb877ff },
+    { id: 'planet', name: 'الكوكب الصغير', cost: 450, primary: 0x2e9dff, accent: 0x4de87c, trail: 0x7ce6ff },
+    { id: 'star', name: 'النجمة الذهبية', cost: 750, primary: 0xffd52e, accent: 0xfff8b0, trail: 0xffe45c }
+  ];
 
-function layout(c,i){
-var g=c.layouts[i];
-if(g)return g;
-g={flats:[],spots:[]};
-var x0=i*CHUNK,sl=c.world.slots,r=function(k){return hsh(c,i*31+k);};
-if(i===0)g.flats.push(mkFlat(c,'pad',62,2.2));
-else for(var n=0;n<4;n++){
-var sx=x0+10+n*20+(r(n)- 0.5)*5,tot=0,k,t='none';
-for(k in sl)tot+=sl[k];
-var rl=r(n+10)*tot;
-for(k in sl){rl-=sl[k];if(rl<0){t=k;break;}}
-if(i===1&&(t==='water'||t==='sand'))t='prop';
-if(t==='prop')g.spots.push({n:n,x:sx});
-else if(t!=='none')g.flats.push(mkFlat(c,t,sx,t==='green'?8:t==='pad'?2.2:t==='water'?5+r(n+20)*2:t==='crater'?6+r(n+20)*3:4.5+r(n+20)*2.5));
-}
-if(c.laidOut>400){c.layouts={};c.laidOut=0;}
-c.layouts[i]=g;c.laidOut++;
-return g;
-}
+  var SAVE_VERSION = 3;
 
-function hAt(c,x){
-x=clp(fin(x,0),-LIM,LIM);
-var h=baseH(c,x),i=Math.floor(x/CHUNK);
-for(var j=i - 1;j<=i+1;j++)if(j>=0){
-var fl=layout(c,j).flats;
-for(var n=0;n<fl.length;n++){
-var f=fl[n],d=Math.abs(x - f.x);
-if(d>=f.hw+BLEND)continue;
-if(f.type==='crater'){if(d<f.hw){var q=d/f.hw;h-=f.depth*(1 - q*q)*(1 - q*q);}continue;}
-var t=d<=f.hw?1:1 - sm((d - f.hw)/BLEND);
-h=h*(1 - t)+f.level*t;
-}
-}
-return h;
-}
+  function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+  function lerp(a, b, t) { return a + (b - a) * t; }
+  function finite(v, fb) { return typeof v === 'number' && isFinite(v) ? v : fb; }
 
-function sAt(c,x){
-x=clp(fin(x,0),-LIM,LIM);
-var i=Math.floor(x/CHUNK);
-for(var j=i - 1;j<=i+1;j++)if(j>=0){
-var fl=layout(c,j).flats;
-for(var n=0;n<fl.length;n++)if(fl[n].type!=='crater'&&Math.abs(x - fl[n].x)<=fl[n].hw)return fl[n];
-}
-return null;
-}
-function sType(c,x){var f=sAt(c,x);return f?f.type:c.world.ground;}
-function slp(c,x){return(hAt(c,x+0.08)- hAt(c,x - 0.08))/0.16;}
+  // Deterministic 32-bit hash in [0, 1).
+  function hash(n, salt) {
+    var x = ((n | 0) * 374761393 + (salt | 0) * 668265263) | 0;
+    x = ((x ^ (x >>> 13)) * 1274126177) | 0;
+    x = (x ^ (x >>> 16)) >>> 0;
+    return x / 4294967296;
+  }
 
-function chunk(c,i){
-var ch=c.chunks[i];
-if(ch)return ch;
-var gr=layout(c,i),x0=i*CHUNK,w=c.world,n,k,h;
-ch={flats:gr.flats,props:[],coins:[],rings:[],ufos:[],tnts:[],cannons:[]};
-var r=function(m){return hsh(c,i*31+m);};
-if(i===0){
-for(k=0;k<6;k++)ch.coins.push({id:0,x:9+k*2.5,y:3.4+k*1.45 - k*k*0.12,gem:false});
-for(k=0;k<5;k++){var ax=30+k*4;ch.coins.push({id:0,x:ax,y:0.95*ax - 0.0142*ax*ax,gem:false});}
-}else{
-for(n=0;n<gr.spots.length;n++){
-var sp=gr.spots[n],p=PROPS[w.prop],sc=0.85+r(sp.n+30)*0.35;
-ch.props.push({id:i*8+sp.n,type:w.prop,x:sp.x,ground:hAt(c,sp.x),lift:p[0]*sc,r:p[1]*sc,k:p[2]});
-}
-var groups=2+(r(40)>0.52?1:0);
-for(n=0;n<groups;n++){
-var gx=x0+6+n*24+r(41+n)*12,band=r(43+n),far=clp(i/12,0,1);
-var base,gem=false,pat=Math.floor(r(47+n)*4),flr=hAt(c,gx);
-if(band<0.3){base=-1;if(pat===2)pat=1;}
-else if(band<0.72 - far*0.12||i<3)base=5+r(45+n)*14;
-else if(band<0.9 - far*0.05||i<5)base=24+r(45+n)*36;
-else{base=80+r(45+n)*180*far;gem=true;pat=2;}
-for(k=0;k<7&&!(gem&&k>4);k++){
-var px=gx+(pat===0?k*2.5:pat===1?k*2.3:pat===2?k*1.9:k*2);
-var py=pat===0?Math.sin(k/6*Math.PI)*3.6:pat===1?0:pat===2?k*1.8:k*1.4;
-var un=hAt(c,px);
-h=base<0?un+1.6+py:Math.max(flr+base+py,un+2);
-ch.coins.push({id:0,x:px,y:h,gem:gem});
-}
-}
-if(r(50)<(i===1?0.65:0.42)){var rx=x0+22+r(51)*38;ch.rings.push({id:i*4,x:rx,y:hAt(c,rx)+10+r(52)*(26+i*1.4),r:3.3});}
-if(r(53)<0.5){var ux=x0+16+r(55)*48;ch.ufos.push({id:i*4+1,x:ux,y:hAt(c,ux)+14+r(54)*(28+Math.min(120,i*6)),r:1.75,kind:Math.floor(r(56)*3)});}
-if(r(60)<0.54){var tx=i===1?x0+54+r(61)*14:x0+14+r(61)*50,st=sType(c,tx);if(st!=='water'&&st!=='green')ch.tnts.push({id:i*4+2,x:tx,y:hAt(c,tx)+1.2,r:1.5});}
-if(i>=2&&r(64)<0.42){
-var cx=x0+34+r(65)*32,cst=sType(c,cx);
-if(cst!=='water'&&cst!=='green'&&(!ch.tnts.length||Math.abs(cx - ch.tnts[0].x)>10))ch.cannons.push({id:i*4+3,x:cx,y:hAt(c,cx)+1.4,r:1.8});
-}
-}
-for(k=0;k<ch.coins.length;k++)ch.coins[k].id=i*64+k;
-if(c.cached>160){c.chunks={};c.cached=0;}
-c.chunks[i]=ch;c.cached++;
-return ch;
-}
+  function normUpgrades(raw) {
+    var out = {};
+    raw = raw && typeof raw === 'object' ? raw : {};
+    for (var i = 0; i < UPGRADES.length; i++) {
+      var u = UPGRADES[i];
+      var v = Math.floor(finite(Number(raw[u.id]), 0));
+      out[u.id] = clamp(v, 0, u.max);
+    }
+    return out;
+  }
 
-function features(c,minX,maxX){
-minX=clp(fin(minX,0),-LIM,LIM);maxX=clp(fin(maxX,minX+200),-LIM,LIM);
-var out={flats:[],props:[],coins:[],rings:[],ufos:[],tnts:[],cannons:[]};
-if(maxX<minX)return out;
-var first=Math.max(0,Math.floor((minX - 12)/CHUNK)),last=Math.min(Math.floor((maxX+12)/CHUNK),first+40);
-for(var i=first;i<=last;i++){var ch=chunk(c,i);for(var k in out)for(var n=0;n<ch[k].length;n++)out[k].push(ch[k][n]);}
-return out;
-}
+  function upgradeCost(id, level) {
+    for (var i = 0; i < UPGRADES.length; i++) {
+      if (UPGRADES[i].id === id) {
+        var u = UPGRADES[i];
+        var lv = clamp(Math.floor(finite(level, 0)), 0, u.max);
+        if (lv >= u.max) return Infinity;
+        return Math.round(u.base * M.pow(u.mult, lv) / 5) * 5;
+      }
+    }
+    return Infinity;
+  }
 
-function lvs(raw){
-raw=raw&&typeof raw==='object'?raw:{};
-var out={};
-for(var i=0;i<KINDS.length;i++){var k=KINDS[i];out[k]=clp(Math.floor(fin(raw[k],0)),0,UPS[k].max);}
-return out;
-}
-function bncOf(u){return 0.36+u.bounce*0.02;}
-function magOf(raw){return 1.3+lvs(raw).magnet*0.7;}
-function rktOf(raw){return 1+lvs(raw).rockets;}
-function pBand(raw,diff){return clp(P_PWR - 0.025*lvs(raw).aim - diffOf(diff).perfectBonus,0.73,0.94);}
-function skimSp(u){return 9 - 1.5*u.skip;}
-function grade(p,raw,diff){p=clp(fin(p,0),0,1);return p>=pBand(raw,diff)?'perfect':p>=G_PWR?'great':p>=OK_PWR?'good':'weak';}
+  function sanitizeSave(raw) {
+    var fresh = {
+      v: SAVE_VERSION,
+      coins: 0,
+      bestDist: 0,
+      bestAlt: 0,
+      shots: 0,
+      upgrades: normUpgrades(null),
+      skin: 'classic',
+      ownedSkins: ['classic'],
+      milestones: [],
+      tips: 0
+    };
+    if (!raw || typeof raw !== 'object' || raw.v !== SAVE_VERSION) return fresh;
+    fresh.coins = Math.max(0, Math.floor(finite(Number(raw.coins), 0)));
+    fresh.bestDist = Math.max(0, Math.floor(finite(Number(raw.bestDist), 0)));
+    fresh.bestAlt = Math.max(0, Math.floor(finite(Number(raw.bestAlt), 0)));
+    fresh.shots = Math.max(0, Math.floor(finite(Number(raw.shots), 0)));
+    fresh.upgrades = normUpgrades(raw.upgrades);
+    fresh.tips = clamp(Math.floor(finite(Number(raw.tips), 0)), 0, 10);
 
-function launch(c,raw,pwr){
-var u=lvs(raw),d=c&&c.diff?c.diff:DIFFS.normal;
-pwr=clp(fin(pwr,0),0,1);
-var g=grade(pwr,raw,d.id),pf=g==='perfect',rk=rktOf(u);
-var sp=(33+u.power*4.6)*(0.4+0.6*pwr)*(pf?1.1:1),ang=(36+8*pwr)*Math.PI/180,y=hAt(c,0)+RAD;
-return{
-x:0,y:y,vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp,r:RAD,
-mode:'air',done:false,reason:null,time:0,maxX:0,maxY:y,power:pwr,grade:g,perfect:pf,
-rockets:rk,rocketsLeft:rk,armed:false,armAge:0,combo:0,bestCombo:0,
-supers:0,bounces:0,skips:0,coins:0,gems:0,pops:0,rings:0,ufos:0,tnts:0,cannons:0,
-got:{},used:{},treasure:u.treasure,coinMul:d.coinMul,
-lastPad:-1,lateUntil:-1,lateOut:0,space:false,hole:false,ace:false,surface:null,trackVy:0
-};
-}
+    var validSkin = {};
+    for (var i = 0; i < SKINS.length; i++) validSkin[SKINS[i].id] = true;
+    var owned = { classic: true };
+    if (Array.isArray(raw.ownedSkins)) {
+      for (i = 0; i < raw.ownedSkins.length; i++) {
+        if (validSkin[raw.ownedSkins[i]]) owned[raw.ownedSkins[i]] = true;
+      }
+    }
+    fresh.ownedSkins = Object.keys(owned);
+    fresh.skin = validSkin[raw.skin] && owned[raw.skin] ? raw.skin : 'classic';
 
-function bisectX(c,ox,oy,x,y,r){
-var lo=0,hi=1;
-for(var it=0;it<10;it++){var m=(lo+hi)/2;if(oy+(y - oy)*m>=hAt(c,ox+(x - ox)*m)+r)lo=m;else hi=m;}
-return ox+(x - ox)*lo;
-}
+    var validMs = {};
+    for (i = 0; i < MILESTONES.length; i++) validMs[MILESTONES[i].id] = true;
+    var seenMs = {};
+    if (Array.isArray(raw.milestones)) {
+      for (i = 0; i < raw.milestones.length; i++) {
+        var mId = raw.milestones[i];
+        if (validMs[mId] && !seenMs[mId]) { seenMs[mId] = true; fresh.milestones.push(mId); }
+      }
+    }
+    return fresh;
+  }
 
-function predImp(c,b,maxT){
-if(!b||b.done||b.mode!=='air')return null;
-var d=c&&c.diff?c.diff:DIFFS.normal,g=c.world.gravity*d.gravityMul,wind=d.wind;
-var x=b.x,y=b.y,vx=b.vx,vy=b.vy,t=0;
-maxT=fin(maxT,d.armWindow);
-while(t<maxT+1e-9){
-var cnt=Math.max(4,Math.ceil(Math.hypot(vx,vy)/30)),h=1/(60*cnt);
-for(var k=0;k<cnt;k++){
-if(t+h>maxT+1e-9)return null;
-var ox=x,oy=y;
-vy-=g*h;if(wind)vx+=wind*0.35*h;
-var dr=Math.exp(-(0.01+0.0009*Math.hypot(vx,vy))*h);
-vx*=dr;vy*=dr;x+=vx*h;y+=vy*h;
-if(x<0){x=0;vx=Math.abs(vx)*0.5;}
-t+=h;
-if(y<=hAt(c,x)+b.r){x=bisectX(c,ox,oy,x,y,b.r);return{t:t,x:x,y:hAt(c,x)};}
-}
-}
-return null;
-}
+  /* --------------------------------------------------------------- meters */
+  // Smooth back-and-forth oscillation 0..1 using cosine easing.
+  function osc01(t, speed) {
+    return 0.5 - 0.5 * M.cos(t * speed * M.PI);
+  }
 
-function perfT(t,c){return t<=(c&&c.diff?c.diff.perfectWindow:P_WIN)+1e-9;}
+  function aimAngle(t, speed) {
+    var u = osc01(t, speed || 1.35);
+    return lerp(20, 70, u);
+  }
 
-function press(c,b,raw,slamOnly){
-if(!b||b.done)return{type:'none'};
-var u=lvs(raw),d=c&&c.diff?c.diff:DIFFS.normal;
-if(b.mode==='air'&&b.time<=b.lateUntil&&!b.armed){
-b.vy+=b.lateOut*0.1*Math.pow(0.92,b.supers)/Math.max(0.1,bncOf(u));
-b.supers++;b.combo=0;b.lateUntil=-1;
-return{type:'late',x:b.x,y:b.y - b.r};
-}
-if(b.mode==='air'&&b.vy<0){
-var p=predImp(c,b,d.armWindow);
-if(p){if(b.armed)return{type:'armed'};b.armed=true;b.armAge=0;return{type:'arm',t:p.t};}
-}
-if(slamOnly)return{type:'none'};
-if(b.rocketsLeft>0){
-b.rocketsLeft--;
-if(b.mode==='roll'){b.mode='air';b.y+=0.05;}
-b.armed=false;
-b.vy=Math.max(b.vy,0)+(18+3*u.thrust)*d.rocketBoost;
-b.vx=Math.max(b.vx,0)+(6+1.5*u.thrust)*d.rocketBoost;
-return{type:'rocket',left:b.rocketsLeft,x:b.x,y:b.y,thrust:u.thrust};
-}
-return{type:'empty'};
-}
+  function isPerfectAngle(deg) {
+    return deg >= PERFECT_ANGLE_MIN && deg <= PERFECT_ANGLE_MAX;
+  }
 
-function finish(c,b,evs,rsn){
-b.vx=b.vy=0;b.done=true;b.mode='stop';b.reason=rsn;b.armed=false;
-if(rsn!=='hole')b.y=Math.max(b.y,hAt(c,b.x)+b.r);
-b.maxX=Math.max(b.maxX,b.x);b.surface=sType(c,b.x);
-evs.push({type:'stop',x:b.x,y:b.y,reason:rsn,surface:b.surface});
-}
+  function powerValue(t, speed) {
+    var u = osc01(t, speed || 1.75);
+    return lerp(0.18, 1.0, u);
+  }
 
-function padHit(b,u,f,evs){
-if(b.lastPad===f.x)return false;
-b.lastPad=f.x;b.mode='air';b.armed=false;
-b.vy=Math.max(17.5+u.bounce*0.65,Math.abs(b.vy)*0.86);
-b.vx=Math.max(b.vx,9.5)+4.2;b.y=f.level+b.r+0.05;
-evs.push({type:'pad',x:b.x,y:b.y});
-return true;
-}
+  function perfectBand(ddaParams) {
+    var w = ddaParams && finite(ddaParams.perfectWidth, 0.14) || 0.14;
+    return clamp(1.0 - w, 0.72, 0.92);
+  }
 
-function impact(c,b,u,evs){
-var f=sAt(c,b.x),type=f?f.type:c.world.ground;
-if(type==='pad'&&padHit(b,u,f,evs))return;
-var sp=Math.hypot(b.vx,b.vy);
-if(type==='green'&&Math.abs(b.x - f.holeX)<0.75&&sp<32){
-b.ace=b.bounces===0&&b.supers===0;b.hole=true;b.x=f.holeX;b.y=f.level - 0.3;
-evs.push({type:'hole',x:b.x,y:f.level,ace:b.ace});finish(c,b,evs,'hole');return;
-}
-if(type==='water'){
-if(b.armed||(b.vx>skimSp(u)&&-b.vy<b.vx*(1.1+0.25*u.skip))){
-b.skips++;b.armed=false;b.vy=Math.abs(b.vy)*0.5+2.5+0.5*u.skip;
-b.vx*=0.84+0.03*u.skip;b.y=f.level+b.r+0.02;
-evs.push({type:'skip',x:b.x,y:f.level,count:b.skips});return;
-}
-b.y=f.level;evs.push({type:'splash',x:b.x,y:f.level});finish(c,b,evs,'water');return;
-}
-var sf=SURF[type]||SURF.grass,s=slp(c,b.x),inv=1/Math.sqrt(1+s*s);
-var nx=-s*inv,ny=inv,tx=inv,ty=s*inv,vn=b.vx*nx+b.vy*ny,vt=b.vx*tx+b.vy*ty;
-var keep=type==='sand'?Math.min(0.85,sf[1]+u.skip*0.08):sf[1];
-var e=clp(bncOf(u)+sf[0]+(type==='sand'?u.skip*0.05:0),0.06,0.9),kind='bounce',q='';
-if(b.armed&&-vn>4){
-var tire=Math.pow(0.92,b.supers);
-if(perfT(b.armAge,c)){q='perfect';e=Math.max(e,(0.86+u.bounce*0.008)*tire);keep=Math.max(keep,0.95);}
-else{q='good';e=Math.max(e,e+0.1*tire);keep=Math.max(keep,0.9);}
-if(type==='sand')e=Math.min(e,0.32+u.skip*0.08);
-}
-b.armed=false;b.bounces++;
-var out=-vn*e;
-if(out<2.6){
-b.combo=0;b.mode='roll';b.vx=Math.max(-4,vt*keep)*tx;b.vy=0;
-b.trackVy=b.vx*slp(c,b.x);b.y=hAt(c,b.x)+b.r;
-evs.push({type:'roll',x:b.x,y:b.y,surface:type});return;
-}
-if(q){kind='super';b.supers++;b.combo=q==='perfect'?b.combo+1:0;b.bestCombo=Math.max(b.bestCombo,b.combo);}
-else b.combo=0;
-b.vx=vt*keep*tx+out*nx;b.vy=vt*keep*ty+out*ny;
-if(kind==='bounce'&&type!=='sand'){b.lateUntil=b.time+L_WIN;b.lateOut=out;}
-if(q==='perfect')b.vx=Math.max(b.vx,Math.min(out*0.9,sp*0.9));
-b.y+=0.01;
-evs.push({type:kind,quality:q,combo:b.combo,x:b.x,y:b.y - b.r,strength:Math.min(1,-vn/35),surface:type});
-}
+  function grade(power, ddaParams) {
+    var pf = perfectBand(ddaParams);
+    if (power >= pf) return 'perfect';
+    if (power >= pf - 0.14) return 'great';
+    if (power >= 0.48) return 'good';
+    return 'weak';
+  }
 
-function collect(c,b,u,ox,evs){
-var i=Math.floor(b.x/CHUNK),reach=magOf(u);
-for(var j=Math.max(0,i - 1);j<=i+1;j++){
-var ch=chunk(c,j),n,o,key;
-for(n=0;n<ch.coins.length;n++){
-o=ch.coins[n];
-if(b.got[o.id]||Math.abs(o.x - b.x)>reach||Math.abs(o.y - b.y)>reach||Math.hypot(o.x - b.x,o.y - b.y)>reach)continue;
-b.got[o.id]=1;if(o.gem)b.gems++;else b.coins++;
-evs.push({type:'coin',id:o.id,x:o.x,y:o.y,gem:o.gem});
-}
-for(n=0;n<ch.rings.length;n++){
-o=ch.rings[n];key='r'+o.id;
-if(b.used[key]||(ox - o.x)*(b.x - o.x)>0||Math.abs(b.y - o.y)>o.r)continue;
-b.used[key]=1;b.rings++;
-var sp=Math.hypot(b.vx,b.vy)||1,bst=(sp+9.5)/sp;
-b.vx*=bst;b.vy=b.vy*bst+3.2;b.armed=false;
-evs.push({type:'ring',id:o.id,x:o.x,y:o.y});
-}
-for(n=0;n<ch.ufos.length;n++){
-o=ch.ufos[n];key='u'+o.id;
-if(b.used[key]||Math.hypot(o.x - b.x,o.y - b.y)>o.r+b.r)continue;
-b.used[key]=1;b.ufos++;b.pops++;b.vy=Math.max(b.vy,0)+15;b.vx+=2.6;b.armed=false;
-evs.push({type:'ufo',id:o.id,x:o.x,y:o.y,kind:o.kind});
-}
-for(n=0;n<ch.tnts.length;n++){
-o=ch.tnts[n];key='t'+o.id;
-if(b.used[key]||Math.hypot(o.x - b.x,o.y - b.y)>o.r+b.r)continue;
-b.used[key]=1;b.tnts++;b.pops++;b.mode='air';b.armed=false;
-b.vy=Math.max(Math.abs(b.vy)*0.85,21+u.bounce*0.6);b.vx=Math.max(b.vx,11)+5.5;b.y=Math.max(b.y,o.y+0.2);
-evs.push({type:'tnt',id:o.id,x:o.x,y:o.y});
-}
-for(n=0;n<ch.cannons.length;n++){
-o=ch.cannons[n];key='c'+o.id;
-if(b.used[key]||Math.hypot(o.x - b.x,o.y - b.y)>o.r+b.r)continue;
-b.used[key]=1;b.cannons++;b.mode='air';b.armed=false;
-var bl=Math.max(Math.hypot(b.vx,b.vy)*1.12,29+u.power*1.1);
-b.vx=bl*0.79;b.vy=bl*0.61;b.x=o.x+1.2;b.y=Math.max(o.y+1.0,hAt(c,o.x+1.2)+b.r+0.2);
-evs.push({type:'cannon',id:o.id,x:o.x,y:o.y});
-}
-for(n=0;n<ch.props.length;n++){
-o=ch.props[n];
-var px=o.x,py=o.ground+o.lift,dx=b.x - px,dy=b.y - py,dist=Math.hypot(dx,dy);
-if(dist>o.r+b.r||dist===0)continue;
-var nx=dx/dist,ny=dy/dist,vn=b.vx*nx+b.vy*ny;
-b.x=px+nx*(o.r+b.r+0.01);b.y=py+ny*(o.r+b.r+0.01);
-if(vn>=0)continue;
-b.vx-=(1+o.k)*vn*nx;b.vy-=(1+o.k)*vn*ny;
-if(o.k<1){b.vx*=0.85;b.vy*=0.85;}
-if(b.mode==='roll')b.mode='air';
-if(ny>0.5&&-vn<3){
-var sd=nx<-0.05?-1:1,sx=ny*sd,sy=-nx*sd,al=b.vx*sx+b.vy*sy;
-if(al<2){b.vx+=(2 - al)*sx;b.vy+=(2 - al)*sy;}
-}
-if(-vn>=3)evs.push({type:'prop',id:o.id,x:b.x - nx*b.r,y:b.y - ny*b.r,prop:o.type,strength:Math.min(1,-vn/25)});
-}
-}
-}
+  function layerAt(y) {
+    var idx = 0;
+    for (var i = LAYERS.length - 1; i >= 0; i--) {
+      if (y >= LAYERS[i].minY) { idx = i; break; }
+    }
+    return LAYERS[idx];
+  }
 
-function step(c,b,raw,dt){
-var evs=[];
-if(!b||b.done)return evs;
-var u=lvs(raw),d=c&&c.diff?c.diff:DIFFS.normal,g=c.world.gravity*d.gravityMul,wind=d.wind;
-dt=clp(fin(dt,1/60),0,0.1);
-var cnt=Math.max(1,Math.ceil(dt/(1/240)),Math.ceil(Math.hypot(b.vx,b.vy)*dt/0.5)),h=dt/cnt;
-for(var k=0;k<cnt&&!b.done;k++){
-b.time+=h;
-var ox=b.x,oy=b.y;
-if(b.armed&&(b.armAge+=h)>d.armWindow+0.15)b.armed=false;
-if(b.mode==='roll'){
-var f=sAt(c,b.x),type=f?f.type:c.world.ground;
-if(type==='pad'&&padHit(b,u,f,evs))continue;
-if(type==='water'){
-if(u.skip&&b.vx>skimSp(u)){
-b.skips++;b.mode='air';b.armed=false;b.vy=3+u.skip;b.vx*=0.84+0.03*u.skip;b.y=f.level+b.r+0.05;
-evs.push({type:'skip',x:b.x,y:f.level,count:b.skips});continue;
-}
-evs.push({type:'splash',x:b.x,y:f.level});b.y=f.level;finish(c,b,evs,'water');break;
-}
-var s=slp(c,b.x),br=(SURF[type]||SURF.grass)[2];
-var fr=type==='sand'?Math.max(9,br - u.skip*3.5):br,al=-g*s/Math.sqrt(1+s*s),nx=b.vx+al*h;
-if(Math.abs(nx)<=fr*h+0.06&&Math.abs(al)<fr){finish(c,b,evs,'rest');break;}
-b.vx=nx - Math.sign(nx)*fr*h;
-b.x=Math.max(0,b.x+b.vx*h);
-if(b.x===0&&b.vx<0){finish(c,b,evs,'rest');break;}
-if(type==='green'&&(ox - f.holeX)*(b.x - f.holeX)<=0&&Math.abs(b.vx)<3.6){
-b.hole=true;b.x=f.holeX;b.y=f.level - 0.3;evs.push({type:'hole',x:b.x,y:f.level,ace:false});finish(c,b,evs,'hole');break;
-}
-var gr=hAt(c,b.x)+b.r,vyG=(gr - oy)/h;
-if(vyG<b.trackVy - g*h*1.2&&Math.abs(b.vx)>6){b.mode='air';b.vy=b.trackVy;b.y=oy+b.vy*h;}
-else{b.y=gr;b.trackVy=vyG;}
-}else{
-b.vy-=g*h;if(wind)b.vx+=wind*0.35*h;
-var dr=Math.exp(-(0.01+0.0009*Math.hypot(b.vx,b.vy))*h);
-b.vx*=dr;b.vy*=dr;b.x+=b.vx*h;b.y+=b.vy*h;
-if(b.x<0){b.x=0;b.vx=Math.abs(b.vx)*0.5;}
-if(b.y<=hAt(c,b.x)+b.r){b.x=bisectX(c,ox,oy,b.x,b.y,b.r);b.y=hAt(c,b.x)+b.r;impact(c,b,u,evs);}
-}
-if(!b.done)collect(c,b,u,ox,evs);
-if(!b.done&&b.mode!=='roll'){var un=hAt(c,b.x)+b.r;if(b.y<un)b.y=un;}
-b.maxX=Math.max(b.maxX,b.x);b.maxY=Math.max(b.maxY,b.y);
-if(!b.space&&b.y>=SPACE){b.space=true;evs.push({type:'space',x:b.x,y:b.y});}
-if(!b.done&&(b.time>T_MAX||b.x>20000))finish(c,b,evs,'limit');
-}
-return evs;
-}
+  function layerIndexAt(y) {
+    for (var i = LAYERS.length - 1; i >= 0; i--) {
+      if (y >= LAYERS[i].minY) return i;
+    }
+    return 0;
+  }
 
-function pace(b){
-if(!b||b.done)return 1;
-var sp=Math.hypot(b.vx,b.vy);
-return(b.mode==='roll'&&sp<12)||(sp<7&&!b.armed)?1.7:1;
-}
+  function magnetRadius(upgrades) {
+    var u = normUpgrades(upgrades);
+    return 3.4 + u.magnet * 0.85;
+  }
 
-function reward(ball){
-var d=Math.floor(clp(fin(ball&&ball.maxX,0),0,20000)),b=ball||{};
-var smsh=(b.ufos||b.tnts||b.cannons)?(b.ufos | 0)*3+(b.tnts | 0)*4+(b.cannons | 0)*5:(b.pops | 0)*2;
-var p={
-coins:(b.coins | 0)+(b.gems | 0)*5+(b.rings | 0)*3+smsh,
-distance:Math.floor(d/10),
-bonus:(b.perfect?5:0)+(b.supers | 0)+(b.hole?(b.ace?150:40)+Math.floor(d/10):0)+(b.space?100:0)
-};
-var mul=fin(b.coinMul,1),sub=p.coins+p.distance+p.bonus;
-p.hero=mul>1?Math.round(sub*(mul - 1)):0;
-p.total=sub+p.hero;
-p.treasure=Math.floor(p.total*0.1*clp(Math.floor(fin(b.treasure,0)),0,UPS.treasure.max));
-p.total+=p.treasure;
-return p;
-}
+  function maxFuelOf(upgrades) {
+    var u = normUpgrades(upgrades);
+    return 1.15 + u.fuel * 0.27;
+  }
 
-function cost(kind,lv){
-var sp=UPS[kind];
-if(!sp)return Infinity;
-lv=clp(Math.floor(fin(lv,0)),0,sp.max);
-return lv>=sp.max?Infinity:Math.round(sp.base*Math.pow(sp.growth,lv)/5)*5;
-}
+  /* --------------------------------------------------------------- course */
+  function createCourse(seed, ddaParams) {
+    var s = Math.floor(finite(seed, 101)) | 0;
+    if (s === 0) s = 101;
+    var dp = ddaParams && typeof ddaParams === 'object' ? ddaParams : {};
+    return {
+      seed: s,
+      perfectWidth: clamp(finite(dp.perfectWidth, 0.15), 0.08, 0.28),
+      targetBonus: clamp(finite(dp.targetBonus, 1.0), 0.8, 1.4),
+      aimSpeed: clamp(finite(dp.aimSpeed, 1.4), 0.9, 2.1),
+      powerSpeed: clamp(finite(dp.powerSpeed, 1.75), 1.1, 2.5),
+      chunks: {}
+    };
+  }
 
-function sanitizeSave(raw){
-raw=raw&&typeof raw==='object'?raw:{};
-var leg=raw.v!==2&&raw.upgrades&&typeof raw.upgrades==='object'&&'glide'in raw.upgrades;
-var coins=clp(Math.floor(fin(raw.coins,0)),0,9999999);
-if(leg){
-var bs={power:65,bounce:50,glide:55},ref=0;
-for(var bk in bs)for(var n=0,lv=clp(Math.floor(fin(raw.upgrades[bk],0)),0,10);n<lv;n++)ref+=Math.round(bs[bk]*Math.pow(1.46,n)/5)*5;
-coins=Math.min(9999999,coins+ref);
-}
-var best=Math.floor(clp(fin(raw.best,0),0,20000)),rb=raw.bests&&typeof raw.bests==='object'?raw.bests:{},bests={};
-for(var i=0;i<worlds.length;i++){
-var wid=worlds[i].id,alt=wid==='volcano'?rb.clouds:wid==='space'?rb.moon:0;
-bests[wid]=Math.max(Math.floor(clp(fin(rb[wid],0),0,20000)),Math.floor(clp(fin(alt,0),0,20000)));
-best=Math.max(best,bests[wid]);
-}
-var owned=skins.filter(function(k){return !k.price||(Array.isArray(raw.skins)&&raw.skins.indexOf(k.id)>=0);}).map(function(k){return k.id;});
-var cnt=function(v){return clp(Math.floor(fin(v,0)),0,999999);};
-return{
-v:2,coins:coins,best:best,bests:bests,high:Math.floor(clp(fin(raw.high,0),0,99999)),
-world:clp(Math.floor(fin(raw.world,0)),0,worlds.length - 1),
-difficulty:DIFF_IDS.indexOf(raw.difficulty)>=0?raw.difficulty:'normal',
-upgrades:leg?lvs({}):lvs(raw.upgrades),
-shots:cnt(raw.shots),holes:cnt(raw.holes),spaces:cnt(raw.spaces),
-tips:clp(Math.floor(fin(raw.tips,leg||raw.shots>0?2:0)),0,2),
-skins:owned,skin:owned.indexOf(raw.skin)>=0?raw.skin:'classic'
-};
-}
+  function rawHeight(course, x) {
+    if (x <= 10) return 2.2;
+    var s = course.seed;
+    var p1 = hash(s, 11) * M.PI * 2;
+    var p2 = hash(s, 23) * M.PI * 2;
+    var blend = clamp((x - 10) / 22, 0, 1);
+    var smooth = blend * blend * (3 - 2 * blend);
+    var hills = 2.4 * M.sin(x * 0.028 + p1) + 1.35 * M.cos(x * 0.067 + p2) + 0.55 * M.sin(x * 0.13);
+    // Gentle dip right after tee creates a fun natural launch bowl!
+    var bowl = -1.6 * M.exp(-M.pow((x - 28) / 14, 2));
+    return lerp(2.2, 2.6 + hills + bowl, smooth);
+  }
 
-var api={
-worlds:worlds,skins:skins,upgrades:UPS,kinds:KINDS,difficulties:DIFFS,diffIds:DIFF_IDS,diffOf:diffOf,
-CHUNK:CHUNK,SPACE:SPACE,ARM_WINDOW:A_WIN,PERFECT_WINDOW:P_WIN,
-bands:{perfect:P_PWR,great:G_PWR,good:OK_PWR},
-createCourse:createCourse,heightAt:hAt,surfaceType:sType,features:features,
-levels:lvs,grade:grade,launch:launch,press:press,predictImpact:predImp,
-perfectTiming:perfT,step:step,pace:pace,reward:reward,cost:cost,
-sanitizeSave:sanitizeSave,magnetOf:magOf,rocketsOf:rktOf,perfectBand:pBand
-};
-root.GolfPhysics=api;
-if(typeof module!=='undefined'&&module.exports)module.exports=api;
-})(typeof window!=='undefined'?window:globalThis);
+  function buildChunk(course, idx) {
+    var cached = course.chunks[idx];
+    if (cached) return cached;
+    var x0 = idx * CHUNK_W;
+    var s = course.seed;
+    var flats = [];
+    var trampolines = [];
+    var tnts = [];
+    var balloons = [];
+    var rings = [];
+    var ufos = [];
+    var stars = [];
+    var scenery = [];
+
+    if (idx >= 1) {
+      // Surface patch: sand bunker or sparkling water pond (never overlapping the tee).
+      var surfRoll = hash(idx, s + 3);
+      if (idx >= 2 && surfRoll < 0.24) {
+        var wx = x0 + 14 + hash(idx, s + 4) * 20;
+        var hw = 6.5 + hash(idx, s + 5) * 4.5;
+        var lvl = rawHeight(course, wx) - 0.55;
+        flats.push({ id: 'w' + idx, type: 'water', x: wx, hw: hw, level: lvl });
+      } else if (surfRoll > 0.72) {
+        var sx = x0 + 12 + hash(idx, s + 6) * 22;
+        var shw = 5.5 + hash(idx, s + 7) * 4.0;
+        var slvl = rawHeight(course, sx) - 0.15;
+        flats.push({ id: 's' + idx, type: 'sand', x: sx, hw: shw, level: slvl });
+      }
+
+      var flatAt = function (px) {
+        for (var f = 0; f < flats.length; f++) {
+          if (M.abs(px - flats[f].x) < flats[f].hw + 2.5) return flats[f];
+        }
+        return null;
+      };
+
+      // Ground Trampoline (super bouncy pad!)
+      var trRoll = hash(idx, s + 10);
+      if (trRoll < 0.52 * course.targetBonus) {
+        var tx = x0 + 9 + hash(idx, s + 11) * 30;
+        if (!flatAt(tx)) {
+          var ty = rawHeight(course, tx) + 0.55;
+          trampolines.push({ id: 'tr' + idx, x: tx, y: ty, r: 2.35 });
+          // Guiding coin arc right above the trampoline!
+          for (var tc = 0; tc < 3; tc++) {
+            var a = (tc - 1) * 3.4;
+            stars.push({ id: 'tc' + idx + '_' + tc, x: tx + a, y: ty + 3.6 - M.abs(a) * 0.22, value: 2, star: tc === 1 });
+          }
+        }
+      }
+
+      // Friendly TNT Boost Crate!
+      var tntRoll = hash(idx, s + 14);
+      if (tntRoll < 0.48 * course.targetBonus) {
+        var bx = x0 + 16 + hash(idx, s + 15) * 26;
+        var fl = flatAt(bx);
+        var elevated = hash(idx, s + 16) > 0.58;
+        var by = elevated ? rawHeight(course, bx) + 9 + hash(idx, s + 17) * 18 : (fl ? fl.level + 2.2 : rawHeight(course, bx) + 1.05);
+        tnts.push({ id: 'tnt' + idx, x: bx, y: by, r: 2.1, floating: elevated });
+      }
+
+      // Ground / low-altitude star-coin arc
+      var arcX = x0 + 10 + hash(idx, s + 20) * 18;
+      var arcY = rawHeight(course, arcX) + 5 + hash(idx, s + 21) * 12;
+      for (var c = 0; c < 5; c++) {
+        var u = (c - 2) / 2;
+        stars.push({
+          id: 'c' + idx + '_' + c,
+          x: arcX + c * 3.2,
+          y: arcY + (1 - u * u) * 3.8,
+          value: c === 2 ? 5 : 1,
+          star: c === 2
+        });
+      }
+
+      // Mid-sky Hot-Air Balloons (y = 26..118 m)
+      var balCount = hash(idx, s + 25) < 0.78 * course.targetBonus ? 2 : 1;
+      for (var bi = 0; bi < balCount; bi++) {
+        var blx = x0 + 10 + hash(idx * 3 + bi, s + 26) * 32;
+        var bly = (bi === 0 ? 28 : 66) + hash(idx * 3 + bi, s + 27) * 42;
+        var colIdx = Math.floor(hash(idx * 3 + bi, s + 28) * 5);
+        balloons.push({ id: 'bal' + idx + '_' + bi, x: blx, y: bly, r: 3.6, colorIdx: colIdx });
+      }
+
+      // Golden Boost Rings (mid-sky, high-sky & stratosphere!)
+      var ringBands = [
+        { minY: 22, span: 36 },
+        { minY: 78, span: 55 },
+        { minY: 160, span: 80 },
+        { minY: 265, span: 95 }
+      ];
+      for (var ri = 0; ri < ringBands.length; ri++) {
+        if (hash(idx * 5 + ri, s + 31) < 0.56 * course.targetBonus) {
+          var rx = x0 + 8 + hash(idx * 5 + ri, s + 32) * 34;
+          var ry = ringBands[ri].minY + hash(idx * 5 + ri, s + 33) * ringBands[ri].span;
+          rings.push({ id: 'rng' + idx + '_' + ri, x: rx, y: ry, r: 3.9 });
+          // Leading sparkle stars through the ring
+          stars.push({ id: 'rs' + idx + '_' + ri + '_a', x: rx - 4.2, y: ry - 0.8, value: 2, star: false });
+          stars.push({ id: 'rs' + idx + '_' + ri + '_b', x: rx + 4.2, y: ry + 1.2, value: 5, star: true });
+        }
+      }
+
+      // High-sky & Outer Space Bouncy UFOs!
+      var ufoBands = [
+        { minY: 135, span: 75 },
+        { minY: 240, span: 90 },
+        { minY: 335, span: 120 }
+      ];
+      for (var ui = 0; ui < ufoBands.length; ui++) {
+        if (hash(idx * 7 + ui, s + 41) < 0.62 * course.targetBonus) {
+          var ux = x0 + 10 + hash(idx * 7 + ui, s + 42) * 32;
+          var uy = ufoBands[ui].minY + hash(idx * 7 + ui, s + 43) * ufoBands[ui].span;
+          ufos.push({ id: 'ufo' + idx + '_' + ui, x: ux, y: uy, r: 4.2 });
+        }
+      }
+
+      // High-altitude & Space Star Clusters
+      for (var si = 0; si < 3; si++) {
+        var stx = x0 + 12 + hash(idx * 4 + si, s + 51) * 28;
+        var sty = 95 + si * 115 + hash(idx * 4 + si, s + 52) * 65;
+        for (var k = 0; k < 3; k++) {
+          stars.push({
+            id: 'hs' + idx + '_' + si + '_' + k,
+            x: stx + (k - 1) * 4.5,
+            y: sty + (k === 1 ? 2.4 : 0),
+            value: k === 1 ? 8 : 3,
+            star: true
+          });
+        }
+      }
+
+      // Decorative 3D Scenery for parallax depth (purely deterministic!)
+      // Trees on near & far sides of the fairway
+      for (var ti = 0; ti < 4; ti++) {
+        var trx = x0 + 5 + hash(idx * 7 + ti, s + 60) * 40;
+        var flT = flatAt(trx);
+        if (!flT) {
+          var side = ti % 2 === 0 ? -(4.5 + hash(idx * 7 + ti, s + 61) * 7.5) : (4.2 + hash(idx * 7 + ti, s + 62) * 4.5);
+          scenery.push({
+            kind: hash(idx * 7 + ti, s + 63) > 0.45 ? 'pine' : 'roundTree',
+            x: trx,
+            y: rawHeight(course, trx),
+            z: side,
+            scale: 0.8 + hash(idx * 7 + ti, s + 64) * 0.75
+          });
+        }
+      }
+      // Cute course flag every chunk
+      if (idx % 2 === 0) {
+        var fx = x0 + 24;
+        if (!flatAt(fx)) {
+          scenery.push({ kind: 'flag', x: fx, y: rawHeight(course, fx), z: -3.4, scale: 1 });
+        }
+      }
+      // Fluffy clouds at y = 32..115
+      for (var ci = 0; ci < 3; ci++) {
+        scenery.push({
+          kind: 'cloud',
+          x: x0 + 6 + hash(idx * 5 + ci, s + 70) * 38,
+          y: 34 + hash(idx * 5 + ci, s + 71) * 78,
+          z: -14 - hash(idx * 5 + ci, s + 72) * 18,
+          scale: 0.9 + hash(idx * 5 + ci, s + 73) * 1.1
+        });
+      }
+      // High sky birds / biplanes / blimps (y = 115..205)
+      var skyRoll = hash(idx, s + 80);
+      if (skyRoll < 0.45) {
+        scenery.push({ kind: 'biplane', x: x0 + 20, y: 125 + hash(idx, s + 81) * 65, z: -12 - hash(idx, s + 82) * 10, scale: 1.1 });
+      } else if (skyRoll < 0.78) {
+        scenery.push({ kind: 'blimp', x: x0 + 24, y: 140 + hash(idx, s + 83) * 55, z: -18 - hash(idx, s + 84) * 10, scale: 1.25 });
+      } else {
+        scenery.push({ kind: 'bird', x: x0 + 18, y: 105 + hash(idx, s + 85) * 45, z: -8 - hash(idx, s + 86) * 8, scale: 1.0 });
+      }
+      // Space satellites, asteroids & ringed planets (y = 310..500)
+      if (idx % 2 === 1) {
+        scenery.push({
+          kind: 'satellite',
+          x: x0 + 22,
+          y: 325 + hash(idx, s + 90) * 110,
+          z: -10 - hash(idx, s + 91) * 12,
+          scale: 1.0
+        });
+      }
+      if (idx % 3 === 0) {
+        scenery.push({
+          kind: 'planet',
+          x: x0 + 26,
+          y: 345 + hash(idx, s + 92) * 130,
+          z: -28 - hash(idx, s + 93) * 16,
+          scale: 1.1 + hash(idx, s + 94) * 0.9,
+          colorIdx: Math.floor(hash(idx, s + 95) * 4)
+        });
+      }
+      for (var ai = 0; ai < 2; ai++) {
+        scenery.push({
+          kind: 'asteroid',
+          x: x0 + 10 + hash(idx * 3 + ai, s + 96) * 32,
+          y: 318 + hash(idx * 3 + ai, s + 97) * 140,
+          z: -8 - hash(idx * 3 + ai, s + 98) * 14,
+          scale: 0.7 + hash(idx * 3 + ai, s + 99) * 0.9
+        });
+      }
+    } else if (idx === 0) {
+      // Tee surroundings: inviting sunny meadow trees, starting flag & first coin arc!
+      scenery.push({ kind: 'pine', x: -8, y: rawHeight(course, -8), z: -7.5, scale: 1.25 });
+      scenery.push({ kind: 'roundTree', x: -3, y: rawHeight(course, -3), z: -10, scale: 1.1 });
+      scenery.push({ kind: 'pine', x: 14, y: rawHeight(course, 14), z: -8.5, scale: 1.15 });
+      scenery.push({ kind: 'roundTree', x: 26, y: rawHeight(course, 26), z: -9.5, scale: 1.3 });
+      scenery.push({ kind: 'flag', x: 38, y: rawHeight(course, 38), z: -3.2, scale: 1 });
+      scenery.push({ kind: 'cloud', x: -6, y: 12.5, z: -22, scale: 1.05 });
+      scenery.push({ kind: 'cloud', x: 14, y: 13.5, z: -20, scale: 1.25 });
+      scenery.push({ kind: 'cloud', x: 36, y: 24, z: -22, scale: 1.1 });
+      // Guaranteed first-shot friendly coins & trampoline so first shot feels awesome!
+      trampolines.push({ id: 'tr0', x: 38, y: rawHeight(course, 38) + 0.55, r: 2.7 });
+      for (var f0 = 0; f0 < 5; f0++) {
+        var fu = (f0 - 2) / 2;
+        stars.push({ id: 'c0_' + f0, x: 11 + f0 * 4.2, y: 12.2 + (1 - fu * fu) * 4.6, value: f0 === 2 ? 3 : 1, star: f0 === 2 });
+      }
+      for (var f1 = 0; f1 < 3; f1++) {
+        stars.push({ id: 'c0b_' + f1, x: 14 + f1 * 4.5, y: 6.8 + (f1 === 1 ? 2.2 : 0), value: 1, star: false });
+      }
+      balloons.push({ id: 'bal0_0', x: 24, y: 15.5, r: 3.8, colorIdx: 0 });
+      balloons.push({ id: 'bal0_1', x: 44, y: 26, r: 3.8, colorIdx: 1 });
+    }
+
+    var chunk = {
+      idx: idx,
+      flats: flats,
+      trampolines: trampolines,
+      tnts: tnts,
+      balloons: balloons,
+      rings: rings,
+      ufos: ufos,
+      stars: stars,
+      scenery: scenery
+    };
+    course.chunks[idx] = chunk;
+    return chunk;
+  }
+
+  function heightAt(course, x) {
+    var idx = M.floor(x / CHUNK_W);
+    var chunk = buildChunk(course, idx);
+    for (var i = 0; i < chunk.flats.length; i++) {
+      var f = chunk.flats[i];
+      var d = M.abs(x - f.x);
+      if (d <= f.hw) return f.level;
+      if (d < f.hw + 3.0) {
+        var t = (d - f.hw) / 3.0;
+        var st = t * t * (3 - 2 * t);
+        return lerp(f.level, rawHeight(course, x), st);
+      }
+    }
+    return rawHeight(course, x);
+  }
+
+  function slopeAt(course, x) {
+    return (heightAt(course, x + 0.4) - heightAt(course, x - 0.4)) / 0.8;
+  }
+
+  function surfaceAt(course, x) {
+    var idx = M.floor(x / CHUNK_W);
+    var chunk = buildChunk(course, idx);
+    for (var i = 0; i < chunk.flats.length; i++) {
+      var f = chunk.flats[i];
+      if (M.abs(x - f.x) <= f.hw) return f.type;
+    }
+    return 'turf';
+  }
+
+  function features(course, x0, x1) {
+    var c0 = M.max(0, M.floor(x0 / CHUNK_W));
+    var c1 = M.max(c0, M.floor(x1 / CHUNK_W));
+    var out = { flats: [], trampolines: [], tnts: [], balloons: [], rings: [], ufos: [], stars: [], scenery: [] };
+    for (var ci = c0; ci <= c1; ci++) {
+      var ch = buildChunk(course, ci);
+      var k;
+      for (k = 0; k < ch.flats.length; k++) out.flats.push(ch.flats[k]);
+      for (k = 0; k < ch.trampolines.length; k++) out.trampolines.push(ch.trampolines[k]);
+      for (k = 0; k < ch.tnts.length; k++) out.tnts.push(ch.tnts[k]);
+      for (k = 0; k < ch.balloons.length; k++) out.balloons.push(ch.balloons[k]);
+      for (k = 0; k < ch.rings.length; k++) out.rings.push(ch.rings[k]);
+      for (k = 0; k < ch.ufos.length; k++) out.ufos.push(ch.ufos[k]);
+      for (k = 0; k < ch.stars.length; k++) out.stars.push(ch.stars[k]);
+      for (k = 0; k < ch.scenery.length; k++) out.scenery.push(ch.scenery[k]);
+    }
+    return out;
+  }
+
+  function gravityAt(y) {
+    // Ground 17.5 m/s^2 -> High sky 11.5 -> Outer space 6.8 (floaty & epic, always returns!)
+    if (y <= 40) return 17.5;
+    if (y >= 320) return 6.8;
+    var t = (y - 40) / 280;
+    return lerp(17.5, 6.8, t * (2 - t));
+  }
+
+  /* --------------------------------------------------------------- ball */
+  function launch(course, upgrades, angleDeg, power) {
+    var u = normUpgrades(upgrades);
+    var ang = clamp(finite(angleDeg, 45), 18, 72);
+    var pwr = clamp(finite(power, 0.85), 0.15, 1.0);
+    var g = grade(pwr, course);
+    var perfectAng = isPerfectAngle(ang);
+    var baseSpeed = 24 + u.power * 4.2;
+    var pwrFactor = 0.42 + pwr * 0.58;
+    var gradeMult = g === 'perfect' ? 1.22 : g === 'great' ? 1.10 : g === 'good' ? 1.0 : 0.86;
+    var angMult = perfectAng ? 1.08 : 1.0;
+    var speed = baseSpeed * pwrFactor * gradeMult * angMult;
+    var rad = ang * DEG2RAD;
+    var y0 = heightAt(course, 0) + BALL_R + 0.08;
+    var fuelMax = maxFuelOf(u);
+
+    return {
+      x: 0,
+      y: y0,
+      vx: M.cos(rad) * speed,
+      vy: M.sin(rad) * speed,
+      r: BALL_R,
+      spin: 12,
+      mode: 'air',
+      done: false,
+      reason: '',
+      time: 0,
+      maxX: 0,
+      maxY: y0,
+      angle: ang,
+      power: pwr,
+      grade: g,
+      perfectAngle: perfectAng,
+      fuel: fuelMax,
+      maxFuel: fuelMax,
+      boosting: false,
+      diving: false,
+      armed: false,
+      armedPerfect: false,
+      armTimer: 0,
+      bounces: 0,
+      supers: 0,
+      combo: 0,
+      skips: 0,
+      coins: 0,
+      starsCollected: 0,
+      space: false,
+      layerIdx: 0,
+      hitIds: {},
+      coinIds: {},
+      milestonesHit: {},
+      squash: 0
+    };
+  }
+
+  // Predicts upcoming ground impact within maxHorizon seconds while descending.
+  function predictImpact(course, ball, maxHorizon) {
+    if (!ball || ball.done || ball.mode !== 'air' || ball.vy >= -0.5) return null;
+    var horizon = finite(maxHorizon, 0.55);
+    var x = ball.x, y = ball.y, vx = ball.vx, vy = ball.vy;
+    var dt = 1 / 60;
+    for (var t = dt; t <= horizon; t += dt) {
+      var g = gravityAt(y);
+      vy -= g * dt;
+      x += vx * dt;
+      y += vy * dt;
+      var h = heightAt(course, x) + ball.r;
+      if (y <= h) {
+        return { t: t, x: x, y: h, surface: surfaceAt(course, x), perfect: t <= 0.22 };
+      }
+    }
+    return null;
+  }
+
+  // Player invokes Dive / Super-Bounce (via ArrowDown/S, or Space/Click near ground or when fuel empty).
+  function pressDive(course, ball) {
+    if (!ball || ball.done || ball.mode !== 'air') return { type: 'none' };
+    var pred = predictImpact(course, ball, 0.52);
+    if (pred && !ball.armed) {
+      ball.armed = true;
+      ball.armedPerfect = pred.perfect;
+      ball.armTimer = 0.55;
+      ball.diving = true;
+      if (ball.vy > -18) ball.vy -= 6;
+      return { type: 'arm', perfect: pred.perfect, x: pred.x, y: pred.y };
+    }
+    if (!ball.diving) {
+      ball.diving = true;
+      ball.vy = M.min(ball.vy - 15, -18);
+      ball.vx += 3.0;
+      ball.armed = true;
+      ball.armedPerfect = false;
+      ball.armTimer = 0.7;
+      return { type: 'dive', x: ball.x, y: ball.y };
+    }
+    return { type: 'none' };
+  }
+
+  function step(course, ball, upgrades, dt, input) {
+    if (!ball || ball.done) return [];
+    var u = normUpgrades(upgrades);
+    var events = [];
+    var stepDt = clamp(finite(dt, 1 / 60), 0.001, 0.05);
+    var inp = input && typeof input === 'object' ? input : {};
+    var wantBoost = !!inp.boost;
+
+    ball.time += stepDt;
+    ball.boosting = false;
+    if (ball.armTimer > 0) {
+      ball.armTimer -= stepDt;
+      if (ball.armTimer <= 0) { ball.armed = false; ball.armedPerfect = false; }
+    }
+    if (ball.squash > 0) ball.squash = M.max(0, ball.squash - stepDt * 4.5);
+
+    if (ball.mode === 'air') {
+      // Continuous Rocket Boost while held and fuel remains!
+      if (wantBoost && ball.fuel > 0) {
+        var burn = M.min(ball.fuel, stepDt);
+        ball.fuel = M.max(0, ball.fuel - burn);
+        ball.boosting = true;
+        ball.diving = false;
+        var thrustY = 34 + u.fuel * 3.1;
+        var thrustX = 16 + u.fuel * 1.9;
+        ball.vy += thrustY * burn;
+        ball.vx += thrustX * burn;
+        ball.vy = M.min(ball.vy, 68 + u.fuel * 3.2);
+        ball.vx = M.min(ball.vx, 98 + u.power * 3.5);
+        events.push({ type: 'boost', x: ball.x, y: ball.y, fuel: ball.fuel });
+      }
+
+      var grav = gravityAt(ball.y);
+      ball.vy -= grav * stepDt;
+      // Subtle atmospheric drag (almost zero in outer space!)
+      var drag = ball.y > 260 ? 0.008 : lerp(0.055, 0.015, clamp(ball.y / 260, 0, 1));
+      ball.vx *= M.max(0.9, 1 - drag * stepDt);
+      ball.vy *= M.max(0.9, 1 - drag * 0.65 * stepDt);
+
+      ball.x += ball.vx * stepDt;
+      ball.y += ball.vy * stepDt;
+      ball.spin = ball.vx * 0.8;
+
+      // Check interactive targets & pickups in nearby chunks
+      var f = features(course, ball.x - 14, ball.x + 14);
+      var magR = magnetRadius(u);
+      var i, o, dx, dy, dist;
+
+      // 1) Coins & Stars (with magnetic pull!)
+      for (i = 0; i < f.stars.length; i++) {
+        o = f.stars[i];
+        if (ball.coinIds[o.id]) continue;
+        dx = o.x - ball.x;
+        dy = o.y - ball.y;
+        dist = M.hypot(dx, dy);
+        if (dist <= magR) {
+          ball.coinIds[o.id] = true;
+          ball.coins += o.value;
+          if (o.star) ball.starsCollected++;
+          events.push({ type: 'coin', id: o.id, x: o.x, y: o.y, value: o.value, star: !!o.star });
+        }
+      }
+
+      // 2) Trampolines
+      for (i = 0; i < f.trampolines.length; i++) {
+        o = f.trampolines[i];
+        if (ball.hitIds[o.id]) continue;
+        if (M.hypot(ball.x - o.x, ball.y - o.y) <= o.r + ball.r) {
+          ball.hitIds[o.id] = true;
+          ball.vy = M.max(25 + u.bounce * 1.45, M.abs(ball.vy) * 1.1 + 14);
+          ball.vx = M.max(ball.vx * 1.08, ball.vx + 7.5);
+          ball.bounces++;
+          ball.combo++;
+          ball.diving = false;
+          ball.armed = false;
+          ball.squash = 1;
+          events.push({ type: 'trampoline', id: o.id, x: o.x, y: o.y, combo: ball.combo });
+        }
+      }
+
+      // 3) Friendly TNT Boost Crates
+      for (i = 0; i < f.tnts.length; i++) {
+        o = f.tnts[i];
+        if (ball.hitIds[o.id]) continue;
+        if (M.hypot(ball.x - o.x, ball.y - o.y) <= o.r + ball.r) {
+          ball.hitIds[o.id] = true;
+          ball.vy = M.max(30 + u.power * 1.15, ball.vy + 22);
+          ball.vx = M.max(ball.vx * 1.14, ball.vx + 11.5);
+          ball.fuel = M.min(ball.maxFuel, ball.fuel + 0.18);
+          ball.bounces++;
+          ball.combo++;
+          ball.diving = false;
+          ball.squash = 1;
+          events.push({ type: 'tnt', id: o.id, x: o.x, y: o.y, combo: ball.combo });
+        }
+      }
+
+      // 4) Hot-Air Balloons
+      for (i = 0; i < f.balloons.length; i++) {
+        o = f.balloons[i];
+        if (ball.hitIds[o.id]) continue;
+        if (M.hypot(ball.x - o.x, ball.y - o.y) <= o.r + ball.r) {
+          ball.hitIds[o.id] = true;
+          ball.vy = M.max(26 + u.bounce * 1.2, ball.vy + 17);
+          ball.vx = M.max(ball.vx * 1.06, ball.vx + 7.5);
+          ball.coins += 4;
+          ball.bounces++;
+          ball.combo++;
+          ball.diving = false;
+          ball.squash = 0.85;
+          events.push({ type: 'balloon', id: o.id, x: o.x, y: o.y, combo: ball.combo });
+        }
+      }
+
+      // 5) Golden Boost Rings
+      for (i = 0; i < f.rings.length; i++) {
+        o = f.rings[i];
+        if (ball.hitIds[o.id]) continue;
+        if (M.hypot(ball.x - o.x, ball.y - o.y) <= o.r + ball.r) {
+          ball.hitIds[o.id] = true;
+          ball.vx += 13 + u.fuel * 0.95;
+          ball.vy = M.max(ball.vy + 15, 25);
+          ball.fuel = M.min(ball.maxFuel, ball.fuel + 0.30);
+          ball.coins += 6;
+          ball.combo++;
+          ball.diving = false;
+          events.push({ type: 'ring', id: o.id, x: o.x, y: o.y, combo: ball.combo });
+        }
+      }
+
+      // 6) Bouncy UFOs
+      for (i = 0; i < f.ufos.length; i++) {
+        o = f.ufos[i];
+        if (ball.hitIds[o.id]) continue;
+        if (M.hypot(ball.x - o.x, ball.y - o.y) <= o.r + ball.r) {
+          ball.hitIds[o.id] = true;
+          ball.vy = M.max(33 + u.bounce * 1.35, ball.vy + 22);
+          ball.vx += 12.5 + u.power * 0.5;
+          ball.fuel = M.min(ball.maxFuel, ball.fuel + 0.35);
+          ball.coins += 10;
+          ball.bounces++;
+          ball.combo++;
+          ball.diving = false;
+          ball.squash = 1;
+          events.push({ type: 'ufo', id: o.id, x: o.x, y: o.y, combo: ball.combo });
+        }
+      }
+
+      // Ground / Water / Sand collision
+      var groundY = heightAt(course, ball.x) + ball.r;
+      if (ball.y <= groundY) {
+        ball.y = groundY;
+        var surf = surfaceAt(course, ball.x);
+        var impactVy = M.abs(ball.vy);
+
+        if (surf === 'water') {
+          var skipMinVx = 9.5 - u.bounce * 0.5;
+          var maxSkips = 3 + M.floor(u.bounce / 2);
+          if ((ball.vx >= skipMinVx || ball.armed) && ball.skips < maxSkips) {
+            ball.skips++;
+            ball.bounces++;
+            var superW = ball.armed;
+            ball.vy = M.max(superW ? 18 : 11.5, impactVy * (superW ? 0.85 : 0.62) + (superW ? 8 : 5));
+            ball.vx *= superW ? 0.96 : 0.88;
+            if (superW) { ball.supers++; ball.combo++; }
+            ball.armed = false; ball.armedPerfect = false; ball.diving = false;
+            ball.squash = 0.8;
+            events.push({ type: 'skip', x: ball.x, y: ball.y, superBounce: superW });
+          } else {
+            ball.vx = 0; ball.vy = 0; ball.done = true; ball.reason = 'water';
+            events.push({ type: 'splash', x: ball.x, y: ball.y });
+            events.push({ type: 'stop', x: ball.x, y: ball.y, reason: 'water' });
+          }
+        } else {
+          var isSand = surf === 'sand';
+          var restit = isSand ? (0.40 + u.bounce * 0.024) : M.min(0.84, 0.58 + u.bounce * 0.026);
+          if (ball.armed) {
+            var mult = ball.armedPerfect ? 1.55 : 1.32;
+            ball.vy = M.max(17 + u.bounce * 0.9, impactVy * restit * mult + 6);
+            ball.vx = M.max(ball.vx * 1.05, ball.vx + (ball.armedPerfect ? 6.5 : 3.5));
+            ball.bounces++;
+            ball.supers++;
+            ball.combo++;
+            var wasPerfect = ball.armedPerfect;
+            ball.armed = false; ball.armedPerfect = false; ball.diving = false;
+            ball.squash = 1;
+            events.push({ type: 'super', x: ball.x, y: ball.y, perfect: wasPerfect, combo: ball.combo });
+          } else if (impactVy > (isSand ? 4.2 : 2.8)) {
+            var sl = slopeAt(course, ball.x);
+            ball.vy = impactVy * restit;
+            ball.vx = ball.vx * (isSand ? 0.78 : 0.90) - sl * 2.5;
+            if (ball.vx < 0) ball.vx = 0;
+            ball.bounces++;
+            ball.combo = 0;
+            ball.diving = false;
+            ball.squash = clamp(impactVy / 28, 0.2, 0.9);
+            events.push({ type: 'bounce', x: ball.x, y: ball.y, surface: surf, impact: impactVy });
+          } else {
+            ball.mode = 'roll';
+            ball.vy = 0;
+            ball.diving = false;
+            ball.combo = 0;
+            events.push({ type: 'land', x: ball.x, y: ball.y, surface: surf });
+          }
+        }
+      }
+    } else if (ball.mode === 'roll') {
+      var rSurf = surfaceAt(course, ball.x);
+      var rSlope = slopeAt(course, ball.x);
+      if (rSurf === 'water') {
+        if (ball.vx >= 10 - u.bounce * 0.5 && ball.skips < 3 + M.floor(u.bounce / 2)) {
+          ball.mode = 'air';
+          ball.skips++;
+          ball.vy = 11.5;
+          ball.vx *= 0.88;
+          events.push({ type: 'skip', x: ball.x, y: ball.y, superBounce: false });
+        } else {
+          ball.vx = 0; ball.vy = 0; ball.done = true; ball.reason = 'water';
+          events.push({ type: 'splash', x: ball.x, y: ball.y });
+          events.push({ type: 'stop', x: ball.x, y: ball.y, reason: 'water' });
+        }
+      } else {
+        var fric = rSurf === 'sand' ? 9.5 : M.max(2.6, 5.2 - u.bounce * 0.22);
+        ball.vx -= (fric + rSlope * 10) * stepDt;
+        ball.x += M.max(0, ball.vx) * stepDt;
+        ball.y = heightAt(course, ball.x) + ball.r;
+        ball.spin = ball.vx * 1.4;
+        // Collect ground coins along roll too
+        var rf = features(course, ball.x - 10, ball.x + 10);
+        var rMag = magnetRadius(u);
+        for (var ri2 = 0; ri2 < rf.stars.length; ri2++) {
+          var ro = rf.stars[ri2];
+          if (!ball.coinIds[ro.id] && M.hypot(ro.x - ball.x, ro.y - ball.y) <= rMag) {
+            ball.coinIds[ro.id] = true;
+            ball.coins += ro.value;
+            if (ro.star) ball.starsCollected++;
+            events.push({ type: 'coin', id: ro.id, x: ro.x, y: ro.y, value: ro.value, star: !!ro.star });
+          }
+        }
+        // Check trampolines & TNT even while rolling!
+        for (var rt = 0; rt < rf.trampolines.length; rt++) {
+          var tr = rf.trampolines[rt];
+          if (!ball.hitIds[tr.id] && M.hypot(ball.x - tr.x, ball.y - tr.y) <= tr.r + ball.r) {
+            ball.hitIds[tr.id] = true;
+            ball.mode = 'air';
+            ball.vy = 24 + u.bounce * 1.4;
+            ball.vx = M.max(ball.vx + 8, 18);
+            ball.bounces++;
+            events.push({ type: 'trampoline', id: tr.id, x: tr.x, y: tr.y, combo: 1 });
+          }
+        }
+        if (ball.vx <= 0.35 && ball.mode === 'roll') {
+          ball.vx = 0; ball.vy = 0; ball.done = true; ball.reason = 'rest';
+          events.push({ type: 'stop', x: ball.x, y: ball.y, reason: 'rest' });
+        }
+      }
+    }
+
+    // Track peaks, altitude layer & milestone crossings
+    if (ball.x > ball.maxX) ball.maxX = ball.x;
+    if (ball.y > ball.maxY) ball.maxY = ball.y;
+    var li = layerIndexAt(ball.y);
+    if (li > ball.layerIdx) {
+      ball.layerIdx = li;
+      if (li === LAYERS.length - 1) ball.space = true;
+      events.push({ type: 'layer', index: li, layer: LAYERS[li] });
+    }
+    for (var mi = 0; mi < MILESTONES.length; mi++) {
+      var ms = MILESTONES[mi];
+      if (!ball.milestonesHit[ms.id] && ball.maxX >= ms.dist) {
+        ball.milestonesHit[ms.id] = true;
+        events.push({ type: 'milestone', milestone: ms });
+      }
+    }
+
+    // Hard safety cap so every shot is guaranteed to terminate!
+    if (!ball.done && ball.time >= MAX_TIME) {
+      ball.y = M.max(ball.y, heightAt(course, ball.x) + ball.r);
+      ball.vx = 0; ball.vy = 0; ball.done = true; ball.reason = 'timeout';
+      events.push({ type: 'stop', x: ball.x, y: ball.y, reason: 'timeout' });
+    }
+
+    return events;
+  }
+
+  function reward(ball, upgrades, prevMilestones) {
+    var u = normUpgrades(upgrades);
+    var dist = M.floor(finite(ball && ball.maxX, 0));
+    var alt = M.floor(finite(ball && ball.maxY, 0));
+    var distCoins = M.max(3, M.floor(dist * 0.16));
+    var altCoins = M.floor(alt * 0.24);
+    var bounceCoins = (ball && ball.bounces ? ball.bounces * 2 : 0) + (ball && ball.supers ? ball.supers * 5 : 0);
+    var pickupCoins = ball && ball.coins ? ball.coins : 0;
+    var sub = distCoins + altCoins + bounceCoins + pickupCoins;
+    var luckyBonus = M.floor(sub * u.magnet * 0.08);
+    var prev = {};
+    if (Array.isArray(prevMilestones)) {
+      for (var i = 0; i < prevMilestones.length; i++) prev[prevMilestones[i]] = true;
+    }
+    var newMilestones = [];
+    var milestoneBonus = 0;
+    for (var j = 0; j < MILESTONES.length; j++) {
+      var m = MILESTONES[j];
+      if (dist >= m.dist && !prev[m.id]) {
+        newMilestones.push(m);
+        milestoneBonus += m.bonus;
+      }
+    }
+    var stars = 1;
+    if (dist >= 420 || alt >= 115) stars = 2;
+    if (dist >= 1000 || alt >= 310 || (ball && ball.space)) stars = 3;
+    return {
+      dist: dist,
+      alt: alt,
+      distCoins: distCoins,
+      altCoins: altCoins,
+      bounceCoins: bounceCoins,
+      pickupCoins: pickupCoins,
+      luckyBonus: luckyBonus,
+      milestoneBonus: milestoneBonus,
+      newMilestones: newMilestones,
+      total: sub + luckyBonus + milestoneBonus,
+      stars: stars
+    };
+  }
+
+  var GolfPhysics = {
+    BALL_R: BALL_R,
+    CHUNK_W: CHUNK_W,
+    MAX_TIME: MAX_TIME,
+    SAVE_VERSION: SAVE_VERSION,
+    LAYERS: LAYERS,
+    MILESTONES: MILESTONES,
+    UPGRADES: UPGRADES,
+    SKINS: SKINS,
+    clamp: clamp,
+    lerp: lerp,
+    hash: hash,
+    normUpgrades: normUpgrades,
+    upgradeCost: upgradeCost,
+    sanitizeSave: sanitizeSave,
+    aimAngle: aimAngle,
+    isPerfectAngle: isPerfectAngle,
+    powerValue: powerValue,
+    perfectBand: perfectBand,
+    grade: grade,
+    layerAt: layerAt,
+    layerIndexAt: layerIndexAt,
+    magnetRadius: magnetRadius,
+    maxFuelOf: maxFuelOf,
+    createCourse: createCourse,
+    heightAt: heightAt,
+    slopeAt: slopeAt,
+    surfaceAt: surfaceAt,
+    features: features,
+    gravityAt: gravityAt,
+    launch: launch,
+    predictImpact: predictImpact,
+    pressDive: pressDive,
+    step: step,
+    reward: reward
+  };
+
+  if (typeof module !== 'undefined' && module.exports) module.exports = GolfPhysics;
+  if (typeof root !== 'undefined') root.GolfPhysics = GolfPhysics;
+})(typeof window !== 'undefined' ? window : globalThis);

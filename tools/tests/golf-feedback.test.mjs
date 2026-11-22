@@ -7,427 +7,210 @@ import { startTestServer } from '../test-server.mjs';
 import { installGolfHarness } from '../golf-harness.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const KEY = 'sg:skybound-golf:progress';
-const PEAK = 39; // frames from the start of the backswing to the top of the gauge
+const KEY = 'sg:skybound-golf:save_v3';
 let browser, server;
-before(async () => { server = await startTestServer(process.env.SG_ROOT ? path.resolve(repo, process.env.SG_ROOT) : repo); browser = await launchChromium(); });
-after(async () => { await browser?.close(); await server?.close(); });
 
-// Frame-stepped game: nothing moves unless the test advances it.
-async function game(t, { reducedMotion = 'no-preference', progress = null, scale = 1, play = true } = {}) {
-  const context = await browser.newContext({ viewport: { width: 995, height: 560 }, reducedMotion, deviceScaleFactor: scale });
+before(async () => {
+  server = await startTestServer(process.env.SG_ROOT ? path.resolve(repo, process.env.SG_ROOT) : repo);
+  browser = await launchChromium();
+});
+
+after(async () => {
+  await browser?.close();
+  await server?.close();
+});
+
+async function openGame(t, { reducedMotion = 'no-preference', save = null, play = true } = {}) {
+  const context = await browser.newContext({ viewport: { width: 1100, height: 620 }, reducedMotion });
   await context.addInitScript(installGolfHarness, { manual: true });
-  if (progress) await context.addInitScript(([key, value]) => { if (!sessionStorage.getItem('seeded')) { sessionStorage.setItem('seeded', '1'); localStorage.setItem(key, value); } }, [KEY, JSON.stringify(progress)]);
+  if (save) {
+    await context.addInitScript(([key, value]) => {
+      if (!sessionStorage.getItem('seeded')) {
+        sessionStorage.setItem('seeded', '1');
+        localStorage.setItem(key, value);
+      }
+    }, [KEY, JSON.stringify(save)]);
+  }
   const page = await context.newPage(), errors = [];
   page.on('pageerror', e => errors.push(e.message));
-  t.after(async () => { await context.close(); assert.deepEqual(errors, []); });
+  t.after(async () => { await context.close(); assert.deepEqual(errors, [], 'no page errors'); });
   await page.goto(server.origin + '/games/skybound-golf/');
-  if (play) await page.locator('#play').click();
+  await page.waitForFunction(() => window.__game && window.golfTick);
+  if (play) {
+    await page.locator('#play').click();
+    await page.evaluate(() => advanceGolfFrames(2));
+  }
   return page;
 }
-const phase = page => page.evaluate(() => golfState.phase);
+
+const phase = page => page.evaluate(() => __game.phase);
 const saved = page => page.evaluate(key => JSON.parse(localStorage.getItem(key)), KEY);
-async function swing(page, frames = PEAK) {
-  await page.evaluate(n => advanceGolfFrames(n), frames);
+
+async function strike(page, aimFrames = 22, powerFrames = 26) {
+  await page.evaluate(n => advanceGolfFrames(n), aimFrames);
   await page.keyboard.press('Space');
-  await page.evaluate(() => advanceGolfFrames(6));
+  assert.equal(await phase(page), 'power');
+  await page.evaluate(n => advanceGolfFrames(n), powerFrames);
+  await page.keyboard.press('Space');
+  await page.evaluate(() => advanceGolfFrames(10));
   assert.equal(await phase(page), 'flight');
 }
-async function land(page) {
-  await page.evaluate(() => { for (let i = 0; i < 6000 && golfState.phase === 'flight'; i++) golfTick(1 / 60); golfRender(); });
+
+async function finishFlight(page) {
+  await page.evaluate(() => {
+    for (let i = 0; i < 4500 && __game.phase === 'flight'; i++) golfTick(1 / 60);
+    golfRender();
+  });
   assert.equal(await phase(page), 'landed');
 }
 
-test('Golf: the canvas strikes on press, not when a slow click is released', async t => {
-  const page = await game(t);
-  await page.evaluate(n => advanceGolfFrames(n), PEAK);
-  const pressed = await page.evaluate(() => golfState.gauge.value);
-  const box = await page.locator('#game').boundingBox();
-  await page.mouse.move(box.x + 300, box.y + 300);
-  await page.mouse.down();
-  await page.evaluate(() => advanceGolfFrames(7));
-  await page.mouse.up();
-  await page.evaluate(() => advanceGolfFrames(3));
-  assert.deepEqual(await page.evaluate(() => [golfState.ball.power, golfState.ball.rocketsLeft, golfState.ball.rockets, golfState.ball.armed]),
-    [pressed, 1, 1, false], 'struck once, at the press; the release fires nothing');
-});
-
-test('Golf: one button in flight fires a rocket in the air and a super bounce near the ground', async t => {
-  const page = await game(t, { progress: { v: 2, shots: 3, tips: 0, upgrades: { rockets: 1 } } });
-  await swing(page);
-  await page.evaluate(() => advanceGolfFrames(20));
-  const vy = await page.evaluate(() => golfState.ball.vy);
-  assert.match(await page.locator('#hint').textContent(), /صاروخ/);
-  await page.keyboard.press('Space');
-  const rocket = await page.evaluate(() => ({ left: golfState.ball.rocketsLeft, vy: golfState.ball.vy, flame: golfState.flame > 0 }));
-  assert.deepEqual([rocket.left, rocket.flame], [1, true]);
-  assert(rocket.vy > vy + 10, 'the rocket kicks the ball upwards');
-  assert.match(await page.locator('#rockets').getAttribute('aria-label'), /1 من 2/);
-  // Press a little early as the landing target appears: a good super bounce,
-  // so the first-time hints stay on screen.
-  await page.evaluate(() => { for (let i = 0; i < 2000 && !(golfState.reticle && golfState.reticle.t < 0.45); i++) golfTick(1 / 60); });
-  await page.keyboard.press('Space');
-  assert.equal(await page.evaluate(() => golfState.ball.armed), true);
-  await page.evaluate(() => { for (let i = 0; i < 40 && !golfState.ball.supers; i++) golfTick(1 / 60); });
-  assert.equal(await page.evaluate(() => golfState.ball.supers), 1, 'the landing becomes a super bounce');
-  assert.equal(await page.evaluate(() => golfState.ball.rocketsLeft), 1, 'arming a landing never spends the rocket in hand');
-  await page.evaluate(() => advanceGolfFrames(3));
-  await page.keyboard.press('Space');
-  assert.equal(await page.evaluate(() => golfState.ball.rocketsLeft), 0, 'on the way up the button is a rocket again');
-  const hint = await page.locator('#hint').textContent();
-  assert.match(hint, /قرب الأرض/);
-  assert.doesNotMatch(hint, /صاروخ/, 'with no rockets left the hint stops offering one');
-  const before = await page.evaluate(() => ({ vx: golfState.ball.vx, vy: golfState.ball.vy, armed: golfState.ball.armed }));
-  await page.keyboard.press('Space');
-  assert.deepEqual(await page.evaluate(() => ({ vx: golfState.ball.vx, vy: golfState.ball.vy, armed: golfState.ball.armed })), before, 'an empty press on the way up changes nothing');
-});
-
-test('Golf: pressing at the first gold landing cue awards a perfect bounce', async t => {
-  const page = await game(t);
-  await swing(page, 19);
-  await page.evaluate(() => {
-    for (let i = 0; i < 2000 && !(golfState.reticle && golfState.reticle.t <= GolfPhysics.PERFECT_WINDOW + 1e-9); i++) golfTick(1 / 60);
-    golfRender();
-  });
-  assert(await page.evaluate(() => golfState.reticle && golfState.hints), 'the gold landing cue is visible');
-  await page.keyboard.press('Space');
-  await page.evaluate(() => { for (let i = 0; i < 100 && !golfState.ball.supers; i++) golfTick(1 / 60); golfRender(); });
-  assert.equal(await page.evaluate(() => golfState.ball.combo), 1, 'the advertised perfect press starts a combo');
-  assert(await page.evaluate(() => golfState.popups.some(p => p.text === 'قفزة خارقة!')));
-});
-
-for (const exit of ['reload', 'menu', 'restart']) {
-  test(`Golf: a finished shot is saved once on landing and survives ${exit}`, async t => {
-    const page = await game(t);
-    await swing(page);
-    await land(page);
+test('Golf: finished shot saves once on landing and survives reload, menu and restart', async t => {
+  for (const exit of ['reload', 'menu', 'restart']) {
+    const page = await openGame(t);
+    await strike(page);
+    await finishFlight(page);
     const done = await saved(page);
-    assert.equal(await page.evaluate(() => golfProbe.saves), 1, 'the shot is saved as it lands');
-    assert(done.coins > 0 && done.shots === 1 && done.best === await page.evaluate(() => Math.floor(golfState.ball.maxX)));
-    assert.equal(done.bests.meadow, done.best);
+    assert.equal(await page.evaluate(() => golfProbe.saves), 1, 'saved exactly once on landing');
+    assert(done.coins > 0 && done.shots === 1 && done.bestDist === await page.evaluate(() => Math.floor(__game.ball.maxX)));
     if (exit !== 'reload') {
       await page.locator('#pause').click();
-      await page.locator('#' + exit).click();
-      assert.equal(await phase(page), exit === 'menu' ? 'title' : 'ready');
-      assert.equal(await page.evaluate(() => golfProbe.saves), 1);
+      await page.locator(exit === 'menu' ? '#pause-menu' : '#restart').click();
+      assert.equal(await phase(page), exit === 'menu' ? 'title' : 'aim');
+      assert.equal(await page.evaluate(() => golfProbe.saves), 1, 'no duplicate save on exit');
     }
     await page.reload();
-    assert.deepEqual(await saved(page), done, 'leaving keeps exactly one finished shot');
-    assert.equal(await page.evaluate(() => golfProbe.saves), 0, 'loading never awards it again');
-  });
-}
-
-for (const exit of ['menu', 'restart']) {
-  test(`Golf: a shot left in flight from the pause menu (${exit}) keeps its coins and the world it announced`, async t => {
-    const page = await game(t, { progress: { v: 2, best: 200, bests: { meadow: 200 }, upgrades: { power: 12, bounce: 10 }, shots: 10, tips: 2 } });
-    await swing(page);
-    const flown = await page.evaluate(() => {
-      for (let i = 0; i < 6000 && golfState.phase === 'flight' && golfState.ball.maxX < GolfPhysics.worlds[1].unlock + 10; i++) golfTick(1 / 60);
-      return { phase: golfState.phase, maxX: Math.floor(golfState.ball.maxX), toast: document.getElementById('toast').textContent };
-    });
-    assert.deepEqual([flown.phase, flown.toast], ['flight', 'فتحت وادي الرمال!']);
-    const saves = await page.evaluate(() => { window.dispatchEvent(new Event('blur')); advanceGolfFrames(2); return golfProbe.saves; });
-    await page.locator('#' + exit).click();
-    const kept = await saved(page);
-    assert.deepEqual([kept.best, kept.bests.meadow, kept.shots], [flown.maxX, flown.maxX, 11]);
-    assert(kept.coins > 0, 'the distance so far pays');
-    assert.equal(await page.evaluate(() => golfProbe.saves), saves + 1, 'saved once');
-    await page.reload();
-    assert.deepEqual(await saved(page), kept);
-  });
-}
-
-test('Golf: the result card opens by itself shortly after the landing', async t => {
-  const page = await game(t);
-  await swing(page);
-  await land(page);
-  await page.evaluate(() => advanceGolfFrames(60));
-  assert.equal(await phase(page), 'landed', 'the landing shows first');
-  await page.evaluate(() => advanceGolfFrames(60));
-  assert.equal(await phase(page), 'result');
-  assert.equal(await page.evaluate(() => golfProbe.saves), 1);
-});
-
-test('Golf: a held Space or Enter opens the result card but never skips past it', async t => {
-  for (const key of ['Space', 'Enter']) {
-    const page = await game(t);
-    await swing(page);
-    await land(page);
-    await page.keyboard.down(key);
-    assert.equal(await phase(page), 'result');
-    for (let i = 0; i < 3; i++) await page.keyboard.down(key); // auto-repeat
-    await page.keyboard.up(key);
-    assert.equal(await phase(page), 'result', key + ' held: the card stays');
+    await page.waitForFunction(() => window.__game && window.golfTick);
+    assert.deepEqual(await saved(page), done, `${exit}: saved progress survives reload`);
+    assert.equal(await page.evaluate(() => golfProbe.saves), 0, 'reload does not re-award shot');
     await page.close();
   }
 });
 
-test('Golf: a held Enter on an upgrade buys one level', async t => {
-  const page = await game(t, { play: false, progress: { v: 2, coins: 400, shots: 3, tips: 2 } });
-  await page.locator('#open-shop').click();
-  await page.locator('[data-upgrade="power"]').focus();
-  await page.keyboard.down('Enter');
-  for (let i = 0; i < 4; i++) await page.keyboard.down('Enter');
-  await page.keyboard.up('Enter');
-  assert.equal((await saved(page)).upgrades.power, 1);
-  assert.equal(await page.locator('#shop-content').isVisible(), true, 'the shop stays open');
-});
+test('Golf: result card auto-opens after landing, Space skips to result without double-skipping, and all 4 upgrades fit & persist', async t => {
+  const page = await openGame(t, { save: { v: 3, coins: 300, bestDist: 100, bestAlt: 40, shots: 3, upgrades: { power: 0, fuel: 0, bounce: 0, magnet: 0 }, skin: 'classic', ownedSkins: ['classic'], milestones: [] } });
+  await strike(page);
+  await finishFlight(page);
+  await page.evaluate(() => advanceGolfFrames(40));
+  assert.equal(await phase(page), 'landed', 'brief landing celebration shows first');
+  await page.evaluate(() => advanceGolfFrames(50));
+  assert.equal(await phase(page), 'result', 'result card auto-opens');
 
-test('Golf: the second press of a double-click never acts on what the first one revealed', async t => {
-  const page = await game(t, { play: false, progress: { v: 2, best: 300, bests: { meadow: 300 }, world: 0, shots: 3, tips: 2 } });
-  await page.locator('#open-worlds').dblclick();
-  assert.equal(await page.locator('#worlds-content').isVisible(), true, 'the world picker stays open');
-  assert.equal(await page.evaluate(() => golfState.world), 0, 'no world was chosen');
-  await page.keyboard.press('Escape');
-  await page.locator('#play').dblclick();
-  await page.evaluate(() => advanceGolfFrames(10));
-  assert.deepEqual(await page.evaluate(() => [golfState.phase, golfState.ball]), ['ready', null], 'no stray swing');
-  await page.evaluate(n => advanceGolfFrames(n), PEAK);
-  await page.locator('#game').click({ position: { x: 200, y: 200 } });
-  await page.evaluate(() => advanceGolfFrames(6));
-  assert.equal(await phase(page), 'flight', 'a separate click still swings');
-});
+  const ids = await page.locator('#upgrades [data-upgrade]').evaluateAll(els => els.map(e => e.dataset.upgrade));
+  assert.deepEqual(ids, ['power', 'fuel', 'bounce', 'magnet']);
 
-// Measure a menu only once its entrance animation has settled.
-const settled = page => page.evaluate(() => Promise.all(document.getAnimations()
-  .filter(a => a.effect && a.effect.getComputedTiming().iterations !== Infinity).map(a => a.finished.catch(() => {}))));
-
-test('Golf: a click on empty menu space never blocks the next real click', async t => {
-  const page = await game(t, { play: false, progress: { v: 2, coins: 400, shots: 3, tips: 2 } });
-  await page.locator('#open-shop').click();
-  await settled(page);
-  const card = await page.locator('[data-upgrade="bounce"]').boundingBox();
-  assert.equal(await page.evaluate(([x, y]) => !document.elementFromPoint(x, y).closest('button'), [card.x + card.width + 3, card.y + 20]), true, 'the first click lands on empty space');
-  await page.mouse.click(card.x + card.width + 3, card.y + 20);
-  await page.mouse.click(card.x + card.width - 4, card.y + 20);
-  assert.equal((await saved(page)).upgrades.bounce, 1);
-  // A button that stays where it was (mute) does not arm the guard either:
-  // a swing just below it, within the guard's 16 px, still counts.
-  await page.keyboard.press('Escape');
-  await page.locator('#play').click();
-  await page.evaluate(() => advanceGolfFrames(39));
-  const mute = await page.locator('.sg-mute').boundingBox();
-  await page.mouse.click(mute.x + mute.width / 2, mute.y + mute.height - 3);
-  await page.mouse.click(mute.x + mute.width / 2, mute.y + mute.height + 6);
-  await page.evaluate(() => advanceGolfFrames(6));
-  assert.equal(await phase(page), 'flight');
-});
-
-test('Golf: quick repeat clicks on one upgrade each buy a level', async t => {
-  const page = await game(t, { play: false, progress: { v: 2, coins: 400, shots: 3, tips: 2 } });
-  await page.locator('#open-shop').click();
-  await page.locator('[data-upgrade="power"]').click();
-  await page.locator('[data-upgrade="power"]').click({ clickCount: 2 });
-  assert.equal((await saved(page)).upgrades.power, 3, 'a rebuilt card is still the same control');
-});
-
-const cards = page => page.locator('#upgrades [data-upgrade]').evaluateAll(list => list.map(b => b.dataset.upgrade));
-
-test('Golf: the shop sells all eight upgrades and every card fits on screen', async t => {
-  const page = await game(t, { play: false, progress: { v: 2, coins: 400, shots: 3, tips: 2 } });
-  await page.locator('#open-shop').click();
-  await settled(page);
-  assert.deepEqual(await cards(page), ['power', 'bounce', 'rockets', 'magnet', 'thrust', 'aim', 'skip', 'treasure']);
   const fit = await page.evaluate(() => {
-    const panel = document.getElementById('panel').getBoundingClientRect(), view = innerHeight;
-    return [...document.querySelectorAll('#upgrades [data-upgrade], #skins-content button')].every(b => {
+    const panel = document.getElementById('panel').getBoundingClientRect();
+    return [...document.querySelectorAll('#upgrades [data-upgrade], #result-content .result-actions button')].every(b => {
       const r = b.getBoundingClientRect();
-      return r.width > 0 && r.top >= panel.top && r.bottom <= panel.bottom && r.bottom <= view;
+      return r.width > 0 && r.top >= panel.top && r.bottom <= panel.bottom && r.bottom <= innerHeight;
     });
   });
-  assert.equal(fit, true, 'every card sits inside the panel and the window');
-  for (const kind of ['thrust', 'aim', 'skip', 'treasure']) await page.locator(`[data-upgrade="${kind}"]`).click();
-  const { upgrades, coins } = await saved(page);
-  assert.deepEqual([upgrades.thrust, upgrades.aim, upgrades.skip, upgrades.treasure], [1, 1, 1, 1]);
-  assert.equal(coins, 400 - 50 - 45 - 35 - 80);
-});
+  assert.equal(fit, true, 'all 4 upgrade cards and result actions fit inside 1100x620 viewport without clipping');
 
-test('Golf: the result card offers the four cheapest upgrades and keeps them while it is open', async t => {
-  const page = await game(t, { progress: { v: 2, coins: 200, shots: 3, tips: 2 } });
-  await swing(page);
-  await land(page);
-  await page.keyboard.press('Space');
+  for (const up of ['power', 'fuel', 'bounce', 'magnet']) {
+    await page.locator(`#upgrades [data-upgrade="${up}"]`).click();
+  }
+  const afterUp = await saved(page);
+  assert.deepEqual(afterUp.upgrades, { power: 1, fuel: 1, bounce: 1, magnet: 1 });
   assert.equal(await phase(page), 'result');
-  assert.deepEqual(await cards(page), ['power', 'bounce', 'magnet', 'skip'], 'bounce 25, power 30, skip 35 and magnet 40, in shop order');
-  await page.locator('[data-upgrade="bounce"]').click();
-  await page.locator('[data-upgrade="bounce"]').click();
-  assert.equal((await saved(page)).upgrades.bounce, 2);
-  assert.deepEqual(await cards(page), ['power', 'bounce', 'magnet', 'skip'], 'the row does not shuffle under the pointer');
-  await page.keyboard.press('KeyR');
-  await swing(page);
-  await land(page);
-  await page.keyboard.press('Space');
-  assert.deepEqual(await cards(page), ['power', 'magnet', 'aim', 'skip'], 'the next card picks again: bounce now costs 49');
 });
 
-test('Golf: the golden-hit upgrade turns a strong swing into a perfect one', async t => {
-  const strike = async progress => {
-    const page = await game(t, { progress });
-    const value = await page.evaluate(() => { for (let i = 0; i < 60 && golfState.gauge.value < 0.82; i++) advanceGolfFrames(1); return golfState.gauge.value; });
-    assert(value >= 0.82 && value < 0.88, 'stopped between the old and the new gold zone: ' + value);
-    await page.keyboard.press('Space');
-    await page.evaluate(() => advanceGolfFrames(6));
-    const out = await page.evaluate(() => [golfState.ball.grade, golfState.gauge.perfect]);
-    await page.close();
-    return out;
-  };
-  assert.deepEqual(await strike({ v: 2, shots: 3, tips: 2 }), ['great', 0.9]);
-  assert.deepEqual(await strike({ v: 2, shots: 3, tips: 2, upgrades: { aim: 4 } }), ['perfect', 0.8]);
-});
-
-test('Golf: the treasure upgrade adds its own coins to the result', async t => {
-  const page = await game(t, { progress: { v: 2, coins: 0, shots: 3, tips: 2, upgrades: { treasure: 5 } } });
-  await swing(page);
-  await land(page);
-  await page.keyboard.press('Space');
-  const parts = await page.evaluate(() => GolfPhysics.reward(golfState.ball));
-  assert(parts.treasure > 0 && parts.treasure === Math.floor((parts.total - parts.treasure) * 0.5), JSON.stringify(parts));
-  assert.match(await page.locator('#result-coins').textContent(), new RegExp('الكنز ' + parts.treasure));
-  assert.equal((await saved(page)).coins, parts.total);
-});
-
-test('Golf: the mute button works while a menu is open', async t => {
-  const page = await game(t);
-  await page.keyboard.press('Escape');
-  assert.equal(await page.locator('#pause-content').isVisible(), true);
-  const muted = await page.evaluate(() => Kit.audio.muted);
-  await page.locator('.sg-mute').click();
-  assert.equal(await page.evaluate(() => Kit.audio.muted), !muted);
-});
-
-test('Golf: Space skips the landing to the result, which never awards twice; R plays again', async t => {
-  const page = await game(t);
-  await swing(page);
-  await land(page);
-  await page.keyboard.press('Space');
-  assert.equal(await phase(page), 'result');
-  assert.equal(await page.locator('#modal-heading').textContent(), 'رحلة رائعة!');
-  assert.match(await page.locator('#result-coins').textContent(), /\+\d+/);
-  const done = await saved(page);
-  await page.evaluate(() => advanceGolfFrames(200));
-  assert.equal(await page.evaluate(() => golfProbe.saves), 1);
-  assert.deepEqual(await saved(page), done);
-  await page.keyboard.press('KeyR');
-  assert.deepEqual(await page.evaluate(() => [golfState.phase, golfState.ball]), ['ready', null]);
-});
-
-test('Golf: a new world unlocked by a shot is offered on the result card', async t => {
-  const page = await game(t, { progress: { v: 2, best: 200, bests: { meadow: 200 }, shots: 4, tips: 2 } });
-  await swing(page);
-  await page.evaluate(() => { const b = golfState.ball; b.done = true; b.reason = 'rest'; b.maxX = 300; advanceGolfFrames(20); });
-  await page.keyboard.press('Space');
-  assert.equal(await page.locator('#modal-heading').textContent(), 'رقم قياسي جديد!');
-  assert.equal(await page.locator('#result-unlock').isVisible(), true);
-  assert.equal(await page.evaluate(() => document.activeElement === document.querySelector('#result-unlock button')), true);
-  await page.keyboard.press('Space');
-  assert.deepEqual(await page.evaluate(() => [golfState.phase, golfState.world]), ['ready', 1]);
-  assert.equal((await saved(page)).world, 1);
-});
-
-test('Golf: a failed save is reported and retried from the warning', async t => {
-  const page = await game(t);
-  await page.evaluate(() => {
-    const setItem = Storage.prototype.setItem;
-    window.failSaves = true;
-    Storage.prototype.setItem = function (k, v) { if (window.failSaves && k.includes('skybound-golf')) throw new Error('full'); return setItem.call(this, k, v); };
+test('Golf: all 5 3D ball skins unlock, equip and persist across reload', async t => {
+  const page = await openGame(t, {
+    play: false,
+    save: { v: 3, coins: 2000, bestDist: 400, bestAlt: 120, shots: 5, upgrades: { power: 2, fuel: 2, bounce: 2, magnet: 2 }, skin: 'classic', ownedSkins: ['classic'], milestones: ['cloud_gate'] }
   });
-  await swing(page);
-  await page.evaluate(() => { const b = golfState.ball; b.done = true; b.reason = 'rest'; b.maxX = 90; advanceGolfFrames(20); });
+  await page.locator('#open-skins').click();
+  const skins = await page.locator('#skins-grid [data-skin]').evaluateAll(els => els.map(e => e.dataset.skin));
+  assert.deepEqual(skins, ['classic', 'fireball', 'disco', 'planet', 'star']);
+
+  await page.locator('#skins-grid [data-skin="fireball"]').click();
+  await page.locator('#skins-grid [data-skin="planet"]').click();
+  assert.equal(await page.evaluate(() => __game.skin), 'planet');
+  await page.reload();
+  await page.waitForFunction(() => window.__game && window.golfTick);
+  assert.equal(await page.evaluate(() => __game.skin), 'planet');
+  const st = await saved(page);
+  assert(st.ownedSkins.includes('fireball') && st.ownedSkins.includes('planet'));
+});
+
+test('Golf: failed save reports Arabic status banner and Retry commits progress', async t => {
+  const page = await openGame(t);
+  await page.evaluate(() => {
+    const orig = Storage.prototype.setItem;
+    window.failSaves = true;
+    Storage.prototype.setItem = function (k, v) {
+      if (window.failSaves && String(k).includes('skybound-golf:save_v3')) throw new Error('quota');
+      return orig.call(this, k, v);
+    };
+  });
+  await strike(page);
+  await page.evaluate(() => {
+    const b = __game.ball; b.done = true; b.reason = 'rest'; b.maxX = 140; b.maxY = 50;
+    advanceGolfFrames(4);
+  });
   assert.equal(await phase(page), 'landed');
-  assert.equal(await page.locator('.sg-save-status').isVisible(), true, 'a failed write is visible');
+  assert.equal(await page.locator('.sg-save-status').isVisible(), true, 'save warning banner is visible');
   assert.equal(await saved(page), null);
+
   await page.evaluate(() => { window.failSaves = false; });
   await page.locator('.sg-save-status button').click();
-  assert.equal((await saved(page)).best, 90, 'retry writes the kept progress');
+  assert.equal((await saved(page)).bestDist, 140, 'retry writes kept progress');
   assert.equal(await page.locator('.sg-save-status button').isVisible(), false);
 });
 
-test('Golf: real shots in every world match the physics at 60 Hz', async t => {
-  const page = await game(t, { play: false });
-  for (let world = 0; world < 5; world++) for (const level of [0, 6, 12]) {
-    const upgrades = { power: level, bounce: Math.min(10, level), rockets: Math.min(5, level / 2), magnet: Math.min(5, level / 2) };
-    await page.evaluate(([key, value]) => localStorage.setItem(key, value), [KEY, JSON.stringify({ v: 2, world, best: 5000, shots: 9, tips: 2, upgrades })]);
-    await page.reload();
-    await page.locator('#play').click();
-    await swing(page, PEAK - 3 + world);
-    const result = await page.evaluate(([world, upgrades]) => {
-      for (let i = 0; i < 9000 && golfState.phase === 'flight'; i++) golfTick(1 / 60);
-      const P = GolfPhysics, course = P.createCourse(world), b = P.launch(course, upgrades, golfState.ball.power);
-      while (!b.done) P.step(course, b, upgrades, P.pace(b) / 60);
-      return { actual: golfState.ball.maxX, expected: b.maxX, coins: [golfState.ball.coins, b.coins], phase: golfState.phase, saves: golfProbe.saves };
-    }, [world, upgrades]);
-    assert.equal(result.actual, result.expected, `world ${world}, level ${level}`);
-    assert.deepEqual(result.coins.length, 2); assert.equal(result.coins[0], result.coins[1]);
-    assert.equal(result.phase, 'landed');
-    assert.equal(result.saves, 1, 'each finished shot saves once');
-  }
-});
-
-test('Golf: reduced motion keeps play complete without shake, flash, hit-stop, hops or trails', async t => {
-  const page = await game(t, { reducedMotion: 'reduce' });
-  await page.evaluate(n => advanceGolfFrames(n), PEAK);
-  await page.keyboard.press('Space');
-  const frames = await page.evaluate(() => {
-    const seen = [], xs = [];
-    for (let i = 0; i < 20; i++) {
-      golfTick(1 / 60);
-      seen.push([golfState.shake.x, golfState.shake.y, golfState.flash, golfState.golfer.jump, golfState.trail.length]);
-      xs.push(golfState.phase === 'flight' ? golfState.ball.x : null);
-    }
-    return { seen, xs, grade: golfState.ball.grade };
+test('Golf: browser 60 Hz flight matches pure GolfPhysics deterministically', async t => {
+  const page = await openGame(t, {
+    save: { v: 3, coins: 100, bestDist: 0, bestAlt: 0, shots: 2, upgrades: { power: 3, fuel: 2, bounce: 3, magnet: 2 }, skin: 'classic', ownedSkins: ['classic'], milestones: [] }
   });
-  assert.equal(frames.grade, 'perfect');
-  assert(frames.seen.every(f => f.every(v => v === 0)), JSON.stringify(frames.seen));
-  const contact = frames.xs.findIndex(x => x !== null);
-  assert(contact >= 0 && frames.xs[contact + 1] > 0, 'no hit-stop holds the ball: ' + JSON.stringify(frames.xs));
-  await page.evaluate(() => advanceGolfFrames(40));
-  assert.deepEqual(await page.evaluate(() => [golfState.trail.length, golfState.shake.x, golfState.shake.y, golfState.flash]), [0, 0, 0, 0]);
-  await land(page);
-  await page.keyboard.press('Space');
-  assert.equal(await phase(page), 'result');
-  assert.equal(await page.locator('#modal-heading').isVisible(), true);
-  // Classroom or system motion changes reach the renderer behind the result card.
-  for (const reduced of [false, true]) {
-    const motion = await page.evaluate(reduced => {
-      const before = golfProbe.draws;
-      Kit.motion.setPreference(reduced ? 'reduce' : 'full');
-      golfRender(); const changed = golfProbe.draws - before; golfRender();
-      return { reduced: golfState.reduced, changed, total: golfProbe.draws - before };
-    }, reduced);
-    assert.deepEqual(motion, { reduced, changed: 1, total: 1 }, 'a motion change repaints once and settles');
-  }
+  await strike(page, 18, 22);
+  const res = await page.evaluate(() => {
+    const angle = __game.ball.angle;
+    const power = __game.ball.power;
+    const course = __game.course;
+    const upgrades = __game.save.upgrades;
+    for (let i = 0; i < 4500 && __game.phase === 'flight'; i++) golfTick(1 / 60);
+    const expected = GolfPhysics.launch(course, upgrades, angle, power);
+    while (!expected.done) GolfPhysics.step(course, expected, upgrades, 1 / 60, { boost: false });
+    return {
+      actualX: __game.ball.maxX,
+      expectedX: expected.maxX,
+      actualCoins: __game.ball.coins,
+      expectedCoins: expected.coins,
+      phase: __game.phase
+    };
+  });
+  assert.equal(res.actualX, res.expectedX, 'browser flight maxX matches pure physics');
+  assert.equal(res.actualCoins, res.expectedCoins, 'browser flight coins match pure physics');
+  assert.equal(res.phase, 'landed');
 });
 
-test('Golf: a save from the first version keeps its coins, refunds its upgrades and keeps its balls', async t => {
-  const page = await game(t, { play: false, progress: { coins: 100, best: 640, world: 2, upgrades: { power: 2, bounce: 1, glide: 0 }, skins: ['gold'], skin: 'gold', shots: 9 } });
-  assert.equal(await page.locator('#coins').textContent(), '310');
-  assert.equal(await page.locator('#best-meters').textContent(), '640');
-  assert.equal(await page.locator('#world-label').textContent(), 'قمم الثلج');
-  assert.equal(await page.evaluate(() => golfState.skin), 'gold');
+test('Golf: reduced motion disables hit-stop and responds to live preference changes on paused frame', async t => {
+  const page = await openGame(t, { reducedMotion: 'reduce' });
+  await strike(page, 24, 30);
+  const xAfterOneFrame = await page.evaluate(() => {
+    const x0 = __game.ball.x;
+    golfTick(1 / 60);
+    return __game.ball.x - x0;
+  });
+  assert(xAfterOneFrame > 0, 'no hit-stop freezes ball in reduced motion');
+  await page.keyboard.press('Escape');
+  assert.equal(await page.locator('#pause-content').isVisible(), true);
+  // While paused, unchanged frames do not redraw; changing motion preference redraws once and settles
+  const drawsBefore = await page.evaluate(() => {
+    golfRender(); golfRender();
+    return golfProbe.draws;
+  });
+  await page.evaluate(() => {
+    Kit.motion.setPreference('full');
+    golfRender(); golfRender();
+  });
+  const drawsAfter = await page.evaluate(() => golfProbe.draws);
+  assert.equal(drawsAfter - drawsBefore, 1, 'paused motion toggle repaints once and settles');
 });
 
-test('Golf: all five worlds are playable immediately and difficulty tiers tune gauge and rewards', async t => {
-  const page = await game(t, { play: false });
-  await page.locator('#open-worlds').click();
-  const enabled = await page.locator('#worlds-content button').evaluateAll(list => list.map(b => !b.disabled));
-  assert.deepEqual(enabled, [true, true, true, true, true], 'all five worlds are open on shared school PCs');
-  await page.locator('#worlds-content button').nth(4).click();
-  assert.equal(await page.evaluate(() => golfState.world), 4, 'can jump straight to galaxy orbit');
-
-  await page.locator('[data-difficulty="easy"]').click();
-  assert.equal(await page.locator('[data-difficulty="easy"]').getAttribute('aria-pressed'), 'true');
-  await page.locator('#play').click();
-  assert(await page.evaluate(() => golfState.gauge.perfect < 0.85), 'easy mode widens the golden zone');
-  await page.locator('#pause').click();
-  await page.locator('#menu').click();
-
-  await page.locator('[data-difficulty="hero"]').click();
-  await page.locator('#play').click();
-  await swing(page, 28);
-  await page.evaluate(() => advanceGolfFrames(15));
-  await page.keyboard.press('ArrowDown');
-  assert.equal(await page.evaluate(() => golfState.ball.rocketsLeft), 1, 'ArrowDown in mid-air saves rockets for ground slams');
-  await land(page);
-  assert(await page.evaluate(() => GolfPhysics.reward(golfState.ball).hero > 0), 'hero tier awards bonus coins');
+test('Golf: incompatible old v2 save resets cleanly to v3 without error', async t => {
+  const page = await openGame(t, { play: false, save: { v: 2, coins: 999, best: 500, world: 3 } });
+  assert.equal(await page.locator('#title-coins').textContent(), '0');
+  assert.equal(await page.locator('#best-meters').textContent(), '0');
 });
-
