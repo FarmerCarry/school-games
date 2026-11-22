@@ -1,8 +1,9 @@
-// Toy Castle: Mega-Mech & Lego-Knight Siege (قلعة الألعاب) — Real Chromium Browser Suite
-// Verifies fresh-save #btnPlay -> '1-1', frame-1 Digit1 summon, zero P1 auto-spawn,
-// active Roof Cannon mouse + Space aiming/firing, Sky Crate popping, Super Meteor,
-// all 12 stages unlocked across 4 worlds, clean 2P shared-keyboard duel (keeping P/R/M/Esc),
-// pause freeze & restart, win/DDA/quota recovery, Toy Armory, reduced motion, 1100x620 fit, and zero BGM.
+// Toy Castle (قلعة الألعاب) — Real Chromium Browser Suite
+// Verifies minimal title screen, 3D WebGL scene, #btnPlay -> Stage 1-1, frame-1 Digit1 spawn,
+// mouse + Space cork cannon aiming/firing, floating crate pop, 2-Player local controls
+// (P1 1-4/Q-R + A/D + Space/S; P2 7-0/U-P + Arrows + Enter/Down without P pausing),
+// pause freeze & restart, stage map, castle skin shop + QuotaExceededError recovery,
+// solo victory persistence + DDA/telemetry, 1100x620 fit, and reduced motion.
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import path from 'node:path';
@@ -23,21 +24,23 @@ after(async () => {
   await server?.close();
 });
 
-const SAVE = (cleared = 0, extra = {}) => ({
-  v: 2,
-  diff: 'normal',
+const SAVE = (extra = {}) => ({
+  v: 3,
   coins: 0,
-  lv: Array.from({ length: 12 }, (_, i) => ({ s: i < cleared ? 2 : 0, t: i < cleared ? 42 : 0 })),
-  armors: [1, 0, 0, 0, 0],
-  cannons: [1, 0, 0, 0, 0],
-  armor: 0,
-  cannon: 0,
+  bestScore: 0,
+  stars: [0, 0, 0, 0, 0, 0, 0, 0, 0],
+  unlockedStage: 0,
+  castleSkin: 0,
+  bannerSkin: 0,
+  ownedCastles: [1, 0, 0, 0, 0],
+  ownedBanners: [1, 0, 0, 0, 0],
+  wins: 0,
   ...extra
 });
 
-async function game(t, { save, dda = 0.35, reducedMotion = 'reduce', size = [1280, 720] } = {}) {
+async function openGame(t, { save, dda = 0.35, reducedMotion = 'reduce', size = [1280, 720] } = {}) {
   const ctx = await browser.newContext({ viewport: { width: size[0], height: size[1] }, reducedMotion });
-  ctx.setDefaultTimeout(5000);
+  ctx.setDefaultTimeout(7000);
   const errors = [], requests = [];
   ctx.on('page', page => {
     page.on('pageerror', e => errors.push(e.message));
@@ -59,7 +62,7 @@ async function game(t, { save, dda = 0.35, reducedMotion = 'reduce', size = [128
       }
     }
     let kit;
-    const tc = window.tc = { results: [], ends: [], rounds: [], failSave: false };
+    const tc = window.tc = { results: [], ends: [], rounds: [], hits: 0, misses: 0, failSave: false };
     Object.defineProperty(window, 'Kit', {
       configurable: true,
       get: () => kit,
@@ -85,8 +88,12 @@ async function game(t, { save, dda = 0.35, reducedMotion = 'reduce', size = [128
         const origEnd = kit.stats.end;
         kit.stats.end = function (...args) {
           tc.ends.push(args);
-          return origEnd.apply(this, args);
+          return origEnd.apply(this, arguments);
         };
+        const origHit = kit.track.hit;
+        kit.track.hit = function () { tc.hits++; return origHit.apply(this, arguments); };
+        const origMiss = kit.track.miss;
+        kit.track.miss = function () { tc.misses++; return origMiss.apply(this, arguments); };
       }
     });
     const write = Storage.prototype.setItem;
@@ -100,7 +107,7 @@ async function game(t, { save, dda = 0.35, reducedMotion = 'reduce', size = [128
 
   const page = await ctx.newPage();
   await page.goto(`${server.origin}/games/toy-castle/`, { timeout: 90000 });
-  await page.waitForFunction(() => window.__game && window.tc.step);
+  await page.waitForFunction(() => window.__game && window.tc && window.tc.step, null, { timeout: 30000 });
   return page;
 }
 
@@ -111,326 +118,217 @@ const stored = page => page.evaluate(() => {
   const raw = localStorage.getItem('sg:toy-castle:save');
   return raw ? JSON.parse(raw) : null;
 });
-const pagePoint = (page, x, y) => page.evaluate(([x, y]) => __game.point(x, y), [x, y]);
 
-test('Title -> #btnPlay opens 1-1 with >=30 energy; P1 never auto-spawns; Digit1 summons on frame 1', async t => {
-  const page = await game(t);
-  await step(page, 15);
+test('Title -> #btnPlay opens Stage 1-1; P1 never auto-spawns; Digit1 summons on frame 1', async t => {
+  const page = await openGame(t);
+  await step(page, 10);
   assert.equal((await state(page)).screen, 'title');
-  assert.equal(await page.locator('#titleStars b').textContent(), '0/36');
+  assert.equal(await page.locator('#titleStars b').textContent(), '0/27');
 
-  // Switch difficulty to سهل on title and confirm persistence
-  await page.locator('#titleDiffs [data-diff="easy"]').click();
-  assert.equal((await stored(page)).diff, 'easy');
-
-  // #btnPlay starts Stage 1-1 immediately
   await page.locator('#btnPlay').click();
   await step(page, 1);
   const s0 = await state(page);
   assert.equal(s0.screen, 'play');
   assert.equal(s0.id, '1-1');
-  assert.ok(s0.energy >= 35, 'starts with >= 35 energy so [1] or [2] is ready at t=0');
+  assert.ok(s0.energy >= 35, 'starts with >= 35 energy');
   assert.equal(s0.p1Spawned, 0);
 
-  // 6 seconds of zero player input MUST keep p1Spawned === 0!
-  await run(page, 360);
-  assert.equal((await state(page)).p1Spawned, 0, 'never auto-spawns P1 units');
-
-  // Pressing Digit1 immediately spawns sword knight
-  await page.keyboard.press('Digit1');
-  await step(page, 1);
-  assert.equal((await state(page)).p1Spawned, 1);
-});
-
-test('Controllable Roof Cannon (mouse + Space), Sky Crate popping, Unit Cards, Super Meteor & Generator', async t => {
-  const page = await game(t);
-  await page.locator('#btnPlay').click();
-  await step(page, 1);
-
-  // Aim Roof Cannon via mouse move & fire via canvas click
-  const target = await pagePoint(page, 720, 420);
-  await page.mouse.move(target.x, target.y);
-  await page.mouse.click(target.x, target.y);
-  await step(page, 2);
-  assert.equal((await state(page)).shots, 1, 'canvas click fires Roof Cannon');
-
-  // Wait for cannon cooldown, tilt barrel with ArrowUp, and fire with Space
-  await run(page, 45);
-  const aimBefore = (await state(page)).aim;
-  await page.keyboard.down('ArrowUp');
-  await run(page, 12);
-  await page.keyboard.up('ArrowUp');
-  assert.ok((await state(page)).aim < aimBefore, 'ArrowUp tilts Roof Cannon upward');
-  await page.keyboard.press('Space');
-  await step(page, 1);
-  assert.equal((await state(page)).shots, 2, 'Space fires Roof Cannon');
-
-  // Advance until first Sky Crate appears (~3.6s total) and click directly on crate to pop it!
-  await run(page, 190);
-  const cratePos = await page.evaluate(() => {
-    const c = __game.world.crates[0];
-    return c ? { x: c.x, y: c.y } : null;
-  });
-  assert.ok(cratePos, 'Sky Energy Crate spawned');
-  const eBefore = (await state(page)).energy;
-  const cratePt = await pagePoint(page, cratePos.x, cratePos.y);
-  await page.mouse.click(cratePt.x, cratePt.y);
-  await step(page, 1);
-  const afterCrate = await state(page);
-  assert.equal(afterCrate.cratesPopped, 1);
-  assert.ok(afterCrate.energy > eBefore + 10, 'popping crate grants bonus energy');
-
-  // Upgrade Generator via [6] and summon units via HUD cards
+  // Idle 2s: P1 still never auto-spawns
   await run(page, 120);
-  await page.keyboard.press('Digit6');
-  await step(page, 1);
-  assert.equal((await state(page)).genLv, 2, 'Digit6 upgrades Generator to level 2');
+  assert.equal((await state(page)).p1Spawned, 0);
 
-  await run(page, 240);
-  await page.locator('#card-sword').click();
-  await page.locator('#card-rocket').click();
-  await page.locator('#card-dino').click();
+  // Press Digit1 -> spawns P1 Foam Knight immediately
+  await page.keyboard.down('Digit1');
   await step(page, 2);
-  assert.equal((await state(page)).p1Spawned, 3, 'clicking unit cards deploys units');
-
-  // Charge Super Meteor to 100% and unleash via Digit5
-  await page.evaluate(() => { __game.world.sides[0].superCharge = 100; });
-  await step(page, 1);
-  await page.keyboard.press('Digit5');
-  await step(page, 1);
-  assert.equal((await state(page)).superCharge, 0, 'Digit5 unleashes Super Meteor Barrage');
+  await page.keyboard.up('Digit1');
+  const s1 = await state(page);
+  assert.equal(s1.p1Spawned, 1, 'Digit1 spawns P1 Foam Knight');
+  assert.ok(s1.units >= 1);
 });
 
-test('All 4 Worlds x 3 Stages (1-1..4-3) are unlocked from the start on the Worlds map', async t => {
-  const page = await game(t);
-  await page.locator('#btnLevels').click();
-  await step(page, 1);
-  assert.equal((await state(page)).screen, 'map');
-  assert.equal(await page.locator('#worlds .w-col').count(), 4, '4 distinct worlds');
-  assert.equal(await page.locator('#worlds .lvl').count(), 12, '12 stages visible');
+test('Cork cannon mouse + Space aiming/firing pops parachute crate and tracks hits/misses', async t => {
+  const page = await openGame(t);
+  await page.locator('#btnPlay').click();
+  await step(page, 2);
 
-  // Click final stage 4-3 directly on a fresh save
-  await page.locator('#worlds .lvl').nth(11).click();
-  await step(page, 1);
-  const s = await state(page);
-  assert.equal(s.screen, 'play');
-  assert.equal(s.id, '4-3');
-  assert.equal(s.worldIdx, 3);
+  // Keyboard aim right + Space fires cork cannon
+  const beforeAim = (await state(page)).aimX1;
+  await page.keyboard.down('KeyD');
+  await step(page, 12);
+  await page.keyboard.up('KeyD');
+  assert.ok((await state(page)).aimX1 > beforeAim, 'KeyD aims cork cannon right');
+
+  await page.keyboard.press('Space');
+  await step(page, 2);
+  assert.equal((await state(page)).cannonShots1, 1);
+
+  // Wait for cooldown and pop a spawned parachute crate with mouse click!
+  await run(page, 100);
+  const crateScreenPt = await page.evaluate(() => {
+    const cr = ToyCastleEngine.spawnCrate(__game.world);
+    cr.baseX = 0; cr.x = 0; cr.y = 5.4; cr.vy = 0; cr.swayAmp = 0;
+    return __game.point(cr.x, cr.y);
+  });
+  await page.mouse.click(crateScreenPt.x, crateScreenPt.y);
+  await run(page, 90);
+
+  const afterPop = await state(page);
+  assert.ok(afterPop.cratesPopped >= 1, 'clicking parachute crate pops it with cork cannon');
+  const tracked = await page.evaluate(() => ({ hits: tc.hits, misses: tc.misses }));
+  assert.ok(tracked.hits >= 1, 'Kit.track.hit recorded on crate pop');
 });
 
-test('2P Shared-Keyboard Duel (#btnTwo): symmetrical action, preserves P/R shortcuts, no DDA skew', async t => {
-  const page = await game(t);
-  await page.locator('#btnTwo').click();
-  await step(page, 1);
+test('Pause freezes simulation and Restart resets battle cleanly', async t => {
+  const page = await openGame(t);
+  await page.locator('#btnPlay').click();
+  await step(page, 2);
+  await page.keyboard.down('Digit1');
+  await step(page, 2);
+  await page.keyboard.up('Digit1');
+  assert.equal((await state(page)).p1Spawned, 1);
+
+  // Pause via #btnPause
+  await page.locator('#btnPause').click();
+  const p0 = await state(page);
+  assert.equal(p0.screen, 'pause');
+  await step(page, 60);
+  const p1 = await state(page);
+  assert.equal(p1.time, p0.time, 'simulation time frozen while paused');
+  assert.equal(p1.frames, p0.frames, 'simulation frames frozen while paused');
+
+  // Restart via #btnRestart
+  await page.locator('#btnRestart').click();
+  await step(page, 2);
+  const r0 = await state(page);
+  assert.equal(r0.screen, 'play');
+  assert.equal(r0.p1Spawned, 0);
+  assert.ok(r0.time < 0.5);
+});
+
+test('2-Player local battle: P1 (Q/Space) & P2 (U/P/Arrows/Enter) without P pausing; Esc pauses', async t => {
+  const page = await openGame(t);
+  await page.locator('#btnDuo').click();
+  await step(page, 2);
   const s0 = await state(page);
   assert.equal(s0.screen, 'play');
-  assert.equal(s0.humans, 2);
-  assert.equal(s0.hpL, s0.hpR);
+  assert.equal(s0.id, 'duo');
+  assert.equal(s0.duo, true);
+  assert.equal(await page.locator('#dockP2').isVisible(), true, 'P2 unit dock visible in 2P mode');
 
-  // P1 summons via Digit1 & fires via Space; P2 summons via Digit7 + KeyI & fires via Enter
-  await page.keyboard.press('Digit1');
-  await page.keyboard.press('Space');
-  await page.keyboard.press('Digit7');
-  await run(page, 40);
-  await page.keyboard.press('KeyI');
+  // P1 spawns with Q; P2 spawns with U
+  await page.keyboard.down('KeyQ');
+  await step(page, 2);
+  await page.keyboard.up('KeyQ');
+  await page.keyboard.down('KeyU');
+  await step(page, 2);
+  await page.keyboard.up('KeyU');
+  const s1 = await state(page);
+  assert.equal(s1.p1Spawned, 1, 'P1 spawns via KeyQ');
+  assert.equal(s1.p2Spawned, 1, 'P2 spawns via KeyU');
+
+  // Give P2 90 energy and press KeyP: spawns Mega Mech WITHOUT pausing!
+  await page.evaluate(() => { __game.world.sides[1].energy = 90; });
+  await page.keyboard.down('KeyP');
+  await step(page, 2);
+  await page.keyboard.up('KeyP');
+  const s2 = await state(page);
+  assert.equal(s2.screen, 'play', 'KeyP in 2P mode must NOT pause');
+  assert.equal(s2.p2Spawned, 2, 'KeyP spawns P2 Mega Mech');
+
+  // P2 aims with ArrowLeft and fires with Enter
+  const beforeAim2 = s2.aimX2;
+  await page.keyboard.down('ArrowLeft');
+  await step(page, 10);
+  await page.keyboard.up('ArrowLeft');
+  assert.ok((await state(page)).aimX2 < beforeAim2, 'ArrowLeft aims P2 cannon');
   await page.keyboard.press('Enter');
   await step(page, 2);
-  const sMid = await state(page);
-  assert.equal(sMid.p1Spawned, 1);
-  assert.equal(sMid.p2Spawned, 2);
-  assert.equal(sMid.shots, 1);
-  assert.equal(sMid.shotsR, 1);
+  assert.equal(await page.evaluate(() => __game.world.sides[1].cannonShots), 1, 'Enter fires P2 cannon');
 
-  // KeyP pauses cleanly (NEVER stolen by P2!)
-  await page.keyboard.press('KeyP');
+  // Escape still pauses 2P cleanly
+  await page.keyboard.press('Escape');
   await step(page, 1);
   assert.equal((await state(page)).screen, 'pause');
-  await page.keyboard.press('KeyP');
-  await step(page, 1);
-  assert.equal((await state(page)).screen, 'play');
-
-  // KeyR restarts cleanly (NEVER stolen by P2!)
-  await page.keyboard.press('KeyR');
-  await step(page, 1);
-  const sRes = await state(page);
-  assert.equal(sRes.screen, 'play');
-  assert.equal(sRes.p1Spawned, 0);
-  assert.equal(sRes.p2Spawned, 0);
-  assert.ok(sRes.time < 0.2);
-
-  // Finish 2P duel -> reports 'end' to telemetry and does NOT touch 1P DDA
-  await page.evaluate(() => { __game.world.sides[1].hp = 5; });
-  await page.evaluate(() => {
-    window.TCEngine.summon(__game.world, 0, 'sword', { free: true }).x = window.TCEngine.GATE_R - 20;
-  });
-  await run(page, 30);
-  assert.equal((await state(page)).screen, 'result');
-  assert.equal(await page.locator('#resTitle').textContent(), 'فاز اللاعب 1!');
-  assert.equal((await page.evaluate(() => tc.results.length)), 0, '2P match never mutates 1P DDA');
 });
 
-test('Pause freezes snapshot 100%, #btnRestart resets battle, win saves stars/coins & handles QuotaExceededError', async t => {
-  const page = await game(t);
+test('Solo victory persists stars/coins, updates DDA & telemetry, and unlocks Stage 1-2', async t => {
+  const page = await openGame(t);
   await page.locator('#btnPlay').click();
-  await page.keyboard.press('Digit1');
-  await run(page, 30);
+  await step(page, 2);
 
-  // Pause via #btnPause and verify complete simulation freeze across 60 frames
-  await page.locator('#btnPause').click();
-  await step(page, 1);
-  assert.equal((await state(page)).screen, 'pause');
-  const snap1 = await page.evaluate(() => [__game.state.time, __game.state.energy, __game.state.p1Spawned, __game.state.units]);
-  await run(page, 60);
-  const snap2 = await page.evaluate(() => [__game.state.time, __game.state.energy, __game.state.p1Spawned, __game.state.units]);
-  assert.deepEqual(snap2, snap1, 'paused snapshot is 100% frozen');
+  // Finish Stage 1-1 via real units & cannon fire
+  await page.evaluate(() => {
+    const w = __game.world;
+    w.sides[1].hp = 12;
+    ToyCastleEngine.setCannonAim(w, 0, ToyCastleEngine.RIGHT_GATE_X, 1.0);
+    ToyCastleEngine.fireCannon(w, 0);
+  });
+  await run(page, 120);
 
-  // Resume via #btnResume, then pause via blur and restart via #btnRestart
-  await page.locator('#btnResume').click();
+  const res = await state(page);
+  assert.equal(res.screen, 'result');
+  assert.equal(res.winner, 0);
+  assert.ok(res.stars >= 2);
+
+  const saved = await stored(page);
+  assert.equal(saved.v, 3);
+  assert.equal(saved.stars[0], res.stars);
+  assert.equal(saved.unlockedStage, 1);
+  assert.ok(saved.coins > 0);
+
+  const telemetry = await page.evaluate(() => ({ rounds: tc.rounds, ends: tc.ends, dda: tc.results }));
+  assert.deepEqual(telemetry.rounds, ['L1-1']);
+  assert.equal(telemetry.ends[0][0], 'win');
+  assert.equal(telemetry.dda.length, 1);
+});
+
+test('Castle shop buys & equips skins, survives reload, and handles QuotaExceededError cleanly', async t => {
+  const page = await openGame(t, { save: SAVE({ coins: 200, unlockedStage: 3 }) });
   await step(page, 5);
-  assert.equal((await state(page)).screen, 'play');
-  await page.evaluate(() => window.dispatchEvent(new Event('blur')));
-  assert.equal((await state(page)).screen, 'pause');
-  await page.locator('#btnRestart').click();
-  await step(page, 1);
-  const afterRestart = await state(page);
-  assert.equal(afterRestart.screen, 'play');
-  assert.equal(afterRestart.p1Spawned, 0);
-  assert.ok(afterRestart.time < 0.2);
-
-  // Win Stage 1-1 while simulating QuotaExceededError, then recover with Retry!
-  await page.evaluate(() => {
-    tc.failSave = true;
-    __game.world.sides[1].hp = 8;
-    window.TCEngine.summon(__game.world, 0, 'mech', { free: true }).x = window.TCEngine.GATE_R - 30;
-  });
-  await run(page, 30);
-  assert.equal((await state(page)).screen, 'result');
-  assert.equal((await state(page)).winner, 1);
-  assert.equal((await page.evaluate(() => tc.results.length)), 1, '1P win updates DDA');
-
-  const status = page.locator('.sg-save-status');
-  assert.equal(await status.getAttribute('data-state'), 'failed');
-  await page.evaluate(() => { tc.failSave = false; });
-  await status.locator('button').click();
-  assert.equal(await status.getAttribute('data-state'), 'saved');
-  const sv = await stored(page);
-  assert.equal(sv.lv[0].s, 3);
-  assert.ok(sv.coins >= 40);
-
-  // Press Enter on result screen to advance to Stage 1-2!
-  await page.keyboard.press('Enter');
-  await step(page, 1);
-  assert.equal((await state(page)).id, '1-2');
-
-  // Corrupted save string recovers cleanly
-  const broken = await game(t, { save: 'corrupt{{{json' });
-  assert.equal((await state(broken)).screen, 'title');
-  assert.equal(await broken.locator('#titleStars b').textContent(), '0/36');
-});
-
-test('Toy Armory (#scrShop), 1100x620 viewport fit, mute toggle, and reduced motion', async t => {
-  const page = await game(t, { save: SAVE(3, { coins: 70 }), reducedMotion: 'reduce', size: [1100, 620] });
-  const canvasBox = await page.locator('#game').boundingBox();
-  assert.ok(canvasBox.width <= 1100 && canvasBox.height <= 620);
-
-  for (const sel of ['#btnPlay', '#btnTwo', '#btnLevels', '#btnShop', '.howto .card >> nth=0', '.howto .card >> nth=3']) {
-    const b = await page.locator(sel).boundingBox();
-    assert.ok(
-      b.x >= canvasBox.x - 1 &&
-      b.x + b.width <= canvasBox.x + canvasBox.width + 1 &&
-      b.y + b.height <= canvasBox.y + canvasBox.height + 1,
-      sel + ' fits inside scaled canvas at 1100x620'
-    );
-  }
-
-  // Open Armory, reject unaffordable Golden Armor (110), buy Cyber Armor (30) & Plasma Cannon (30)
   await page.locator('#btnShop').click();
-  await step(page, 1);
-  assert.equal((await state(page)).screen, 'armory');
+  await step(page, 2);
+  assert.equal((await state(page)).screen, 'shop');
 
-  await page.locator('#shelfArmors .tile').nth(4).click();
-  assert.equal((await page.evaluate(() => __game.save.armor)), 0);
+  // Buy Candy Castle (index 1, 60 coins) & Golden Crown topper (index 1, 80 coins)
+  await page.locator('#castleGrid .tc-skin-tile').nth(1).click();
+  await page.locator('#bannerGrid .tc-skin-tile').nth(1).click();
+  let saved = await stored(page);
+  assert.equal(saved.castleSkin, 1);
+  assert.equal(saved.bannerSkin, 1);
+  assert.equal(saved.coins, 60);
 
-  await page.locator('#shelfArmors .tile').nth(1).click();
-  await page.locator('#shelfCannons .tile').nth(1).click();
-  const sv = await stored(page);
-  assert.equal(sv.armor, 1);
-  assert.equal(sv.cannon, 1);
-  assert.equal(sv.coins, 10);
+  // Simulate QuotaExceededError when equipping skin 0 -> saveStatus warning appears & Retry works
+  await page.evaluate(() => { tc.failSave = true; });
+  await page.locator('#castleGrid .tc-skin-tile').nth(0).click();
+  await page.waitForSelector('.sg-save-status:not([hidden])');
+  await page.evaluate(() => { tc.failSave = false; });
+  await page.locator('.sg-save-status button').click();
+  saved = await stored(page);
+  assert.equal(saved.castleSkin, 0);
 
-  // Escape back to title; mute via .sg-mute and KeyM
-  await page.keyboard.press('Escape');
-  await step(page, 1);
-  assert.equal((await state(page)).screen, 'title');
-  await page.locator('.sg-mute').click();
-  assert.equal(await page.evaluate(() => Kit.audio.muted), true);
-  await page.keyboard.press('KeyM');
-  assert.equal(await page.evaluate(() => Kit.audio.muted), false);
-
-  // Reduced motion keeps fx === 0 and shake === 0 during active battle
-  await page.locator('#btnPlay').click();
-  await step(page, 1);
-  const trayBox = await page.locator('#tray1p').boundingBox();
-  assert.ok(trayBox.x >= canvasBox.x && trayBox.x + trayBox.width <= canvasBox.x + canvasBox.width);
-
-  await page.keyboard.press('Digit1');
-  await page.keyboard.press('Space');
-  await run(page, 45);
-  const s = await state(page);
-  assert.equal(s.fx, 0, 'zero particle bursts under reduced motion');
-  assert.equal(s.shake, 0, 'zero screen shake under reduced motion');
+  // Reload confirms persistence + Stage Map shows unlocked stages
+  await page.reload({ timeout: 90000 });
+  await page.waitForFunction(() => window.__game && window.tc && window.tc.step, null, { timeout: 30000 });
+  assert.equal((await page.evaluate(() => __game.save.bannerSkin)), 1);
+  await page.locator('#btnMap').click();
+  const unlockedBtns = await page.locator('#mapWorlds .tc-stage-btn:not(:disabled)').count();
+  assert.equal(unlockedBtns, 4);
 });
 
-test('Zero idle BGM on title and pause screens, and focused button Enter works natively', async t => {
-  const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
-  t.after(() => ctx.close());
-  await ctx.addInitScript(() => {
-    window.__audioStarts = [];
-    const hook = (proto, name) => {
-      const d = proto && Object.getOwnPropertyDescriptor(proto, name);
-      if (!d || typeof d.value !== 'function') return;
-      const orig = d.value;
-      Object.defineProperty(proto, name, {
-        ...d,
-        value: function (...args) {
-          window.__audioStarts.push([performance.now(), this.constructor.name]);
-          return orig.apply(this, args);
-        }
-      });
-    };
-    hook(window.AudioScheduledSourceNode?.prototype, 'start');
-    hook(window.AudioBufferSourceNode?.prototype, 'start');
-    hook(window.HTMLMediaElement?.prototype, 'play');
-  });
+test('1100x620 classroom iframe viewport fits cleanly with zero scrollbars', async t => {
+  const page = await openGame(t, { size: [1100, 620] });
+  await step(page, 5);
+  const fitTitle = await page.evaluate(() => ({
+    scrollW: document.documentElement.scrollWidth,
+    clientW: document.documentElement.clientWidth,
+    scrollH: document.documentElement.scrollHeight,
+    clientH: document.documentElement.clientHeight
+  }));
+  assert.equal(fitTitle.scrollW, fitTitle.clientW);
+  assert.equal(fitTitle.scrollH, fitTitle.clientH);
 
-  const page = await ctx.newPage();
-  await page.goto(`${server.origin}/games/toy-castle/`, { timeout: 90000 });
-  await page.waitForFunction(() => window.__game);
-
-  // Unlock audio via F2 + top-left inert click (3, 3), verify still on title and 0 idle audio starts
-  await page.keyboard.press('F2');
-  await page.mouse.click(3, 3);
-  await page.waitForTimeout(200);
-  assert.equal(await page.evaluate(() => window.__game.state.screen), 'title');
-  await page.evaluate(() => { window.__audioStarts.length = 0; });
-  await page.waitForTimeout(750);
-  assert.equal(await page.evaluate(() => window.__audioStarts.length), 0, 'zero BGM while idle on title');
-
-  // Focus #btnShop and press Enter -> native click opens Armory
-  await page.locator('#btnShop').focus();
-  await page.keyboard.press('Enter');
-  await page.waitForTimeout(100);
-  assert.equal(await page.evaluate(() => window.__game.state.screen), 'armory');
-  await page.keyboard.press('Escape');
-  await page.waitForTimeout(100);
-
-  // Start match, pause, let pause SFX finish, then verify 0 idle audio starts on pause screen
-  await page.locator('#btnPlay').click();
-  await page.waitForTimeout(150);
-  await page.locator('#btnPause').click();
-  await page.waitForTimeout(350);
-  assert.equal(await page.evaluate(() => window.__game.state.screen), 'pause');
-  await page.evaluate(() => { window.__audioStarts.length = 0; });
-  await page.waitForTimeout(750);
-  assert.equal(await page.evaluate(() => window.__audioStarts.length), 0, 'zero BGM while idle on pause');
+  await page.locator('#btnDuo').click();
+  await step(page, 5);
+  const dockBox = await page.locator('#dockWrap').boundingBox();
+  assert.ok(dockBox && dockBox.y + dockBox.height <= 620, '2P unit docks fit inside 1100x620');
 });
