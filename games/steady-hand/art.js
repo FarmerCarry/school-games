@@ -10,9 +10,10 @@
   var INK = A.INK = '#141a44';
   A.HOT = '#ff4d7a';
   var cache = {}, tracks = {}, rgbaCache = {}, rtlCache = {};
-  var DASH = [4, 6], CARRY_DASH = [10, 12], SOLID = [];
+  var DASH = [4, 6], CARRY_DASH = [10, 12], ORB_DASH = [6, 8], SW_DASH = [8, 10], SOLID = [];
+  var SW_COLS = ['#2ee8a5', '#38c7ff', '#ffdf4d'];
   var HAND_PARTS = [[22, 5, 17, 54, 8.5], [37, 36, 15, 30, 7.5], [50, 40, 14, 28, 7], [14, 46, 52, 48, 19]], HAND_PASSES = [INK, '#fff'];
-  A.reset = () => { cache = {}; tracks = {}; };
+  A.reset = () => { cache = {}; tracks = {}; flatC = null; };
 
   function canvas(w, h) { var c = document.createElement('canvas'); c.width = Math.max(1, Math.ceil(w)); c.height = Math.max(1, Math.ceil(h)); return c; }
   A.pic = (c, w, h, ps) => {
@@ -114,19 +115,37 @@
     return [a, e];
   }
   A.segRange = segRange;
+  function mix(a, b, k) {
+    var x = parseInt(a.slice(1), 16), y = parseInt(b.slice(1), 16);
+    var ch = s => Math.round(((x >> s) & 255) * (1 - k) + ((y >> s) & 255) * k);
+    return 'rgb(' + ch(16) + ',' + ch(8) + ',' + ch(0) + ')';
+  }
+  var flatC = null;
+  function flatRuns(g, L, ps, grow, color, alpha, from, to) {
+    var segs = L.segs, a = from || 0, b = to == null ? segs.length : to, varying = false;
+    for (var i = a + 1; i < b; i++) if (Math.abs(segs[i].hw - segs[a].hw) >= 0.6) { varying = true; break; }
+    if (!varying) { g.strokeStyle = rgba(color, alpha); runs(g, L, grow, from, to); return; }
+    var p = A.pic(flatC, W, H, ps || 1), fg = p[1];
+    flatC = p[0];
+    fg.lineCap = 'round'; fg.lineJoin = 'round'; fg.strokeStyle = color;
+    runs(fg, L, grow, from, to);
+    var ga = g.globalAlpha; g.globalAlpha = ga * alpha;
+    g.drawImage(flatC, 0, 0, W, H);
+    g.globalAlpha = ga;
+  }
   // The wire track: glowing electric walls around a dark, safe channel.
-  function drawTrack(g, L, wd) {
+  function drawTrack(g, L, wd, ps) {
     g.lineCap = 'round'; g.lineJoin = 'round';
-    g.strokeStyle = rgba(wd.deep, 0.16); runs(g, L, 46);
-    g.strokeStyle = rgba(wd.deep, 0.3); runs(g, L, 26);
+    flatRuns(g, L, ps, 46, wd.deep, 0.16);
+    flatRuns(g, L, ps, 26, wd.deep, 0.3);
     g.strokeStyle = wd.color; runs(g, L, 12);
-    g.strokeStyle = 'rgba(255,255,255,0.92)'; runs(g, L, 4);
+    g.strokeStyle = mix(wd.color, '#ffffff', 0.92); runs(g, L, 4);
     g.strokeStyle = '#0a0e2c'; runs(g, L, 0);
-    g.strokeStyle = rgba(wd.color, 0.09); runs(g, L, -12);
+    g.strokeStyle = mix('#0a0e2c', wd.color, 0.09); runs(g, L, -12);
     // Carry stretches: bands across the channel, like a crossing.
     L.carry.forEach(c => {
       var r = segRange(L, c[0], c[1]);
-      g.strokeStyle = 'rgba(255,190,60,0.16)'; runs(g, L, -6, r[0], r[1]);
+      flatRuns(g, L, ps, -6, '#ffbe3c', 0.16, r[0], r[1]);
       g.setLineDash(CARRY_DASH); g.lineCap = 'butt';
       g.strokeStyle = 'rgba(255,200,80,0.32)'; runs(g, L, -10, r[0], r[1]);
       g.setLineDash(SOLID); g.lineCap = 'round';
@@ -146,7 +165,7 @@
       tracks = {};
       var p = A.pic(null, W, H, ps), wd = SH.WORLDS[L.world];
       background(p[1], wd, 7 + L.i * 131);
-      drawTrack(p[1], L, wd);
+      drawTrack(p[1], L, wd, ps);
       tracks[key] = p[0];
     }
     return tracks[key];
@@ -230,6 +249,91 @@
       g.beginPath(); g.arc(0, -5, 6, Math.PI, 0); S(g, 3.5, INK);
       A.rr(g, -9, -5, 18, 14, 4); F(g, '#ffd23f'); S(g, 3);
       g.restore();
+    }
+  };
+  // A patrolling shock orb riding a dashed rail between two wall bumpers.
+  A.orb = (g, o, t, still) => {
+    g.lineCap = 'round';
+    g.setLineDash(ORB_DASH);
+    g.beginPath(); g.moveTo(o.ax, o.ay); g.lineTo(o.bx, o.by); S(g, 3, rgba(A.HOT, 0.4));
+    g.setLineDash(SOLID);
+    A.circle(g, o.ax, o.ay, 6.5); F(g, '#20264f'); S(g, 2.5, A.HOT);
+    A.circle(g, o.bx, o.by, 6.5); F(g, '#20264f'); S(g, 2.5, A.HOT);
+    var p = SH.orbPos(o, t), x = p[0], y = p[1];
+    var dx = o.bx - o.ax, dy = o.by - o.ay, len = Math.hypot(dx, dy) || 1;
+    var dir = still ? 0 : -Math.sin(TAU * (t * o.f + o.ph));
+    var lx = (dx / len) * dir * 2.2, ly = (dy / len) * dir * 2.2;
+    A.glow(g, x, y, 28, A.HOT, 0.72);
+    var rot = still ? 0 : t * 4.2;
+    g.beginPath();
+    for (var i = 0; i < 16; i++) {
+      var a = rot + i * Math.PI / 8, rr = i % 2 ? 10 : 16;
+      if (i) g.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); else g.moveTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+    }
+    g.closePath(); F(g, A.HOT); S(g, 2, '#ffd6e4');
+    A.circle(g, x, y, 10.5); F(g, '#ff85b3'); S(g, 2, '#fff');
+    A.circle(g, x - 3.6 + lx, y - 0.8 + ly, 2.2); F(g, INK);
+    A.circle(g, x + 3.6 + lx, y - 0.8 + ly, 2.2); F(g, INK);
+    g.beginPath(); g.moveTo(x - 5.6 + lx, y - 4 + ly); g.lineTo(x - 1.4 + lx, y - 2.5 + ly);
+    g.moveTo(x + 5.6 + lx, y - 4 + ly); g.lineTo(x + 1.4 + lx, y - 2.5 + ly);
+    S(g, 1.8, INK);
+  };
+  // Switch pad + glowing cable leading to its linked energy barrier.
+  A.swPad = (g, sw, st, idx, t, still, flash) => {
+    var col = SW_COLS[idx % SW_COLS.length], on = st.on;
+    var mx = (sw.x + sw.gx) * 0.5 + sw.gnx * 26, my = (sw.y + sw.gy) * 0.5 + sw.gny * 26;
+    g.save();
+    g.lineCap = 'round';
+    g.beginPath(); g.moveTo(sw.x, sw.y); g.quadraticCurveTo(mx, my, sw.gx, sw.gy);
+    if (on || flash) {
+      S(g, flash ? 11 : 8, rgba(col, flash ? 0.55 : 0.3));
+      S(g, 3.5, col);
+      if (!still) { g.setLineDash(SW_DASH); g.lineDashOffset = -t * 54; S(g, 2, '#fff'); g.setLineDash(SOLID); }
+    } else {
+      g.setLineDash(SW_DASH);
+      if (!still) g.lineDashOffset = -t * 28;
+      S(g, 3, rgba(col, 0.55));
+      g.setLineDash(SOLID);
+    }
+    g.restore();
+    if (!on && !still) {
+      var rp = (t * 0.9 + idx * 0.3) % 1, ga = g.globalAlpha;
+      g.globalAlpha = ga * (1 - rp) * 0.75;
+      A.circle(g, sw.x, sw.y, 14 + rp * 14); S(g, 3 * (1 - rp) + 0.5, col);
+      g.globalAlpha = ga;
+    }
+    if (on || flash) A.glow(g, sw.x, sw.y, flash ? 38 : 30, col, flash ? 0.95 : 0.75);
+    A.circle(g, sw.x, sw.y, 16); F(g, '#18204d'); S(g, 3.5, col);
+    A.circle(g, sw.x, sw.y, 10); F(g, on ? '#fff' : col); S(g, 2, INK);
+    if (on) {
+      g.beginPath(); g.moveTo(sw.x - 4.5, sw.y + 0.5); g.lineTo(sw.x - 1, sw.y + 4); g.lineTo(sw.x + 5, sw.y - 3.5);
+      g.lineCap = 'round'; g.lineJoin = 'round'; S(g, 2.8, INK);
+    } else {
+      A.circle(g, sw.x, sw.y, 3.6); F(g, '#fff');
+    }
+    if (sw.dur > 0 && st.left > 0) {
+      var frac = Math.min(1, st.left / sw.dur);
+      g.beginPath(); g.arc(sw.x, sw.y, 19.5, -Math.PI / 2, -Math.PI / 2 + TAU * frac);
+      S(g, 3.5, st.left < 1.2 ? A.HOT : '#fff');
+    }
+  };
+  // Switch-linked barrier: two halves matching the switch pad's colour, plus timer badge.
+  A.swDoor = (g, sw, st, idx, t, still, badge) => {
+    var col = SW_COLS[idx % SW_COLS.length], a = st.a, e = sw.ghalf, m = sw.ghalf * a;
+    bar(g, sw.gx - sw.gnx * e, sw.gy - sw.gny * e, sw.gx - sw.gnx * m, sw.gy - sw.gny * m, sw.th, col);
+    bar(g, sw.gx + sw.gnx * m, sw.gy + sw.gny * m, sw.gx + sw.gnx * e, sw.gy + sw.gny * e, sw.th, col);
+    if (a < 0.05) {
+      var k = still ? 1 : 1 + 0.06 * Math.sin(t * 6);
+      g.save(); g.translate(sw.gx, sw.gy); g.scale(k, k);
+      A.circle(g, 0, 0, 11); F(g, '#18204d'); S(g, 3, col);
+      A.circle(g, 0, 0, 5.5); F(g, col); S(g, 2, '#fff');
+      g.restore();
+    }
+    if (sw.dur > 0 && st.left > 0 && badge) {
+      var frac = Math.min(1, st.left / sw.dur), warn = st.left < 1.2;
+      A.circle(g, badge.x, badge.y, 17); F(g, 'rgba(10,14,44,0.88)'); S(g, 3, warn ? A.HOT : col);
+      g.beginPath(); g.moveTo(badge.x, badge.y); g.arc(badge.x, badge.y, 12.5, -Math.PI / 2, -Math.PI / 2 + TAU * frac); g.closePath();
+      F(g, warn ? A.HOT : col);
     }
   };
 

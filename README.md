@@ -211,9 +211,11 @@ open inside the lens; the space station has timed rounds. The wheel never scroll
 **سلك الشرارة (Steady Hand)** trains careful mouse control: press on a glowing spark and drag it
 along neon wire tracks to light a lamp. Touching the edge gives a funny "bzzt" and sends it back to
 the last lantern (never game over); letting go, leaving the window or pausing just drops it safely,
-and a fast flick cannot jump through a wall. Five worlds of six levels: gentle curves, zigzags (and
-levels where the spark follows the mouse without pressing), sliding gates and turning bars, doors
-that open with a click or Space and stretches where the button must be held, then a final tower.
+and a fast flick cannot jump through a wall. Ten worlds of six levels (60 tracks): gentle curves,
+zigzags (and levels where the spark follows the mouse without pressing), sliding gates and turning
+bars, doors that open with a click or Space and stretches where the button must be held, a tower
+finale, then five expansion worlds adding variable-width corridors, patrolling shock orbs,
+switch-opened energy barriers (permanent and timed), a laboratory mashup, and a galaxy finale.
 Coins buy spark colours and trails.
 
 **بوابات الحساب (Math Gates)** is a three-lane crowd runner for practising math. A crowd of candy

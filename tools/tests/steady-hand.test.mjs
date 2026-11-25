@@ -19,7 +19,7 @@ after(async () => { await browser?.close(); await server?.close(); });
 
 // A save with the first `open` levels lit (one star each), so later levels can be picked.
 const SAVE = (open = 0, extra = {}) => ({
-  v: 1, lv: Array.from({ length: 30 }, (_, i) => ({ s: i < open ? 1 : 0, t: i < open ? 300 : 0, c: 0 })), coins: 0,
+  v: 1, lv: Array.from({ length: 60 }, (_, i) => ({ s: i < open ? 1 : 0, t: i < open ? 300 : 0, c: 0 })), coins: 0,
   colors: [1, 0, 0, 0, 0, 0, 0], trails: [1, 0, 0, 0, 0], color: 0, trail: 0, coach: true, ...extra
 });
 
@@ -111,7 +111,7 @@ test('the title waits; Play goes straight to the first wire on a first visit; th
   const page = await game(t);
   await step(page, 30);
   assert.equal((await state(page)).screen, 'title');
-  assert.equal(await page.locator('#titleStars b').textContent(), '0/90');
+  assert.equal(await page.locator('#titleStars b').textContent(), '0/180');
   for (const word of ['الفأرة', 'اضغط مطولًا', 'اسحب']) assert.ok(await page.locator('.howto figcaption', { hasText: word }).isVisible(), word);
   await page.locator('#btnPlay').click();
   await step(page);
@@ -343,11 +343,11 @@ test('no-button levels: the pointer alone picks the spark up and moves it; a clo
 
 test('saves come back after a reload; damaged saves start fresh; a full disk warns, keeps the progress and Retry writes it', async t => {
   const page = await game(t, { save: SAVE(3, { coins: 5 }) });
-  assert.equal(await page.locator('#titleStars b').textContent(), '3/90');
+  assert.equal(await page.locator('#titleStars b').textContent(), '3/180');
   assert.equal(await page.locator('#titleCoins b').textContent(), '5');
   await page.reload();
   await page.waitForFunction(() => window.__game && window.sh.step);
-  assert.equal(await page.locator('#titleStars b').textContent(), '3/90');
+  assert.equal(await page.locator('#titleStars b').textContent(), '3/180');
   // A full disk while lighting the lamp of 1-4.
   await page.evaluate(() => { sh.failSave = true; });
   await openLevel(page, 3);
@@ -368,7 +368,7 @@ test('saves come back after a reload; damaged saves start fresh; a full disk war
   for (const save of ['broken{', '{"v":1,"lv":[{"s":7,"t":-1,"c":99}],"coins":"lots","color":5,"colors":[0,0,0,0,0,1]}']) {
     const old = await game(t, { save });
     assert.equal((await state(old)).screen, 'title', save);
-    assert.equal(await old.locator('#titleStars b').textContent(), '0/90', save);
+    assert.equal(await old.locator('#titleStars b').textContent(), '0/180', save);
     await old.keyboard.press('Enter'); await step(old);
     const s = await state(old);
     assert.equal(s.screen, 'play'); assert.equal(s.id, '1-1');
@@ -436,4 +436,56 @@ test('the colour shop buys with coins and the spark wears it; the mute button an
   await page.locator('#btnLevels').click(); await step(page);
   await page.locator('.lvl').nth(4).click(); await step(page);
   assert.equal((await state(page)).screen, 'map');
+});
+
+test('two-page world map switches cleanly between Worlds 1–5 and 6–10; legacy 30-level saves auto-open Page 2 at 6-1', async t => {
+  const legacy30 = {
+    v: 1, lv: Array.from({ length: 30 }, () => ({ s: 1, t: 250, c: 0 })), coins: 0,
+    colors: [1, 0, 0, 0, 0, 0, 0], trails: [1, 0, 0, 0, 0], color: 0, trail: 0, coach: true
+  };
+  const page = await game(t, { save: legacy30, size: [1100, 620] });
+  assert.equal(await page.locator('#titleStars b').textContent(), '30/180');
+  await page.locator('#btnLevels').click(); await step(page);
+  assert.equal((await state(page)).mapPage, 1, 'auto-opens Page 2 when 6-1 is next');
+  assert.equal(await page.locator('.wrow:not([hidden])').count(), 5);
+  assert.match(await page.locator('.lvl').nth(30).getAttribute('class'), /next/);
+  // All tabs and visible rows fit cleanly inside the 1100x620 portal frame.
+  const canvas = await page.locator('#game').boundingBox();
+  for (const sel of ['#tabP0', '#tabP1', '.wrow >> nth=5', '.wrow >> nth=9']) {
+    const b = await page.locator(sel).boundingBox();
+    assert.ok(b && b.x >= canvas.x && b.x + b.width <= canvas.x + canvas.width && b.y >= canvas.y && b.y + b.height <= canvas.y + canvas.height, sel);
+  }
+  // Switch to Page 1 via tab click and back to Page 2 via ArrowLeft.
+  await page.locator('#tabP0').click(); await step(page);
+  assert.equal((await state(page)).mapPage, 0);
+  assert.equal(await page.locator('.wrow').nth(0).isVisible(), true);
+  assert.equal(await page.locator('.wrow').nth(5).isVisible(), false);
+  await page.keyboard.press('ArrowLeft'); await step(page);
+  assert.equal((await state(page)).mapPage, 1);
+  // Click 6-1 on Page 2 and start playing World 6.
+  await page.locator('.lvl').nth(30).click(); await step(page);
+  const s = await state(page);
+  assert.equal(s.screen, 'play'); assert.equal(s.id, '6-1');
+});
+
+test('world 8 switch pad unlocks its linked barrier and lets the spark light the lamp in real Chromium', async t => {
+  const page = await game(t, { save: SAVE(42), dda: 0.3 });
+  await page.locator('#btnLevels').click(); await step(page);
+  assert.equal((await state(page)).mapPage, 1);
+  await page.locator('.lvl').nth(42).click(); await step(page);
+  let s = await state(page);
+  assert.equal(s.id, '8-1');
+  assert.equal(s.switches.length, 1);
+  assert.equal(s.switches[0].on, false);
+  const track = await page.evaluate(() => __game.track);
+  await pressSpark(page);
+  await along(page, s.best, track.switches[0].s + 24, 9);
+  await step(page, 20);
+  s = await state(page);
+  assert.equal(s.switches[0].on, true, 'switch pad lit up');
+  assert.equal(s.switches[0].a, 1, 'linked barrier opened fully');
+  await along(page, s.best, track.len, 9);
+  await page.mouse.up();
+  s = await state(page);
+  assert.equal(s.done, true); assert.equal(s.touches, 0);
 });

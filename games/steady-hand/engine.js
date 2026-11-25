@@ -20,7 +20,9 @@
   SH.GOAL = 14;       // the lamp lights this close to the end of the track
   SH.COIN_R = 18;     // a coin is collected this close
   SH.BAR = 12;        // thickness of sliding and turning bars
+  SH.ORB = 11;        // hit radius of a patrolling shock orb
   SH.DOOR = 14;       // thickness of a door
+  SH.SW_R = 22;       // a switch pad triggers this close
   SH.QUEUE = 64;      // pointer points kept waiting at most
   // The difficulty's two ends (Kit.dda level 0 and 1): track width factor, speed of the
   // moving parts, distance between checkpoints and how long a door stays open.
@@ -158,6 +160,10 @@
     return [cx - o.nx * o.half, cy - o.ny * o.half, cx + o.nx * o.half, cy + o.ny * o.half];
   };
   SH.spinAngle = function (o, t, arm) { return o.a0 + o.w * t + arm * TAU / o.arms; };
+  SH.orbPos = function (o, t) {
+    var k = 0.5 + 0.5 * Math.cos(TAU * (t * o.f + o.ph));
+    return [o.ax + (o.bx - o.ax) * k, o.ay + (o.by - o.ay) * k];
+  };
   // Does one moving part touch a spark at (x, y) at time t?
   function hitsOne(o, x, y, t) {
     var dx = x - o.cx, dy = y - o.cy, r = o.th / 2 + SH.RS;
@@ -165,6 +171,11 @@
     if (o.k === 'slide') {
       var b = SH.slideBar(o, t);
       return segD2(x, y, b[0], b[1], b[2], b[3]) < r * r;
+    }
+    if (o.k === 'orb') {
+      var k = 0.5 + 0.5 * Math.cos(TAU * (t * o.f + o.ph));
+      var ox = x - (o.ax + (o.bx - o.ax) * k), oy = y - (o.ay + (o.by - o.ay) * k), rr = o.r + SH.RS;
+      return ox * ox + oy * oy < rr * rr;
     }
     for (var a = 0; a < o.arms; a++) {
       var ang = SH.spinAngle(o, t, a);
@@ -180,7 +191,7 @@
   };
   // The arc-length stretch of centre line one moving part can reach.
   function reach(L, o) {
-    var period = o.k === 'slide' ? 1 / o.f : TAU / (Math.abs(o.w) * o.arms), lo = Infinity, hi = -Infinity, hits = 0;
+    var period = o.k === 'spin' ? TAU / (Math.abs(o.w) * o.arms) : 1 / o.f, lo = Infinity, hi = -Infinity, hits = 0;
     for (var i = 0; i < L.pts.length; i++) {
       var p = L.pts[i];
       for (var j = 0; j < 72; j++) {
@@ -200,7 +211,7 @@
     var R = raw || SH.LEVELS[i];
     P = P || SH.params(0.5);
     var pts = resample(dense(R)), n = pts.length, ws = P.width, sp = P.speed;
-    var L = { i: i, R: R, P: P, mode: R.mode, world: R.world, pts: pts, len: pts[n - 1].s, segs: [], pulses: [], obs: [], gates: [], carry: [], coins: [], zones: [], cps: [] };
+    var L = { i: i, R: R, P: P, mode: R.mode, world: R.world, pts: pts, len: pts[n - 1].s, segs: [], pulses: [], obs: [], gates: [], switches: [], carry: [], coins: [], zones: [], cps: [] };
     pts.forEach(function (p, k) {
       p.hw = R.w * 0.5 * p.f * ws;
       var a = pts[Math.max(0, k - 1)], b = pts[Math.min(n - 1, k + 1)], tx = b.x - a.x, ty = b.y - a.y, l = Math.hypot(tx, ty) || 1;
@@ -239,12 +250,32 @@
       o.cx = o.px; o.cy = o.py; o.r2 = Math.pow(o.len + SH.BAR / 2 + SH.RS + 2, 2);
       L.obs.push(o);
     });
+    (R.orb || []).forEach(function (q) {
+      var c = project(L, q[0], q[1]), spn = q[4] || 0, dir = spn < 0 ? -1 : 1, dist = Math.abs(spn);
+      var pa = dist ? SH.at(L, clamp(c.s - dist, 10, L.len - 10)) : c;
+      var pb = dist ? SH.at(L, clamp(c.s + dist, 10, L.len - 10)) : c;
+      var ax = pa.x - pa.nx * dir * (pa.hw + 2), ay = pa.y - pa.ny * dir * (pa.hw + 2);
+      var bx = pb.x + pb.nx * dir * (pb.hw + 2), by = pb.y + pb.ny * dir * (pb.hw + 2);
+      var o = { k: 'orb', s: c.s, x: c.x, y: c.y, ax: ax, ay: ay, bx: bx, by: by, f: sp / q[2], ph: q[3] || 0, span: spn, r: SH.ORB, th: SH.ORB * 2 };
+      o.cx = (ax + bx) / 2; o.cy = (ay + by) / 2;
+      o.r2 = Math.pow(Math.hypot(bx - ax, by - ay) / 2 + SH.ORB + SH.RS + 2, 2);
+      L.obs.push(o);
+    });
     L.obs.forEach(function (o) { o.zone = reach(L, o); L.zones.push(o.zone); });
     (R.gate || []).forEach(function (q) {
       var c = project(L, q[0], q[1]);
       var g = { s: c.s, x: c.x, y: c.y, nx: c.nx, ny: c.ny, tx: c.tx, ty: c.ty, hw: c.hw, half: c.hw + 14, th: SH.DOOR };
       g.zone = [c.s - SH.DOOR / 2 - SH.RS - 10, c.s + SH.DOOR / 2 + SH.RS + 10];
       L.gates.push(g); L.zones.push(g.zone);
+    });
+    (R.sw || []).forEach(function (q) {
+      var sc = project(L, q[0], q[1]), room = sc.hw - SH.RS - 4, base = sc.hw / ws - SH.RS - 4;
+      var share = clamp(sc.off / Math.max(1, base), -0.82, 0.82);
+      var gc = project(L, q[2], q[3]), dur = q[4] ? q[4] * (P.open / SH.HARD.open) : 0;
+      var sw = { s: sc.s, x: sc.x + sc.nx * share * room, y: sc.y + sc.ny * share * room, share: share,
+        gs: gc.s, gx: gc.x, gy: gc.y, gnx: gc.nx, gny: gc.ny, gtx: gc.tx, gty: gc.ty, ghw: gc.hw, ghalf: gc.hw + 14,
+        th: SH.DOOR, dur: dur, zone: [gc.s - SH.DOOR / 2 - SH.RS - 10, gc.s + SH.DOOR / 2 + SH.RS + 10] };
+      L.switches.push(sw); L.zones.push(sw.zone);
     });
     (R.carry || []).forEach(function (q) { L.carry.push(span(q)); });
     (R.coins || []).forEach(function (q) {
@@ -253,10 +284,11 @@
       L.coins.push({ s: c.s, x: c.x + c.nx * share * room, y: c.y + c.ny * share * room, share: share });
     });
     // The start, the goal and the checkpoints between them (never where a moving part,
-    // a door or a carry stretch is: a spark sent home there must be safe).
+    // a door, a carry stretch or a timed switch run is: a spark sent home must be safe).
     L.start = SH.at(L, 22);
     L.end = SH.at(L, L.len);
-    var keep = L.zones.concat(L.carry).map(function (z) { return [z[0] - 30, z[1] + 30]; });
+    var swKeep = L.switches.map(function (sw) { return sw.dur > 0 ? [Math.min(sw.s, sw.gs) - 20, Math.max(sw.s, sw.gs) + 20] : [sw.s - 24, sw.s + 24]; });
+    var keep = L.zones.concat(L.carry, swKeep).map(function (z) { return [z[0] - 30, z[1] + 30]; });
     var cand = [];
     for (var s = L.start.s + P.spacing; s < L.len - 110; s += P.spacing) cand.push(s);
     if (P.spacing < 400) L.zones.forEach(function (z) { cand.push(z[0] - 30); });
@@ -282,8 +314,8 @@
       cp.lx = best.x; cp.ly = best.y; cp.side = best.side;
     });
     // Seconds for the time star: the track's length at a careful pace, plus a little for
-    // every moving part, door and carry stretch (the same at every difficulty).
-    L.par = Math.ceil(L.len / 125 + 2.5 * L.obs.length + 2 * L.gates.length + 1.5 * L.carry.length + 2);
+    // every moving part, door, switch and carry stretch (the same at every difficulty).
+    L.par = Math.ceil(L.len / 125 + 2.5 * L.obs.length + 2 * L.gates.length + 2 * L.switches.length + 1.5 * L.carry.length + 2);
     return L;
   };
 
@@ -294,9 +326,10 @@
     var L = SH.build(i, P);
     return {
       L: L, t: 0, clock: 0, started: false, done: false, x: L.start.x, y: L.start.y, held: false, rest: false, ox: 0, oy: 0,
-      s: L.start.s, best: L.start.s, arc: L.start.s, hitOb: -1, hitDoor: -1, cp: -1, touches: 0, stun: 0, dragged: 0, grabs: 0,
+      s: L.start.s, best: L.start.s, arc: L.start.s, hitOb: -1, hitDoor: -1, hitSw: -1, cp: -1, touches: 0, stun: 0, dragged: 0, grabs: 0,
       coins: L.coins.map(function () { return false; }), got: 0,
       gates: L.gates.map(function () { return { a: 0, left: 0 }; }),
+      switches: L.switches.map(function () { return { on: false, a: 0, left: 0 }; }),
       q: [], ev: []
     };
   };
@@ -337,14 +370,28 @@
     return -1;
   }
   SH.doorAt = doorAt;
+  // Does a closed switch-linked barrier stop a spark at (x, y)? Returns its index or -1.
+  function swDoorAt(w, x, y) {
+    var L = w.L, r = SH.DOOR / 2 + SH.RS;
+    for (var k = 0; k < L.switches.length; k++) {
+      var sw = L.switches[k], a = w.switches[k].a;
+      if (a >= 0.999) continue;
+      var e = sw.ghalf, m = sw.ghalf * a;
+      if (segD2(x, y, sw.gx - sw.gnx * e, sw.gy - sw.gny * e, sw.gx - sw.gnx * m, sw.gy - sw.gny * m) < r * r ||
+          segD2(x, y, sw.gx + sw.gnx * m, sw.gy + sw.gny * m, sw.gx + sw.gnx * e, sw.gy + sw.gny * e) < r * r) return k;
+    }
+    return -1;
+  }
+  SH.swDoorAt = swDoorAt;
   // What stops the spark at (x, y): 0 nothing, 1 an edge, 2 a moving part, 3 a closed
-  // door, 4 a carry stretch without the button. Leaves the track position in L.qi/L.qu.
+  // door, 4 a carry stretch without the button, 5 a closed switch barrier.
   function check(w, x, y, down) {
     var L = w.L;
     if (inside(L, x, y, w.t) < 0) return 1;
     var arc = arcOf(L);
     if (L.obs.length && (w.hitOb = SH.moving(L, x, y, w.t)) >= 0) return 2;
     if (L.gates.length && (w.hitDoor = doorAt(w, x, y)) >= 0) return 3;
+    if (L.switches.length && (w.hitSw = swDoorAt(w, x, y)) >= 0) return 5;
     if (!down && L.carry.length && inCarry(L, arc)) return 4;
     w.arc = arc;
     return 0;
@@ -357,10 +404,10 @@
     for (var k = 1; k <= n; k++) {
       var x = ax + dx * k / n, y = ay + dy * k / n, r = check(w, x, y, down);
       if (r === 1 || r === 2) { touch(w, x, y, r === 1 ? 'edge' : 'part', w.hitOb); return false; }
-      if (r === 3 || r === 4) {
-        // Stopped by a door or a carry stretch: resting until the pointer moves off or presses.
+      if (r === 3 || r === 4 || r === 5) {
+        // Stopped by a door, switch barrier or carry stretch: resting safely.
         w.held = false; w.q.length = 0; w.rest = true;
-        w.ev.push({ t: r === 3 ? 'block' : 'stuck', door: w.hitDoor, x: w.x, y: w.y });
+        w.ev.push(r === 5 ? { t: 'swblock', sw: w.hitSw, x: w.x, y: w.y } : { t: r === 3 ? 'block' : 'stuck', door: w.hitDoor, x: w.x, y: w.y });
         return false;
       }
       w.dragged += Math.hypot(x - w.x, y - w.y);
@@ -371,7 +418,7 @@
     }
     return true;
   }
-  // Checkpoints, coins and the goal at the spark's new place.
+  // Checkpoints, coins, switches and the goal at the spark's new place.
   function arrive(w) {
     var L = w.L;
     while (w.cp + 1 < L.cps.length && w.best >= L.cps[w.cp + 1].s) { w.cp++; w.ev.push({ t: 'cp', i: w.cp }); }
@@ -379,6 +426,15 @@
       var c = L.coins[k];
       if (!w.coins[k] && (c.x - w.x) * (c.x - w.x) + (c.y - w.y) * (c.y - w.y) <= SH.COIN_R * SH.COIN_R) {
         w.coins[k] = true; w.got++; w.ev.push({ t: 'coin', i: k, x: c.x, y: c.y });
+      }
+    }
+    for (var j = 0; j < L.switches.length; j++) {
+      var sw = L.switches[j], st = w.switches[j];
+      if ((sw.x - w.x) * (sw.x - w.x) + (sw.y - w.y) * (sw.y - w.y) <= SH.SW_R * SH.SW_R) {
+        var fresh = !st.on || (sw.dur > 0 && st.left < sw.dur - 0.5);
+        st.on = true;
+        if (sw.dur > 0) st.left = sw.dur;
+        if (fresh) { w.rest = false; w.ev.push({ t: 'switch', i: j, x: sw.x, y: sw.y, gx: sw.gx, gy: sw.gy }); }
       }
     }
     if (w.s >= L.len - SH.GOAL) {
@@ -404,6 +460,21 @@
     // An opened door lets a resting spark be picked up by the pointer again.
     if (opened) { w.rest = false; w.ev.push({ t: 'open' }); }
   }
+  // Switch-linked barriers: open when their pad is triggered; timed ones count down and
+  // never close on the spark.
+  function switchDoors(w, dt) {
+    var L = w.L;
+    for (var k = 0; k < L.switches.length; k++) {
+      var sw = L.switches[k], st = w.switches[k];
+      var along = (w.x - sw.gx) * sw.gtx + (w.y - sw.gy) * sw.gty, across = (w.x - sw.gx) * sw.gnx + (w.y - sw.gy) * sw.gny;
+      var near = Math.abs(along) < SH.DOOR / 2 + SH.RS + 8 && Math.abs(across) < sw.ghalf;
+      var want = (sw.dur > 0 ? st.left > 0 : st.on) || (near && st.a > 0) ? 1 : 0;
+      if (sw.dur > 0 && st.left > 0) { st.left = Math.max(0, st.left - dt); if (st.left === 0) st.on = false; }
+      var was = st.a;
+      st.a = want ? Math.min(1, st.a + dt * 4.5) : Math.max(0, st.a - dt * 4);
+      if (was > 0 && st.a === 0) w.ev.push({ t: 'swshut', i: k });
+    }
+  }
   // One 1/60 s step. inp: { pts: pointer points since the last step [[x, y], ...] (logical),
   // x, y: where the pointer is now (null when it is not over the game), down: the
   // button is held, press: {x, y} of a new press, door: a press or a key that opens the
@@ -416,6 +487,7 @@
     if (w.done) return;
     if (w.started) w.clock += dt;
     if (L.gates.length) doors(w, dt, !!inp.door);
+    if (L.switches.length) switchDoors(w, dt);
     if (inp.out) { if (w.held) drop(w, 'out'); w.q.length = 0; return; }
     if (w.held && L.mode === 'drag' && !down) drop(w, 'release');
     var fresh = false;
