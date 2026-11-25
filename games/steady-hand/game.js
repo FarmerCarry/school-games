@@ -74,7 +74,8 @@
   }
 
   /* ---------------------------------------------------------------- map */
-  const levelBtns = [], rows = [];
+  const levelBtns = [], rows = [], PAGE_WORLDS = 5;
+  let mapPage = 0;
   function buildMap() {
     const box = $('worlds');
     SH.WORLDS.forEach((wd, wi) => {
@@ -91,6 +92,18 @@
       box.appendChild(row); rows.push(row);
     });
   }
+  function setMapPage(p) {
+    const pages = Math.max(1, Math.ceil(SH.WORLDS.length / PAGE_WORLDS));
+    mapPage = clamp(p | 0, 0, pages - 1);
+    rows.forEach((r, wi) => { r.hidden = Math.floor(wi / PAGE_WORLDS) !== mapPage; });
+    for (let k = 0; k < 2; k++) {
+      const tab = $('tabP' + k);
+      if (!tab) continue;
+      cls(tab, 'on', k === mapPage);
+      tab.setAttribute('aria-selected', k === mapPage ? 'true' : 'false');
+    }
+    dirty = true;
+  }
   function refreshMap() {
     if (!levelBtns.length) buildMap();
     const next = SH.nextLevel(save);
@@ -102,10 +115,13 @@
       aria(b, R.id + ' ' + R.name + (open ? '، ' + st + ' من 3 نجوم' : ' (مقفلة)'));
     });
     rows.forEach((r, wi) => cls(r, 'locked', !SH.isOpen(save, wi * 6)));
+    if ($('tabP1')) cls($('tabP1'), 'locked', !SH.isOpen(save, PAGE_WORLDS * 6));
+    setMapPage(mapPage);
     chip('mapStars', SH.totalStars(save) + '/' + SH.LEVELS.length * 3);
   }
   function toMap() {
     leaveLevel();
+    mapPage = Math.floor(SH.nextLevel(save) / (PAGE_WORLDS * 6));
     refreshMap();
     setScreen('map');
     J.whoosh(0.4);
@@ -172,7 +188,7 @@
     const E = SH.EASY, D = SH.HARD;
     return { width: dda.value(E.width, D.width), speed: dda.value(E.speed, D.speed), spacing: dda.value(E.spacing, D.spacing), open: dda.value(E.open, D.open) };
   }
-  let doorIcons = [], carryIcons = [];
+  let doorIcons = [], carryIcons = [], swBadges = [];
   function startLevel(i) {
     leaveLevel();
     cur = i;
@@ -187,6 +203,7 @@
     // Where the "how to open" picture of each door goes: beside the track, with room.
     doorIcons = L.gates.map(d => spotBeside(L, d, d.half + 46));
     carryIcons = L.carry.map(c => { const p = SH.at(L, c[0]); return spotBeside(L, p, p.hw + 44); });
+    swBadges = L.switches.map(sw => sw.dur > 0 ? spotBeside(L, { x: sw.gx, y: sw.gy, nx: sw.gnx, ny: sw.gny }, sw.ghw + 30) : null);
     intro = 2.6;
     setScreen('play');
     J.whoosh(0.5);
@@ -302,6 +319,8 @@
   on($('btnLevels'), () => { J.select(); toMap(); });
   on($('btnShop'), openShop);
   on($('mapHome'), () => { J.back(); toTitle(); });
+  on($('tabP0'), () => { if (mapPage !== 0) { J.tap(); setMapPage(0); } });
+  on($('tabP1'), () => { if (mapPage !== 1) { J.tap(); setMapPage(1); } });
   on($('shopBack'), () => { J.back(); toTitle(); });
   on($('btnPause'), () => pause(true));
   on($('btnResume'), resume);
@@ -347,7 +366,12 @@
   function handleKeys() {
     const K = Kit.keys, go = K.anyPressed(KEYS_GO);
     if (screen === 'title') { if (go) play(); }
-    else if (screen === 'map') { if (go) { J.select(); startLevel(SH.nextLevel(save)); } else if (K.pressed('Escape')) { J.back(); toTitle(); } }
+    else if (screen === 'map') {
+      if (go) { J.select(); startLevel(SH.nextLevel(save)); }
+      else if (K.anyPressed(['ArrowLeft', 'KeyA']) && mapPage === 0) { J.tap(); setMapPage(1); }
+      else if (K.anyPressed(['ArrowRight', 'KeyD']) && mapPage === 1) { J.tap(); setMapPage(0); }
+      else if (K.pressed('Escape')) { J.back(); toTitle(); }
+    }
     else if (screen === 'shop') { if (go || K.pressed('Escape')) { J.back(); toTitle(); } }
     else if (screen === 'play') {
       if (K.anyPressed(['KeyP', 'Escape'])) pause(true);
@@ -404,6 +428,14 @@
           fx.burst(e.x, e.y, { count: 18, colors: ['#ffd23f', '#fff', '#ffb800'], speed: 260, life: 0.6, size: 6, gravity: 250 });
           float(e.x, e.y - 30, '+1', '#ffd23f', 34);
           break;
+        case 'switch':
+          J.chime(2);
+          fx.burst(e.x, e.y, { count: 16, colors: ['#2ee8a5', '#38c7ff', '#fff'], speed: 240, life: 0.55, size: 6, gravity: 160 });
+          fx.burst(e.gx, e.gy, { count: 12, colors: ['#2ee8a5', '#fff'], speed: 200, life: 0.45, size: 5, gravity: 120 });
+          if (hint && hint.kind === 'sw' && hint.i === e.i) hint = null;
+          break;
+        case 'swshut': J.toggle(false); break;
+        case 'swblock': J.land(0.35); hint = { kind: 'sw', t: 0, i: e.sw }; break;
         case 'open': J.toggle(true); break;
         case 'shut': J.toggle(false); break;
         case 'block': J.land(0.35); hint = { kind: 'door', t: 0, i: e.door }; break;
@@ -536,12 +568,14 @@
     L.cps.forEach((cp, i) => A.lantern(ctx, cp, i <= world.cp, time, still, cpPop[i]));
     L.coins.forEach((c, i) => { if (!world.coins[i]) A.coin(ctx, c.x, c.y, time, still); });
     L.carry.forEach((c, i) => { const p = carryIcons[i]; if (p) A.mouseIcon(ctx, p.x, p.y, 0.75 + (still ? 0 : 0.05 * Math.sin(time * 5)), true, '#ffbe3c'); });
+    L.switches.forEach((sw, i) => A.swPad(ctx, sw, world.switches[i], i, time, still, hint && hint.kind === 'sw' && hint.i === i));
     L.gates.forEach((d, i) => {
       const a = world.gates[i].a;
       A.door(ctx, d, a, time, still);
       if (a < 0.5 && doorIcons[i]) doorHint(ctx, doorIcons[i], hint && hint.kind === 'door' && hint.i === i ? 1.25 : 1, still, ps);
     });
-    L.obs.forEach(o => { if (o.k === 'slide') A.slide(ctx, o, t); else A.spin(ctx, o, t); });
+    L.switches.forEach((sw, i) => A.swDoor(ctx, sw, world.switches[i], i, time, still, swBadges[i]));
+    L.obs.forEach(o => { if (o.k === 'slide') A.slide(ctx, o, t); else if (o.k === 'orb') A.orb(ctx, o, t, still); else A.spin(ctx, o, t); });
     A.bulb(ctx, L.end.x, L.end.y, Math.max(24, L.end.hw * 0.62), L.end.tx, L.end.ty, world.done, time, still);
     drawTrail(ctx, SH.COLORS[save.color]);
     if (coach.on) drawCoach(ctx, still);
@@ -620,7 +654,7 @@
       g.translate(-400, -6);
       A.rr(g, x0, 10, w, 58, 29); g.fillStyle = 'rgba(10,14,44,0.82)'; g.fill(); g.lineWidth = 4; g.strokeStyle = wd.color; g.stroke();
       A.rr(g, R - 92, 16, 84, 46, 23); g.fillStyle = wd.color; g.fill();
-      A.text(g, L.R.id, R - 50, 40, 30, A.INK, { stroke: false });
+      A.text(g, L.R.id, R - 50, 40, L.R.id.length > 3 ? 25 : 30, A.INK, { stroke: false });
       g.save(); g.translate(R - 116, 39); g.scale(0.55, 0.55);
       g.beginPath(); g.moveTo(6, -28); g.lineTo(-20, 4); g.lineTo(-3, 4); g.lineTo(-10, 28); g.lineTo(20, -8); g.lineTo(2, -8); g.closePath();
       g.fillStyle = world.touches ? A.HOT : '#ffd23f'; g.fill(); g.lineWidth = 5; g.strokeStyle = '#fff'; g.stroke();
@@ -671,7 +705,11 @@
       const s = still ? titleL.len * 0.45 : (time * 170) % (titleL.len + 300) - 150, p = SH.at(titleL, clamp(s, 20, titleL.len - 20));
       A.bulb(ctx, titleL.end.x, titleL.end.y, 22, titleL.end.tx, titleL.end.ty, s >= titleL.len - 25, time, still);
       A.spark(ctx, p.x, p.y, { col: SH.COLORS[save.color], t: time, still: still, face: 'happy', lx: 1 });
-    } else setBg(A.backdrop(screen === 'map' ? Math.floor(SH.nextLevel(save) / 6) : 3, ps));
+    } else {
+      const nextW = Math.floor(SH.nextLevel(save) / 6);
+      const mapW = clamp(mapPage * PAGE_WORLDS + clamp(nextW - mapPage * PAGE_WORLDS, 0, PAGE_WORLDS - 1), 0, SH.WORLDS.length - 1);
+      setBg(A.backdrop(screen === 'map' ? mapW : 3, ps));
+    }
     fx.draw(ctx);
   }
   function render() {
@@ -700,11 +738,12 @@
     get state() {
       const w = world;
       return {
-        screen: screen, paused: screen === 'pause', level: cur, id: w ? w.L.R.id : '', mode: w ? w.L.mode : '',
+        screen: screen, paused: screen === 'pause', mapPage: mapPage, level: cur, id: w ? w.L.R.id : '', mode: w ? w.L.mode : '',
         held: !!(w && w.held), spark: w ? { x: r1(w.x), y: r1(w.y) } : null, touches: w ? w.touches : 0, cp: w ? w.cp : -1,
         best: w ? r1(w.best) : 0, progress: w ? Math.round(w.best / w.L.len * 1000) / 1000 : 0, coins: w ? w.got : 0,
         done: !!(w && w.done), time: w ? Math.round(w.t * 1000) / 1000 : 0, clock: w ? Math.round(w.clock * 100) / 100 : 0,
         dragged: w ? r1(w.dragged) : 0, grabs: w ? w.grabs : 0, stun: w ? w.stun : 0, doors: w ? w.gates.map(g => Math.round(g.a * 100) / 100) : [],
+        switches: w ? w.switches.map(sw => ({ on: sw.on, a: Math.round(sw.a * 100) / 100, left: Math.round(sw.left * 100) / 100 })) : [],
         width: w ? Math.round(w.L.P.width * 1000) / 1000 : 0, tier: dda.tier, trail: trailN, fx: fx.list.length, shake: shake.power,
         stars: result ? result.stars : 0, celebrate: celebrate > 0, coach: coach.on,
         atStart: !!(w && !w.touches && !w.dragged && Math.hypot(w.x - w.L.start.x, w.y - w.L.start.y) < 0.5)
@@ -719,6 +758,7 @@
       const L = world.L;
       return { len: L.len, par: L.par, start: { x: L.start.x, y: L.start.y, s: L.start.s }, end: { x: L.end.x, y: L.end.y },
         cps: L.cps.map(c => ({ s: c.s, x: c.x, y: c.y })), doors: L.gates.map(d => ({ s: d.s, x: d.x, y: d.y })),
+        switches: L.switches.map(sw => ({ s: sw.s, x: sw.x, y: sw.y, gs: sw.gs, gx: sw.gx, gy: sw.gy, dur: sw.dur })),
         parts: L.obs.map(o => ({ k: o.k, s: o.s, zone: o.zone })), coins: L.coins.map(c => ({ x: c.x, y: c.y, s: c.s })), carry: L.carry };
     }
   };

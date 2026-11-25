@@ -84,8 +84,13 @@ html[data-sg-motion="reduce"] .ring::after, html[data-sg-motion="reduce"] .lvl.n
 /* ---------------------------------------------------------------- map */
 #mapHome, #shopBack { position: absolute; top: 14px; left: 14px; }
 #mapStars, #shopCoins { left: 96px; }
+.map-tabs { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); display: flex; gap: 14px; }
+.map-tab { height: 58px; padding: 0 26px; gap: 6px; font-size: 26px; background: rgba(10, 14, 44, 0.88); color: #fff; border-color: #3df0ff; box-shadow: 0 6px 0 var(--ink); }
+.map-tab.on { background: #ffd23f; color: var(--ink); border-color: var(--ink); box-shadow: 0 6px 0 var(--ink), 0 0 22px rgba(255, 210, 63, 0.55); }
+.map-tab.locked:not(.on) { border-color: #6b72a8; color: #c4c9eb; }
 #worlds { position: absolute; top: 96px; inset-inline: 0; display: flex; flex-direction: column; gap: 14px; align-items: center; }
 .wrow { display: flex; align-items: center; gap: 14px; }
+.wrow[hidden] { display: none; }
 .wname {
   width: 196px; height: 92px; display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 26px;
   background: rgba(10, 14, 44, 0.86); border: 5px solid var(--wc, #3df0ff); color: #fff; box-shadow: 0 0 22px var(--wc, #3df0ff);
