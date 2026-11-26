@@ -414,6 +414,10 @@
       tune: tune,
       rng: rng,
       length: endless ? Infinity : def.length,
+      // The first world (levels 1-1 to 1-3) never ends a run: a bump still costs a heart, but the
+      // last heart stays, so a child always reaches the nest (with fewer stars). The play
+      // statistics of November 2026 showed level 1-2 lost 8 times out of 8, each within 16 s.
+      gentle: !endless && def.world === 0,
       baseSpeed: baseSpeed,
       speed: baseSpeed,
       x: 0,
@@ -473,6 +477,8 @@
         cursor = spawnEncounter(world, cursor, 'arch', rng, baseSpeed, tune.gapTime + 0.1, false);
       }
       var endSafe = def.length - 16;
+      // the first world also leaves a quarter of a second more between obstacles
+      var gap = tune.gapTime + (def.world === 0 ? 0.25 : 0);
       var kinds = def.kinds;
       while (cursor < endSafe) {
         var k = kinds[Math.floor(rng() * kinds.length)];
@@ -480,7 +486,7 @@
           k = kinds[(kinds.indexOf(k) + 1) % kinds.length];
         }
         world.lastKind = k;
-        cursor = spawnEncounter(world, cursor, k, rng, baseSpeed, tune.gapTime, true);
+        cursor = spawnEncounter(world, cursor, k, rng, baseSpeed, gap, true);
       }
       // Victory rainbow lead-in right before the family nest!
       addEggArc(world, def.length - 8.5, 6.2, 1.9, 5, 'rainbow', 2);
@@ -678,7 +684,7 @@
       if (overlapX && overlapY && !ob.hit) {
         ob.hit = true;
         if (p.invuln <= 0 && p.roarT <= 0) {
-          p.hp = Math.max(0, p.hp - 1);
+          p.hp = Math.max(world.gentle ? 1 : 0, p.hp - 1);
           p.invuln = HURT_INVULN;
           world.bumps++;
           world.streak = 0;
