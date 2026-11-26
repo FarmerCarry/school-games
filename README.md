@@ -3,7 +3,7 @@
 A light, ad-free games website **in Arabic** for children aged 5–11: a small Poki-style portal
 with original browser games, all written from scratch for this site. The site and all of its
 games are in Arabic, laid out right-to-left. The games scale from a 5-year-old who has never
-held a mouse to an 11-year-old expert (27 of the 52 games—including Bubble Bop, Road Hopper,
+held a mouse to an 11-year-old expert (28 of the 53 games—including Bubble Bop, Road Hopper,
 Dino 3D, Beat Dash, Math Gates, Word Garden, Shortcut Factory, Robo Swarm and Balloon Blast—adapt
 their difficulty dynamically via `Kit.dda` to how children play on each PC), and none of them
 plays background music.
@@ -29,7 +29,7 @@ Only `js/telemetry.js` sends, and only when the fast build is given the server's
 the address, the offline ZIP run from a folder and a browser with Global Privacy Control send
 nothing. Details, the exact fields and how to turn it off: [`docs/TELEMETRY.md`](docs/TELEMETRY.md).
 
-## The games (52)
+## The games (53)
 
 | Game | English name | Players | Type |
 |---|---|---|---|
@@ -41,6 +41,7 @@ nothing. Details, the exact fields and how to turn it off: [`docs/TELEMETRY.md`]
 | أصابع البرق | Lightning Fingers (typing game with lightning clouds and a speed test, Arabic + English) | 1 | تحديات، أركيد |
 | عدّاء المفاتيح | Key Runner (find the keys on the school keyboard) | 1-2 | تحديات، لاعبان |
 | مغامرة الكيبورد | Keyboard Obby (hop across a giant 3D school keyboard) | 1 | تحديات، أركيد |
+| زوووم +1 | Zooom +1 (silly +1-speed runner on a road of giant keycaps) | 1 | جري، أركيد |
 | حديقة الكلمات | Word Garden (type the missing letter, Arabic + English) | 1 | ألغاز، تحديات |
 | مصنع الاختصارات | Shortcut Factory (Ctrl+C, V, X, Z and other shortcuts) | 1 | ألغاز، تحديات |
 | ضربة الطلاء | Splat Strike (3D paint-blaster arena vs bots) | 1 | تصويب، تحدي الروبوتات |
@@ -184,6 +185,18 @@ fall just bounces him back to the last checkpoint, and after three falls in one 
 ease off. Five worlds (home row, top row, bottom row, digits, whole keyboard with words) and 29
 levels in «عربي» or «English»; a small keyboard at the bottom always lights the next key. Coins
 buy colours and hats.
+
+**زوووم +1 (Zooom +1)** is a silly speed runner, pure fun with no typing to learn. Hold ↑, W, Space or
+the mouse button and a googly-eyed toast runs down a road of giant candy-coloured keycaps that pop up
+under its feet. Every new keycap row clacks and adds **+1 speed** (more with bouncy shoes), and the
+speed sets how fast it runs. Each stage ends at a giant space-bar ramp over a jelly sea. With the
+stage's speed it flies over and wins trophies. Without it, the toast lands in the jelly with a bloop and
+tries again, keeping all of its speed, until the bar fills. ← → dodge rubber ducks and sliding jelly
+cubes (a bonk costs a little speed). Golden keys give ten steps at once, rainbow keys double every step
+for a while, and chests hold trophies. Trophies buy bouncier shoes, a trophy multiplier and eight more
+runners (a potato, a rubber duck, a pickle, a cupcake, a golden toaster…). From stage 11 a rebirth starts
+again at stage 1 with more speed per step for good. Six candy themes, no end to the stages, `Kit.dda`
+sets how busy the road is, and the light 2D canvas stays smooth on the lab PCs. P or Esc pauses.
 
 **حديقة الكلمات (Word Garden)** is a spelling game: a picture and its word with a glowing gap; type
 the missing letter and a flower grows in the garden. The school keyboard is always on screen and the

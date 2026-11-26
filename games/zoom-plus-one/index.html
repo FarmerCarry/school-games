@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>زوووم +1</title>
+<link rel="icon" type="image/svg+xml" href="../../favicon.svg">
+<link rel="stylesheet" href="../../shared/game.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<svg class="defs" aria-hidden="true" focusable="false" width="0" height="0">
+  <symbol id="i-play" viewBox="0 0 64 64"><path d="M22 11 Q18 9 18 14 L18 50 Q18 55 22 53 L52 35 Q56 32 52 29 Z"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 64 64"><rect x="15" y="12" width="12" height="40" rx="5"/><rect x="37" y="12" width="12" height="40" rx="5"/></symbol>
+  <symbol id="i-again" viewBox="0 0 64 64"><path d="M50 30 A19 19 0 1 1 41 15" fill="none" stroke="currentColor" stroke-width="9" stroke-linecap="round"/><path d="M33 4 L52 13 L37 27 Z"/></symbol>
+  <symbol id="i-home" viewBox="0 0 64 64"><path d="M8 32 L32 10 L56 32 L49 32 L49 54 L37 54 L37 40 L27 40 L27 54 L15 54 L15 32 Z"/></symbol>
+  <symbol id="i-shop" viewBox="0 0 64 64"><path d="M10 22 L54 22 L50 54 L14 54 Z"/><path d="M22 24 L22 18 A10 10 0 0 1 42 18 L42 24" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round"/></symbol>
+  <symbol id="i-cup" viewBox="0 0 64 64"><path d="M16 8 L48 8 Q48 36 32 38 Q16 36 16 8 Z" fill="#ffc928" stroke="#2a1d4e" stroke-width="4" stroke-linejoin="round"/><path d="M16 14 Q4 14 8 24 Q11 30 18 30 M48 14 Q60 14 56 24 Q53 30 46 30" fill="none" stroke="#2a1d4e" stroke-width="4"/><rect x="27" y="38" width="10" height="9" fill="#ffc928" stroke="#2a1d4e" stroke-width="4"/><rect x="18" y="47" width="28" height="10" rx="3" fill="#ffc928" stroke="#2a1d4e" stroke-width="4"/></symbol>
+  <symbol id="i-bolt" viewBox="0 0 64 64"><path d="M38 4 L12 36 L30 36 L24 60 L52 26 L34 26 Z" fill="#ffe14f" stroke="#2a1d4e" stroke-width="4" stroke-linejoin="round"/></symbol>
+</svg>
+
+<canvas id="game" tabindex="0" aria-label="زوووم +1"></canvas>
+
+<div id="ui">
+  <div id="hud" hidden>
+    <button type="button" id="btnPause" class="zp-btn zp-round" aria-label="استراحة" title="استراحة (P / Esc)"><svg aria-hidden="true"><use href="#i-pause"/></svg></button>
+    <button type="button" id="btnShop" class="zp-btn zp-round shop" aria-label="المتجر" title="المتجر"><svg aria-hidden="true"><use href="#i-shop"/></svg></button>
+  </div>
+
+  <section id="scrTitle" class="screen" aria-label="زوووم +1">
+    <h1 class="logo"><span class="l1">زوووم</span><span class="l2" dir="ltr">+1</span></h1>
+    <button type="button" id="btnPlay" class="zp-btn zp-play ring" aria-label="العب"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
+    <div class="title-chips">
+      <span class="chip" id="titleStage" aria-label="المرحلة"><b>1</b><small>المرحلة</small></span>
+      <span class="chip" id="titleWins" aria-label="الكؤوس"><svg aria-hidden="true"><use href="#i-cup"/></svg><b>0</b></span>
+    </div>
+    <button type="button" id="btnTitleShop" class="zp-btn zp-wide" aria-label="المتجر والشخصيات"><svg aria-hidden="true"><use href="#i-shop"/></svg><span>المتجر</span></button>
+    <div class="howto">
+      <span><span class="sg-key" dir="ltr">↑</span> أو <span class="sg-key">مسافة</span> اضغط مطولًا للجري</span>
+      <span><span dir="ltr"><span class="sg-key">←</span> <span class="sg-key">→</span></span> تفادَ البط والجيلي</span>
+      <span>كل زر تدوس عليه = <b dir="ltr">+1</b> سرعة!</span>
+    </div>
+  </section>
+
+  <section id="scrPause" class="screen dim" aria-label="استراحة" hidden>
+    <div class="card">
+      <h2>استراحة</h2>
+      <button type="button" id="btnResume" class="zp-btn zp-go" aria-label="تابع"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
+      <div class="row">
+        <button type="button" id="btnHome" class="zp-btn zp-round big" aria-label="البداية"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
+        <button type="button" id="btnPauseShop" class="zp-btn zp-round big shop" aria-label="المتجر"><svg aria-hidden="true"><use href="#i-shop"/></svg></button>
+        <button type="button" id="btnRestart" class="zp-btn zp-round big" aria-label="أعد المرحلة"><svg aria-hidden="true"><use href="#i-again"/></svg></button>
+      </div>
+    </div>
+  </section>
+
+  <section id="scrShop" class="screen dim" aria-label="المتجر" hidden>
+    <div class="card shop-card">
+      <div class="shop-head">
+        <button type="button" id="shopBack" class="zp-btn zp-round" aria-label="رجوع"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
+        <h2>المتجر</h2>
+        <span class="chip" id="shopWins"><svg aria-hidden="true"><use href="#i-cup"/></svg><b>0</b></span>
+      </div>
+      <div class="ups">
+        <button type="button" class="up" id="buyShoes"><span class="ic">👟</span><b class="nm">أحذية نطّاطة</b><span class="ds"></span><span class="pr"></span></button>
+        <button type="button" class="up" id="buyWinx"><span class="ic"><svg aria-hidden="true"><use href="#i-cup"/></svg></span><b class="nm">كؤوس مضاعفة</b><span class="ds"></span><span class="pr"></span></button>
+        <button type="button" class="up reb" id="btnRebirth"><span class="ic">🌟</span><b class="nm">انطلاقة جديدة</b><span class="ds"></span><span class="pr"></span></button>
+      </div>
+      <h3>الشخصيات</h3>
+      <div class="runners" id="runners" role="group" aria-label="الشخصيات"></div>
+    </div>
+  </section>
+
+  <section id="scrError" class="screen dim" hidden>
+    <div class="card"><h2>عذرًا!</h2><p>تعذّر تشغيل اللعبة. جرّب لعبة أخرى.</p></div>
+  </section>
+</div>
+<div id="live" class="sr" aria-live="polite"></div>
+
+<script src="../../shared/kit.js"></script>
+<script src="../../shared/juice.js"></script>
+<script src="engine.js"></script>
+<script src="art.js"></script>
+<script src="game.js"></script>
+</body>
+</html>
