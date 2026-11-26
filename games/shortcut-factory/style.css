@@ -172,8 +172,8 @@ html, body { background: #7cc6f5; }
 @keyframes sf-banner { 0% { opacity: 0; transform: scale(0.6); } 15% { opacity: 1; transform: scale(1.08); } 25% { transform: scale(1); } 80% { opacity: 1; } 100% { opacity: 0; transform: translateY(-30px); } }
 
 /* --------------------------------------------------------------- coach */
-#coach { position: absolute; left: 50%; bottom: 128px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; animation: sf-pop 0.25s ease-out; }
-@keyframes sf-pop { from { transform: translateX(-50%) scale(0.7); opacity: 0; } }
+#coach { position: absolute; left: 50%; bottom: 122px; transform: translateX(-50%) scale(0.78); transform-origin: 50% 100%; display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; animation: sf-pop 0.25s ease-out; }
+@keyframes sf-pop { from { transform: translateX(-50%) scale(0.55); opacity: 0; } }
 .cname { display: flex; align-items: center; gap: 12px; padding: 6px 22px 6px 14px; background: #fff; border: 5px solid var(--ink); border-radius: 999px; box-shadow: 0 6px 0 var(--ink); font-size: 36px; font-weight: 700; }
 .cname .ic { width: 50px; height: 50px; }
 .cname .kc { font-size: 28px; }
