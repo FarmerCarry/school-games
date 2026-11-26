@@ -15,6 +15,8 @@
  *   - sw.js: an offline cache. After the first visit the whole site is stored on the PC, pages
  *     open without asking the server, and it still works if the internet drops. Each build
  *     changes sw.js, so PCs download only the files that changed.
+ *   - version.json: the build's version. Open portals check it every few minutes and offer
+ *     children a «new version» button (js/offline.js) once the update is on the PC.
  *   - school-games-offline.zip: this whole build in one school-games/ folder, for PCs that
  *     run it from a folder without internet (unzip, double-click index.html). It is not
  *     precached, so children's PCs never download it.
@@ -354,6 +356,10 @@ try {
   }
   const sw = KILL_SW ? KILL_SW_SOURCE(Object.keys(precache)) : SW_SOURCE(version, precache);
   write('sw.js', sw);
+  // The published version, for open portals to compare with their own (js/offline.js).
+  // It is fetched past every cache, so a PC learns of a new deploy even when a cache on
+  // the way still hands out an old sw.js. Not precached: it must always come from the site.
+  if (!KILL_SW) write('version.json', JSON.stringify({ v: version }) + '\n');
 
   /* ---------------------------------------------------- offline download */
   // The same fast site as one ZIP for PCs without internet (README, "Running it
@@ -466,10 +472,26 @@ async function offlineStatus(repair, quick) {
   check.task = task;
   try { return await task; } finally { if (checkingStatus === check) checkingStatus = null; }
 }
+// The version the site publishes now (version.json, written by the build), fetched past
+// every cache. The portal compares it with this worker's to find a newer deploy even when
+// a cache on the way still hands out an old sw.js. null when the site cannot be reached.
+async function latestVersion() {
+  var url = new URL('version.json', SCOPE).href + '?r=' + Date.now().toString(36) + Math.random().toString(36).slice(2);
+  var res = await fetch(url, { cache: 'no-store' });
+  if (!res.ok) return null;
+  var v = (await res.json()).v;
+  return typeof v === 'string' && /^[0-9a-f]{16}$/.test(v) ? v : null;
+}
 self.addEventListener('message', function (event) {
   var data = event.data, port = event.ports && event.ports[0];
-  if (!data || data.type !== 'sg:offline-status' || !port) return;
-  if (!event.source || toRel(event.source.url) !== 'index.html') return;
+  if (!data || !port || !event.source || toRel(event.source.url) !== 'index.html') return;
+  if (data.type === 'sg:offline-latest') {
+    event.waitUntil(latestVersion().catch(function () { return null; }).then(function (v) {
+      port.postMessage({ type: 'sg:offline-latest', id: data.id, v: v, version: VERSION });
+    }));
+    return;
+  }
+  if (data.type !== 'sg:offline-status') return;
   event.waitUntil(offlineStatus(data.repair === true, data.quick === true).then(function (result) {
     port.postMessage(Object.assign({}, result, { type: 'sg:offline-status', id: data.id }));
   }).catch(function () {

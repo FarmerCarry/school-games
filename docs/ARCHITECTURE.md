@@ -73,7 +73,7 @@ js/catalog.js            the games, categories and site name
 js/telemetry.js          SGTelemetry — the ONLY network sender: anonymous play statistics
                                       to the school's server, off without an address
 js/site.js               portal shell, iframe host, routes, favourites and recent games
-js/offline.js            the fast build's offline cache controller
+js/offline.js            the fast build's offline cache controller and «new version» button
 ```
 
 Games never touch storage outside `Kit.store`, never use the network, and talk to
@@ -109,6 +109,7 @@ sender is on does it post `sg:telemetry` and run one 10 s timer. Its messages wi
 | game → portal | `{ type: 'sg:ready', version: 1 }` | `Kit.ready()`: the game initialised and can be shown. |
 | game → portal | `{ type: 'sg:warn', version: 1, message }` | One stray error after ready (at most once per 10 s). |
 | game → portal | `{ type: 'sg:error', version: 1, message }` | `Kit.fail()` or a failed start: the portal offers Retry. |
+| game → portal | `{ type: 'sg:round', version: 1, open }` | A round started (`Kit.stats.round`, `open: true`) or ended (`Kit.stats.end`, `open: false`); sent once per change, whatever the statistics setting. The portal offers its «new version» button only while no round is open. |
 | game → portal | `'sg:focus-portal'` | Shift+Tab from the game surface: keyboard focus goes back to the portal. |
 | game → portal | `{ type: 'sg:telemetry', version: 2, e, f, il, ev }` | Anonymous play statistics ([`TELEMETRY.md`](TELEMETRY.md), "Kit"): engaged ms, frames, input latency, round events. Only after ready, while embedded and told `telemetry: true`. |
 | portal → game | `{ type: 'sg:request-ready' }` | Repeat `sg:ready` if the game is already ready. |

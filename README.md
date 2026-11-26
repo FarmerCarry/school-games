@@ -391,6 +391,20 @@ defers if a game opened during that check. It also works offline. The first inst
 never triggers an update reload. A game-only update includes the changed game and the
 portal's new build identity.
 
+A game is never reloaded by itself. Between rounds (after a round ends, on the game's own
+menus, or in a game that has no rounds) the game bar under it shows a yellow
+«✨ نسخة جديدة! اضغط للتحديث 🔄» button; it hides again as soon as a round starts. A tap
+reloads the page, which opens the same game again in the new version. Games tell the
+portal when a round starts and ends through `Kit.stats.round` / `Kit.stats.end`.
+
+Lab PCs often keep one tab open all day, and a cache between the school and the site can
+keep handing out an old `sw.js`. So while the portal is visible it asks for the newest
+version every 10 minutes (and on focus, at most every 2): the offline worker fetches the
+site's own `version.json`, written by the build, past every cache. When it differs from
+the PC's version the browser checks `sw.js`; if that still brings nothing new, the worker
+is fetched again at `sw.js?v=<version>`, an address no cache can hold yet, and the PC keeps
+that address. Nothing is sent, and no other server is asked.
+
 See [Performance evidence and measurement](docs/PERFORMANCE.md) for retained/reverted
 experiments, exact byte costs, reproducible measurement commands and timing limits.
 

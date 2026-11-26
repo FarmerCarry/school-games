@@ -141,8 +141,8 @@ test('worker-only changes get an independent cache while unchanged builds stay d
 
 test('legacy normal and kill-switch builds without markers are recognized', t => {
   const f = fixture(t);
-  // Builds without markers also predate the offline download.
-  const makeLegacy = () => { for (const file of [marker, download]) fs.unlinkSync(path.join(f.root, '_site', file)); };
+  // Builds without markers also predate the offline download and version.json.
+  const makeLegacy = () => { for (const file of [marker, download, 'version.json']) fs.rmSync(path.join(f.root, '_site', file), { force: true }); };
   for (const args of [[], ['--kill-sw']]) {
     success(run(f, args));
     makeLegacy();
@@ -323,7 +323,7 @@ test('SG_TELEMETRY_URL reaches the portal only, is checked first, and changes no
     assert.ok(!text(on, name).includes('SG_TELEMETRY') && !text(on, name).includes('ingest.example.org'), name + ' gets nothing');
   }
   // Only the portal, the worker's version and the download that holds them change.
-  assert.deepEqual(Object.keys(on).filter(name => on[name] !== plain[name]).sort(), ['index.html', 'school-games-offline.zip', 'sw.js']);
+  assert.deepEqual(Object.keys(on).filter(name => on[name] !== plain[name]).sort(), ['index.html', 'school-games-offline.zip', 'sw.js', 'version.json']);
   assert.deepEqual(Object.keys(on).sort(), Object.keys(plain).sort());
 
   // The emergency switch never sends: no address in a --kill-sw build.

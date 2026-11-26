@@ -246,6 +246,14 @@
   function text(value) { try { return String(value).slice(0, 24); } catch (e) { return ''; } }
   // A page that goes away (not kept in the back-forward cache) with a round open quits it.
   function quitOpen(quit) { if (quit && roundId) { tally(); mark('q'); roundId = ''; } }
+  // Whether a round is being played, for the portal's «new version» button, which waits
+  // for the end of a round. It is sent whatever the statistics setting: it holds no numbers.
+  var roundSaid = false;
+  function roundState(open) {
+    if (open === roundSaid) return;
+    roundSaid = open;
+    tellPortal({ type: 'sg:round', version: 1, open: open });
+  }
   Kit._ack = function () { unacked.shift(); };
   Kit._flush = function (quit) { quitOpen(quit); return [unacked.splice(0), send(quit, [])]; };
   listen('pagehide', function (e) { quitOpen(!(e && e.persisted)); send(e); });
@@ -260,6 +268,7 @@
       mark();
       roundMs = 0;
       send();
+      roundState(true);
     },
     // result: 'win', 'lose', 'draw', 'end' (no winner) or 'quit' (its first letter is sent).
     end: function (result, score) {
@@ -268,6 +277,7 @@
       mark(text(result).charAt(0), score);
       roundId = '';
       send();
+      roundState(false);
     },
     tutorial: function (step) {
       if ((step === 'start' || step === 'done') && !tutorials[step]) { tutorials[step] = 1; push(['tu', step.charAt(0)]); }
