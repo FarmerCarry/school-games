@@ -11,10 +11,11 @@
     { name: 'كعكة', hat: 1 }, { name: 'فلفول', hat: 2 }, { name: 'زلزول', hat: 6 }, { name: 'سكّر', hat: 3 },
     { name: 'دبدوب', hat: 7 }, { name: 'برقوق', hat: 5 }, { name: 'شمشم', hat: 8 }, { name: 'نمنم', hat: 9 }, { name: 'فستق', hat: 4 }
   ];
-  var DIFF_NAME = { easy: 'سهل', medium: 'متوسط', hard: 'صعب' };
+  var DIFF_NAME = { beginner: 'مبتدئ', easy: 'سهل', medium: 'متوسط', hard: 'صعب' };
   var STAGES = [
     // guide: a faint aim line that shows how a ball bounces back (first two stages only)
-    { name: 'أول لطخة', bots: [['easy', 0]], target: 3, guide: true },
+    // the first stage is the tutorial: a beginner tank and first to 2 splats
+    { name: 'أول لطخة', bots: [['beginner', 0]], target: 2, guide: true },
     { name: 'صديقان مشاغبان', bots: [['easy', 1], ['easy', 2]], target: 3, guide: true },
     { name: 'الخصم الذكي', bots: [['medium', 3]], target: 3 },
     { name: 'معركة الحلوى', bots: [['easy', 8], ['medium', 4]], target: 3 },
@@ -256,7 +257,7 @@
       d.innerHTML = '<div class="num">' + (i + 1) + '</div><div class="sname"></div><canvas width="480" height="200"></canvas><div class="who"></div><div class="diff"></div><div class="stars"></div>';
       d.querySelector('.sname').textContent = st.name;
       d.querySelector('.who').textContent = 'ضد: ' + st.bots.map(function (b) { return BOTS[b[1]].name; }).join('، ');
-      var hard = st.bots.reduce(function (m, b) { return b[0] === 'hard' ? 'hard' : (b[0] === 'medium' && m !== 'hard' ? 'medium' : m); }, 'easy');
+      var hard = st.bots.reduce(function (m, b) { return b[0] === 'hard' ? 'hard' : (b[0] === 'medium' && m !== 'hard' ? 'medium' : m); }, st.bots.every(function (b) { return b[0] === 'beginner'; }) ? 'beginner' : 'easy');
       var df = d.querySelector('.diff'); df.textContent = DIFF_NAME[hard]; df.classList.add(hard);
       var ss = d.querySelector('.stars');
       for (var k = 0; k < 3; k++) { var e = document.createElement('span'); e.className = 'star' + (k < save.stars[i] ? '' : ' off'); ss.appendChild(e); }
