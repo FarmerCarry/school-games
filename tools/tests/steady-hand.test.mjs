@@ -468,23 +468,70 @@ test('two-page world map switches cleanly between Worlds 1–5 and 6–10; legac
   assert.equal(s.screen, 'play'); assert.equal(s.id, '6-1');
 });
 
-test('world 8 switch pad unlocks its linked barrier and lets the spark light the lamp in real Chromium', async t => {
+test('world 8 switch pads unlock their linked barriers and let the spark light the lamp in real Chromium', async t => {
   const page = await game(t, { save: SAVE(42), dda: 0.3 });
   await page.locator('#btnLevels').click(); await step(page);
   assert.equal((await state(page)).mapPage, 1);
   await page.locator('.lvl').nth(42).click(); await step(page);
   let s = await state(page);
   assert.equal(s.id, '8-1');
-  assert.equal(s.switches.length, 1);
+  assert.equal(s.switches.length, 2);
   assert.equal(s.switches[0].on, false);
+  assert.equal(s.switches[1].on, false);
   const track = await page.evaluate(() => __game.track);
+  const DDA = 0.3;
+  // Helper: drag from current arc length `from` to `to`, steering smoothly onto off-centre
+  // switch pads and waiting cleanly before any moving part until a full pass is clear.
+  async function carefulAlong(from, to) {
+    const gap = 8, per = 2; // 16 logical px per frame = 960 px/s; wait cleanly before each moving part
+    let curS = from, committed = -1;
+    while (curS < to) {
+      const nextS = Math.min(to, curS + gap * per);
+      const z = track.parts.findIndex(o => nextS > o.zone[0] - 8 && nextS < o.zone[1] + 8);
+      if (z >= 0 && committed !== z) {
+        let ok = false;
+        for (let w = 0; w < 300 && !ok; w++) {
+          ok = await page.evaluate(([s0, s1, dda]) => {
+            const st = __game.state, L = SH.build(st.level, SH.params(dda)), t0 = st.time;
+            const steps = Math.ceil((s1 - s0) / 16) + 2;
+            for (let k = 1; k <= steps; k++) {
+              for (let e = -4; e <= 20; e += 4) {
+                const p = SH.at(L, Math.min(L.len, s0 + (k - 1) * 16 + e));
+                if (SH.moving(L, p.x, p.y, t0 + k / 60) >= 0) return false;
+              }
+            }
+            return true;
+          }, [curS, track.parts[z].zone[1] + 12, DDA]);
+          if (!ok) await step(page, 2);
+        }
+        assert.ok(ok, 'moving part ' + z + ' opened');
+        committed = z;
+      }
+      if (z < 0) committed = -1;
+      for (let m = 1; m <= per && curS < to; m++) {
+        curS = Math.min(to, curS + gap);
+        const pt = await page.evaluate(([s, dda]) => {
+          const st = __game.state, L = SH.build(st.level, SH.params(dda)), p = SH.at(L, Math.min(L.len, s));
+          let off = 0;
+          for (const sw of L.switches) {
+            if (!sw.share) continue;
+            const d = Math.abs(s - sw.s);
+            if (d < 90) { const u = 1 - d / 90; off += sw.share * (p.hw - SH.RS - 4) * u * u * (3 - 2 * u); }
+          }
+          return __game.point(p.x + p.nx * off, p.y + p.ny * off);
+        }, [curS, DDA]);
+        await page.mouse.move(pt.x, pt.y);
+      }
+      await step(page);
+    }
+  }
   await pressSpark(page);
-  await along(page, s.best, track.switches[0].s + 24, 9);
+  await carefulAlong(s.best, track.switches[0].s + 24);
   await step(page, 20);
   s = await state(page);
-  assert.equal(s.switches[0].on, true, 'switch pad lit up');
-  assert.equal(s.switches[0].a, 1, 'linked barrier opened fully');
-  await along(page, s.best, track.len, 9);
+  assert.equal(s.switches[0].on, true, 'permanent switch pad lit up');
+  assert.equal(s.switches[0].a, 1, 'permanent barrier opened fully');
+  await carefulAlong(track.switches[0].s + 24, track.len);
   await page.mouse.up();
   s = await state(page);
   assert.equal(s.done, true); assert.equal(s.touches, 0);

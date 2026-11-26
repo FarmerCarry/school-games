@@ -254,8 +254,8 @@
       var c = project(L, q[0], q[1]), spn = q[4] || 0, dir = spn < 0 ? -1 : 1, dist = Math.abs(spn);
       var pa = dist ? SH.at(L, clamp(c.s - dist, 10, L.len - 10)) : c;
       var pb = dist ? SH.at(L, clamp(c.s + dist, 10, L.len - 10)) : c;
-      var ax = pa.x - pa.nx * dir * (pa.hw + 2), ay = pa.y - pa.ny * dir * (pa.hw + 2);
-      var bx = pb.x + pb.nx * dir * (pb.hw + 2), by = pb.y + pb.ny * dir * (pb.hw + 2);
+      var ax = pa.x - pa.nx * dir * (pa.hw + 4), ay = pa.y - pa.ny * dir * (pa.hw + 4);
+      var bx = pb.x + pb.nx * dir * (pb.hw + 4), by = pb.y + pb.ny * dir * (pb.hw + 4);
       var o = { k: 'orb', s: c.s, x: c.x, y: c.y, ax: ax, ay: ay, bx: bx, by: by, f: sp / q[2], ph: q[3] || 0, span: spn, r: SH.ORB, th: SH.ORB * 2 };
       o.cx = (ax + bx) / 2; o.cy = (ay + by) / 2;
       o.r2 = Math.pow(Math.hypot(bx - ax, by - ay) / 2 + SH.ORB + SH.RS + 2, 2);

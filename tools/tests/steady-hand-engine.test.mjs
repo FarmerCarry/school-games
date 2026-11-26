@@ -115,7 +115,7 @@ test('ten worlds of six levels, each with an Arabic name and valid parts', () =>
     ids.add(R.id);
     assert.match(R.name, ARABIC, where);
     assert.ok(['drag', 'hover'].includes(R.mode), where);
-    assert.ok(R.w >= 70 && R.w <= 130, where + ' width');
+    assert.ok(R.w >= (i < 30 ? 70 : 54) && R.w <= 130, where + ' width');
     assert.ok(Array.isArray(R.p) && R.p.length >= 3 && R.p.every(p => p.length >= 2 && p.every(Number.isFinite)), where + ' points');
     assert.ok((R.coins || []).length >= 1 && R.coins.length <= 8, where + ' coins');
     for (const q of R.slide || []) assert.ok(q.length >= 5 && Math.abs(q[2]) === 1 && q[3] > 1 && q[4] > 0.2 && q[4] < 0.8, where + ' slide');
@@ -140,8 +140,10 @@ test('ten worlds of six levels, each with an Arabic name and valid parts', () =>
   assert.ok(W(7).every(R => R.sw && R.sw.length >= 1), 'world 8 showcases switches');
   assert.ok(W(8).filter(R => mixCount(R) >= 2).length >= 5, 'world 9 mixes old and new mechanics');
   assert.ok(W(9).filter(R => mixCount(R) >= 3).length >= 5, 'world 10 is the grand finale');
+  assert.ok(SH.LEVELS.slice(30).every(R => mixCount(R) >= 1), 'every world 6–10 level has active hazards');
   const mean = k => W(k).reduce((n, R) => n + R.w, 0) / 6;
-  assert.ok(mean(0) > mean(1) && mean(1) > mean(4) && mean(4) <= 82 && mean(9) <= 82, 'tracks get narrower');
+  assert.ok(mean(0) > mean(1) && mean(1) > mean(4) && mean(4) <= 82, 'worlds 1–5 get narrower');
+  assert.ok(mean(4) > mean(5) && mean(5) > mean(6) && mean(6) > mean(7) && mean(7) > mean(8) && mean(8) > mean(9) && mean(9) <= 62, 'worlds 6–10 escalate narrower than world 5');
 });
 
 test('every track stays on screen below the top bar and never runs into itself, even at its widest', () => {
@@ -225,7 +227,7 @@ test('the difficulty: harder means narrower tracks, faster parts, fewer checkpoi
     // Even at its narrowest, the track leaves room around the spark, and breathing walls
     // never close on the centre line.
     for (const sg of h.segs) {
-      assert.ok(sg.hw - SH.RS >= 20, `${R.id} too narrow: ${sg.hw}`);
+      assert.ok(sg.hw - SH.RS >= (i < 30 ? 20 : 14), `${R.id} too narrow: ${sg.hw}`);
       assert.ok(sg.hw * (1 - sg.amp) - SH.RS >= 6, `${R.id} squeezes too far`);
     }
   });
@@ -539,36 +541,62 @@ test('shock orbs touch the spark on contact and can be passed safely when clear'
 });
 
 test('switch barriers stop the spark safely until their pad is touched; timed barriers never close on the spark', () => {
-  // Permanent switch (8-1): touching the pad unlocks the barrier permanently.
+  // Permanent switch (8-1): steering onto its off-centre pad unlocks the barrier permanently.
   const w = SH.create(levelIndex('8-1'), MID), L = w.L, sw = L.switches[0];
   grab(w);
-  drag(w, along(L, w.s, sw.s + 10));
+  drag(w, along(L, w.s, sw.s - 20));
+  drag(w, [[sw.x, sw.y]]);
   assert.equal(w.switches[0].on, true, 'switch triggered');
   for (let n = 0; n < 30; n++) step(w, { down: true, x: w.x, y: w.y });
   assert.equal(w.switches[0].a, 1, 'barrier opened fully');
   // Timed switch (8-3): skipping the pad blocks safely; pressing it opens, holds while inside, then shuts behind.
-  const v = SH.create(levelIndex('8-3'), HARD), VL = v.L, vsw = VL.switches[0];
+  const v = SH.create(levelIndex('8-3'), HARD), VL = v.L, vsw = VL.switches[0], orb = VL.obs[0];
   assert.ok(vsw.dur > 0, 'timed switch');
+  const walkClear = (from, to) => {
+    const ev = [], dir = from < to ? 1 : -1;
+    let s = from;
+    while (dir > 0 ? s < to : s > to) {
+      const ns = dir > 0 ? Math.min(to, s + 4) : Math.max(to, s - 4);
+      const inOrb = ns > orb.zone[0] - 6 && ns < orb.zone[1] + 6;
+      if (inOrb && !(s > orb.zone[0] - 6 && s < orb.zone[1] + 6)) {
+        // Wait before entering the orb's reach until a pass at 4 px/frame (240 px/s) is clear.
+        let ok = false, guard = 0;
+        while (!ok && guard++ < 300) {
+          ok = true;
+          for (let k = 1; k <= Math.ceil((orb.zone[1] - orb.zone[0] + 18) / 4); k++) {
+            const q = SH.at(VL, Math.min(VL.len, Math.max(0, s + dir * k * 4)));
+            if (SH.hitsOne(orb, q.x, q.y, v.t + k * DT)) { ok = false; break; }
+          }
+          if (!ok) step(v, { down: true, x: v.x, y: v.y });
+        }
+      }
+      s = ns;
+      const p = SH.at(VL, s);
+      ev.push(...step(v, { pts: [[p.x, p.y]], down: true, x: p.x, y: p.y }));
+      if (!v.held) break;
+    }
+    return ev;
+  };
   grab(v);
-  drag(v, along(VL, v.s, vsw.s + 36));
+  walkClear(v.s, vsw.s + 36);
   assert.equal(v.switches[0].on, true);
   // Wait until the timer expires BEFORE reaching the barrier: it shuts and blocks safely.
   for (let n = 0; n < Math.ceil((vsw.dur + 1) * 60); n++) step(v, { down: true, x: v.x, y: v.y });
   assert.equal(v.switches[0].a, 0, 'timed barrier closed again');
-  let ev = drag(v, along(VL, v.s, vsw.gs + 40));
+  let ev = walkClear(v.s, vsw.gs + 40);
   assert.ok(ev.some(e => e.t === 'swblock'), 'closed switch barrier stopped the spark safely');
   assert.equal(v.touches, 0); assert.equal(v.held, false);
   // Go back to press the pad again, enter the doorway, and wait past dur: it never closes on the spark!
   step(v, { x: v.x - 80, y: v.y });
   grab(v);
-  drag(v, along(VL, v.s, vsw.s, 4));
+  walkClear(v.s, vsw.s);
   assert.equal(v.switches[0].on, true);
   for (let n = 0; n < 20; n++) step(v, { down: true, x: v.x, y: v.y });
-  drag(v, along(VL, v.s, vsw.gs, 4));
+  walkClear(v.s, vsw.gs);
   for (let n = 0; n < Math.ceil((vsw.dur + 2) * 60); n++) step(v, { down: true, x: v.x, y: v.y });
   assert.equal(v.switches[0].a, 1, 'never closes on the spark');
   assert.equal(v.touches, 0);
-  drag(v, along(VL, v.s, vsw.gs + 100, 4));
+  walkClear(v.s, vsw.gs + 100);
   for (let n = 0; n < 40; n++) step(v, { down: true, x: v.x, y: v.y });
   assert.equal(v.switches[0].a, 0, 'and closes behind it');
 });
