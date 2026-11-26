@@ -516,3 +516,36 @@ test('a PC that moved to a versioned worker address keeps it on every visit', as
   await flush();
   assert.deepEqual(foreign.registered, ['sw.js'], 'only this site\'s own worker address is reused');
 });
+
+test('a look at the site made while offline does not delay the next one once back online', async () => {
+  const active = worker('activated');
+  const owner = registration({ active });
+  const page = controller([owner]);
+  await flush(); await flush();
+  assert.equal(active.latestAsks, 1, 'the first look found nothing (offline)');
+  active.latest = 'abcdef0123456789';
+  page.window.emit('online');
+  await flush(); await flush(); await flush();
+  assert.equal(active.latestAsks, 2, 'coming online looks again at once, not after two minutes');
+  // Coming online while a look is still on its way looks again when it returns.
+  const slow = worker('activated'), slowOwner = registration({ active: slow });
+  let answer;
+  slow.postMessage = function (message, ports) {
+    if (message.type === 'sg:offline-latest') {
+      this.latestAsks++;
+      const reply = v => ports[0].postMessage({ type: 'sg:offline-latest', id: message.id, v, version: this.version });
+      if (this.latestAsks === 1) answer = reply; else queueMicrotask(() => reply(null));
+      return;
+    }
+    worker().postMessage.call(this, message, ports);
+  };
+  const second = controller([slowOwner]);
+  await flush(); await flush();
+  assert.equal(slow.latestAsks, 1);
+  second.window.emit('online');
+  await flush();
+  assert.equal(slow.latestAsks, 1, 'one look at a time');
+  answer(null);
+  await flush(); await flush(); await flush();
+  assert.equal(slow.latestAsks, 2, 'the look made offline is followed by one made online');
+});

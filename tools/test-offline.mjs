@@ -340,13 +340,15 @@ try {
     await page.evaluate(() => { window.failedUpgradeSentinel = 'same-doc'; window.dispatchEvent(new Event('focus')); });
     await page.waitForFunction(() => document.getElementById('offlineStatus').dataset.state === 'ready');
     check(await page.evaluate(version => window.SG_OFFLINE_VERSION === version && window.failedUpgradeSentinel === 'same-doc', v2.version), 'failed upgrade never reloads into the incomplete version');
-    await offlineReload(context, [page]);
     stalePath = null;
 
     // A cache on the way keeps serving the old sw.js. The portal asks the site's own
     // version.json (through its worker), finds v3, and fetches the worker at a new address.
     // An open game is never reloaded: the «new version» button waits for the round to end.
+    // The old sw.js is in place before the page comes back online: coming online looks at
+    // the site at once, and must not find the new worker at the plain address.
     staleWorker = fs.readFileSync(path.join(v2.dir, 'sw.js'));
+    await offlineReload(context, [page]);
     await page.goto(origin + BASE + '#/play/connect-four', { waitUntil: 'load' });
     await page.waitForFunction(() => document.querySelector('#stage iframe') && !document.querySelector('#stage iframe').hasAttribute('inert'));
     const roundFrame = page.frames().find(frame => frame.url().includes('/games/connect-four/'));

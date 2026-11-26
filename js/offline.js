@@ -9,7 +9,7 @@
   var registration = null, starting = false, checking = false, checkingRepair = false, queued = false, queuedRepair = false, sequence = 0, installingTimer = 0, observedWorker = null, shown = '';
   // offeredVersion: a newer version that is verified on this PC and waits for a tap.
   // activeVersion: the version of the worker that answered last; serverCheckAt: the last look at version.json.
-  var offeredVersion = null, activeVersion = null, serverCheckAt = 0, serverChecking = false, updatedAt = 0;
+  var offeredVersion = null, activeVersion = null, serverCheckAt = 0, serverChecking = false, serverAgain = false, updatedAt = 0;
   var SERVER_EVERY = 10 * 60 * 1000, SERVER_SOON = 2 * 60 * 1000;
   // Idle views (the catalog, no typing) reload by themselves; nothing is lost there.
   function safeToRefresh() { return typeof window.SGUpdateSafe === 'function' && window.SGUpdateSafe(); }
@@ -227,7 +227,11 @@
       // Same scope, so the same registration: its updatefound listener follows the install.
       await navigator.serviceWorker.register('sw.js?v=' + latest, { updateViaCache: 'none' });
     } catch (e) { /* the site is unreachable; the PC keeps its working version */ }
-    finally { serverChecking = false; }
+    finally {
+      serverChecking = false;
+      // The PC came back online while this look was on its way: look again now.
+      if (serverAgain) { serverAgain = false; checkServer(SERVER_SOON); }
+    }
   }
   // Keep the worker address this PC already uses (sw.js, or sw.js?v=… after the check above):
   // registering another address would make every visit install the same worker again.
@@ -282,7 +286,12 @@
   setInterval(function () { checkServer(SERVER_EVERY); }, 60 * 1000);
   navigator.serviceWorker.addEventListener('controllerchange', function () { inspect(false); });
   // Reconnecting repairs an incomplete copy; a ready one only needs the quick check.
-  window.addEventListener('online', function () { inspect(shown !== 'ready'); });
+  // A look at version.json made while offline found nothing, so coming back online looks again.
+  window.addEventListener('online', function () {
+    serverCheckAt = 0;
+    if (serverChecking) serverAgain = true;
+    inspect(shown !== 'ready');
+  });
   window.addEventListener('focus', function () { if (!document.hidden) inspect(false); });
   document.addEventListener('visibilitychange', function () { if (!document.hidden) inspect(false); });
   if (document.readyState === 'complete') start();
