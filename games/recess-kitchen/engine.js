@@ -199,9 +199,11 @@
 
   var LEVELS = [
     {
+      // The first level: one burger at a time, a longer round and one burger served wins it.
+      // (In November 2026 no child won it: 9 of 11 rounds were left within a minute.)
       index: 0, id: '1-1', canteen: 0, name: 'برغر الصباح',
-      duration: 90, maxOrders: 3, spawnEvery: 10.5, burnGrace: 8.5,
-      stars: [180, 420, 700],
+      duration: 120, maxOrders: 2, spawnEvery: 14, burnGrace: 12,
+      stars: [100, 330, 600],
       recipes: ['burger'],
       spawns: [{ x: 3.5, y: 3.5 }, { x: 7.5, y: 3.5 }],
       grid: [
@@ -216,8 +218,8 @@
     },
     {
       index: 1, id: '1-2', canteen: 0, name: 'الجبن اللذيذ',
-      duration: 90, maxOrders: 3, spawnEvery: 10.0, burnGrace: 8.0,
-      stars: [220, 480, 800],
+      duration: 100, maxOrders: 3, spawnEvery: 11.5, burnGrace: 9.5,
+      stars: [180, 440, 760],
       recipes: ['burger', 'cheeseburger'],
       spawns: [{ x: 3.5, y: 2.5 }, { x: 7.5, y: 2.5 }],
       grid: [
