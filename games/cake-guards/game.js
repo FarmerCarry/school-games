@@ -52,7 +52,7 @@
   let screen = 'title', world = null, levelIdx = 0, endless = false, endlessBest = 0, speed = 1;
   let placing = null, selected = -1, menuPad = -1, hoverPad = -1, mouse = { x: -100, y: -100 };
   let time = 0, ending = null, result = null, resultLock = 0, busyT = 0;
-  let floats = [], zaps = [], rings = [], tutorial = 0, hud = {};
+  let floats = [], zaps = [], rings = [], tutorial = 0, hud = {}, autoWaveT = 0;
 
   /* -------------------------------------------------------------- screens */
   const SCREENS = ['title', 'levels', 'cakes', 'pause', 'win', 'lose', 'over'];
@@ -174,7 +174,7 @@
     if (stars > prev) save.stars[levelIdx] = stars;
     persist();
     Kit.stats.end('win', stars);
-    if (tutorial) Kit.stats.tutorial('done');
+    endTutorial();
     const cake = CG.CAKES.find(c => c.stars > before && c.stars <= totalStars());
     result = { stars: stars, prev: prev, hearts: world.hearts, cake: cake, endless: !wasOpen && endlessOpen() };
   }
@@ -380,17 +380,37 @@
   // The first level teaches by doing: build on the glowing pad, then start the wave.
   function showTutorial() {
     if (!world || screen !== 'play') return;
-    if (tutorial === 1) hint(placing ? 'انقر على دائرة بجانب الطريق لتضع البرج' : 'انقر على الدائرة المتوهجة لتبني برجًا');
+    if (tutorial === 1) hint(placing ? 'انقر على دائرة بجانب الطريق لتضع البرج' : 'انقر على الدائرة المتوهجة لتبني برجًا', 0, true);
     if (tutorial === 2) {
-      if (world.phase === 'build') hint('رائع! الآن اضغط «ابدأ الموجة» أو مسافة');
+      if (world.phase === 'build') hint('رائع! الهلام قادم… اضغط «ابدأ الموجة» أو مسافة', 0, true);
       else tutorial = 3;
     }
-    if (tutorial === 3) { tutorial = 4; hint('الأبراج ترمي الهلام وحدها. ابنِ المزيد بالعملات!', 3500); }
+    if (tutorial === 3) { endTutorial(); hint('الأبراج ترمي الهلام وحدها. ابنِ المزيد بالعملات!', 3500); }
+  }
+  // The tutorial is two steps (build, start the wave), ends when the first wave starts and can
+  // be skipped: in November only 1 of 13 children who began it on level 1 finished that level.
+  function endTutorial() {
+    if (tutorial > 0 && tutorial < 4) { tutorial = 4; Kit.stats.tutorial('done'); }
+  }
+  function skipTutorial() {
+    S.click();
+    endTutorial();
+    hideHint();
+    if (world && world.phase === 'build' && !world.pads.some(p => p.tower) && glow >= 0) tryBuild(glow, 'pop');
+    if (world && world.phase === 'build') callWave();
+    focusGame();
   }
   let hintTimer = 0;
-  function hint(text, ms) {
+  function hint(text, ms, skippable) {
     const el = $('hint');
     el.textContent = text; el.hidden = false;
+    if (skippable) {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'hint-skip'; b.textContent = 'تخطَّ';
+      b.addEventListener('pointerdown', e => e.stopPropagation());
+      b.addEventListener('click', skipTutorial);
+      el.appendChild(b);
+    }
     clearTimeout(hintTimer);
     if (ms) hintTimer = setTimeout(hideHint, ms);
   }
@@ -502,6 +522,8 @@
     mouse = p; hoverPad = pad;
     if (pad >= 0 && world.pads[pad].tower) { select(pad); return; }
     if (pad >= 0 && placing) { tryBuild(pad, placing); return; }
+    // the tutorial's first step is one click: the glowing pad builds the popcorn tower
+    if (pad >= 0 && tutorial === 1 && pad === glow) { tryBuild(pad, 'pop'); return; }
     if (pad >= 0) { openBuildMenu(pad); return; }
     if (placing) { placing = null; refreshBar(); showTutorial(); }
     closePanel();
@@ -619,6 +641,12 @@
         busyT += dt;
         if (busyT >= 1) { busyT = 0; if (world.phase === 'wave') Kit.stats.busy(); }
         if (tutorial === 2 && world.phase !== 'build') showTutorial();
+        // Level 1's first wave starts by itself 6 s after the first tower (children did not
+        // find the start button and left while nothing happened).
+        if (!endless && levelIdx === 0 && world.phase === 'build' && world.wave === 0 && world.pads.some(p => p.tower)) {
+          autoWaveT += dt;
+          if (autoWaveT >= 6) callWave();
+        } else autoWaveT = 0;
       } else {
         // The board keeps its celebration going until the result screen opens.
         ending.t -= dt;
@@ -735,6 +763,7 @@
     get world() { return world; },
     save: save,
     // Where pad i is on the page, for tests that click it like a player.
+    get glow() { return glow; },
     padPoint: function (i) { const p = world.pads[i], r = canvas.getBoundingClientRect(); return { x: r.left + p.x * view.scale, y: r.top + p.y * view.scale }; },
     start: function (i) { startLevel(i); },
     endless: function () { startEndless(); },

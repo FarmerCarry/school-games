@@ -218,8 +218,10 @@ test('the first level teaches by doing, and the keyboard covers waves, speed and
     return page.locator('#hint').evaluate(e => e.hidden ? '' : e.textContent);
   };
   assert.match(await hintAfterPause(), /الدائرة المتوهجة/);
-  await clickPad(page, 0);
-  await page.locator('#panel .cg-card[data-type="pop"]').click();
+  // the glowing pad builds the popcorn tower in one click
+  await clickPad(page, await page.evaluate(() => __game.glow));
+  assert.equal((await state(page)).towers, 1);
+  assert.equal(await page.locator('#panel').isHidden(), true, 'no menu to choose from');
   assert.match(await page.locator('#hint').textContent(), /ابدأ الموجة/);
   assert.match(await hintAfterPause(), /ابدأ الموجة/);
   await page.keyboard.press('KeyF');
@@ -242,4 +244,24 @@ test('reduced motion keeps the banner readable and removes it by a timer', async
   const banner = await page.$eval('#banner', e => ({ hidden: e.hidden, opacity: getComputedStyle(e).opacity, animation: getComputedStyle(e).animationName }));
   assert.deepEqual(banner, { hidden: false, opacity: '1', animation: 'none' });
   await page.waitForFunction(() => document.getElementById('banner').hidden, null, { timeout: 5000 });
+});
+
+test('the first level\'s tutorial can be skipped, and its first wave starts by itself after the first tower', async t => {
+  const page = await game(t);
+  await page.keyboard.press('Enter');
+  await page.evaluate(() => cg.step(1));
+  await page.locator('#hint .hint-skip').click({ force: true }); // the hint gently floats
+  await page.evaluate(() => cg.step(2));
+  let s = await state(page);
+  assert.deepEqual({ towers: s.towers, phase: s.phase, wave: s.wave }, { towers: 1, phase: 'wave', wave: 1 }, 'skip builds the first tower and starts the wave');
+  // A PC that already won level 1: no tutorial, a tower, and the wave still comes by itself.
+  await page.evaluate(() => { __game.save.stars[0] = 1; __game.start(0); });
+  await page.evaluate(() => cg.step(1));
+  await clickPad(page, 0);
+  await page.locator('#panel .cg-card[data-type="pop"]').click();
+  await page.evaluate(() => cg.step(30));
+  assert.equal((await state(page)).phase, 'build', 'not yet after half a second');
+  await page.evaluate(() => cg.step(6 * 60));
+  s = await state(page);
+  assert.equal(s.phase, 'wave', 'the first wave started by itself');
 });
