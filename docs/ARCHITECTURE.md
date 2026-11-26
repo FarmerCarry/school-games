@@ -109,6 +109,7 @@ sender is on does it post `sg:telemetry` and run one 10 s timer. Its messages wi
 | game → portal | `{ type: 'sg:ready', version: 1 }` | `Kit.ready()`: the game initialised and can be shown. |
 | game → portal | `{ type: 'sg:warn', version: 1, message }` | One stray error after ready (at most once per 10 s). |
 | game → portal | `{ type: 'sg:error', version: 1, message }` | `Kit.fail()` or a failed start: the portal offers Retry. |
+| game → portal | `{ type: 'sg:round', version: 1, phase, result }` | `Kit.stats.round()` (`phase: 'start'`) and `Kit.stats.end()` (`phase: 'end'`, `result` the result's first letter: `w`, `l`, `d`, `e`, `q`). Only after ready and while embedded, whether or not statistics are on: the portal offers a "play next" game between rounds. |
 | game → portal | `'sg:focus-portal'` | Shift+Tab from the game surface: keyboard focus goes back to the portal. |
 | game → portal | `{ type: 'sg:telemetry', version: 2, e, f, il, ev }` | Anonymous play statistics ([`TELEMETRY.md`](TELEMETRY.md), "Kit"): engaged ms, frames, input latency, round events. Only after ready, while embedded and told `telemetry: true`. |
 | portal → game | `{ type: 'sg:request-ready' }` | Repeat `sg:ready` if the game is already ready. |
@@ -176,8 +177,13 @@ Every sound is a one-shot under 1.5 s. Juice never loops and has no music API.
 ## Portal
 
 The home page shows the starter game (Bubble Bop), the recently played games, favourites,
-category chips, quick filters and search. A game opens in an iframe with fullscreen,
-restart and favourite buttons, and its controls and tips beside it. The topbar 🔊 button
+category chips and quick filters (there is no search box: children rarely used it, and
+old `#/search/…` links open the home page). Featured games (catalog `hot: <rank>`, chosen
+from the play statistics as the games children stay with longest) lead the list. A game
+opens in an iframe with fullscreen, restart and favourite buttons, and its controls and tips
+beside it. When a round ends (`sg:round`), a small "play next" card in the stage's corner
+offers one featured game that shares categories with this one; it hides when the next round
+starts, and ✕ hides it for the rest of the visit. The topbar 🔊 button
 saves `sg:site:muted` (which Kit and Juice read) and tells the open game at once. The
 reduced-motion choice `sg:site:motion` is shared with the games through `Kit.motion`.
 The portal stores only favourites, recent games and these two preferences, and, while its

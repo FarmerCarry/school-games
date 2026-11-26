@@ -383,8 +383,7 @@ downloaded folder instead reports that it is running locally. Each file's bytes 
 hashed when it is cached; later visits only confirm that every verified file is
 still there, so slow disks are not re-read on every visit. Retry hashes them again.
 
-When a newer complete version is cached, tabs on the games list (without an active
-search cursor) reload into it automatically; running or paused games and game menus keep
+When a newer complete version is cached, tabs on the games list reload into it automatically; running or paused games and game menus keep
 their session uninterrupted, then reload automatically as soon as the player returns to
 the games list. Before reloading, the controller verifies cache completeness again and
 defers if a game opened during that check. It also works offline. The first installation

@@ -7,7 +7,7 @@
  *   #/                home
  *   #/c/<category>    one category
  *   #/favorites       saved favorites
- *   #/search/<text>   search results
+ *   #/search/<text>   (old links) the home page
  *   #/play/<slug>     play a game
  *
  * Data comes from js/catalog.js: window.SITE, window.CATEGORIES, window.GAMES.
@@ -30,11 +30,7 @@
     favsPrompt: 'افتح لعبة واضغط زر القلب لحفظها هنا.',
     more: 'ألعاب أخرى ستحبها',
     toPlay: ' تنتظرك!',
-    searchTitle: 'ابحث عن لعبة',
-    searchPrompt: 'اكتب اسم لعبة في مربع البحث بالأعلى',
-    searchNone: 'لم نجد أي لعبة',
     found: function (n) { return n === 1 ? 'وجدنا لعبة واحدة' : n === 2 ? 'وجدنا لعبتين' : 'وجدنا ' + nGames(n); },
-    noMatch: 'أوه! لا توجد لعبة بهذا الاسم. جرّب واحدة من هذه!',
     oops: 'أوه!',
     noCat: 'لم نجد هذا القسم.',
     noGame: 'هذه اللعبة مختبئة! اختر لعبة أخرى.',
@@ -79,12 +75,14 @@
     oneButtonHint: 'زر واحد أثناء اللعب؛ قد تحتاج الفأرة لاختيار القوائم والترقيات.',
     friendHint: 'العبوا معًا على الجهاز نفسه — دون حسابات.',
     titleNotFound: 'لم نجد اللعبة',
-    titleSearch: 'بحث: ',
     gameFallback: 'لعبة',
     starterTitle: 'ابدأ من هنا',
     starterGo: 'هيا',
     starterBadge: 'نقطة البداية',
-    mute: 'كتم الصوت'
+    mute: 'كتم الصوت',
+    nextTitle: 'العب بعدها',
+    nextGo: 'هيا',
+    nextClose: 'إخفاء'
   };
   // Arabic counting: 1 لعبة واحدة, 2 لعبتان, 3-10 ألعاب, 11+ لعبة.
   function nGames(n) {
@@ -358,122 +356,6 @@
       inner + '</section>';
   }
 
-  /* ------------------------------------------------------------ search */
-  // Arabic-aware normalizing: no tashkeel/tatweel, one form of alef, ة→ه, ى→ي,
-  // ؤ→و, ئ→ي, Arabic-Indic digits → 0-9, Latin lowercased.
-  function norm(s) {
-    return String(s || '').toLowerCase()
-      .replace(/[ً-ٰٟۖ-ۭ]/g, '')
-      .replace(/ـ/g, '')
-      .replace(/[آأإٱ]/g, 'ا')
-      .replace(/ة/g, 'ه')
-      .replace(/[ىی]/g, 'ي')
-      .replace(/ؤ/g, 'و')
-      .replace(/ئ/g, 'ي')
-      .replace(/ک/g, 'ك')
-      .replace(/[٠-٩]/g, function (d) { return String(d.charCodeAt(0) - 0x660); })
-      .replace(/[۰-۹]/g, function (d) { return String(d.charCodeAt(0) - 0x6F0); })
-      .replace(/[^a-z0-9ء-ي ]+/g, ' ')
-      .replace(/\s+/g, ' ').trim();
-  }
-  var MULTI_WORDS = ' لاعبان لاعبين اثنان اثنين صديق صديقك صديقي اصدقاء ضد جماعي 2 two player players friend friends multiplayer versus 2p';
-  var HOT_WORDS = ' رائج رائجه مشهور مشهوره حماس hot popular';
-  var STARTER_WORDS = ' ابدأ هنا نقطة البداية مبتدئ beginner start here tutorial first mouse keyboard';
-  var INDEX = Object.create(null);
-  function idx(g) {
-    if (INDEX[g.slug]) return INDEX[g.slug];
-    var cats = g.cats.map(function (id) { return CAT_BY_ID[id] ? CAT_BY_ID[id].label + ' ' + id + ' ' + (CAT_BY_ID[id].tags || '') : id; }).join(' ');
-    var ix = {
-      t: norm(g.title),
-      en: norm((g.en || '') + ' ' + g.slug.replace(/-/g, ' ')),
-      h: norm(g.title + ' ' + (g.en || '') + ' ' + g.slug.replace(/-/g, ' ') + ' ' + (g.blurb || '') + ' ' + (g.tags || '') + ' ' + cats +
-        (isMulti(g) ? MULTI_WORDS : '') + (g.hot ? HOT_WORDS : '') + (g.starter ? STARTER_WORDS : ''))
-    };
-    ix.words = (ix.t + ' ' + ix.en).split(' ').filter(Boolean);
-    INDEX[g.slug] = ix;
-    return ix;
-  }
-  function subseq(needle, hay) {
-    var j = 0;
-    for (var i = 0; i < hay.length && j < needle.length; i++) if (hay[i] === needle[j]) j++;
-    return j === needle.length;
-  }
-  // Levenshtein distance, stopping early when it's already bigger than max.
-  function lev(a, b, max) {
-    if (Math.abs(a.length - b.length) > max) return max + 1;
-    var prev = [], cur, i, j;
-    for (j = 0; j <= b.length; j++) prev[j] = j;
-    for (i = 1; i <= a.length; i++) {
-      cur = [i];
-      var rowMin = i;
-      for (j = 1; j <= b.length; j++) {
-        cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
-        if (cur[j] < rowMin) rowMin = cur[j];
-      }
-      if (rowMin > max) return max + 1;
-      prev = cur;
-    }
-    return prev[b.length];
-  }
-  // Also try each word without the Arabic "ال" (the) and "و" (and) prefixes.
-  function variants(w) {
-    var v = [w];
-    if (w.length > 3 && w.indexOf('ال') === 0) v.push(w.slice(2));
-    if (w.length > 3 && w[0] === 'و') v.push(w.slice(1));
-    return v;
-  }
-  function wordScore(w, ix) {
-    var titles = [ix.t, ix.en], best = 0;
-    variants(w).forEach(function (x, vi) {
-      var s = 0;
-      titles.forEach(function (t) {
-        if (!t) return;
-        if (t.indexOf(x) === 0) s = Math.max(s, 10);
-        else if ((' ' + t).indexOf(' ' + x) >= 0 || (' ' + t).indexOf(' ال' + x) >= 0) s = Math.max(s, 7);
-        else if (x.length >= 4 && t.indexOf(x) >= 0) s = Math.max(s, 5); // inside a word: only longer bits
-      });
-      if (!s && ((' ' + ix.h).indexOf(' ' + x) >= 0 || (' ' + ix.h).indexOf(' ال' + x) >= 0)) s = 3;
-      if (!s && x.length >= 4 && ix.h.indexOf(x) >= 0) s = 1;
-      if (vi) s *= 0.9;
-      best = Math.max(best, s);
-    });
-    return best;
-  }
-  function search(q) {
-    var words = norm(q).split(' ').filter(Boolean);
-    if (!words.length) return [];
-    var scored = [];
-    GAMES.forEach(function (g) {
-      var ix = idx(g), score = 0;
-      var all = words.every(function (w) { var s = wordScore(w, ix); score += s; return s > 0; });
-      if (all) scored.push([score + (g.hot ? 0.5 : 0), g]);
-    });
-    if (!scored.length) {
-      // Forgiving fallback for spelling slips: close words (1-2 letters off),
-      // or the letters in order inside the title.
-      var flat = words.join('');
-      GAMES.forEach(function (g) {
-        var ix = idx(g), score = 0;
-        var ok = words.every(function (w) {
-          if (w.length < 3) return true;
-          var max = w.length >= 6 ? 2 : 1, bestD = max + 1;
-          ix.words.forEach(function (tw) {
-            variants(tw).forEach(function (x) {
-              bestD = Math.min(bestD, lev(w, x, max));
-              if (x.length > w.length) bestD = Math.min(bestD, lev(w, x.slice(0, w.length), max));
-            });
-          });
-          if (bestD <= max) { score += 3 - bestD; return true; }
-          return false;
-        });
-        if (ok && score > 0) scored.push([score, g]);
-        else if (flat.length >= 3 && (subseq(flat, ix.t.replace(/ /g, '')) || subseq(flat, ix.en.replace(/ /g, '')))) scored.push([0.5, g]);
-      });
-    }
-    scored.sort(function (a, b) { return b[0] - a[0]; });
-    return scored.map(function (s) { return s[1]; });
-  }
-
   /* ------------------------------------------------------------ routes */
   function parseRoute() {
     var h = (location.hash || '').replace(/^#\/?/, '');
@@ -482,7 +364,6 @@
     var rest = dec(parts.slice(1).join('/'));
     if (head === 'c' && rest) return { name: 'cat', id: rest };
     if (head === 'favorites') return { name: 'favorites' };
-    if (head === 'search') return { name: 'search', q: rest };
     if (head === 'play' && rest) return { name: 'play', slug: rest };
     if (head === 'quick' && rest) return { name: 'quick', id: rest };
     return { name: 'home' };
@@ -513,16 +394,23 @@
       '<p class="filter-note">' + (route.id === 'short' ? T.estimates : route.id === 'simple' ? T.oneButtonHint : T.friendHint) + '</p>' + gridHTML(list);
   }
 
+  // A featured game's place: catalog `hot: <rank>` (1 leads; `hot: true` comes after the ranked).
+  function hotRank(g) { return typeof g.hot === 'number' && g.hot > 0 ? g.hot : 99; }
+  function byHotRank(list) {
+    return list.map(function (g, i) { return [g, i]; }).sort(function (a, b) {
+      return hotRank(a[0]) - hotRank(b[0]) || a[1] - b[1];
+    }).map(function (x) { return x[0]; });
+  }
   function hotList() {
     var hot = GAMES.filter(function (g) { return g.hot; });
-    return (hot.length ? hot : GAMES).slice(0, 6);
+    return (hot.length ? byHotRank(hot) : GAMES).slice(0, 6);
   }
 
   // Stable featured-first order, shared by home and category views.
-  // The beginner lesson leads, then hot games, then the rest.
+  // The beginner lesson leads, then hot games by rank, then the rest.
   function featuredFirst(list) {
     return list.filter(function (g) { return g.starter; })
-      .concat(list.filter(function (g) { return g.hot && !g.starter; }))
+      .concat(byHotRank(list.filter(function (g) { return g.hot && !g.starter; })))
       .concat(list.filter(function (g) { return !g.hot && !g.starter; }));
   }
   function starterCard(g) {
@@ -596,23 +484,6 @@
       '<section class="sec">' + gridHTML(featuredFirst(list)) + '</section>';
   }
 
-  function renderSearch(route) {
-    var q = (route.q || '').trim();
-    var res = search(q);
-    var head = '<div class="banner search-banner" style="--cc:#00a6ff"><span class="banner-ico" aria-hidden="true">🔍</span><div>' +
-      '<h1>' + (q ? '«<bdi>' + esc(q) + '</bdi>»' : T.searchTitle) + '</h1>' +
-      '<p>' + (q ? (res.length ? T.found(res.length) : T.searchNone) : T.searchPrompt) + '</p></div></div>';
-    if (res.length) {
-      return head + '<section class="sec">' + gridHTML(res) + '</section>';
-    }
-    if (!q) {
-      var abc = GAMES.slice().sort(function (a, b) { return a.title.localeCompare(b.title, 'ar'); });
-      return head + sectionHTML('🎮', T.all, gridHTML(abc), '<span class="count">' + nGames(GAMES.length) + '</span>');
-    }
-    return head + '<div class="empty small"><div class="empty-emoji">🙈</div><p>' + T.noMatch + '</p></div>' +
-      sectionHTML('🔥', T.hot, gridHTML(hotList()));
-  }
-
   function notFound(msg) {
     return '<div class="empty"><div class="empty-emoji">🙈</div><h2>' + T.oops + '</h2><p>' + esc(msg) + '</p>' +
       '<a class="big-btn" href="#/">' + T.back + '</a></div>' +
@@ -652,7 +523,7 @@
     // Related: shared categories first (most overlap), then hot, then the rest.
     var more = GAMES.filter(function (o) { return o !== g; }).map(function (o) {
       var shared = o.cats.filter(function (id) { return g.cats.indexOf(id) >= 0; }).length;
-      return [shared * 10 + (o.hot ? 2 : 0), o];
+      return [shared * 10 + (o.hot ? 2 + (30 - Math.min(hotRank(o), 30)) / 100 : 0), o];
     }).sort(function (a, b) { return b[0] - a[0]; }).slice(0, 6).map(function (x) { return x[1]; });
 
     return '<div class="play" id="play">' +
@@ -661,6 +532,7 @@
             '<div class="stage loading" id="stage" style="--c:' + g.color + '">' +
               '<div class="stage-loading" role="status"><svg aria-hidden="true" viewBox="0 0 64 64" width="84" height="84">' + iconSVG() + '</svg><span>' + T.loading + esc(g.title) + '…</span></div>' +
               '<div class="stage-msg" id="stageMsg" role="alert" hidden><div class="empty-emoji" aria-hidden="true">🛠️</div><b>' + T.loadFailed + '</b><span>' + T.loadFailedSub + '</span><div class="stage-actions"><button type="button" class="pbtn" id="gameRetry">' + T.retry + '</button><a class="pbtn" href="' + esc(playReturn ? playReturn.hash : '#/') + '">' + T.returnGames + '</a></div></div>' +
+              '<div class="next-card" id="nextCard" hidden></div>' +
             '</div>' +
             '<div class="play-bar" id="playBar">' +
               '<a class="pbtn back" id="backGames" href="' + esc(playReturn ? playReturn.hash : '#/') + '" aria-label="' + T.returnGames + '" title="' + T.returnGames + '"><span aria-hidden="true">‹</span><span class="pb-lbl">' + T.backShort + '</span></a>' +
@@ -693,10 +565,9 @@
   var frameAt = 0;        // when the current frame was made (performance.now())
   function routeHash() { return location.hash || '#/'; }
   function frameEl() { return $('#stage iframe'); }
-  // A paused game, its title/menu, a pending launch, or active typing in search own the view.
+  // A paused game, its title/menu or a pending launch own the view.
   window.SGUpdateSafe = function () {
-    var a = document.activeElement;
-    return renderedHash !== null && !current && !frameEl() && parseRoute().name !== 'play' && !(a && a.id === 'q');
+    return renderedHash !== null && !current && !frameEl() && parseRoute().name !== 'play';
   };
   // The anonymous play statistics sender (js/telemetry.js, docs/TELEMETRY.md). It does
   // nothing unless the fast build gave it the school's statistics server; tm() skips a
@@ -726,8 +597,6 @@
     if (portalFocus) return;
     var f = frameEl();
     if (!f || !frameReady) return;
-    var a = document.activeElement;
-    if (a && a.id === 'q') return; // don't steal focus from someone typing a search
     try { f.focus({ preventScroll: true }); } catch (e) { try { f.focus(); } catch (e2) { /* ignore */ } }
     try { if (f.contentWindow) f.contentWindow.focus(); } catch (e) { /* ignore */ }
   }
@@ -761,9 +630,81 @@
       $('#stage').setAttribute('aria-busy', 'false');
       sendPreferences();
       focusGame();
-    } else if (type === 'sg:error') failFrame(f, 'x');
+    } else if (type === 'sg:round') onRound(e.data);
+    else if (type === 'sg:error') failFrame(f, 'x');
     else if (type === 'sg:warn') noteGameWarn(e.data);
   }
+  /* --------------------------------------------------------- play next */
+  // Between rounds (Kit's sg:round) the stage offers one next game, so a visit does not
+  // have to end at the menu. The pick is a featured game (catalog `hot` rank: the games
+  // children stay with), the more categories it shares with this game the better, and
+  // never this game or one of the last few played on this PC. The card waits a moment
+  // after a round ends, goes away when the next round starts, and ✕ hides it for the
+  // rest of the visit. It never takes keyboard focus from the game.
+  var nextTimer = 0, nextShut = false;
+  var NEXT_DELAY = 1200;
+  function nextPick(slug) {
+    var g = BY_SLUG[slug];
+    if (!g) return null;
+    var skip = getRecent().slice(0, 4), best = null, bestScore = -1;
+    GAMES.forEach(function (o) {
+      if (o === g || o.starter || skip.indexOf(o.slug) >= 0) return;
+      var shared = o.cats.filter(function (id) { return g.cats.indexOf(id) >= 0; }).length;
+      var score = (o.hot ? 40 - Math.min(hotRank(o), 30) : 0) + shared * 6 + (isMulti(o) && isMulti(g) ? 2 : 0);
+      if (score > bestScore) { best = o; bestScore = score; }
+    });
+    return best;
+  }
+  function nextCardHTML(o) {
+    return '<a class="next-go" href="#/play/' + enc(o.slug) + '" data-next="' + esc(o.slug) + '" style="--c:' + o.color + '">' +
+        '<span class="next-art"><img src="' + thumbSrc(o.slug) + '" alt="" decoding="async" draggable="false" onerror="this.parentNode.removeChild(this)"></span>' +
+        '<span class="next-copy"><small>' + T.nextTitle + '</small><b>' + esc(o.title) + '</b></span>' +
+        '<span class="next-btn" aria-hidden="true">' + T.nextGo + ' ▶</span>' +
+      '</a>' +
+      '<button type="button" class="next-x" aria-label="' + T.nextClose + '" title="' + T.nextClose + '"><span aria-hidden="true">✕</span></button>';
+  }
+  function hideNext() {
+    clearTimeout(nextTimer);
+    var card = $('#nextCard');
+    if (card && !card.hidden) { card.hidden = true; card.classList.remove('show'); }
+  }
+  function showNext() {
+    var card = $('#nextCard'), o = current && nextPick(current);
+    if (!card || !o || nextShut || !frameReady) return;
+    card.innerHTML = nextCardHTML(o);
+    card.setAttribute('aria-label', T.nextTitle + ': ' + o.title);
+    card.hidden = false;
+    void card.offsetWidth;
+    card.classList.add('show');
+  }
+  function onRound(data) {
+    if (data.phase === 'start') hideNext();
+    else if (data.phase === 'end' && !nextShut) {
+      clearTimeout(nextTimer);
+      nextTimer = setTimeout(showNext, NEXT_DELAY);
+    }
+  }
+  function setupNext() {
+    var card = $('#nextCard');
+    nextShut = false;
+    clearTimeout(nextTimer);
+    if (!card) return;
+    // The stage's own mousedown/click hand the keys to the game; a click here is for the card.
+    card.addEventListener('mousedown', function (e) { e.stopPropagation(); });
+    card.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var go = e.target.closest('.next-go'), x = e.target.closest('.next-x');
+      if (go) {
+        juice('select');
+        tm('tag', go.getAttribute('data-next'), 'related');
+      } else if (x) {
+        nextShut = true;
+        hideNext();
+        activateGame();
+      }
+    });
+  }
+
   // A stray error after the game is ready. Count it on this page only: the
   // text is not stored or sent, and the iframe is left alone.
   var gameWarns = 0;
@@ -779,6 +720,7 @@
     $('#stage').classList.remove('loading');
     $('#stage').setAttribute('aria-busy', 'false');
     $('#stageMsg').hidden = false;
+    hideNext();
     // Dispose the browsing context, including timers, audio and pending saves.
     // Merely hiding a game after a runtime error leaves its simulation alive.
     tm('gone');
@@ -796,6 +738,7 @@
     if (old) { tm('gone'); old.parentNode.removeChild(old); }
     var msg = $('#stageMsg');
     if (msg) msg.hidden = true;
+    hideNext();
     stage.classList.add('loading');
     stage.setAttribute('aria-busy', 'true');
     var f = document.createElement('iframe');
@@ -868,6 +811,7 @@
   function setupPlay(slug) {
     tm('open', slug, !renderedHash);
     pushRecent(slug);
+    setupNext();
     mountFrame(slug);
     var stage = $('#stage');
     stage.addEventListener('mousedown', activateGame);
@@ -931,7 +875,6 @@
   }
 
   /* ------------------------------------------------------------ render */
-  var typing = false;
   var chipsKey = null;
   function render() {
     var route = parseRoute();
@@ -940,12 +883,13 @@
     var active = document.activeElement;
     var previousGame = current;
     var returnState = previousGame && route.name !== 'play' && playReturn && routeHash() === playReturn.hash ? playReturn : null;
-    var moveFocus = !typing && active && ($('#chips').contains(active) || $('#quickFilters').contains(active) || app.contains(active));
+    var moveFocus = active && ($('#chips').contains(active) || $('#quickFilters').contains(active) || app.contains(active));
     if (route.name === 'play' && !current && renderedHash) {
       playReturn = pendingReturn || { hash: renderedHash, scroll: window.pageYOffset || 0, slug: route.slug };
     }
     pendingReturn = null;
     clearTimeout(readyTimer);
+    clearTimeout(nextTimer);
     if (current && route.name !== 'play') exitFullscreen();
     body.className = 'route-' + route.name;
     var nextChipsKey = route.name + (route.id || '');
@@ -954,13 +898,6 @@
       $('#quickFilters').innerHTML = quickHTML(route);
       chipsKey = nextChipsKey;
     }
-    var q = $('#q');
-    if (route.name !== 'search') {
-      q.value = '';
-      if (document.activeElement === q && route.name === 'play') q.blur();
-    }
-    if (route.name === 'search' && document.activeElement !== q) q.value = route.q || '';
-
     var html, title, name = noEmoji(SITE.name);
     current = null;
     if (route.name === 'play') {
@@ -976,9 +913,6 @@
     } else if (route.name === 'favorites') {
       html = renderFavorites();
       title = T.favs + ' — ' + name;
-    } else if (route.name === 'search') {
-      html = renderSearch(route);
-      title = (route.q ? T.titleSearch + route.q : T.searchTitle) + ' — ' + name;
     } else if (route.name === 'quick') {
       html = renderQuick(route);
       title = (QUICK[route.id] ? QUICK[route.id].label + ' — ' : '') + name;
@@ -994,11 +928,10 @@
     // fullscreenchange comes only after the fullscreen stage is replaced here.
     parkToast();
     app.innerHTML = html;
-    $('#searchStatus').textContent = route.name === 'search' ? ((route.q || '').trim() ? T.found(search(route.q).length) : T.searchPrompt) : '';
     document.title = title;
     fitStage();
     if (current) setupPlay(current);
-    if (!typing) window.scrollTo(0, returnState ? returnState.scroll : 0);
+    window.scrollTo(0, returnState ? returnState.scroll : 0);
     // A replaced navigation link must not leave keyboard users at the document root.
     // The heading announces the destination; the next Tab reaches its games.
     if (!current && (moveFocus || returnState)) {
@@ -1027,7 +960,6 @@
       }
     }
     renderedHash = routeHash();
-    typing = false;
     window.dispatchEvent(new Event('sg:sessionchange'));
   }
 
@@ -1059,11 +991,6 @@
       e.preventDefault();
       activateGame();
       return;
-    }
-    // "/" focuses the search box (the same key is "ظ" on an Arabic keyboard).
-    if (!current && !inField && (e.key === '/' || e.code === 'Slash') && !e.ctrlKey && !e.metaKey && !e.altKey) {
-      e.preventDefault();
-      $('#q').focus();
     }
   }
 
@@ -1122,32 +1049,6 @@
       else if (target) target.focus();
     });
 
-    var q = $('#q');
-    q.addEventListener('input', function () {
-      var v = q.value.replace(/^\s+/, '');
-      var onSearch = parseRoute().name === 'search';
-      typing = true;
-      if (v) go('#/search/' + enc(v), onSearch);
-      else if (onSearch) go('#/', true);
-      else typing = false;
-    });
-    var qBlurTimer = 0;
-    q.addEventListener('focus', function () { clearTimeout(qBlurTimer); });
-    q.addEventListener('blur', function () {
-      clearTimeout(qBlurTimer);
-      qBlurTimer = setTimeout(function () { window.dispatchEvent(new Event('sg:sessionchange')); }, 300);
-    });
-    q.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape') { q.value = ''; q.blur(); if (parseRoute().name === 'search') go('#/', true); }
-    });
-    $('#searchForm').addEventListener('submit', function (e) {
-      e.preventDefault();
-      var res = search(q.value);
-      if (res.length === 1) { q.blur(); tm('tag', res[0].slug, 'search'); go('#/play/' + enc(res[0].slug)); return; }
-      // Several results: hand keyboard focus to the first one.
-      var first = $('#app .tile');
-      if (res.length && first) first.focus(); else q.blur();
-    });
     $('#surprise').addEventListener('click', surprise);
     window.addEventListener('keydown', onKey, true);
     window.addEventListener('hashchange', render);

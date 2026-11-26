@@ -251,6 +251,12 @@
   listen('pagehide', function (e) { quitOpen(!(e && e.persisted)); send(e); });
   listen('pointermove', engage);
   listen('wheel', engage);
+  // The portal hears when a round starts and ends (sg:round), whether or not statistics
+  // are on, so it can offer the next game between rounds. Only the phase and the result's
+  // letter: no score, no id.
+  function roundNews(phase, code) {
+    if (ready && !failed) tellPortal({ type: 'sg:round', version: 1, phase: phase, result: code || '' });
+  }
   Kit.stats = {
     // A new round while one is open ends the open one as a quit.
     round: function (id) {
@@ -260,14 +266,17 @@
       mark();
       roundMs = 0;
       send();
+      roundNews('start');
     },
     // result: 'win', 'lose', 'draw', 'end' (no winner) or 'quit' (its first letter is sent).
     end: function (result, score) {
       if (!roundId) return;
       tally();
-      mark(text(result).charAt(0), score);
+      var code = text(result).charAt(0);
+      mark(code, score);
       roundId = '';
       send();
+      roundNews('end', code);
     },
     tutorial: function (step) {
       if ((step === 'start' || step === 'done') && !tutorials[step]) { tutorials[step] = 1; push(['tu', step.charAt(0)]); }

@@ -135,7 +135,7 @@ export function installObservers({ target, active, ready }) {
     if (p.startRequestedMs !== null) {
       if (target !== 'portal') latch('playableMs', playable(), performance.now());
       const response = target === 'portal'
-        ? p.portalQuery && document.getElementById('q')?.value === p.portalQuery && decodeURIComponent(location.hash).includes(p.portalQuery) && document.querySelector('#app .tile')
+        ? p.portalQuery && location.hash === p.portalQuery && document.body.className === 'route-cat' && document.querySelector('#app .tile')
         : window.sgInput?.seen;
       latch('inputResponsiveMs', !!response, performance.now());
     }
@@ -176,9 +176,9 @@ async function navigate(page, cdp, url, target) {
     await page.waitForFunction(() => window.__perf && window.__perf.firstUsefulMs !== null && window.__perf.readyForStartMs !== null, null, { timeout: 60000, polling: 'raf' });
     await page.evaluate(() => { window.__perf.startRequestedMs = performance.now(); });
     if (target === 'portal') {
-      const query = await page.evaluate(() => window.GAMES.find(game => game.slug === 'hoop-heads')?.title || window.GAMES[0].title);
+      const query = await page.evaluate(() => '#/c/' + (window.GAMES.find(game => game.slug === 'hoop-heads')?.cats[0] || window.GAMES[0].cats[0]));
       await page.evaluate(query => { window.__perf.portalQuery = query; }, query);
-      await page.locator('#q').fill(query);
+      await page.locator(`#chips a[href="${query}"]`).click();
     } else await runScenario(page, target, { mode: 'performance' });
     await page.waitForFunction(target => window.__perf.inputResponsiveMs !== null && (target === 'portal' || window.__perf.playableMs !== null), target, { timeout: 60000, polling: 'raf' });
     const metrics = Object.fromEntries((await cdp.send('Performance.getMetrics')).metrics.map(metric => [metric.name, metric.value]));
@@ -194,7 +194,7 @@ async function navigate(page, cdp, url, target) {
         dpr: devicePixelRatio, controlledByServiceWorker: !!navigator.serviceWorker?.controller };
     });
     if (target === 'portal') {
-      await page.locator('#q').fill('');
+      await page.locator('#chips a[href="#/"]').click();
       await page.waitForFunction(() => !!document.querySelector('.catalog-grid .tile'), null, { timeout: 7000 });
     }
     return { ...result, scriptToInputMs: metrics.ScriptDuration * 1000,
@@ -292,7 +292,7 @@ export async function main(argv = process.argv.slice(2)) {
       readyForStartMs: 'Navigation to initialized test hook and visible enabled primary Start control. No Kit.ready handshake is used on direct pages.',
       startRequestedMs: 'In-page timestamp just before the normal UI Start sequence; no post-load settling wait.',
       playableMs: 'Navigation to real UI Start, natural intro/countdown completion, and two consecutive active-state rAF opportunities. Portal is null.',
-      inputResponsiveMs: 'Navigation to the existing real-movement scenario confirming input has changed gameplay (portal: real search yields matching tiles).',
+      inputResponsiveMs: 'Navigation to the existing real-movement scenario confirming input has changed gameplay (portal: a real category chip click yields its tiles).',
       warm: 'Same-context HTTP-cache navigation, SW blocked, local/session storage cleared so startup configuration and saves match cold.',
       activity: 'Frame intervals during repeated real inputs/portal scrolling after responsiveness. Idle/countdown/recovery frames excluded; scriptMs is null if a reload invalidates the page-level counter.',
       bytes: 'On-disk release bytes/local compression estimates are separate from CDP HTTP encoded bytes; localhost is not deployed transfer/HDD.',
