@@ -9,11 +9,11 @@
 
   BD.FACES = [
     { id: 'smile', name: 'مبتسم' },
-    { id: 'cool', name: 'النظّارة', need: { lvl: 0 } },
-    { id: 'cat', name: 'قطقوط', need: { lvl: 1 } },
-    { id: 'robot', name: 'روبو', need: { lvl: 2 } },
-    { id: 'alien', name: 'فضائي', need: { lvl: 3 } },
-    { id: 'ninja', name: 'نينجا', need: { lvl: 4 } },
+    { id: 'cool', name: 'النظّارة', need: { lvl: 'neon-steps' } },
+    { id: 'cat', name: 'قطقوط', need: { lvl: 'pulse-road' } },
+    { id: 'robot', name: 'روبو', need: { lvl: 'gravity-jam' } },
+    { id: 'alien', name: 'فضائي', need: { lvl: 'rocket-rave' } },
+    { id: 'ninja', name: 'نينجا', need: { lvl: 'star-storm' } },
     { id: 'wow', name: 'واو!', need: { attempts: 25 } },
     { id: 'starry', name: 'عيون النجوم', need: { stars: 3 } },
     { id: 'grr', name: 'غاضب', need: { stars: 6 } },
@@ -28,18 +28,18 @@
     { c: '#7dff5a', name: 'ليموني' },
     { c: '#ff8a2a', name: 'برتقالي', need: { attempts: 10 } },
     { c: '#ffffff', name: 'ثلجي', need: { stars: 1 } },
-    { c: '#b36bff', name: 'عنبي', need: { lvl: 0 } },
+    { c: '#b36bff', name: 'عنبي', need: { lvl: 'neon-steps' } },
     { c: '#ff3b4f', name: 'كرزي', need: { stars: 2 } },
-    { c: '#2f6bff', name: 'محيطي', need: { lvl: 1 } },
+    { c: '#2f6bff', name: 'محيطي', need: { lvl: 'pulse-road' } },
     { c: '#1de9b6', name: 'نعناعي', need: { stars: 4 } },
     { c: '#ffb3e6', name: 'حلوى', need: { attempts: 50 } },
-    { c: '#3b3f58', name: 'ظلّ', need: { lvl: 2 } },
+    { c: '#3b3f58', name: 'ظلّ', need: { lvl: 'gravity-jam' } },
     { c: '#c6ff00', name: 'كهربائي', need: { stars: 7 } },
     { c: '#ff9ecb', name: 'خوخي', need: { jumps: 500 } },
     { c: '#8a5a2b', name: 'كاكاو', need: { stars: 10 } },
-    { c: '#ffc300', name: 'ذهبي', need: { lvl: 3 } },
+    { c: '#ffc300', name: 'ذهبي', need: { lvl: 'rocket-rave' } },
     { c: '#00ffa2', name: 'نيون', need: { stars: 12 } },
-    { c: '#ff2bd6', name: 'فوشيا', need: { lvl: 4 } }
+    { c: '#ff2bd6', name: 'فوشيا', need: { lvl: 'star-storm' } }
   ];
 
   function rr(ctx, x, y, w, h, r) {
@@ -241,6 +241,7 @@
 
   // Difficulty face on a circle, for the level select card.
   BD.DIFFS = {
+    starter: { label: 'سهل جدًا', col: '#7dff5a', ink: '#0a4a26' },
     easy: { label: 'سهل', col: '#3ddc84', ink: '#0a4a26' },
     normal: { label: 'متوسط', col: '#35c6ff', ink: '#08395a' },
     hard: { label: 'صعب', col: '#ffb300', ink: '#5a3a00' },
@@ -257,7 +258,7 @@
     ctx.scale(r, r);
     ctx.fillStyle = d.ink; ctx.strokeStyle = d.ink; ctx.lineCap = 'round'; ctx.lineWidth = 0.1;
     function e(x, y, rr) { ctx.fillStyle = d.ink; ctx.beginPath(); ctx.arc(x, y, rr, 0, 7); ctx.fill(); ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x - rr * 0.3, y - rr * 0.3, rr * 0.35, 0, 7); ctx.fill(); }
-    if (kind === 'easy') {
+    if (kind === 'easy' || kind === 'starter') {
       e(-0.28, -0.15, 0.13); e(0.28, -0.15, 0.13);
       ctx.beginPath(); ctx.moveTo(-0.35, 0.18); ctx.quadraticCurveTo(0, 0.55, 0.35, 0.18); ctx.stroke();
     } else if (kind === 'normal') {

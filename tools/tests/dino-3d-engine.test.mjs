@@ -251,3 +251,17 @@ test('save schema v3 resets old saves cleanly, validates unlocks, and computes s
   assert.equal(D.computeStars(16, 30, 2, true), 2);
   assert.equal(D.computeStars(24, 30, 1, true), 3);
 });
+
+test('the first world never ends a run: a child who never presses anything still reaches the nest', () => {
+  for (let lv = 0; lv < 3; lv++) {
+    const w = D.createWorld({ level: lv, ddaLevel: 0 });
+    for (let f = 0; f < 20000 && !w.done && !w.over; f++) { D.step(w, 1 / 60, {}); w.ev.length = 0; }
+    assert.equal(w.over, false, `level 1-${lv + 1} never ends early`);
+    assert.equal(w.done, true, `level 1-${lv + 1} reaches the nest`);
+    assert.ok(w.bumps > 0 && w.p.hp === 1, 'bumps still cost hearts, down to the last one');
+  }
+  // The second world is a real challenge again.
+  const w = D.createWorld({ level: 3, ddaLevel: 0 });
+  for (let f = 0; f < 20000 && !w.done && !w.over; f++) { D.step(w, 1 / 60, {}); w.ev.length = 0; }
+  assert.equal(w.over, true, 'level 2-1 ends after three bumps');
+});

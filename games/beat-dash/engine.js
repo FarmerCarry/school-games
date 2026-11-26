@@ -242,11 +242,15 @@
   // level from Kit.dda at each try's start; a PC with no results starts at 0.35.
   // slowest (optional): a course's own easiest rate (the later levels keep more of their speed).
   BD.EASE = { rate: [0.66, 1], haz: [0.25, P.HAZ], buf: [10, P.BUF] };
-  BD.forgivingAt = function (level, slowest) {
+  // pace (optional): a course's own tempo, always applied (0.8 = the whole course, its song
+  // and its physics 20% slower, so every press has 25% more time). A slower bpm alone would
+  // not help: the cube would just jump shorter in blocks over the same spikes.
+  BD.forgivingAt = function (level, slowest, pace) {
     var l = level >= 0 && level <= 1 ? level : 1, E = BD.EASE;
     function at(k, easy) { return easy + (E[k][1] - easy) * l; }
     var r0 = slowest > E.rate[0] && slowest < 1 ? slowest : E.rate[0];
-    return BD.forgiving({ rate: at('rate', r0), haz: at('haz', E.haz[0]), buf: at('buf', E.buf[0]) });
+    var p = pace > 0.3 && pace < 1 ? pace : 1;
+    return BD.forgiving({ rate: at('rate', r0) * p, haz: at('haz', E.haz[0]), buf: at('buf', E.buf[0]) });
   };
 
   // One 60 Hz tick. held = jump button is down, pressed = it went down this tick.

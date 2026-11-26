@@ -1386,6 +1386,14 @@ Rounding out the 13-game Three.js rebuild (all reusing the shared cached `lib/th
 - **Portal (`index.html`)**: inlined updated Poki-style SVG thumbnails for the 13 rebuilt games bring the built portal to **480,969 bytes** (limit `478,000` → `485,000`).
 - **Offline precache (66 files)**: **7,511,668 bytes** total across all 52 games + shared runtime + fonts (limit `7,400,000` → `7,600,000`).
 
+## Zooom +1, 26 November 2026
+
+زوووم +1 (`zoom-plus-one`) is a new 2D-canvas game: one flat-filled pseudo-3D keycap road (no
+three.js, no shadows, no filters, no canvas reads, at most 1.5 device pixels), so it needs no
+light-graphics mode. Built HTML **76,542 bytes** (limit `79,000`). Its catalog entry and inlined
+thumbnail bring the built portal to **485,836 bytes** (limit `485,000` → `487,000`), and the
+offline precache (67 files, 53 games) to **7,611,859 bytes** (limit `7,600,000` → `7,700,000`).
+
 
 
 

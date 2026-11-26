@@ -136,3 +136,5 @@ html[data-sg-art="0"] #banner, html[data-sg-art="0"] #hint, html[data-sg-art="0"
 html[data-sg-art="0"] .cg-lvbtn, html[data-sg-art="0"] .cg-cake, html[data-sg-art="0"] .cg-howto {
   background-image: none; box-shadow: 0 4px 0 #1b1640;
 }
+#hint .hint-skip { margin-inline-start: 12px; padding: 2px 12px; border-radius: 10px; border: 2px solid currentColor; background: transparent;
+  color: inherit; font: inherit; font-size: 0.85em; cursor: pointer; pointer-events: auto; }

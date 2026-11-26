@@ -6,6 +6,10 @@
   var M = window.TS_MAZE;
 
   var PARAMS = {
+    // beginner: stage 1 only (the first match, where children learn to drive and aim). It wanders,
+    // aims loosely, waits long between shots and never dodges. In November only 5 of 33 finished
+    // first matches were won against the easy tank.
+    beginner: { think: 0.8, bounces: 0, samples: 0, aimErr: 0.3, react: 0.9, dodge: 0, maxBalls: 1, crates: false, turn: 0.55, speed: 0.6, range: 360, fireGap: 2.4, validate: 0.2 },
     easy: { think: 0.45, bounces: 0, samples: 0, aimErr: 0.13, react: 0.45, dodge: 0.2, maxBalls: 2, crates: false, turn: 0.7, speed: 0.78, range: 460, fireGap: 1.0, validate: 0.4 },
     medium: { think: 0.25, bounces: 1, samples: 40, aimErr: 0.055, react: 0.26, dodge: 0.5, maxBalls: 3, crates: true, turn: 0.88, speed: 0.95, range: 700, fireGap: 0.55, validate: 0.85 },
     hard: { think: 0.16, bounces: 1, samples: 56, aimErr: 0.04, react: 0.2, dodge: 0.6, maxBalls: 3, crates: true, turn: 1, speed: 1, range: 850, fireGap: 0.42, validate: 1 }

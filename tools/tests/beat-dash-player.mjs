@@ -13,7 +13,9 @@ for (const file of ['engine.js', 'levels.js', 'beat.js']) {
   vm.runInContext(readFileSync(path.join(repo, 'games/beat-dash', file), 'utf8'), context, { filename: file });
 }
 export const BD = context.window.BD, LEVELS = context.window.BD_LEVELS;
-export const level1 = BD.compile(LEVELS[0]);
+// level1 is Neon Steps (the first level until the slower first song came before it)
+export const level1 = BD.compile(LEVELS.find(d => d.id === 'neon-steps'));
+export const firstSong = BD.compile(LEVELS[0]);
 export const HOLD = 6, LOOK = 50; // a child's press lasts about 0.1 s; look 50 ticks ahead
 export const ms = ticks => ticks * 1000 / 60;
 export const plain = value => JSON.parse(JSON.stringify(value)); // objects from the engine's own realm

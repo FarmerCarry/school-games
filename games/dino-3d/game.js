@@ -668,6 +668,11 @@
           view.shake(0.45);
           view.burst(ev.x, ev.y, 0, { count: 14, colors: [0xff5277, 0xffe44d, 0xffffff], speed: 4.4, up: 3.5, life: 0.5, size: 0.2, gravity: 12 });
         }
+        // the first world keeps the last heart: say so once, so the child keeps going
+        if (w.gentle && ev.hp === 1 && !coach.shown.gentle) {
+          coach.shown.gentle = true;
+          showBanner('لا تقلق! الديناصور يكمل الطريق');
+        }
       } else if (ev.t === 'worldChange') {
         J.chime(2);
         updateWorldLabel();

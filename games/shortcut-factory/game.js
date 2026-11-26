@@ -319,7 +319,9 @@
       advice = SF.advice(world);
       tools.querySelectorAll('.tool').forEach(el => el.classList.toggle('tip', !!advice && el.dataset.k === advice.key));
     }
-    const wait = level === 0 && !save.coach ? 3 : 6;
+    // The first level shows the coach almost at once on every PC (many children share a PC, so
+    // the PC's own "seen it" flag says little about this child); the first hall after 3 s.
+    const wait = level === 0 ? 1.2 : level < 4 || !save.coach ? 3 : 6;
     const want = advice && (world.hold || idle >= wait || nudge > 0) && banner <= 0.4;
     if (want) showCoach(advice);
     else if (coach.on) hideCoach();
@@ -368,6 +370,12 @@
     } else if (!mod && !e.altKey && (e.code === 'Delete' || e.code === 'Backspace')) {
       e.preventDefault();
       act = 'delete';
+    } else if (!mod && !e.altKey && !e.repeat && screen === 'play' && world && !ending && COMBO[e.code] && world.L.keys.indexOf(COMBO[e.code]) >= 0) {
+      // A letter alone (the most common slip of a young child): show that Ctrl goes with it.
+      float('Ctrl + ' + e.code.slice(3), view.clipPoint(), 'cy big');
+      say('اضغط Ctrl مع الحرف معًا');
+      nudge = 2.6; adviceT = 0;
+      return;
     }
     if (!act || e.repeat) return;
     if (screen === 'play' && world && !ending && queue.length < 8) queue.push(act);

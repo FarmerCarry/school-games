@@ -27,6 +27,7 @@
     {
       name: 'بوابة البداية',
       wing: 0,
+      gentle: true, // the first wing: a fall into a pool goes back to the last stone (engine.js killHero)
       par: 22,
       map: [
         '##############################',
@@ -56,6 +57,7 @@
     {
       name: 'بركة الوحل',
       wing: 0,
+      gentle: true, // the first wing: a fall into a pool goes back to the last stone (engine.js killHero)
       par: 30,
       map: [
         '##############################',
@@ -85,6 +87,7 @@
     {
       name: 'الرافعة الذهبية',
       wing: 0,
+      gentle: true, // the first wing: a fall into a pool goes back to the last stone (engine.js killHero)
       par: 34,
       map: [
         '##############################',
@@ -120,6 +123,7 @@
     {
       name: 'زرّ التعاون',
       wing: 0,
+      gentle: true, // the first wing: a fall into a pool goes back to the last stone (engine.js killHero)
       par: 36,
       map: [
         '##############################',
@@ -154,6 +158,7 @@
     {
       name: 'صندوق المعبد',
       wing: 0,
+      gentle: true, // the first wing: a fall into a pool goes back to the last stone (engine.js killHero)
       par: 40,
       map: [
         '##############################',

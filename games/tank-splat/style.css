@@ -138,7 +138,7 @@ html, body { background: #2e2160; }
 .stage canvas { width: 240px; height: 100px; display: block; margin: 2px auto 0; }
 .stage .who { font-size: 16px; line-height: 1.2; min-height: 20px; }
 .stage .diff { display: inline-block; font-size: 15px; font-weight: 700; color: #fff; border-radius: 999px; padding: 1px 12px; border: 3px solid var(--ink); margin-top: 4px; }
-.diff.easy { background: #3fd15d; } .diff.medium { background: #ff9d1f; } .diff.hard { background: #ff4f63; }
+.diff.beginner { background: #7fd6ff; } .diff.easy { background: #3fd15d; } .diff.medium { background: #ff9d1f; } .diff.hard { background: #ff4f63; }
 .stage .stars { display: flex; justify-content: center; gap: 4px; margin-top: 6px; }
 .stage .stars .star { width: 32px; height: 32px; }
 .stage.locked { cursor: default; background: #d9d4e8; }

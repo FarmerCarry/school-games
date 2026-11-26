@@ -275,3 +275,10 @@ test('save loader ignores old v2 saves cleanly and validates v3 saves', () => {
   assert.equal(E.isLevelUnlocked(reloaded, 1), true);
   assert.equal(E.nextPlayableLevel(reloaded), 1);
 });
+
+test('the first level is won by serving one burger, with at most two orders waiting, in a longer round', () => {
+  const first = E.LEVELS[0];
+  assert.ok(first.stars[0] <= E.RECIPES.burger.points, 'one burger reaches the first star');
+  assert.equal(first.maxOrders, 2);
+  assert.ok(first.duration >= 120);
+});
