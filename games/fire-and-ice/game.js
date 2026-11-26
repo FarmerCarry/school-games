@@ -122,6 +122,15 @@
         }
       } else if (ev.t === 'dead') {
         onDeath(ev);
+      } else if (ev.t === 'respawn') {
+        // the first wing: a fall puts the hero back on the last stone, and the level goes on
+        sfx('pop', 0.5);
+        if (view) view.burst(ev.x, ev.y, ev.cause === 'goo' ? 'goo' : ev.kind, 14);
+        var whoR = ev.kind === 'fire' ? 'شعلة' : 'ثلجة';
+        var whatR = ev.cause === 'water' ? 'الماء' : ev.cause === 'lava' ? 'الحمم' : 'الوحل الأخضر';
+        coachPill.textContent = 'عادت ' + whoR + ' إلى الحجر. احذر من ' + whatR + '!';
+        coachPill.hidden = false;
+        respawnT = 2.6;
       } else if (ev.t === 'win') {
         onWin(ev);
       }
@@ -196,7 +205,9 @@
     hudTimer.textContent = FI.formatTime(world.t);
   }
 
+  var respawnT = 0; // seconds the "back to the stone" note stays up (the first wing's levels)
   function syncCoach() {
+    if (respawnT > 0 && mode === 'play') return;
     var show = mode === 'play' && levelIdx === 0 && !movedOnLevel;
     coachPill.hidden = !show;
     if (!show) return;
@@ -298,6 +309,7 @@
   }
 
   function startLevel(idx) {
+    respawnT = 0;
     hideOverlays();
     loadWorld(idx, 'play');
     hud.hidden = false;
@@ -475,6 +487,7 @@
       }
       FI.step(world, inp, dt);
       handleWorldEvents(world);
+      if (respawnT > 0 && (respawnT -= dt) <= 0) { respawnT = 0; coachPill.hidden = true; syncCoach(); }
       syncHudTime(false);
     } else if (mode === 'dead') {
       if (!deadModalShown) {

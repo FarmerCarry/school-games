@@ -96,7 +96,8 @@ The original arcade games save best scores and unlocks in the browser, and have 
 
 **الديناصور ثلاثي الأبعاد (Dino 3D)** is a smooth low-poly 3D journey runner: a cute little dinosaur
 runs home to reunite with its dino family across five distinct worlds (Golden Desert, Lush Jungle,
-Snowy Peaks, Volcano Valley and the Royal Family Nest), three stages each, plus an Endless Run mode
+Snowy Peaks, Volcano Valley and the Royal Family Nest), three stages each (in the first world a bump
+never takes the last heart, so every run reaches the nest), plus an Endless Run mode
 with optional four-digit course codes. Space/↑/W or click jumps (with coyote time, jump buffering,
 variable hop height and bouncy mushroom double-bounces), ↓/S ducks under swooping pterosaurs and low
 arches (or fast-falls in midair), and →/D/Shift unleashes a glowing sonic-ring Roar that smashes
@@ -134,7 +135,8 @@ popper, bubble blower, cupcake cannon or candy-cane zapper, and click a tower to
 it. Twelve levels in three worlds add new towers and blobs (fast, big, splitting, armoured and a
 jelly king), and each level gives up to three stars for the cake that is left. Finishing four
 levels opens an endless mode, and stars unlock new cakes. Keys: 1–4 choose a tower, Space starts
-the next wave, F plays faster, U/X upgrade or sell, P/Esc pauses. `node games/cake-guards/verify.js`
+the next wave, F plays faster, U/X upgrade or sell, P/Esc pauses. Level 1's two-step tutorial can be
+skipped, and its first wave starts by itself 6 s after the first tower. `node games/cake-guards/verify.js`
 checks that every level can be won and is lost when nothing is built.
 
 ### Connect 4 and tic-tac-toe

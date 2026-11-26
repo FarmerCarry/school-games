@@ -4,11 +4,12 @@
 // tries, and the difficulty's slower, more forgiving tries keep the course exactly the same.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { BD, HOLD, LEVELS, beatPlayer, context, level1, ms, plain, triesToClear } from './beat-dash-player.mjs';
+import { BD, HOLD, LEVELS, beatPlayer, context, firstSong, level1, ms, plain, triesToClear } from './beat-dash-player.mjs';
 
 test('the engine and levels are pure: they load with no DOM, no Kit and no timers', () => {
   assert.equal(typeof BD.tick, 'function');
-  assert.equal(LEVELS.length, 5);
+  assert.equal(LEVELS.length, 6);
+  assert.deepEqual(plain(LEVELS.map(d => d.id)), ['first-song', 'neon-steps', 'pulse-road', 'gravity-jam', 'rocket-rave', 'star-storm']);
   assert.equal('Kit' in context, false);
 });
 
@@ -59,14 +60,17 @@ test('easier tries are slower and more forgiving, and the course and its jumps s
   assert.ok(easy.buf >= mid.buf && mid.buf >= BD.PHYS.BUF, 'presses remembered longer when easier');
   assert.deepEqual(plain(BD.forgiving({ rate: -1, haz: 3, buf: 'x' })), plain(BD.forgivingAt(1)), 'nonsense falls back to the design');
   // The later courses keep most of their speed for the older children: 80% at the slowest.
-  for (const def of LEVELS.slice(1)) {
-    assert.equal(BD.forgivingAt(0, def.slowest).rate, 0.8, def.id);
+  for (const def of LEVELS.slice(2)) {
+    assert.equal(BD.forgivingAt(0, def.slowest).rate, def.id === 'pulse-road' ? 0.7 : 0.8, def.id);
     assert.equal(BD.forgivingAt(1, def.slowest).rate, 1, def.id);
     assert.equal(BD.forgivingAt(0, def.slowest).haz, easy.haz, `${def.id} still gets the forgiving hitbox`);
   }
-  assert.equal(LEVELS[0].slowest, undefined, 'the first level can slow down the most');
+  assert.equal(LEVELS[1].slowest, undefined, 'Neon Steps can slow down the most');
+  // The first song is always played at 80%, and slows down to 60%.
+  const fs = LEVELS[0];
+  assert.ok(Math.abs(BD.forgivingAt(1, fs.slowest, fs.pace).rate - 0.8) < 1e-9 && Math.abs(BD.forgivingAt(0, fs.slowest, fs.pace).rate - 0.6) < 1e-9);
   // The same press positions work at every speed: a slower try only gives more time.
-  for (const col of LEVELS[0].tutorial.map(t => t.x)) {
+  for (const col of LEVELS[1].tutorial.map(t => t.x)) {
     // (to the 0.05-block sampling: smaller time steps resolve a landing a hair differently)
     const slow = BD.takeoff(level1, col, { ...BD.forgivingAt(1), rate: 0.5 }), full = BD.takeoff(level1, col, BD.forgivingAt(1));
     assert.ok(Math.abs(slow.a - full.a) <= 0.051 && Math.abs(slow.b - full.b) <= 0.051, `same spot at ${col}: ${JSON.stringify([slow, full])}`);
@@ -93,4 +97,46 @@ test('the beat clock is level time: a slowed try slows its beat with it', () => 
   assert.equal(BD.time(BD.clone(s)), BD.time(s), 'a checkpoint keeps the beat clock');
   const old = { ...BD.clone(s) }; delete old.t;
   assert.equal(BD.time(old), 2, 'a state without the clock (an old checkpoint) falls back to real time');
+});
+
+// The first song came after the play statistics of November 2026: only 21 of 5,767 rounds
+// were won, and most tries crashed on the first spikes of Neon Steps.
+const songAt = level => BD.forgivingAt(level, LEVELS[0].slowest, LEVELS[0].pace);
+
+test('the first song is slower and gentler than Neon Steps: single spikes, no pads, more time for every press', () => {
+  for (const level of [1, 0]) {
+    const s = BD.newState(firstSong), opt = songAt(level);
+    while (!s.dead && s.tick < 5000) BD.tick(firstSong, s, false, false, opt);
+    assert.ok(s.tick / 60 > 7, `a long run-up at difficulty ${level}: ${(s.tick / 60).toFixed(2)} s to the first spike`);
+  }
+  const { s, jumps, events } = beatPlayer(firstSong, songAt(1), 0);
+  assert.equal(s.won, true, 'pressing exactly on the beat clears it');
+  assert.equal(s.stars, 7, 'and takes all three stars on the way');
+  assert.equal(events.filter(e => e === 'pad' || e === 'orb').length, 0, 'nothing but jumps');
+  assert.ok(jumps.length <= 14, `${jumps.length} jumps`);
+  for (const j of jumps) {
+    assert.ok(ms(j.last - j.first + 1) > 280, `jump at x ${j.x.toFixed(1)}: ${ms(j.last - j.first + 1).toFixed(0)} ms to press`);
+  }
+  const neon = beatPlayer(level1, BD.forgivingAt(1), 0).jumps, slowest = Math.min(...jumps.map(j => j.last - j.first));
+  assert.ok(slowest > Math.min(...neon.map(j => j.last - j.first)), 'its hardest jump is easier than Neon Steps\' hardest');
+});
+
+test('young players clear the first song within a few tries, even with a 120 ms timing error', () => {
+  const fresh = Array.from({ length: 12 }, (_, i) => triesToClear(firstSong, songAt(0.35), 90, 71 + i));
+  assert.ok(fresh.every(n => n <= 8), `a 90 ms error at the starting difficulty (${fresh})`);
+  const easiest = Array.from({ length: 12 }, (_, i) => triesToClear(firstSong, songAt(0), 120, 91 + i));
+  assert.ok(easiest.every(n => n <= 8), `a 120 ms error at the easiest (${easiest})`);
+});
+
+test('Pulse Road opens gently and its pad lifts the cube onto the wall with no press', () => {
+  const def = LEVELS.find(d => d.id === 'pulse-road'), L = BD.compile(def);
+  const s = BD.newState(L);
+  while (!s.dead && s.tick < 5000) BD.tick(L, s, false, false, BD.forgivingAt(1, def.slowest));
+  assert.ok(s.x > 40, `the first spike is 40 blocks in (${s.x.toFixed(1)})`);
+  const pad = L.objs.find(o => o.t === 'pad' && o.kind === 'Y');
+  const t = BD.newState(L); t.x = t.px = pad.x1 - 3; t.ev = [];
+  const seen = [];
+  while (!t.dead && t.x < pad.x1 + 8) { BD.tick(L, t, false, false); seen.push(...t.ev.map(e => e.t)); t.ev.length = 0; }
+  assert.equal(t.dead, false, `the pad's arc clears the wall (${seen})`);
+  assert.ok(seen.includes('pad'), 'the pad was used');
 });

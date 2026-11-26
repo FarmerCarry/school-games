@@ -625,8 +625,10 @@
       handleEvents(events);
       syncHUD();
 
-      // Ghost hint during first-time tutorial or when idle > 4s
-      var showGhost = !world.over && (tutorialActive || (world.served === 0 && world.time < 12) || idleT >= 4.2);
+      // Ghost hint: in every round until its first dish is served (the step-by-step arrow is
+      // what a new child needs, and the PC's tutorial flag says nothing about this child), and
+      // whenever the player stands idle for 3 s
+      var showGhost = !world.over && (tutorialActive || world.served === 0 || idleT >= 3);
       if (showGhost) {
         var hint = E.nextHint(world);
         if (hint && hint.station) {

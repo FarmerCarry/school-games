@@ -14,6 +14,11 @@
   // Tutorial (level 1 until it is done): the run slows to TUT_SLOW from TUT_LEAD blocks before
   // the spot to jump, and waits there in slow motion until the player jumps or passes it.
   var TUT_SLOW = 0.3, TUT_LEAD = 3;
+  // Checkpoint flags: the normal mode saves the run at each of these fractions of a course, so
+  // a crash goes back to the last flag passed instead of the start (5,767 rounds in November
+  // ended in only 21 wins, most of them crashing within seconds of the start). Practice mode
+  // keeps its own, more frequent checkpoints.
+  var FLAGS = [0.25, 0.5, 0.75];
   var BD = window.BD;
 
   var canvas = document.getElementById('game');
@@ -53,6 +58,8 @@
     var L = BD.compile(def);
     L.song = BD.makeSong(def.song, def.bpm);
     L.theme = def.theme;
+    // checkpoint flags of the normal mode, as fractions of the course (see "checkpoint flags")
+    L.flags = (def.flags || FLAGS).map(function (f) { return Math.round(f * L.finishX); });
     return L;
   });
   var MENU_BPM = 128;
@@ -88,11 +95,18 @@
   function popcnt(n) { var c = 0; while (n) { c += n & 1; n >>>= 1; } return c; }
   function totalStars() { var t = 0; LEVELS.forEach(function (L) { t += popcnt(save.stars[L.id] || 0); }); return t; }
   function maxStars() { var t = 0; LEVELS.forEach(function (L) { t += L.stars; }); return t; }
-  function levelUnlocked(i) { return i === 0 || !!save.done[LEVELS[i - 1].id] || !!save.doneP[LEVELS[i - 1].id]; }
+  // The first two levels are always open (the first song came before Neon Steps later, so a PC
+  // that already played Neon Steps keeps it); a level that was ever reached stays open.
+  function levelUnlocked(i) {
+    if (i <= 1) return true;
+    var id = LEVELS[i].id, prev = LEVELS[i - 1].id;
+    return !!save.done[prev] || !!save.doneP[prev] || !!save.best[id] || !!save.bestP[id] || !!save.done[id];
+  }
+  function levelById(id) { for (var i = 0; i < LEVELS.length; i++) if (LEVELS[i].id === id) return LEVELS[i]; return null; }
   function beatenCount() { var n = 0; LEVELS.forEach(function (L) { if (save.done[L.id]) n++; }); return n; }
   function needMet(need) {
     if (!need) return true;
-    if (need.lvl != null) return !!(LEVELS[need.lvl] && save.done[LEVELS[need.lvl].id]);
+    if (need.lvl != null) return !!(levelById(need.lvl) && save.done[need.lvl]);
     if (need.stars != null) return totalStars() >= need.stars;
     if (need.attempts != null) return save.total.attempts >= need.attempts;
     if (need.jumps != null) return save.total.jumps >= need.jumps;
@@ -105,7 +119,7 @@
     return n + ' ' + (n >= 3 && n <= 10 ? few : many);
   }
   function needText(need) {
-    if (need.lvl != null) return 'أكمل مرحلة «' + LEVELS[need.lvl].name + '» لتفتحه';
+    if (need.lvl != null) return 'أكمل مرحلة «' + levelById(need.lvl).name + '» لتفتحه';
     if (need.stars != null) return 'اجمع ' + countAr(need.stars, 'نجمة واحدة', 'نجمتين', 'نجوم', 'نجمة') + ' لتفتحه (معك ' + totalStars() + ')';
     if (need.attempts != null) return 'العب ' + countAr(need.attempts, 'محاولة واحدة', 'محاولتين', 'محاولات', 'محاولة') + ' لتفتحه (لعبت ' + save.total.attempts + ')';
     if (need.jumps != null) return 'اقفز ' + countAr(need.jumps, 'قفزة واحدة', 'قفزتين', 'قفزات', 'قفزة') + ' لتفتحه (قفزت ' + save.total.jumps + ')';
@@ -247,7 +261,9 @@
     opt: BD.forgiving(), sim: BD.forgiving(), slow: 1, wait: false, latch: false, played: false,
     reported: false, jumps0: 0, cpWanted: false, deadBy: null,
     // tutorial: on for this try, the next step, each step's spot to jump, crashes before its end
-    tutOn: false, tutStep: 0, tutWins: [], tutFails: 0, tutAgain: false
+    tutOn: false, tutStep: 0, tutWins: [], tutFails: 0, tutAgain: false,
+    // checkpoint flags (normal mode): the next flag still ahead, and a passed flag waiting for a safe spot
+    flagNext: 0, flagWant: false
   };
   var demo = { s: null, L: demoL, camY: 0, rot: 0, trail: [], t: 0 };
   var menuT = 0, sel = 0, themeNow = LEVELS[0].theme, themeFade = null;
@@ -289,7 +305,9 @@
     scene = 'select'; show('select');
     if (idx != null) sel = idx;
     else {
-      sel = Math.min(save.last || 0, LEVELS.length - 1);
+      // A new page load is often a new child on a shared lab PC, so it starts on the first song
+      // (the play statistics showed children starting on the last level someone else played).
+      sel = sessionLast;
       if (!levelUnlocked(sel)) sel = 0;
     }
     selBeat.lvl = -1;
@@ -337,6 +355,7 @@
   }
   // The level select pulses at the chosen level's tempo, from the first bar after its intro (see render).
   var selBeat = { lvl: -1, t0: 0 };
+  var sessionLast = 0; // the level last played since this page loaded
   function selMove(d) {
     var n = Math.max(0, Math.min(LEVELS.length - 1, sel + d));
     if (n !== sel) { sel = n; sfx.click(); refreshSelect(true); }
@@ -415,6 +434,7 @@
     $('pbar-p').style.width = bp + '%'; $('pbar-p-t').textContent = bp + '%';
     $('b-toggle-practice').textContent = G.practice ? 'الوضع العادي' : 'وضع التدريب';
     var rt = G.practice && G.cps.length ? 'من نقطة الحفظ' : 'من البداية';
+    // (in the normal mode a crash goes back to the last flag; this button goes back to the start)
     $('b-restart').textContent = rt; $('pause-r-t').textContent = rt;
   }
   function resumeGame() {
@@ -508,7 +528,7 @@
     scene = 'play';
     G.li = li; G.L = LEVELS[li]; G.practice = practice; G.cps = []; G.sessionAtt = 0;
     G.paused = false; G.won = false; G.winShown = false; G.tutFails = 0; G.tutAgain = false;
-    save.last = li; persist('last');
+    save.last = li; persist('last'); sessionLast = li;
     setTheme(G.L.theme); themeFade = null;
     show(null);
     parts.length = 0;
@@ -523,13 +543,16 @@
     save.att[L.id] = (save.att[L.id] || 0) + 1; persist('att');
     save.total.attempts++; persist('total');
     // how forgiving this try is: the PC's difficulty, read now (replays always run as designed)
-    G.opt = G.auto ? BD.forgiving() : BD.forgivingAt(dda.level, L.def.slowest);
+    G.opt = G.auto ? BD.forgiving({ rate: L.def.pace }) : BD.forgivingAt(dda.level, L.def.slowest, L.def.pace);
     G.sim.rate = G.opt.rate; G.sim.haz = G.opt.haz; G.sim.buf = G.opt.buf; G.slow = 1;
     var s;
     // a checkpoint that is no longer safe at this try's settings is dropped, never respawned into
-    if (G.practice) while (G.cps.length && !practiceSafe(G.cps[G.cps.length - 1].s)) G.cps.pop();
-    if (G.practice && G.cps.length) s = BD.clone(G.cps[G.cps.length - 1].s);
+    while (G.cps.length && !practiceSafe(G.cps[G.cps.length - 1].s)) G.cps.pop();
+    var fromCp = G.cps.length > 0;
+    if (fromCp) s = BD.clone(G.cps[G.cps.length - 1].s);
     else s = BD.newState(L);
+    G.flagNext = 0; G.flagWant = false;
+    while (G.flagNext < L.flags.length && L.flags[G.flagNext] <= s.x) G.flagNext++;
     s.ev = []; s.px = s.x; s.py = s.y; s.buf = 0;
     G.s = s; G.dead = false; G.deadT = 0; G.won = false; G.wonT = 0; G.winShown = false;
     G.jumpsAtStart = s.jumps; G.newBestRun = false;
@@ -539,7 +562,7 @@
     G.attemptX = s.x;
     // The run waits for a press after every practice respawn, and after a try in which nobody
     // pressed anything: an unattended game never crashes over and over by itself.
-    G.wait = !G.auto && G.sessionAtt > 1 && (G.practice || !G.played);
+    G.wait = !G.auto && G.sessionAtt > 1 && (G.practice || fromCp || !G.played);
     G.played = false; G.reported = false; G.cpWanted = false; G.jumps0 = s.jumps;
     // a jump key still held from the last try (or the menu) does nothing until it is let go
     G.latch = !G.auto && jumpHeld();
@@ -667,9 +690,9 @@
         if (!calm()) burst(W / 2, 250, 40, { speed: 520, life: 1.1, size: 12, colors: ['#ffe14d', '#ff5ad1', '#3df2ff', '#7dff5a'], g: 700, screen: true, shape: 4 });
       }
     } else if (!G.practice && p >= 85) popup('قريب جدًا!', p + '%', '#ff8ad8');
-    // stuck? point kids at practice mode (5th try in a row, then every 10 more, until they pass 70%)
+    // stuck? point kids at practice mode (4th try in a row, then every 8 more, until they pass 70%)
     var tries = G.sessionAtt;
-    if (!G.practice && (tries === 5 || (tries > 5 && (tries - 5) % 10 === 0)) && (save.best[L.id] || 0) < 70) toast('صعبة؟ جرّب وضع التدريب: اضغط P ثم «وضع التدريب»');
+    if (!G.practice && (tries === 4 || (tries > 4 && (tries - 4) % 8 === 0)) && (save.best[L.id] || 0) < 70) toast('صعبة؟ جرّب وضع التدريب: اضغط P ثم «وضع التدريب»');
   }
 
   var lastBumpT = -1;
@@ -863,6 +886,15 @@
     if (G.practice) {
       if (G.cpWanted) { if (cpSpot(s)) { G.cpWanted = false; addCheckpoint(true); } }
       else if (s.tick - G.lastCpTick > 140 && s.jumps > G.jumps0 && cpSpot(s)) addCheckpoint(false);
+    } else if (!G.auto) {
+      // checkpoint flags: a passed flag saves the run at the next spot that is safe to respawn on
+      if (!G.flagWant && G.flagNext < L.flags.length && s.x >= L.flags[G.flagNext]) G.flagWant = true;
+      if (G.flagWant && cpSpot(s)) {
+        G.flagWant = false;
+        while (G.flagNext < L.flags.length && L.flags[G.flagNext] <= s.x) G.flagNext++;
+        addCheckpoint(true);
+        popup('نقطة حفظ!', 'تكمل من هنا', '#7dff5a');
+      }
     }
     // visuals
     if (s.mode === 0) {
@@ -1418,6 +1450,23 @@
     ctx.restore();
   }
 
+  // The normal mode's checkpoint flags: a waving green flag where the run was saved (the
+  // flags still ahead are marked on the progress bar).
+  function drawFlags(L, s, camX, gy, t) {
+    var wave = calm() ? 0 : Math.sin(t * 6) * 4, i, fx, fy;
+    function flag(x, y) {
+      ctx.fillStyle = '#f2f2f2'; ctx.fillRect(x - 2, y - 92, 5, 92);
+      ctx.fillStyle = '#7dff5a'; ctx.strokeStyle = '#0a4a26'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(x + 3, y - 92); ctx.quadraticCurveTo(x + 24, y - 88 + wave, x + 44, y - 78);
+      ctx.lineTo(x + 3, y - 62); ctx.closePath(); ctx.fill(); ctx.stroke();
+    }
+    for (i = 0; i < G.cps.length; i++) {
+      var cp = G.cps[i].s;
+      fx = (cp.x + 0.5 - camX) * U; fy = cp.grav > 0 ? gy - cp.y * U : gy - (cp.y + 1) * U + 92;
+      if (fx > -60 && fx < W + 60) flag(fx, fy);
+    }
+  }
+
   function drawHUD(L, s, t) {
     // progress bar
     var p = s.x / L.finishX; if (p > 1) p = 1;
@@ -1427,6 +1476,7 @@
     ctx.fillStyle = 'rgba(255,255,255,0.15)'; BD.rr(ctx, bx, by, bw, bh, 9); ctx.fill();
     var best = (G.practice ? save.bestP : save.best)[L.id] || 0;
     if (best > 0) { ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.fillRect(bx + bw * best / 100 - 2, by - 3, 4, bh + 6); }
+    var flagsAt = G.practice ? [] : L.flags;
     if (p > 0.005) {
       var span = Math.max(bh, bw * p);
       ctx.fillStyle = G.practice ? '#35c6ff' : '#7dff5a';
@@ -1437,6 +1487,13 @@
         ctx.save(); ctx.beginPath(); ctx.rect(bx, by, span, bh); ctx.clip();
         ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.fillRect(bx + travel, by + 1, 12, bh - 2); ctx.restore();
       }
+    }
+    for (var fi = 0; fi < flagsAt.length; fi++) {
+      var fxp = bx + bw * flagsAt[fi] / L.finishX;
+      ctx.fillStyle = fi < G.flagNext ? '#0a4a26' : '#ffffff';
+      ctx.fillRect(fxp - 1.5, by - 7, 3, bh + 7);
+      ctx.beginPath(); ctx.moveTo(fxp + 1.5, by - 7); ctx.lineTo(fxp + 11, by - 3); ctx.lineTo(fxp + 1.5, by + 1); ctx.closePath();
+      ctx.fillStyle = fi < G.flagNext ? '#7dff5a' : '#ffffff'; ctx.fill();
     }
     ctx.font = '700 26px Fredoka, "Segoe UI", sans-serif';
     ctx.direction = 'ltr'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
@@ -1617,8 +1674,9 @@
       var signs = L.def.signs || [];
       for (var i = 0; i < signs.length; i++) worldText(signs[i].text, signs[i].x, signs[i].y, camX, gy, 34, signs[i].col || '#fff');
       drawLevel(L, th, camX, camY, t, bi, s, save.stars[L.id] || 0);
-      // checkpoints
-      if (G.practice) {
+      // checkpoints: practice diamonds, the normal mode's flags
+      if (!G.practice) drawFlags(L, s, camX, gy, t);
+      else {
         for (var j = 0; j < G.cps.length; j++) {
           var cp = G.cps[j].s, cx = (cp.x + 0.5 - camX) * U, cy = gy - (cp.y + 0.5) * U;
           if (cx < -40 || cx > W + 40) continue;

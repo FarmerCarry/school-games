@@ -185,13 +185,14 @@ test('a paused match keeps its last frame until something changes', async t => {
 test('a match won and then left from a pause during the celebration keeps its coins and stars', async t => {
   const page = await game(t);
   await startQuietStage(page, 0);
-  for (let round = 0; round < 3; round++) {
+  // stage 1 is first to 2 splats (it is the tutorial match)
+  for (let round = 0; round < 2; round++) {
     await page.evaluate(last => {
       const g = __game.app.game;
       __game.winRound();
       for (let i = 0; i < 600 && g.state === 'play'; i++) runtime.step(1 / 60);
       for (let i = 0; i < 600 && !last && g.state !== 'play'; i++) runtime.step(1 / 60);
-    }, round === 2);
+    }, round === 1);
   }
   assert.deepEqual(await page.evaluate(() => [__game.app.game.state, __game.app.game.over]), ['roundEnd', true]);
   await page.keyboard.press('Escape');
