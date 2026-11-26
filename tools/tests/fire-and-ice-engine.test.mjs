@@ -230,3 +230,23 @@ test('Fire & Ice channels, levers, crate-weighted buttons, win stars and save v2
   assert.equal(FI.formatTime(59.96), '1:00.0');
   assert.equal(FI.formatTime(0), '0:00.0');
 });
+
+test('the first wing puts a fallen hero back on the last stone; later wings still end the level', () => {
+  const FI = loadEngine();
+  // Level 3: Ice walks straight into the lava before Fire has pulled the lever.
+  assert.equal(FI.LEVELS.slice(0, 5).every(d => d.gentle), true, 'levels 1 to 5 are gentle');
+  assert.equal(FI.LEVELS.slice(5).some(d => d.gentle), false, 'the later wings are not');
+  const w = FI.build(FI.LEVELS[2], 2), seen = [];
+  for (let f = 0; f < 240; f++) {
+    FI.step(w, { fire: { l: false, r: false, j: false }, ice: { l: false, r: true, j: false } }, 1 / 60);
+    seen.push(...w.events.map(e => e.t)); w.events.length = 0;
+  }
+  assert.equal(w.state, 'play', 'the level goes on');
+  assert.ok(seen.includes('respawn') && !seen.includes('dead'), `Ice went back to the stone (${[...new Set(seen)]})`);
+  assert.equal(w.ice.alive, true);
+  // The same walk on level 6 ends it.
+  const def = { ...FI.LEVELS[2], gentle: false };
+  const hard = FI.build(def, 5);
+  for (let f = 0; f < 240 && hard.state === 'play'; f++) stepN(FI, hard, { fire: { l: false, r: false, j: false }, ice: { l: false, r: true, j: false } }, 1);
+  assert.equal(hard.state, 'dead');
+});

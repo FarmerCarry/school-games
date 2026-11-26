@@ -78,6 +78,8 @@
       pushing: 0,
       pushSfxCd: 0,
       inDoor: false,
+      safeX: x,
+      safeY: y,
       justJumped: false,
       justLanded: 0
     };
@@ -234,6 +236,9 @@
       t: 0,
       winT: 0,
       state: 'play', // 'play' | 'dead' | 'won'
+      // gentle (the first wing's levels): a hero who falls into a pool goes back to the last
+      // stone it stood on instead of ending the level (see killHero)
+      gentle: !!def.gentle,
       deadHero: null,
       deadCause: null,
       events: []
@@ -765,6 +770,13 @@
 
     h.onStone = touchingStone;
 
+    // the last stone a hero stood on with both feet, where a gentle level puts it back
+    if (h.grounded && h.onPlatform < 0 && !touchingDeadly && h.alive) {
+      var allStone = true;
+      for (var gx3 = footL; gx3 <= footR; gx3++) if (tileAt(w, gx3, footY) !== '#') allStone = false;
+      if (allStone) { h.safeX = h.x; h.safeY = h.y; }
+    }
+
     if (touchingDeadly && !touchingStone) {
       // If we stepped horizontally off safe stone onto a flush deadly pool rim, allow a tiny coyote grace
       // so late-rim jumps rescue the player, while falling into a pool or sprinting into it still kills.
@@ -788,6 +800,14 @@
 
   function killHero(w, h, poolChar) {
     if (!h.alive || w.state !== 'play') return;
+    if (w.gentle) {
+      // back to the last safe stone (or the start), with no speed: the level goes on
+      var cause = poolChar === 'W' ? 'water' : poolChar === 'L' ? 'lava' : 'goo';
+      w.events.push({ t: 'respawn', kind: h.kind, cause: cause, x: h.x + h.w / 2, y: h.y + h.h / 2 });
+      h.x = h.safeX; h.y = h.safeY; h.vx = 0; h.vy = 0; h.poolGraceT = 0;
+      h.grounded = false; h.onPlatform = -1; h.jumpHeld = false; h.jumpTime = 0; h.coyoteT = 0; h.jBufT = 0;
+      return;
+    }
     h.alive = false;
     w.state = 'dead';
     w.deadHero = h.kind;
