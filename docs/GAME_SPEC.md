@@ -108,6 +108,7 @@ not loaded by other games.
 8. **Fast.** Loads in about a second. Aim for a smooth 60 fps on an ordinary school PC with
    integrated graphics. No huge textures and no unbounded arrays; reuse objects and cap particles.
    With three.js, cap `devicePixelRatio` at 1.5 and keep draw calls low.
+   A heavy 3D game also offers light graphics with `Kit.gfx` (see `docs/ARCHITECTURE.md`).
 9. **Fast-build friendly.** Load your files with plain `<script src="…"></script>` and
    `<link rel="stylesheet" href="…">` tags (no extra attributes) — `tools/build.mjs` inlines
    them into one file per game (keeping `three.min.js` and `shared/artkit.js` as shared cached

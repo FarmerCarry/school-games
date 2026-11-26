@@ -56,15 +56,19 @@
 
   /* ============================================================ renderer */
   var canvas = $('gl'), renderer;
+  // Light graphics (Kit.gfx) for PCs that can't keep it smooth: no antialiasing from the
+  // next start, and from the moment it turns on no shadows and fewer pixels.
+  var gfx = Kit.gfx('road-hopper', { apply: applyGfx });
   try {
-    renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, powerPreference: 'high-performance' });
+    renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: !gfx.light, powerPreference: 'high-performance' });
   } catch (e) {
     document.body.insertAdjacentHTML('beforeend', '<div class="sg-overlay"><div class="sg-panel"><h1 class="sg-title">عذرًا!</h1><p class="sg-sub">هذا الجهاز لا يدعم الرسوم ثلاثية الأبعاد.</p></div></div>');
     return;
   }
-  var basePR = Math.min(window.devicePixelRatio || 1, 1.5);
+  function glRatio() { return gfx.light ? Math.min(window.devicePixelRatio || 1, 1) * 0.75 : Math.min(window.devicePixelRatio || 1, 1.5); }
+  var basePR = glRatio();
   renderer.setPixelRatio(basePR);
-  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.enabled = !gfx.light;
   renderer.shadowMap.type = THREE.PCFShadowMap;
   var scene = new THREE.Scene();
   scene.background = new THREE.Color(THEMES[0].sky);
@@ -72,7 +76,7 @@
   var CAM_OFF = new THREE.Vector3(1.7, 9.6, 9.4);
   scene.add(new THREE.HemisphereLight(0xffffff, 0x9aa6c8, 1.25));
   var sun = new THREE.DirectionalLight(0xffffff, 2.1);
-  sun.castShadow = true;
+  sun.castShadow = !gfx.light;
   sun.shadow.mapSize.set(1024, 1024);
   (function (sc) { sc.left = -15; sc.right = 15; sc.top = 15; sc.bottom = -15; sc.near = 1; sc.far = 60; })(sun.shadow.camera);
   sun.shadow.bias = -0.0008;
@@ -1004,6 +1008,19 @@
   // Switching to reduced motion stops shake and confetti at once.
   Kit.motion.onChange(function (reduced) { if (reduced) { shakeP = 0; conf.length = 0; redraw = true; } });
 
+  // Shadows on or off changes every lit material's shader: rebuilt once, at the switch.
+  function applyGfx() {
+    basePR = glRatio();
+    dres.ratio = basePR; dres.min = basePR * 0.6; dres.n = 0; dres.bad = 0;
+    renderer.setPixelRatio(basePR);
+    renderer.shadowMap.enabled = sun.castShadow = !gfx.light;
+    scene.traverse(function (o) {
+      var m = o.material;
+      if (!m) return;
+      (Array.isArray(m) ? m : [m]).forEach(function (x) { x.needsUpdate = true; });
+    });
+    onResize();
+  }
   function onResize() {
     redraw = true;
     var w = window.innerWidth, h = window.innerHeight;

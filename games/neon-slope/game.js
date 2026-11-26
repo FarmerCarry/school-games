@@ -107,12 +107,23 @@
 
   /* =========================================================== RENDERER */
   var canvas = $('gl'), renderer;
+  // Light graphics (Kit.gfx) for PCs that can't keep it smooth: no antialiasing from the
+  // next start, and from the moment it turns on fewer pixels and no star field.
+  var gfx = Kit.gfx('neon-slope', { apply: applyGfx });
   try {
-    renderer = new T.WebGLRenderer({ canvas: canvas, antialias: true, powerPreference: 'high-performance' });
+    renderer = new T.WebGLRenderer({ canvas: canvas, antialias: !gfx.light, powerPreference: 'high-performance' });
   } catch (e) { renderer = null; }
   if (!renderer) { $('nogl').hidden = false; $('title').hidden = true; return; }
-  var DPR = Math.min(window.devicePixelRatio || 1, 1.5);
+  function glRatio() { return gfx.light ? Math.min(window.devicePixelRatio || 1, 1) * 0.75 : Math.min(window.devicePixelRatio || 1, 1.5); }
+  var DPR = glRatio();
   renderer.setPixelRatio(DPR);
+  function applyGfx() {
+    DPR = glRatio();
+    dres.ratio = DPR; dres.min = DPR * 0.6; dres.n = 0; dres.bad = 0;
+    renderer.setPixelRatio(DPR);
+    stars.visible = !gfx.light;
+    resize();
+  }
   renderer.setClearColor(0x07021a, 1);
   var maxAniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
 
@@ -201,6 +212,7 @@
   var stars = new T.Points(starGeo, new T.PointsMaterial({ color: 0xffffff, size: 2, sizeAttenuation: false, fog: false, depthWrite: false, depthTest: false, transparent: true, opacity: 0.9 }));
   stars.renderOrder = -9; stars.frustumCulled = false;
   scene.add(stars);
+  stars.visible = !gfx.light;
 
   var sunTex = canvasTex(256, 256, function (g) {
     var gr = g.createLinearGradient(0, 0, 0, 256);

@@ -7,10 +7,12 @@
   var canvas = document.getElementById('game');
   // cap the canvas backing store (~1.8M pixels) so fullscreen stays smooth on integrated graphics
   var fitOpts = { maxDpr: 2 };
+  // Light graphics (Kit.gfx) for PCs that can't keep it smooth: under half the pixels.
+  var gfx = Kit.gfx('moto-madness', { apply: function () { capDpr(); view.resize(); } });
   function capDpr() {
     var sc = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
     var px = 1280 * sc * 720 * sc;
-    fitOpts.maxDpr = Math.max(0.5, Math.min(2, Math.sqrt(1.8e6 / Math.max(1, px))));
+    fitOpts.maxDpr = Math.max(0.5, Math.min(2, Math.sqrt((gfx.light ? 0.8e6 : 1.8e6) / Math.max(1, px))));
   }
   capDpr();
   window.addEventListener('resize', capDpr);
