@@ -68,7 +68,7 @@ games/<slug>/            game code (the UI layer calls Kit.dda, Kit.stats, Kit.t
 shared/juice.js          Kit.juice  — procedural SFX engine (opt-in; portal + games)
 shared/artkit.js         Kit.art    — opt-in drawing kit (one shared file, not inlined)
 shared/kit.js            Kit        — lifecycle, input, audio graph, saving, scaling, Kit.dda,
-                                      play statistics (Kit.stats, Kit.track, sg:telemetry)
+                                      Kit.gfx, play statistics (Kit.stats, Kit.track, sg:telemetry)
 js/catalog.js            the games, categories and site name
 js/telemetry.js          SGTelemetry — the ONLY network sender: anonymous play statistics
                                       to the school's server, off without an address
@@ -145,6 +145,29 @@ dda.reset()
   over and the first save writes the new shape.
 * DDA lives in the UI layer (`game.js`): engines and level files stay pure and take
   difficulty as parameters (their Node verifiers load a stub Kit).
+
+### `Kit.gfx(slug, opts)` — light graphics for weak PCs
+
+Rail Rush, Neon Slope, Road Hopper and Moto Madness turn on lighter graphics by themselves on
+a PC that can't keep them smooth (some lab PCs of the same model run them at about 30 fps
+while others hold 60).
+
+```js
+var gfx = Kit.gfx('road-hopper', { apply: function (light, why) { /* fewer pixels, no shadows */ } });
+gfx.light            // read while building the renderer (antialias: !gfx.light ...)
+gfx.set(false)       // the child's choice; kept for this game
+```
+
+* **Switch:** during engaged round play (the frames `Kit.stats.frame` and `Kit.loop` count),
+  more than 15 percent of frames over 20 ms in two 120-frame windows in a row; stalls over
+  250 ms are left out. A PC holding 60 fps never switches. It only switches once per page.
+* **Storage:** `sg:<slug>:gfx` is `"light"` or `"full"`; `sg:site:gfx-light` makes the
+  other heavy games on that PC start light too. A short notice offers the way back
+  (`"full"`, never overruled for that game).
+* `?lq` forces light, `?hq` forces full; automated browsers never switch unless `?gfxauto`.
+* What light means is the game's: no antialiasing (from the next start), a 0.75 pixel ratio
+  (Moto Madness: a 0.8 M pixel canvas instead of 1.8 M), no shadows in Road Hopper, no
+  star field in Neon Slope.
 
 ## Juice (shared/juice.js)
 

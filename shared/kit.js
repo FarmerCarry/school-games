@@ -205,8 +205,14 @@
     if (!extendOnly && roundId && until && t >= until) rd++;
     if (!extendOnly || t < until) { from = t; until = t + 20000; }
   }
+  // Kit._frame: the same frames for shared/gfx.js (light graphics), when a game loads it.
   function countFrame(ms) {
-    try { if (ms > 0 && roundId && clock() < until) frames[ms > 20 ? ms > 34 ? ms > 250 ? 3 : 2 : 1 : 0]++; } catch (e) { /* ignore */ }
+    try {
+      if (ms > 0 && roundId && clock() < until) {
+        frames[ms > 20 ? ms > 34 ? ms > 250 ? 3 : 2 : 1 : 0]++;
+        if (Kit._frame) Kit._frame(ms);
+      }
+    } catch (e) { /* ignore */ }
   }
   function send(cut, out) {
     tally();

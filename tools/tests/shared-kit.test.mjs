@@ -4,6 +4,9 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
 const source = readFileSync(new URL('../../shared/kit.js', import.meta.url), 'utf8');
+const gfxSource = readFileSync(new URL('../../shared/gfx.js', import.meta.url), 'utf8');
+// shared/gfx.js on top of a harness's Kit, as a game that loads it after kit.js.
+function withGfx(h) { new Function('window', 'document', 'setTimeout', gfxSource)(h.window, h.document, () => 0); return h; }
 // clock: injected window.performance; raf: collects requestAnimationFrame callbacks;
 // embedded false: a standalone page (window.parent === window).
 function harness({ reduce = false, stored = {}, clock, raf, embedded = true } = {}) {
@@ -456,6 +459,66 @@ test('telemetry: frames count only while engaged and in a round, never the first
   h.Kit.stats.end('end'); frame(16); h.Kit.stats.frame(16);
   assert.deepEqual(counted(), [4, 2, 2, 2], 'no frames once the round has ended');
   assert.ok(updates > 0, 'the loop still runs its updates');
+});
+
+test('Kit.gfx turns light graphics on after two 2-second windows of unsmooth round play, remembers it and offers the way back', () => {
+  const clock = {now: 1000}, h = withGfx(harness({clock, embedded: false}));
+  const changes = [], g = h.Kit.gfx('rail-rush', {apply: (light, why) => changes.push([light, why])});
+  assert.equal(g.light, false, 'a PC with no history starts with full graphics');
+  const play = (n, ms) => { for (let i = 0; i < n; i++) { clock.now += ms; h.Kit.stats.frame(ms); } };
+  play(600, 30);
+  assert.deepEqual(changes, [], 'frames outside a round say nothing');
+  h.Kit.stats.round('main'); h.window.emit('keydown', {code: 'KeyA'});
+  play(102, 16); play(18, 30); play(240, 16);
+  assert.deepEqual(changes, [], 'exactly 15 percent of slow frames is still smooth enough');
+  play(120, 400);
+  assert.deepEqual(changes, [], 'stalls are left out');
+  h.window.emit('keydown', {code: 'KeyA'});
+  play(100, 16); play(20, 30);
+  assert.deepEqual(changes, [], 'one slow window is not enough');
+  play(100, 16); play(20, 25);
+  assert.deepEqual(changes, [[true, 'auto']], 'the second slow window in a row switches');
+  assert.equal(g.light, true);
+  assert.equal(h.values.get('sg:rail-rush:gfx'), '"light"');
+  assert.equal(h.values.get('sg:site:gfx-light'), 'true');
+  const notice = h.document.body.children.find(c => c.className === 'sg-gfx-notice');
+  assert.ok(notice && !notice.hidden, 'a notice says so');
+  play(600, 30);
+  assert.equal(changes.length, 1, 'it switches once');
+  notice.children[1].emit('click', {detail: 1});
+  assert.deepEqual(changes, [[true, 'auto'], [false, 'child']], 'the notice\'s button brings full graphics back');
+  assert.equal(h.values.get('sg:rail-rush:gfx'), '"full"');
+  assert.ok(notice.hidden);
+
+  const again = withGfx(harness({clock, embedded: false, stored: Object.fromEntries(h.values)}));
+  const kept = again.Kit.gfx('rail-rush', {apply: (light, why) => changes.push([light, why])});
+  assert.equal(kept.light, false, 'the child\'s choice of full graphics stays');
+  again.Kit.stats.round('main'); again.window.emit('keydown', {code: 'KeyA'});
+  play(0, 0); for (let i = 0; i < 600; i++) { clock.now += 30; again.Kit.stats.frame(30); }
+  assert.equal(changes.length, 2, 'and is never overruled by the automatic switch');
+  const other = again.Kit.gfx('neon-slope');
+  assert.equal(other.light, true, 'other heavy games on this PC start light');
+  other.set(false);
+  assert.equal(other.light, false);
+  assert.equal(again.values.get('sg:neon-slope:gfx'), '"full"');
+});
+
+test('Kit.gfx: ?lq and ?hq force a mode, and automated browsers never switch unless ?gfxauto', () => {
+  const clock = {now: 1000};
+  const run = (search, webdriver) => {
+    const h = harness({clock, embedded: false});
+    h.window.location = {search}; h.window.navigator = {webdriver}; withGfx(h);
+    const changes = [], g = h.Kit.gfx('road-hopper', {apply: light => changes.push(light)});
+    const start = g.light;
+    h.Kit.stats.round('main'); h.window.emit('keydown', {code: 'KeyA'});
+    for (let i = 0; i < 360; i++) { clock.now += 30; h.Kit.stats.frame(30); }
+    return [start, changes];
+  };
+  assert.deepEqual(run('?lq', false), [true, []]);
+  assert.deepEqual(run('?hq', false), [false, []]);
+  assert.deepEqual(run('', true), [false, []]);
+  assert.deepEqual(run('?gfxauto', true), [false, [true]]);
+  assert.deepEqual(run('', false), [false, [true]]);
 });
 
 test('telemetry: one 10 s timer chain, only while ready and on, that stops after a failure or when told off', () => {
