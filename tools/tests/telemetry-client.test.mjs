@@ -296,11 +296,10 @@ test('real rounds reach the statistics server as the contract says, with nothing
   assert.deepEqual(await rid(page), { v: 1, pc: '8c21d0e94a6f' });
   assert.deepEqual(await tmKeys(page), [], 'nothing waits yet, and no sharing note');
 
-  // A child types a search, then opens the starter card, then two rounds of tic-tac-toe
-  // with a rematch in between, hearts it, and opens a game by the Surprise button.
-  await page.locator('#q').fill('زرافة سرية');
-  await page.waitForFunction(() => location.hash.startsWith('#/search/'));
-  await page.locator('#q').press('Escape');
+  // A child follows an old search link (its words are never sent), then opens the starter
+  // card, then two rounds of tic-tac-toe with a rematch in between, hearts it, and opens a
+  // game by the Surprise button.
+  await page.goto(origin + '/#/search/' + encodeURIComponent('زرافة سرية'));
   await page.waitForFunction(() => document.body.className === 'route-home');
   const starter = await page.locator('#app > a.starter').getAttribute('data-slug');
   await page.locator('#app > a.starter').click();
@@ -866,7 +865,7 @@ test('load failures are reported by kind, never with their text', async t => {
   await checkBatches(page, batches(state));
 });
 
-test('launch sources: catalog, featured, recent, favourites, category, quick filter, search, related, reload, direct and history', async t => {
+test('launch sources: catalog, featured, recent, favourites, category, quick filter, related, play next, reload, direct and history', async t => {
   const state = await setup(t), { page } = state;
   await page.goto(origin + '/');
   const opened = async (slug, src) => {
@@ -892,10 +891,14 @@ test('launch sources: catalog, featured, recent, favourites, category, quick fil
     await tile.click();
     await opened(slug, src);
   }
-  // A search with one result, opened with Enter.
-  await page.locator('#q').fill('2048');
-  await page.locator('#q').press('Enter');
-  await opened('merge-2048', 'search');
+  // The play-next card between rounds counts as a related game.
+  await page.goto(origin + '/#/play/merge-2048');
+  await ready(page);
+  await page.evaluate(() => { const kit = document.querySelector('#stage iframe').contentWindow.Kit; kit.stats.round('a'); kit.stats.end('end', 4); });
+  await page.waitForSelector('#nextCard.show');
+  const next = await page.getAttribute('#nextCard .next-go', 'data-next');
+  await page.locator('#nextCard .next-go').click();
+  await opened(next, 'related');
   // A new page load straight onto a game, then a reload of it, then back to it.
   await page.goto(origin + '/seed.html');
   await page.goto(origin + '/#/play/sumo-bonk');

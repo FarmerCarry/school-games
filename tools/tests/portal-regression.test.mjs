@@ -79,7 +79,7 @@ test('favorites remain consistent during failed saves and persist after recovery
   assert.equal(await favorite.getAttribute('aria-pressed'), 'true', 'successfully saved favorites survive reload');
 });
 
-test('category navigation transfers focus to its heading and search keeps typing focus', async t => {
+test('category navigation transfers focus to its heading', async t => {
   const page = await newPage(t);
   await page.goto(`${origin}${base}`);
   const category = page.locator('#chips a[href^="#/c/"]').first();
@@ -90,9 +90,6 @@ test('category navigation transfers focus to its heading and search keeps typing
   assert.equal(await page.evaluate(() => document.activeElement === document.querySelector('#app h1')), true, 'the category heading receives focus after its navigation link is replaced');
   await page.keyboard.press('Tab');
   assert.equal(await page.evaluate(() => document.activeElement === document.querySelector('#app .tile')), true, 'Tab continues into the category games');
-  await page.locator('#q').fill('pool');
-  await page.waitForFunction(() => document.body.className === 'route-search');
-  assert.equal(await page.evaluate(() => document.activeElement.id), 'q', 'live search does not steal focus while typing');
 });
 
 test('inherited object names show the missing-route page', async t => {

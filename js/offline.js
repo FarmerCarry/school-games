@@ -80,7 +80,7 @@
       if (owner !== registration || worker !== owner.active) { refreshing = false; inspect(false); return; }
       remember(result);
       if (!complete(result)) paint('unavailable', 'النسخة دون إنترنت غير مكتملة — اتصل بالإنترنت ثم أعد المحاولة', true);
-      // Verification can yield while a game opens or search is focused. Never discard a live session.
+      // Verification can yield while a game opens. Never discard a live session.
       if (availableVersion === expected && !alreadyReloaded(expected) && safeToRefresh()) {
         markReloaded(expected);
         location.reload();

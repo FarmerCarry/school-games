@@ -36,27 +36,65 @@ async function slugs(page, selector = '#app .tile') {
   return page.locator(selector).evaluateAll(tiles => tiles.map(tile => tile.dataset.slug));
 }
 
-async function search(page, query) {
-  await page.locator('#q').fill(query);
-  await page.waitForFunction(q => document.body.className === 'route-search' && document.querySelector('#app h1 bdi')?.textContent === q, query);
-}
+test('category chips replace the search box, and old search links open the home page', async t => {
+  const page = await newPage(t);
+  await page.goto(url + '#/search/pool');
+  await page.waitForFunction(() => document.body.className === 'route-home');
+  assert.equal(await page.locator('#q, #searchForm, .search').count(), 0, 'no search box');
+  assert.ok(await page.locator('#chips a.chip[href^="#/c/"]').count() >= 5, 'category chips are shown');
+  await page.locator('#chips a.chip[href="#/c/sports"]').click();
+  await page.waitForFunction(() => document.body.className === 'route-cat');
+  assert.ok((await slugs(page)).includes('pool-party'), 'a chip lists its games');
+});
 
-test('Arabic and fuzzy search retain focus and matching results without rebuilding navigation', async t => {
+test('featured games lead the catalog in their stay-time rank', async t => {
   const page = await newPage(t);
   await page.goto(url);
-  await search(page, 'أربعة على التوالي');
-  assert.deepEqual(await slugs(page), ['connect-four']);
-  await page.evaluate(() => {
-    window.savedChips = document.querySelector('#chips');
-    window.savedLinks = Array.from(window.savedChips.children);
-    window.savedHeader = document.querySelector('#logo');
-  });
-  for (const [query, expected] of [['اربعه على التوالي', 'connect-four'], ['connect foor', 'connect-four'], ['pool party', 'pool-party']]) {
-    await search(page, query);
-    assert.deepEqual(await slugs(page), [expected], query);
-    assert.equal(await page.evaluate(() => document.activeElement.id), 'q', 'typing focus stays in search');
-    assert.equal(await page.evaluate(() => window.savedChips === document.querySelector('#chips') && window.savedHeader === document.querySelector('#logo') && window.savedLinks.every((node, index) => node === document.querySelector('#chips').children[index])), true, 'subsequent queries reuse all navigation nodes');
-  }
+  const order = await slugs(page, '.catalog-grid .tile');
+  const ranked = await page.evaluate(() => GAMES.filter(g => typeof g.hot === 'number').sort((a, b) => a.hot - b.hot).map(g => g.slug));
+  assert.ok(ranked.length >= 6, 'ranked featured games');
+  assert.deepEqual(order.slice(1, 1 + ranked.length), ranked, 'the starter leads, then featured games by rank');
+});
+
+test('a round end offers one play-next game that hides when the next round starts', async t => {
+  const page = await newPage(t);
+  await page.goto(url + '#/play/tunnel-blitz');
+  await page.waitForFunction(() => !document.querySelector('#stage').classList.contains('loading'), null, { timeout: 20000 });
+  const kit = 'document.querySelector("#stage iframe").contentWindow.Kit';
+  assert.equal(await page.isVisible('#nextCard'), false, 'no card before a round ends');
+  await page.evaluate(`${kit}.stats.round('a'); ${kit}.stats.end('lose', 1)`);
+  await page.waitForSelector('#nextCard.show');
+  const pick = await page.getAttribute('#nextCard .next-go', 'data-next');
+  assert.ok(pick && pick !== 'tunnel-blitz', 'another game is offered');
+  assert.equal(await page.evaluate(s => !!GAMES.find(g => g.slug === s).hot, pick), true, 'the pick is a featured game');
+  assert.notEqual(await page.evaluate(() => document.activeElement && document.activeElement.closest && document.activeElement.closest('#nextCard')), true, 'the card does not take focus');
+  await page.evaluate(`${kit}.stats.round('b')`);
+  await page.waitForFunction(() => document.querySelector('#nextCard').hidden);
+  // A round that restarts at once never shows the card.
+  await page.evaluate(`${kit}.stats.end('lose'); ${kit}.stats.round('c')`);
+  await page.waitForTimeout(1500);
+  assert.equal(await page.isVisible('#nextCard'), false, 'a quick restart shows no card');
+  // ✕ hides it for the rest of the visit.
+  await page.evaluate(`${kit}.stats.end('lose')`);
+  await page.waitForSelector('#nextCard.show');
+  await page.locator('#nextCard .next-x').click();
+  await page.evaluate(`${kit}.stats.round('d'); ${kit}.stats.end('win')`);
+  await page.waitForTimeout(1500);
+  assert.equal(await page.isVisible('#nextCard'), false, 'closed for this visit');
+  // The card opens the game it offers.
+  await page.click('#restartBtn');
+  await page.waitForFunction(() => !document.querySelector('#stage').classList.contains('loading'), null, { timeout: 20000 });
+  await page.evaluate(`${kit}.stats.round('e'); ${kit}.stats.end('lose')`);
+  await page.waitForTimeout(1500);
+  assert.equal(await page.isVisible('#nextCard'), false, 'a restart keeps the visit closed');
+  await page.goto(url + '#/play/beat-dash');
+  await page.waitForFunction(() => !document.querySelector('#stage').classList.contains('loading'), null, { timeout: 20000 });
+  await page.evaluate(`${kit}.stats.round('a'); ${kit}.stats.end('lose')`);
+  await page.waitForSelector('#nextCard.show');
+  const next = await page.getAttribute('#nextCard .next-go', 'data-next');
+  assert.notEqual(next, 'tunnel-blitz', 'a game played just now is not offered again');
+  await page.click('#nextCard .next-go');
+  await page.waitForFunction(s => location.hash === '#/play/' + s, next);
 });
 
 test('desktop and narrow grids retain DOM order, visible cards and RTL reading order', async t => {
