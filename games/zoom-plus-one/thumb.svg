@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffb8de"/>
+      <stop offset="1" stop-color="#fff0f8"/>
+    </linearGradient>
+    <linearGradient id="sea" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ff7ab8"/>
+      <stop offset="1" stop-color="#e0418f"/>
+    </linearGradient>
+  </defs>
+  <rect width="400" height="400" fill="url(#sky)"/>
+  <circle cx="330" cy="70" r="34" fill="#fff7a8"/>
+  <path d="M-10 150 Q50 104 110 132 Q170 160 230 120 Q300 84 410 136 L410 160 L-10 160 Z" fill="#ffc6e4"/>
+  <rect y="156" width="400" height="244" fill="url(#sea)"/>
+  <!-- the keycap road, far to near -->
+  <g stroke="#2a1d4e" stroke-width="3" stroke-linejoin="round">
+    <path d="M168 160 L232 160 L246 182 L154 182 Z" fill="#ffffff" opacity="0.35"/>
+    <path d="M150 188 L250 188 L266 216 L134 216 Z" fill="#ffffff" opacity="0.45"/>
+    <g>
+      <path d="M128 224 L156 224 L150 254 L114 254 Z" fill="#ff5fa2"/>
+      <path d="M160 224 L188 224 L186 254 L152 254 Z" fill="#c77dff"/>
+      <path d="M192 224 L220 224 L224 254 L190 254 Z" fill="#ff8cc6"/>
+      <path d="M224 224 L252 224 L262 254 L228 254 Z" fill="#9d7bff"/>
+      <path d="M256 224 L284 224 L298 254 L266 254 Z" fill="#ffb0d6"/>
+    </g>
+    <g>
+      <path d="M106 264 L144 264 L136 304 L86 304 Z" fill="#9d7bff"/>
+      <path d="M150 264 L188 264 L184 304 L140 304 Z" fill="#ffe14f"/>
+      <path d="M194 264 L232 264 L236 304 L190 304 Z" fill="#c77dff"/>
+      <path d="M238 264 L276 264 L286 304 L240 304 Z" fill="#ff5fa2"/>
+      <path d="M282 264 L320 264 L336 304 L292 304 Z" fill="#ff8cc6"/>
+    </g>
+    <g>
+      <path d="M76 316 L128 316 L118 370 L50 370 Z" fill="#ff8cc6"/>
+      <path d="M136 316 L188 316 L182 370 L124 370 Z" fill="#ff5fa2"/>
+      <path d="M196 316 L248 316 L254 370 L190 370 Z" fill="#9d7bff"/>
+      <path d="M256 316 L308 316 L322 370 L262 370 Z" fill="#ffb0d6"/>
+      <path d="M316 316 L368 316 L392 370 L330 370 Z" fill="#c77dff"/>
+    </g>
+  </g>
+  <!-- the toast runner with googly eyes -->
+  <g stroke="#2a1d4e" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M182 300 L166 336 M218 300 L238 330" fill="none"/>
+    <ellipse cx="160" cy="338" rx="18" ry="10" fill="#ff4f6d"/>
+    <ellipse cx="244" cy="330" rx="18" ry="10" fill="#ff4f6d"/>
+    <path d="M150 230 L118 200 M250 230 L284 196" fill="none"/>
+    <circle cx="116" cy="198" r="9" fill="#fff"/>
+    <circle cx="286" cy="194" r="9" fill="#fff"/>
+    <rect x="144" y="178" width="112" height="128" rx="32" fill="#f3c27a"/>
+    <rect x="160" y="194" width="80" height="96" rx="22" fill="#ffe1a8" stroke="none"/>
+    <rect x="182" y="168" width="36" height="16" rx="4" fill="#fff27a" stroke-width="4"/>
+    <circle cx="178" cy="226" r="18" fill="#fff"/>
+    <circle cx="224" cy="222" r="15" fill="#fff"/>
+    <path d="M176 254 Q200 286 224 254 Z" fill="#7a1f3d" stroke-width="4"/>
+  </g>
+  <circle cx="184" cy="232" r="9" fill="#2a1d4e"/>
+  <circle cx="218" cy="214" r="8" fill="#2a1d4e"/>
+  <!-- +1 popups -->
+  <g font-family="Fredoka, Arial, sans-serif" font-weight="700" stroke="#2a1d4e" stroke-width="5" paint-order="stroke" stroke-linejoin="round">
+    <text x="60" y="246" font-size="34" fill="#ffffff">+1</text>
+    <text x="300" y="236" font-size="40" fill="#ffe14f">+1</text>
+    <text x="318" y="296" font-size="30" fill="#ffffff">+1</text>
+  </g>
+  <!-- logo -->
+  <g font-family="Fredoka, Arial, sans-serif" font-weight="700" text-anchor="middle" stroke="#2a1d4e" stroke-width="10" paint-order="stroke" stroke-linejoin="round">
+    <text x="250" y="104" font-size="78" fill="#ffffff">زوووم</text>
+    <text x="88" y="104" font-size="72" fill="#ffe14f">+1</text>
+  </g>
+</svg>

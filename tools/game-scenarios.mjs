@@ -85,6 +85,9 @@ export const scenarios = {
   'neon-slope': defaults(['#btnPlay'], `${g}.state.mode === 'play'`, select(`${g}.state`, ['x','y','dist','gemsRun']), holdUntilChanged('ArrowRight', `${g}.state.x`), '#btnPause', `${g}.state.mode === 'paused'`, '#btnRestart', `${g}.state.dist < 15`),
   'tunnel-blitz': defaults(['#playBtn'], `${g}.info().state === 'play'`, select(`${g}.info()`, ['rot','D','score','orbsRun']), hold('ArrowRight'), '#pauseBtn', `${g}.info().state === 'paused'`, '#restartBtn', `${g}.info().D < 15`),
   'beat-dash': defaults(['#b-play','#b-go'], `${g}.scene === 'play' && !${g}.state.paused`, select(`${g}.state`, ['x','y','pct','dead','attempt']), hold('Space', 160), '#b-pause', `${g}.state.paused`, '#b-restart', `${g}.state.pct < 5`),
+  // The runner stands on the start pad until ↑ (or Space, W, the mouse) is held; every
+  // new keycap row it steps on counts a step. Restart puts it back on the pad.
+  'zoom-plus-one': defaults(['#btnPlay'], `${g}.state.screen === 'play'`, `[${g}.state.z,${g}.state.speed,${g}.state.steps,${g}.state.phase]`, hold('ArrowUp', 900), '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.z < 0`),
   'swing-hook': defaults(['#btnPlay'], `${g}.mode === 'play'`, select(`${g}.state()`, ['x','y','timer','hooked']), hold('Space', 200), '#pauseBtn', `${g}.mode === 'pause'`, '#psRestart', `${g}.state().timer < 1`),
   'moto-madness': defaults(['#btnPlay','.mm-tile[data-i="0"]'], `${g}.state === 'play'`, `[${g}.world.bike.x,${g}.world.bike.y,${g}.world.time]`, hold('ArrowUp', 280), '#pauseBtn', `${g}.state === 'paused'`, '#btnRestart', `!${g}.world.started`),
   'drift-king': defaults(['#btnPlay'], `${g}.mode === 'play'`, pos(`${g}.car`), hold('Space'), '#btnPause', `${g}.mode === 'pause' || ${g}.mode === 'paused'`, '#btnRestart', `${g}.car.progress < 1`, {
@@ -319,6 +322,7 @@ const inputSnapshots = {
   'lucky-lake': `${g}.state.p1.casts`, 'typing-test': `${g}.state.keys`, 'word-garden': `${g}.state.keys`,
   'bubble-bop': `[${g}.state.hits,${g}.state.travel]`,
   'key-runner': `${g}.state.hits`, 'keyboard-obby': `${g}.state.hops`,
+  'zoom-plus-one': `${g}.state.steps`,
   'shortcut-factory': `[${g}.state.copies,${g}.state.pastes]`,
   'block-world': `${g}.player.x`, 'candy-rope': `${g}.world().ropes.filter(r => r.alive).length`,
   'maze-dash': `[${g}.state.px,${g}.state.py,${g}.state.dots]`,
@@ -414,7 +418,7 @@ const heldKeys = {
   'keyboard-obby': 'KeyF',
   'splat-catapult': 'ArrowUp', 'recess-kitchen': 'ArrowRight', 'desk-karts': 'ArrowUp',
   'toy-castle': 'Digit1', 'magic-crayon': 'Space', 'juicy-drop': 'Space',
-  'robo-swarm': 'ArrowRight', 'balloon-blast': 'ArrowRight'
+  'robo-swarm': 'ArrowRight', 'balloon-blast': 'ArrowRight', 'zoom-plus-one': 'ArrowUp'
 };
 for (const [slug, key] of Object.entries(heldKeys)) scenarios[slug].heldKey = key;
 

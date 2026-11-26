@@ -161,6 +161,10 @@ window.GAMES = [
       { keys: ['←', '→', '↑', '↓'], action: 'اللاعب 2 في وضع اللاعبين' },
       { keys: ['P', 'Esc'], action: 'استراحة' }
     ] },
+  { slug: 'zoom-plus-one', roundMinutes: null, inputStyle: 'mixed', title: 'زوووم +1', en: 'Zooom +1 speed obby keycap road plus one speed simulator wins trophies rebirth silly runner', tags: 'سرعة +1 بلس ون اوبي أوبي جري أزرار كيبورد كؤوس مضحكة سبيد speed obby simulator', cats: ['running', 'arcade'], players: '1', color: '#ff5fa2',
+    blurb: 'كل زر تدوس عليه = +1 سرعة! اجرِ على طريق الأزرار العملاقة، اقفز فوق بحر الجيلي واجمع الكؤوس!',
+    tip: 'وقعت في الجيلي؟ لا بأس! سرعتك تبقى معك. اجرِ مرة أخرى حتى يمتلئ شريط السرعة، واشترِ <b>أحذية نطّاطة</b> من المتجر.',
+    controls: [{ keys: ['↑', 'W', 'مسافة'], action: 'اضغط مطولًا للجري' }, { keys: ['←', '→', 'A', 'D'], action: 'غيّر المسار وتفادَ البط والجيلي' }, { keys: ['الفأرة'], action: 'اضغط مطولًا للجري وحرّك للتوجيه' }, { keys: ['P', 'Esc'], action: 'استراحة' }] },
   { slug: 'candy-rope', roundMinutes: [1, 3], inputStyle: 'pointer', title: 'حبل الحلوى', en: 'Munch Rope', tags: 'cut the rope قص الحبل', cats: ['puzzle'], players: '1', color: '#8bd346',
     blurb: 'اقطع الحبال، اجمع النجوم، وأطعم الوحش قضّوم حلوته اللذيذة!',
     controls: [{ keys: ['اسحب'], action: 'اقطع الحبال' }, { keys: ['انقر'], action: 'فرقع الفقاعة وشغّل النافخ' }] },

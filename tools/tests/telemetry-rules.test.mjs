@@ -137,7 +137,7 @@ test('every catalog game reports the start and the end of its rounds', () => {
     if (!/Kit\.stats\.end\(/.test(text)) missing.push(slug + ': no Kit.stats.end');
   }
   assert.deepEqual(missing, []);
-  assert.equal(slugs.length, 52, 'the whole catalog');
+  assert.equal(slugs.length, 53, 'the whole catalog');
 });
 
 test('round ids are ids from the game, never typed text, names or codes', () => {
