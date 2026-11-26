@@ -122,15 +122,26 @@
   /* ============================================================ renderer */
   var canvas = $('gl');
   var LQ = /[?&]lq\b/.test(location.search); // low-quality mode for automated tests
+  // Light graphics (Kit.gfx) for PCs that can't keep it smooth: no antialiasing from the
+  // next start, and from the moment it turns on fewer pixels (the HUD stays sharp).
+  var gfx = Kit.gfx('rail-rush', { apply: applyGfx });
   var renderer;
   try {
-    renderer = new T.WebGLRenderer({ canvas: canvas, antialias: !LQ, alpha: true, powerPreference: 'high-performance' });
+    renderer = new T.WebGLRenderer({ canvas: canvas, antialias: !LQ && !gfx.light, alpha: true, powerPreference: 'high-performance' });
   } catch (e) {
     $('nogl').hidden = false;
     return;
   }
-  var PR = LQ ? 0.5 : Math.min(window.devicePixelRatio || 1, 1.5);
+  var UI_PR = LQ ? 0.5 : Math.min(window.devicePixelRatio || 1, 1.5);
+  function glRatio() { return LQ ? 0.5 : gfx.light ? Math.min(window.devicePixelRatio || 1, 1) * 0.75 : UI_PR; }
+  var PR = glRatio();
   renderer.setPixelRatio(PR);
+  function applyGfx() {
+    PR = glRatio();
+    dres.ratio = PR; dres.min = PR * 0.6; dres.n = 0; dres.bad = 0;
+    renderer.setPixelRatio(PR);
+    layout();
+  }
   var scene = new T.Scene();
   var camera = new T.PerspectiveCamera(60, 16 / 9, 0.1, 900);
   scene.fog = new T.Fog(0xd6ecff, 70, 200);
@@ -1393,7 +1404,7 @@
     ui.style.fontSize = (16 * s).toFixed(2) + 'px';
     updatePointScale();
     var cf = $('confetti');
-    cf.width = Math.round(w * PR); cf.height = Math.round(h * PR);
+    cf.width = Math.round(w * UI_PR); cf.height = Math.round(h * UI_PR);
   }
   window.addEventListener('resize', layout);
 
@@ -1521,7 +1532,7 @@
     if (cfxIdle) return;
     // confetti
     var w = window.innerWidth, h = window.innerHeight;
-    cctx.setTransform(PR, 0, 0, PR, 0, 0);
+    cctx.setTransform(UI_PR, 0, 0, UI_PR, 0, 0);
     cctx.clearRect(0, 0, w, h);
     for (var i = cfx.length - 1; i >= 0; i--) {
       var c = cfx[i];

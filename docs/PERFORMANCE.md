@@ -1388,3 +1388,20 @@ Rounding out the 13-game Three.js rebuild (all reusing the shared cached `lib/th
 
 
 
+
+## Light graphics for the heavy runners and racers, 26 November 2026
+
+Some lab PCs of the main model (16 cores, 8 GB, 1920 wide) run Rail Rush, Neon Slope, Road
+Hopper and Moto Madness at about 30 fps (26 to 57 percent of frames over 20 ms, while the
+other half of the same model stays near 0 percent and Tunnel Blitz is smooth on all of them).
+The existing pixel-ratio safety net only stepped in when the median frame passed 24 ms, which
+a PC alternating 16.7 ms and 33 ms frames never reaches. `shared/gfx.js` (`Kit.gfx`, see
+`docs/ARCHITECTURE.md`) turns on light graphics when more than 15 percent of frames in round
+play are over 20 ms, two 2-second windows in a row: a 0.75 pixel ratio at once and no
+antialiasing from the next start (Road Hopper also drops its shadows, Neon Slope its star
+field, Moto Madness renders 0.8 M pixels instead of 1.8 M). With software WebGL at
+1920 x 1080 the median frame goes from 217 to 100 ms (Rail Rush), 267 to 150 ms (Neon Slope)
+and 233 to 50 ms (Road Hopper); Moto Madness's 90th percentile from 33 to 17 ms. Only these
+four games load `gfx.js` (Kit gains one hook), so their built HTML grows by about 2.3 KB:
+limits `rail-rush` 142,000 → 144,500, `neon-slope` 122,000 → 124,500, `road-hopper`
+116,500 → 119,000, `moto-madness` 132,000 → 134,500.
