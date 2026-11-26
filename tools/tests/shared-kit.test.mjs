@@ -314,7 +314,7 @@ function session(h, clock) {
   clock.now = 5000; runTimers(h); h.window.emit('blur'); h.window.emit('pagehide');
 }
 
-test('without the portal\'s telemetry: true Kit sends nothing but readiness, warnings and the portal hand-off, and starts no timer', () => {
+test('without the portal\'s telemetry: true Kit sends nothing but readiness, warnings, round news and the portal hand-off, and starts no timer', () => {
   const run = (setup, options = {}) => {
     const clock = {now: 0}, raf = [], h = harness({clock, raf, ...options});
     setup(h);
@@ -337,6 +337,10 @@ test('without the portal\'s telemetry: true Kit sends nothing but readiness, war
     const h = run(setup, options);
     assert.deepEqual(telemetryOf(h), [], name + ': no statistics');
     assert.deepEqual([...new Set(h.sent.map(m => m.type || m))].filter(t => !['sg:ready', 'sg:focus-portal', 'sg:error', 'sg:round'].includes(t)), [], name);
+    // Round news (for the portal's play-next card) carries the phase and the result's letter only.
+    for (const m of h.sent.filter(m => m && m.type === 'sg:round')) assert.deepEqual(Object.keys(m).sort(), ['phase', 'result', 'type', 'version'], name);
+    if (!/never ready|failed|standalone/.test(name)) assert.ok(h.sent.some(m => m && m.type === 'sg:round' && m.phase === 'end'), name + ': round news without statistics');
+    else assert.ok(!h.sent.some(m => m && m.type === 'sg:round'), name + ': no round news');
     // A game that failed after its timer started stops the chain at the next tick.
     if (name.includes('failed')) assert.equal(pending(h), 0, name + ': no timer left');
     else assert.deepEqual(h.delays, [], name + ': no timers of its own');
@@ -378,6 +382,9 @@ test('telemetry: round starts and ends, hits, misses, reaction times, input late
   h.window.emit('keydown', {code: 'KeyA', timeStamp: 7900});                         // only the latency changes
   runTimers(h);
   const v2 = (e, il, ev, f = [0, 0, 0, 0]) => ({type: 'sg:telemetry', version: 2, e, f, il, ev});
+  // The portal hears each round start and end (the second end of L3 has no open round).
+  assert.deepEqual(h.sent.filter(m => m.type === 'sg:round').map(m => m.phase + ':' + m.result),
+    ['start:', 'start:', 'end:l', 'start:', 'end:w', 'start:', 'end:d']);
   assert.deepEqual(h.sent.slice(1).filter(m => m.type !== 'sg:round'), [
     v2(1000, [1, 0, 0, 0, 0, 0], [['rs', 'L1', 3]]),
     // rx before each end: wall ms, inputs (the key repeat aside), idle lapses, pauses,
@@ -735,20 +742,18 @@ test('telemetry: every call is safe with any argument, and every payload survive
   }
 });
 
-test('the portal hears when a round starts and ends, once per change, whatever the statistics setting', () => {
+test('the portal hears when a round starts and ends, whatever the statistics setting', () => {
   for (const telemetry of [true, false, undefined]) {
     const h = harness();
     h.Kit.ready();
     if (telemetry !== undefined) preferences(h, {telemetry});
-    const said = () => h.sent.filter(m => m.type === 'sg:round');
+    const said = () => h.sent.filter(m => m.type === 'sg:round').map(m => m.phase + ':' + m.result);
     h.Kit.stats.end('win');
     assert.deepEqual(said(), [], 'no round, nothing to end');
     h.Kit.stats.round('L1'); h.Kit.stats.round('L2');
-    assert.deepEqual(said(), [{type: 'sg:round', version: 1, open: true}], 'a round replacing a round is still one open round');
     h.Kit.stats.end('lose'); h.Kit.stats.end('lose');
     h.Kit.stats.round('L2'); h.Kit.stats.end('quit');
-    assert.deepEqual(said().map(m => m.open), [true, false, true, false]);
-    assert.ok(said().every(m => Object.keys(m).length === 3), 'nothing but whether a round is open');
+    assert.deepEqual(said(), ['start:', 'start:', 'end:l', 'start:', 'end:q']);
   }
   const alone = harness({embedded: false});
   alone.Kit.stats.round('L1');

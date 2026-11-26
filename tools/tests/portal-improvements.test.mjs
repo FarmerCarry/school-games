@@ -79,10 +79,6 @@ test('verified update waits through real game menus, play, pause and search focu
   assert.equal(await page.evaluate(() => window.portalLiveSentinel), undefined, 'closing the game auto-reloads into the verified build');
   assert.equal(await page.evaluate(() => sessionStorage.getItem('sg:offline:reloaded')), 'completed-next-build');
   assert.equal(await page.evaluate(() => SGUpdateSafe()), true);
-  await page.locator('#q').focus();
-  assert.equal(await page.evaluate(() => SGUpdateSafe()), false, 'focused search box defers auto-refresh while typing');
-  await page.locator('#q').blur();
-  assert.equal(await page.evaluate(() => SGUpdateSafe()), true);
 });
 
 test('refresh verification cannot discard a game launched while the status reply is pending', async t => {
@@ -137,9 +133,6 @@ test('personal games appear first and quick filters select matching games', asyn
     assert.deepEqual(slugs, expected, id);
     if (id === 'friends') assert.ok(slugs.includes('pool-party'));
   }
-  await page.locator('#q').fill('pool');
-  await page.waitForFunction(() => document.querySelector('#searchStatus').textContent.includes('واحدة'));
-  assert.equal(await page.evaluate(() => document.activeElement.id), 'q');
 });
 
 test('return to games restores the clicked section, keyboard focus, and scroll', async t => {

@@ -350,7 +350,7 @@ try {
     await page.goto(origin + BASE + '#/play/connect-four', { waitUntil: 'load' });
     await page.waitForFunction(() => document.querySelector('#stage iframe') && !document.querySelector('#stage iframe').hasAttribute('inert'));
     const roundFrame = page.frames().find(frame => frame.url().includes('/games/connect-four/'));
-    const round = open => roundFrame.evaluate(open => parent.postMessage({ type: 'sg:round', version: 1, open }, location.origin), open);
+    const round = open => roundFrame.evaluate(open => parent.postMessage({ type: 'sg:round', version: 1, phase: open ? 'start' : 'end', result: '' }, location.origin), open);
     await round(true);
     await page.evaluate(() => { window.promptSentinel = 'same-doc'; });
     await waitFor(() => inspector.evaluate(async ({ scope, url }) => {

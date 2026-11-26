@@ -252,19 +252,17 @@
   function text(value) { try { return String(value).slice(0, 24); } catch (e) { return ''; } }
   // A page that goes away (not kept in the back-forward cache) with a round open quits it.
   function quitOpen(quit) { if (quit && roundId) { tally(); mark('q'); roundId = ''; } }
-  // Whether a round is being played, for the portal's «new version» button, which waits
-  // for the end of a round. It is sent whatever the statistics setting: it holds no numbers.
-  var roundSaid = false;
-  function roundState(open) {
-    if (open === roundSaid) return;
-    roundSaid = open;
-    tellPortal({ type: 'sg:round', version: 1, open: open });
-  }
   Kit._ack = function () { unacked.shift(); };
   Kit._flush = function (quit) { quitOpen(quit); return [unacked.splice(0), send(quit, [])]; };
   listen('pagehide', function (e) { quitOpen(!(e && e.persisted)); send(e); });
   listen('pointermove', engage);
   listen('wheel', engage);
+  // The portal hears when a round starts and ends (sg:round), whether or not statistics
+  // are on, so it can offer the next game, and its «new version» button, between rounds. Only the phase and the result's
+  // letter: no score, no id.
+  function roundNews(phase, code) {
+    if (ready && !failed) tellPortal({ type: 'sg:round', version: 1, phase: phase, result: code || '' });
+  }
   Kit.stats = {
     // A new round while one is open ends the open one as a quit.
     round: function (id) {
@@ -274,16 +272,17 @@
       mark();
       roundMs = 0;
       send();
-      roundState(true);
+      roundNews('start');
     },
     // result: 'win', 'lose', 'draw', 'end' (no winner) or 'quit' (its first letter is sent).
     end: function (result, score) {
       if (!roundId) return;
       tally();
-      mark(text(result).charAt(0), score);
+      var code = text(result).charAt(0);
+      mark(code, score);
       roundId = '';
       send();
-      roundState(false);
+      roundNews('end', code);
     },
     tutorial: function (step) {
       if ((step === 'start' || step === 'done') && !tutorials[step]) { tutorials[step] = 1; push(['tu', step.charAt(0)]); }
