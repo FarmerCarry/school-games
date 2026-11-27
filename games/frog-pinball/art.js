@@ -43,7 +43,11 @@
     circle(c, x + lx * r * 0.42 - r * 0.16, y + ly * r * 0.42 - r * 0.18, r * 0.14); c.fillStyle = '#fff'; c.fill();
   }
   FP.googly = googly;
-  function look(fx, fy, tx, ty) { var dx = tx - fx, dy = ty - fy, d = M.sqrt(dx * dx + dy * dy) || 1; return [dx / d, dy / d]; }
+  // The way from (fx, fy) to (tx, ty), in one reused pair (read it at once): no garbage per frame.
+  var LK = [0, 0], EYE = [0, 0.4], DOWN = [0, 0.5];
+  function look(fx, fy, tx, ty) { var dx = tx - fx, dy = ty - fy, d = M.sqrt(dx * dx + dy * dy) || 1; LK[0] = dx / d; LK[1] = dy / d; return LK; }
+  // A chevron pointing up, at (x, y).
+  function chev(c, x, y) { c.beginPath(); c.moveTo(x - 10, y + 6); c.lineTo(x, y - 4); c.lineTo(x + 10, y + 6); c.lineTo(x + 10, y + 12); c.lineTo(x, y + 2); c.lineTo(x - 10, y + 12); c.closePath(); }
   // An offscreen layer w x h logical pixels at k device pixels per logical pixel.
   function layer(w, h, k, draw) {
     var cv = document.createElement('canvas');
@@ -56,6 +60,7 @@
   }
 
   /* --------------------------------------------------------------- balls */
+  var SPOTS = [-0.4, -0.45, -0.4, 0.45, 0.05, -0.55, 0.05, 0.55, -0.75, 0], SPRINKLES = ['#fff36b', '#4fd8ff', '#ffffff', '#7dffb0'];
   // ctx at the ball centre; r the radius; spin the rolling angle; t the clock.
   FP.drawBall = function (c, id, x, y, r, spin, t) {
     c.save(); c.translate(x, y);
@@ -78,7 +83,7 @@
         c.save(); c.clip();
         circle(c, r * 0.85, 0, r * 0.55); c.fillStyle = INK; c.fill();
         c.beginPath(); c.moveTo(-r, 0); c.lineTo(r * 0.5, 0); c.lineWidth = r * 0.12; c.strokeStyle = INK; c.stroke();
-        c.fillStyle = INK; [[-0.4, -0.45], [-0.4, 0.45], [0.05, -0.55], [0.05, 0.55], [-0.75, 0]].forEach(function (p) { circle(c, p[0] * r, p[1] * r, r * 0.17); c.fill(); });
+        c.fillStyle = INK; for (var sp = 0; sp < 10; sp += 2) { circle(c, SPOTS[sp] * r, SPOTS[sp + 1] * r, r * 0.17); c.fill(); }
         c.restore();
         circle(c, r * 0.95, -r * 0.2, r * 0.13); c.fillStyle = '#fff'; c.fill(); circle(c, r * 0.95, r * 0.2, r * 0.13); c.fill();
         circle(c, 0, 0, r); break;
@@ -90,8 +95,7 @@
       case 'donut':
         c.fillStyle = '#d99a52'; c.fill();
         circle(c, 0, 0, r * 0.82); c.fillStyle = '#ff7ac0'; c.fill();
-        var cols = ['#fff36b', '#4fd8ff', '#ffffff', '#7dffb0'];
-        for (var s = 0; s < 8; s++) { var a = s * 0.79 + 0.3, rr = r * (0.55 + (s % 2) * 0.12); c.save(); c.rotate(a); c.fillStyle = cols[s % 4]; c.fillRect(rr - 1.5, -1, 3.5, 2); c.restore(); }
+        for (var s = 0; s < 8; s++) { var a = s * 0.79 + 0.3, rr = r * (0.55 + (s % 2) * 0.12); c.save(); c.rotate(a); c.fillStyle = SPRINKLES[s % 4]; c.fillRect(rr - 1.5, -1, 3.5, 2); c.restore(); }
         circle(c, 0, 0, r * 0.28); c.fillStyle = '#7a4a1a'; c.fill();
         circle(c, 0, 0, r); break;
       case 'fly':
@@ -147,7 +151,7 @@
     circle(c, 0, py + 16, 6); c.fillStyle = '#fff36b'; c.fill(); c.stroke();
     // the eyes (domes on top), pupils follow the ball
     for (var e = 0; e < 2; e++) {
-      var ex = T.eyes[e][0] - T.head.x, ey = T.eyes[e][1] - T.head.y, lk = o.look ? look(x + ex * s, y + ey * s, o.look[0], o.look[1]) : [0, 0.4];
+      var ex = T.eyes[e][0] - T.head.x, ey = T.eyes[e][1] - T.head.y, lk = o.look ? look(x + ex * s, y + ey * s, o.look[0], o.look[1]) : EYE;
       circle(c, ex, ey, T.eyeR); inked(c, '#63d35a', lw);
       var squint = puff > 0.3 || o.happy;
       if (squint) {
@@ -251,7 +255,7 @@
 
   /* -------------------------------------------------------------- the view */
   FP.createView = function (ctx) {
-    var v = { calm: false, theme: -1, k: 1, bg: null, bumper: null, bumperLit: null, duck: null, flies: [] };
+    var v = { calm: false, theme: -1, k: 1, bg: null, bumper: null, bumperLit: null, duck: null, flies: [], head: { at: [0, 0] } };
     var th = THEMES[0];
     v.setTheme = function (i, k) {
       i = THEMES[i] ? i : 0;
@@ -340,7 +344,7 @@
       c.stroke(); c.setLineDash([]);
       // lane chevrons pointing up the side lanes
       c.fillStyle = 'rgba(255,255,255,0.4)';
-      [[42, 300], [42, 280], [480, 280], [480, 260]].forEach(function (p) { c.beginPath(); c.moveTo(p[0] - 10, p[1] + 6); c.lineTo(p[0], p[1] - 4); c.lineTo(p[0] + 10, p[1] + 6); c.lineTo(p[0] + 10, p[1] + 12); c.lineTo(p[0], p[1] + 2); c.lineTo(p[0] - 10, p[1] + 12); c.closePath(); c.fill(); });
+      chev(c, 42, 300); c.fill(); chev(c, 42, 280); c.fill(); chev(c, 480, 280); c.fill(); chev(c, 480, 260); c.fill();
       // the apron: a mud bank under the flippers, with the drain between them
       c.fillStyle = th.apron;
       poly(c, [[58, 550], [164, 600], [176, 640], [214, 690], [214, 730], [24, 730], [24, 690], [56, 690]], true); c.fill();
@@ -431,10 +435,16 @@
         var lk = w.boostLit[bl] / 0.5;
         if (lk <= 0) continue;
         c.globalAlpha = lk; c.fillStyle = th.glow; c.strokeStyle = INK; c.lineWidth = 2;
-        (bl ? [[480, 280], [480, 260]] : [[42, 300], [42, 280]]).forEach(function (p) {
-          c.beginPath(); c.moveTo(p[0] - 10, p[1] + 6); c.lineTo(p[0], p[1] - 4); c.lineTo(p[0] + 10, p[1] + 6); c.lineTo(p[0] + 10, p[1] + 12); c.lineTo(p[0], p[1] + 2); c.lineTo(p[0] - 10, p[1] + 12); c.closePath(); c.fill(); c.stroke();
-        });
+        chev(c, bl ? 480 : 42, bl ? 280 : 300); c.fill(); c.stroke(); chev(c, bl ? 480 : 42, bl ? 260 : 280); c.fill(); c.stroke();
         c.globalAlpha = 1;
+      }
+      // level 5: lit springs in the lane mouths, pointing up the lanes
+      for (var ms = 0; w.L.lane && ms < 2; ms++) {
+        var mo = T.mouths[ms];
+        c.save(); c.translate(mo[0] - mo[2] * 12, mo[1] - mo[3] * 12); c.rotate(M.atan2(mo[2], -mo[3]));
+        c.globalAlpha = 0.7 + 0.3 * blink; c.fillStyle = th.glow; c.strokeStyle = INK; c.lineWidth = 2;
+        chev(c, 0, 0); c.fill(); c.stroke(); chev(c, 0, -14); c.fill(); c.stroke();
+        c.restore();
       }
       // ball save: a bubble between the flippers
       var save = w.saveT > 0 && !w.over;
@@ -475,7 +485,7 @@
         var b = T.bumpers[i], bp = w.bumpers[i], lit = bp.lit > 0, sq = lit && !v.calm ? 1 + 0.18 * (bp.lit / 0.3) : 1;
         c.save(); c.translate(b[0], b[1]); c.scale(sq, 2 - sq);
         c.drawImage(lit ? v.bumperLit : v.bumper, -30, -30, 60, 60);
-        var lk = ball ? look(b[0], b[1], ball.x, ball.y) : [0, 0.5];
+        var lk = ball ? look(b[0], b[1], ball.x, ball.y) : DOWN;
         googly(c, -8, -12, 7.5, lk[0], lk[1], 2); googly(c, 8, -13, 6.5, lk[0], lk[1], 2);
         if (lit) { c.beginPath(); c.arc(0, 4, 6, 0.1, M.PI - 0.1); c.fillStyle = '#7a1f3d'; c.fill(); }
         c.restore();
@@ -495,11 +505,11 @@
       circle(c, x - 15, y - 1.5, 1.8); c.fillStyle = INK; c.fill();
     }
     function flipper(c, f, color) {
-      var d = FP.flipDir(f), L = T.flipLen, r0 = T.flipR0, r1 = T.flipR1;
-      var tx = f.x + d[0] * L, ty = f.y + d[1] * L, nx = -d[1], ny = d[0];
+      var dx = f.side * M.cos(f.ang), dy = M.sin(f.ang), L = T.flipLen, r0 = T.flipR0, r1 = T.flipR1;
+      var tx = f.x + dx * L, ty = f.y + dy * L, nx = -dy, ny = dx;
       var sinA = (r0 - r1) / L, cosA = M.sqrt(1 - sinA * sinA);
       // tangent lines between the two end circles
-      var a1x = nx * cosA + d[0] * sinA, a1y = ny * cosA + d[1] * sinA, a2x = -nx * cosA + d[0] * sinA, a2y = -ny * cosA + d[1] * sinA;
+      var a1x = nx * cosA + dx * sinA, a1y = ny * cosA + dy * sinA, a2x = -nx * cosA + dx * sinA, a2y = -ny * cosA + dy * sinA;
       c.beginPath();
       c.moveTo(f.x + a1x * r0, f.y + a1y * r0); c.lineTo(tx + a1x * r1, ty + a1y * r1);
       var ang1 = M.atan2(a1y, a1x), ang2 = M.atan2(a2y, a2x);
@@ -510,8 +520,8 @@
       inked(c, color, 3.5);
       // frog toes at the tip, a shine and the pivot bolt
       c.fillStyle = color;
-      for (var k = -1; k <= 1; k++) { circle(c, tx + d[0] * 3 + nx * k * 5, ty + d[1] * 3 + ny * k * 5, 3.6); c.fill(); c.lineWidth = 2; c.stroke(); }
-      c.beginPath(); c.moveTo(f.x + d[0] * 8 - nx * f.side * 6, f.y + d[1] * 8 - ny * f.side * 6); c.lineTo(tx - d[0] * 12 - nx * f.side * 2.5, ty - d[1] * 12 - ny * f.side * 2.5);
+      for (var k = -1; k <= 1; k++) { circle(c, tx + dx * 3 + nx * k * 5, ty + dy * 3 + ny * k * 5, 3.6); c.fill(); c.lineWidth = 2; c.stroke(); }
+      c.beginPath(); c.moveTo(f.x + dx * 8 - nx * f.side * 6, f.y + dy * 8 - ny * f.side * 6); c.lineTo(tx - dx * 12 - nx * f.side * 2.5, ty - dy * 12 - ny * f.side * 2.5);
       c.lineWidth = 3; c.strokeStyle = 'rgba(255,255,255,0.6)'; c.stroke();
       circle(c, f.x, f.y, 4.5); c.fillStyle = '#ffffff'; c.fill(); c.lineWidth = 2; c.strokeStyle = INK; c.stroke();
     }
@@ -564,7 +574,10 @@
         open = M.max(0, M.min(1, (150 - d) / 110));
       }
       var fo = o.frog || {};
-      FP.drawFrogHead(c, T.head.x, T.head.y, 1, { look: target ? [X0 + target.x, target.y] : null, open: open, puff: fr.ball ? 1 : fo.puff || 0, burp: fo.burp || 0, multi: fo.multi, t: t });
+      var hd = v.head;
+      if (target) { hd.at[0] = X0 + target.x; hd.at[1] = target.y; }
+      hd.look = target ? hd.at : null; hd.open = open; hd.puff = fr.ball ? 1 : fo.puff || 0; hd.burp = fo.burp || 0; hd.multi = fo.multi; hd.t = t;
+      FP.drawFrogHead(c, T.head.x, T.head.y, 1, hd);
       if (o.tongue && o.tongue.k > 0) {
         var tg = o.tongue, mx = T.mouth[0], my = T.mouth[1] - 8, ex = mx + (tg.x - mx) * tg.k, ey = my + (tg.y - my) * tg.k;
         c.beginPath(); c.moveTo(mx, my); c.lineTo(ex, ey); c.lineWidth = 11; c.strokeStyle = INK; c.stroke(); c.lineWidth = 7; c.strokeStyle = '#ff6f91'; c.stroke();

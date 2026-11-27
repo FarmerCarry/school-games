@@ -7,7 +7,8 @@
  * sends a ball that gets there over the frog), a plunger lane on the right, and a giant frog
  * head at the top: a ball in its mouth is gulped, held, and burped back out; three feeds
  * start a multiball (ball rain). On the first levels a lily bud between the flippers springs
- * balls back up, and on level 1 a gate drops balls coming over the top into the bumpers.
+ * balls back up, on level 1 a gate drops balls coming over the top into the bumpers, and on
+ * level 5 lit springs in the side lanes' mouths help a ball that is nearly on target in.
  * Each level is a game of three balls with one mission.
  *
  * Physics: a fixed 60 Hz step split into 8 substeps (480 Hz). Walls are line segments
@@ -46,6 +47,8 @@
     mouth: [261, 226], release: [261, 246],
     post: [261, 676, 8],
     laneY: 262, spinY: 232, lanes: [[20, 64], [458, 540]],
+    // the mouths of the two side lanes: [x, y] of the middle, then [ux, uy] the way up the lane
+    mouths: [[83, 372, -0.643, -0.766], [439, 372, 0.643, -0.766]],
     kick: [[20, 58], [464, 502]], kickY: 648,
     slings: [[[98, 456], [98, 530], [146, 551]], [[424, 456], [424, 530], [376, 551]]],
     arch: { x: 280, y: 215, rx: 260, ry: 192 },
@@ -135,13 +138,14 @@
   // m: the mission; goal: how many. save: ball-save seconds per ball (-1: the whole level,
   // 0: from the UI's difficulty). kick: 2 kickbacks always lit, 1 lit at every new ball,
   // 0 lit only by the ducks. post: the centre lily bud. pit: the gate into the bumpers.
+  // lane: lit springs in the side lanes' mouths (a ball going roughly into one goes up it).
   // slope: gravity factor. stars: the scores for 2 and 3 stars once the mission is done.
   FP.LEVELS = [
     { m: 'bump', goal: 10, save: -1, kick: 2, post: true, pit: true, slope: 0.85, mouth: 36, stars: [15000, 28000] },
     { m: 'duck', goal: 3, save: 20, kick: 1, post: true, slope: 0.9, mouth: 34, stars: [7500, 15000] },
     { m: 'feed', goal: 1, save: 20, kick: 1, post: true, slope: 0.93, mouth: 34, stars: [7000, 11000] },
     { m: 'score', goal: 5000, save: 0, kick: 0, post: false, slope: 1, mouth: 30, stars: [7500, 10000] },
-    { m: 'orbit', goal: 2, save: 0, kick: 0, post: false, slope: 1, mouth: 30, stars: [40000, 100000] },
+    { m: 'orbit', goal: 1, save: 0, kick: 0, post: false, lane: true, slope: 1, mouth: 30, stars: [9000, 18000] },
     { m: 'feed', goal: 3, save: 0, kick: 0, post: false, slope: 1, mouth: 30, stars: [12000, 25000] },
     { m: 'mult', goal: 3, save: 0, kick: 0, post: false, slope: 1, mouth: 30, stars: [15000, 30000] },
     { m: 'score', goal: 20000, save: 0, kick: 0, post: false, slope: 1, mouth: 30, stars: [25000, 29000] },
@@ -248,16 +252,17 @@
     return w;
   };
   function emit(w, e) { if (w.ev.length < 200) w.ev.push(e); }
-  // A new ball waits on the plunger.
+  // A new ball waits on the plunger; it launches by itself after auto seconds.
   function serve(w, auto) {
     var b = { id: ++w.ids, st: 'plunger', x: T.plunger.x, y: T.plunger.y - R, vx: 0, vy: 0, fresh: true, arm: 0, armT: 0, slow: 0, age: 0 };
     w.balls.push(b);
     w.waitT = 0; w.autoT = auto; w.pull = 0; w.pullT = 0;
-    emit(w, { type: 'serve', id: b.id });
+    emit(w, { type: 'serve', id: b.id, auto: auto });
     return b;
   }
   FP.serveExtra = function (w) { return serve(w, 0.5); };
   function onPlunger(w) { for (var i = 0; i < w.balls.length; i++) if (w.balls[i].st === 'plunger') return w.balls[i]; return null; }
+  function anyLive(w) { for (var i = 0; i < w.balls.length; i++) if (w.balls[i].st === 'live') return true; return false; }
   function launch(w, b, power) {
     // a spring is never quite the same twice, so no two balls take the very same path
     b.st = 'live'; b.vx = 0; b.vy = -M.min(FP.MAXV, power + (w.rnd() - 0.5) * 40); b.fresh = true; b.age = 0;
@@ -386,23 +391,29 @@
       } else if (imp > 320) emit(w, { type: 'wall', p: M.min(1, imp / 1400), x: b.x, y: b.y });
     }
   }
-  FP.duckSeg = function (i) {
-    var d = T.ducks[i], u = T.duckDir, hl = T.duckHalf;
+  // The ducks' segments [ax, ay, bx, by], worked out once.
+  var DUCKS = T.ducks.map(function (d) {
+    var u = T.duckDir, hl = T.duckHalf;
     return [d[0] - u[0] * hl, d[1] - u[1] * hl, d[0] + u[0] * hl, d[1] + u[1] * hl];
-  };
-  function duckNear(i, x, y, extra) {
-    var s = FP.duckSeg(i), ux = T.duckDir[0], uy = T.duckDir[1], t = (x - s[0]) * ux + (y - s[1]) * uy;
+  });
+  FP.duckSeg = function (i) { return DUCKS[i].slice(); };
+  // The closest point of duck i to (x, y), written into one reused object: this runs for
+  // every ball at every substep, so it makes no garbage.
+  var NEAR = { cx: 0, cy: 0, dx: 0, dy: 0, d2: 0 };
+  function duckNear(i, x, y) {
+    var s = DUCKS[i], ux = T.duckDir[0], uy = T.duckDir[1], t = (x - s[0]) * ux + (y - s[1]) * uy, n = NEAR;
     t = M.max(0, M.min(2 * T.duckHalf, t));
-    var cx = s[0] + ux * t, cy = s[1] + uy * t, dx = x - cx, dy = y - cy;
-    return { cx: cx, cy: cy, dx: dx, dy: dy, d2: dx * dx + dy * dy, hit: dx * dx + dy * dy < (T.duckR + R + (extra || 0)) * (T.duckR + R + (extra || 0)) };
+    n.cx = s[0] + ux * t; n.cy = s[1] + uy * t; n.dx = x - n.cx; n.dy = y - n.cy; n.d2 = n.dx * n.dx + n.dy * n.dy;
+    return n;
   }
   function hitDucks(w, b) {
+    var rr = T.duckR + R;
     for (var i = 0; i < w.ducks.length; i++) {
       var dk = w.ducks[i];
       if (!dk.up) continue;
       var n = duckNear(i, b.x, b.y);
-      if (!n.hit) continue;
-      var d = M.sqrt(n.d2), nx = d > 1e-6 ? n.dx / d : -0.404, ny = d > 1e-6 ? n.dy / d : 0.915, rr = T.duckR + R;
+      if (n.d2 >= rr * rr) continue;
+      var d = M.sqrt(n.d2), nx = d > 1e-6 ? n.dx / d : -0.404, ny = d > 1e-6 ? n.dy / d : 0.915;
       b.x = n.cx + nx * rr; b.y = n.cy + ny * rr;
       var imp = bounce(b, nx, ny, 0.5);
       if (imp > 50) {
@@ -410,7 +421,7 @@
         w.duckHits++;
         var p = add(w, FP.SCORE.duck);
         emit(w, { type: 'duck', i: i, x: T.ducks[i][0], y: T.ducks[i][1], score: p });
-        if (w.ducks.every(function (q) { return !q.up; })) bank(w);
+        if (!w.ducks[0].up && !w.ducks[1].up && !w.ducks[2].up) bank(w);
         check(w);
       }
     }
@@ -491,6 +502,18 @@
       b.arm = 0; b.fresh = false;
     }
   }
+  // The lit lane springs (level 5): a ball heading roughly up into a side lane's mouth is
+  // set on the lane's middle and sent straight up it, so a loop is not only for a perfect shot.
+  function funnel(w, b) {
+    for (var s = 0; s < 2; s++) {
+      var m = T.mouths[s], ux = m[2], uy = m[3], dx = b.x - m[0], dy = b.y - m[1];
+      var along = dx * ux + dy * uy, off = dy * ux - dx * uy, v = M.sqrt(b.vx * b.vx + b.vy * b.vy);
+      if (along < -24 || along > 6 || off * off > 144 || v < 250 || b.vx * ux + b.vy * uy < 0.6 * v) continue;
+      v = M.max(v, 950); b.vx = ux * v; b.vy = uy * v;
+      b.x += uy * off; b.y -= ux * off;
+      w.boostLit[s] = 0.5;
+    }
+  }
   function mouthCatch(w, b) {
     var fr = w.frog;
     if (fr.ball || fr.cool > 0 || w.over) return false;
@@ -560,6 +583,7 @@
       hitFlippers(w, b);
       var mx = b.x - px, my = b.y - py, m2 = mx * mx + my * my;
       if (m2 > w.maxStep) w.maxStep = m2;
+      if (w.L.lane) funnel(w, b);
       lanes(w, b, py);
       if (b.y < 300 && mouthCatch(w, b)) continue;
       if (b.y > T.kickY) kickback(w, b);
@@ -626,7 +650,7 @@
         }
       }
     }
-    if (w.saveT > 0 && w.balls.some(function (q) { return q.st === 'live'; })) {
+    if (w.saveT > 0 && anyLive(w)) {
       w.saveT -= dt;
       if (w.saveT <= 0) { w.saveT = 0; emit(w, { type: 'saveOff' }); }
     }
@@ -668,7 +692,7 @@
     if (w.bankT > 0 && (w.bankT -= dt) <= 0) {
       // the ducks pop back up (once no ball sits where one stands)
       var clear = true;
-      for (i = 0; i < 3 && clear; i++) for (var j = 0; j < w.balls.length; j++) if (w.balls[j].st === 'live' && duckNear(i, w.balls[j].x, w.balls[j].y, 2).hit) clear = false;
+      for (i = 0; i < 3 && clear; i++) for (var j = 0; j < w.balls.length; j++) if (w.balls[j].st === 'live' && duckNear(i, w.balls[j].x, w.balls[j].y).d2 < (T.duckR + R + 2) * (T.duckR + R + 2)) clear = false;
       if (clear) { for (i = 0; i < 3; i++) { w.ducks[i].up = true; w.ducks[i].t = 0; } emit(w, { type: 'ducksUp' }); }
       else w.bankT = 0.2;
     }

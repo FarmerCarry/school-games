@@ -1,7 +1,8 @@
 /* Frog Pinball (بينبول الضفدع): screens, input, saves, the level map and the shop, sounds,
  * the HUD and play statistics. engine.js runs the table; art.js draws it. This is the UI
  * layer: it reads Kit.dda at the start of every try (the table's slope, the ball save and
- * the bumper kick) and reports each try back to it, and it reports every try as a round.
+ * the bumper kick; free play has a level of its own) and reports each try back to it, and it
+ * reports every try as a round.
  */
 (function () {
   'use strict';
@@ -29,8 +30,9 @@
     return true;
   }
   // The table's slope, how long a drained ball comes back and how hard the bumpers kick follow
-  // how the tries go on this PC.
-  var dda = Kit.dda(SLUG, { id: 'main', target: 0.7 });
+  // how the tries go on this PC. Free play keeps its own level, from how long its balls last:
+  // its big scores say nothing about the missions.
+  var dda = Kit.dda(SLUG, { id: 'main', target: 0.7 }), ddaFree = Kit.dda(SLUG, { id: 'free', target: 0.6 });
 
   /* --------------------------------------------------------------- state */
   var screen = 'title', world = null, demo = null, demoMem = {}, demoRnd = FP.rng(11), time = 0, lastT = 0;
@@ -38,10 +40,11 @@
   var floats = [], banner = null, fx = Kit.particles(), shake = Kit.shake();
   var mouse = { l: false, r: false, pull: false, hl: false, hr: false, hp: false };
   var mood = { name: 'idle', t: 0, len: 0 }, frogFx = { burp: 0, multi: false }, tongue = { k: 0, x: 0, y: 0 };
-  var hint = 0, noFlip = 0, scorePop = 0, shownScore = 0, wallAt = 0, spinAt = 0, flipAt = 0;
+  var viewOpts = { t: 0, skin: '', frog: frogFx, tongue: tongue };
+  var hint = 0, noFlip = 0, scorePop = 0, shownScore = 0, wallAt = 0, spinAt = 0, flipAt = 0, waitAt = -1, pullWas = false;
   var MISSION = {
     bump: 'اضرب المصدّات 10 مرات', duck: 'أسقط البطات الثلاث', feed1: 'أطعم الضفدع', score5: 'اجمع 5,000 نقطة',
-    orbit: 'لفّتان في المدار', feed3: 'أطعم الضفدع 3 مرات', mult: 'اصنع مضاعفًا ' + ltr('×3'), score20: 'اجمع 20,000 نقطة',
+    orbit: 'لفّة في المدار', feed3: 'أطعم الضفدع 3 مرات', mult: 'اصنع مضاعفًا ' + ltr('×3'), score20: 'اجمع 20,000 نقطة',
     multi: 'مطر الكرات مرتين', free: 'أعلى نتيجة!'
   };
   var MKEY = ['bump', 'duck', 'feed1', 'score5', 'orbit', 'feed3', 'mult', 'score20', 'multi', 'free'];
@@ -91,13 +94,14 @@
   function start(lv) {
     quitRound();
     level = lv;
-    var d = { level: lv, gravity: dda.value(960, 1300), save: dda.value(13, 7), kick: dda.value(360, 440), seed: (time * 1000 + lv * 7919) | 0 };
+    var k = lv === FP.FREE ? ddaFree : dda;
+    var d = { level: lv, gravity: k.value(960, 1300), save: k.value(13, 7), kick: k.value(360, 440), seed: (time * 1000 + lv * 7919) | 0 };
     world = FP.create(d);
     floats.length = 0; banner = null; fx.clear(); outcome = null; endT = 0;
-    frogFx.burp = 0; tongue.k = 0; shownScore = 0; noFlip = 0;
+    frogFx.burp = 0; tongue.k = 0; shownScore = 0; noFlip = 0; waitAt = -1;
     setMood('wow', 1);
     Kit.stats.round(lv === FP.FREE ? 'free' : 'L' + lv);
-    Kit.track.tier(dda.tier);
+    Kit.track.tier(k.tier);
     roundOpen = true;
     if (!save.coach) { hint = 1; Kit.stats.tutorial('start'); } else hint = 0;
     setScreen('play');
@@ -128,7 +132,8 @@
     roundOpen = false;
     var won = kind === 'win', score = world.score, balls = world.ballsLeft;
     Kit.stats.end(kind, score);
-    if (level === FP.FREE) dda.result(M.min(1, score / 25000));
+    // free play: how long its three balls lasted (5 minutes or more is the top)
+    if (level === FP.FREE) ddaFree.result(M.min(1, world.t / 300));
     else dda.result(won ? (balls >= 3 ? 1 : balls === 2 ? 0.85 : 0.7) : 0);
     var rec = FP.record(save, level, score, won);
     outcome = { won: won, kind: kind, score: score, stars: rec.stars, newBest: rec.newBest, unlocked: rec.unlocked, best: save.best[level - 1] };
@@ -332,15 +337,15 @@
   }
   // Held keys and buttons, plus presses that came and went between two frames.
   var KL = ['ArrowLeft', 'KeyA', 'KeyZ', 'ShiftLeft'], KR = ['ArrowRight', 'KeyD', 'Slash', 'ShiftRight'], KP = ['Space', 'ArrowDown'];
+  // (one reused object: this runs every frame)
+  var buttons = { left: false, right: false, pull: false };
   function readInput() {
-    var k = Kit.keys;
-    var inp = {
-      left: k.anyDown(KL) || k.anyPressed(KL) || mouse.l || mouse.hl || !!mouse.tl,
-      right: k.anyDown(KR) || k.anyPressed(KR) || mouse.r || mouse.hr || !!mouse.tr,
-      pull: k.anyDown(KP) || k.anyPressed(KP) || mouse.pull || mouse.hp || !!mouse.tp
-    };
+    var k = Kit.keys, b = buttons;
+    b.left = k.anyDown(KL) || k.anyPressed(KL) || mouse.l || mouse.hl || !!mouse.tl;
+    b.right = k.anyDown(KR) || k.anyPressed(KR) || mouse.r || mouse.hr || !!mouse.tr;
+    b.pull = k.anyDown(KP) || k.anyPressed(KP) || mouse.pull || mouse.hp || !!mouse.tp;
     mouse.hl = mouse.hr = mouse.hp = false;
-    return inp;
+    return b;
   }
 
   /* -------------------------------------------------------- sounds and fx */
@@ -395,9 +400,12 @@
       case 'launch':
         S.launch(ev.power / FP.MAXP);
         if (hint === 1) hint = save.coach ? 0 : 2;
+        waitAt = -1;
         burst(ev.x, ev.y, ['#fff', '#ffe14f'], 10, 220);
         break;
-      case 'serve': if (world && world.launches) Kit.track.cue(); break;
+      // a new ball after a drain waits for the child (a saved ball goes by itself): the time
+      // to the plunger press is a reaction time
+      case 'serve': waitAt = world.launches && ev.auto > 1 ? world.t : -1; break;
       case 'bumper':
         S.boing(ev.combo); Kit.track.hit();
         burst(ev.x, ev.y, ['#d8ff6b', '#fff', '#ff8cc6'], 10, 260);
@@ -496,6 +504,8 @@
     if (screen === 'play' && world) {
       var inp = readInput();
       if (outcome) { inp.pull = false; }
+      if (waitAt >= 0 && inp.pull && !pullWas) { Kit.track.react((world.t + dt - waitAt) * 1000); waitAt = -1; }
+      pullWas = inp.pull;
       FP.step(world, dt, inp);
       for (var i = 0; i < world.ev.length; i++) handle(world.ev[i]);
       world.ev.length = 0;
@@ -542,6 +552,7 @@
     ctx.lineWidth = 4; ctx.strokeStyle = '#fff'; ctx.stroke();
   }
   // Wraps Arabic words into lines no wider than w.
+  var missionLines = null, linesFor = 0;
   function lines(str, size, w) {
     ctx.font = '700 ' + size + 'px Fredoka'; ctx.direction = 'rtl';
     var words = str.split(' '), out = [], cur = '';
@@ -575,7 +586,8 @@
     text(level === FP.FREE ? 'لعب حر' : 'المرحلة ' + level, 221, 48, 32, '#ffffff', 'center', true);
     card(16, 92, 330, 196, '#fffdf2', 26);
     missionIcon(L.m, 288, 146, 0.95);
-    var ml = lines(missionText(level), 29, 204), top = ml.length > 1 ? 128 : 146;
+    if (linesFor !== level) { missionLines = lines(missionText(level), 29, 204); linesFor = level; }
+    var ml = missionLines, top = ml.length > 1 ? 128 : 146;
     for (var i = 0; i < ml.length && i < 3; i++) text(ml[i], 240, top + i * 38, 29, FP.INK, 'right', true, false);
     if (L.m !== 'free') {
       var goal = L.goal, prog = w.prog, f = M.min(1, (L.m === 'mult' ? prog - 1 : prog) / (L.m === 'mult' ? goal - 1 : goal));
@@ -670,7 +682,8 @@
     ctx.save();
     if (shake.power && screen === 'play') ctx.translate(shake.x, shake.y);
     if (w) {
-      view.render(w, { t: time, skin: FP.SKINS[save.skin].id, frog: frogFx, tongue: tongue });
+      viewOpts.t = time; viewOpts.skin = FP.SKINS[save.skin].id;
+      view.render(w, viewOpts);
     } else view.panelsOnly();
     ctx.restore();
     if (screen === 'title') { FP.drawMascot(ctx, 180, 410, 0.78, 'idle', 0, time, calm()); dirty = false; return; }
@@ -720,7 +733,7 @@
   window.addEventListener('pagehide', function () { persist(); });
   canvas.addEventListener('contextrestored', function () { if (view) view.resize(view.k); dirty = true; render(); });
   if (document.fonts && document.fonts.load) {
-    document.fonts.load('700 40px Fredoka', 'ب').then(function () { dirty = true; render(); }, function () { /* fallback fonts */ });
+    document.fonts.load('700 40px Fredoka', 'ب').then(function () { dirty = true; linesFor = 0; render(); }, function () { /* fallback fonts */ });
   }
   var loop = null;
   try {

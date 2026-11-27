@@ -267,7 +267,7 @@ pull the plunger (a quick tap always reaches the table); P or Esc pauses. Three 
 bumpers go "بونغ!", three rubber-duck drop targets raise the multiplier (up to ×5) and light the
 kickbacks, the orbit loop scores "لفّة!", and a giant frog gulps a ball shot into its mouth ("غلب!")
 and burps it back out ("بُرررب!"); three feeds start «مطر الكرات» multiball. Nine mission levels
-(bumpers, ducks, feed the frog, 5,000 points, two loops, three feeds, ×3 multiplier, 20,000 points,
+(bumpers, ducks, feed the frog, 5,000 points, a loop, three feeds, ×3 multiplier, 20,000 points,
 two ball rains), then free play with a saved best. Level 1 cannot be lost: every ball comes back,
 both kickbacks stay lit, the slope is gentler and a lily bud springs balls back. Stars unlock 6 ball
 skins and night and candy ponds. `Kit.dda` sets gravity, ball save and bumper kick; physics run at

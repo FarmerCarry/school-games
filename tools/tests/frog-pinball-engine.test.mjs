@@ -1,9 +1,10 @@
 // Frog Pinball's pure engine in Node: the table geometry, the physics (cradles, flips,
 // bumpers, slingshots, no ball ever escaping or tunnelling in thousands of random shots),
 // the plunger, the frog's gulp and burp and the ball rain, ducks and the multiplier,
-// kickbacks (never a loop between the outlanes), the orbit, level 1's gate into the bumpers,
-// ball save and lost balls, every mission, saves, and players: a good scripted player wins
-// every level and a sloppy one wins the first level quickly at every difficulty.
+// kickbacks (never a loop between the outlanes), the orbit and level 5's lit lane springs,
+// level 1's gate into the bumpers, ball save and lost balls, every mission, saves, and players:
+// a good scripted player wins every level, a sloppy one wins the first level quickly at every
+// difficulty, and level 5 sits between levels 4 and 6 for a sloppy player.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -212,8 +213,9 @@ test('no ball ever escapes, tunnels or sinks into a solid in thousands of random
     T.ducks.every(d => Math.hypot(x - d[0], y - d[1]) > T.duckHalf + T.duckR + R + 1) &&
     T.flippers.every(f => Math.hypot(x - f.x, y - f.y) > T.flipLen + 25) && !T.slings.some(t => inConvex(t, x, y));
   let shots = 0, worst = 0, frames = 0;
-  for (let k = 0; k < 2400; k++) {
-    const w = table(k % 3 ? 4 : 1, { gravity: 900 + rnd() * 450, seed: k });
+  // levels 4 and 1 (the gate), then level 5 (the lit springs in the lane mouths)
+  for (let k = 0; k < 3000; k++) {
+    const w = table(k >= 2400 ? 5 : k % 3 ? 4 : 1, { gravity: 900 + rnd() * 450, seed: k });
     let x, y;
     do { x = 21 + rnd() * 518; y = 25 + rnd() * 640; } while (!clear(x, y));
     const a = rnd() * Math.PI * 2, sp = rnd() * FP.MAXV;
@@ -242,8 +244,8 @@ test('no ball ever escapes, tunnels or sinks into a solid in thousands of random
     worst = Math.max(worst, Math.sqrt(w.maxStep));
     shots++;
   }
-  assert.equal(shots, 2400);
-  assert.ok(frames > 2400 * 100);
+  assert.equal(shots, 3000);
+  assert.ok(frames > 3000 * 100);
   assert.ok(worst < R, 'a ball never moves its radius in one substep: ' + worst.toFixed(2));
 });
 
@@ -458,17 +460,22 @@ test('the orbit: up one side lane, over the frog and down the other is a loop; t
   const launchEv = run(w, { seconds: 3, input: (w, i) => ({ pull: i === 2 }) });
   assert.equal(count(launchEv, 'orbit'), 0);
   assert.equal(w.orbits, 0);
-  // a shot up either side channel loops round the top and comes down the other side
-  for (const side of [0, 1]) for (const g of [960, 1300]) {
-    const o = table(5, { gravity: g });
+  // a shot up either side channel loops round the top and comes down the other side (level 6
+  // has no lit lane springs; on level 5 the loop is the mission, with a bonus for spare balls)
+  for (const lv of [5, 6]) for (const side of [0, 1]) for (const g of [960, 1300]) {
+    const o = table(lv, { gravity: g });
     const [x, y, dx, dy] = side ? [442, 384, 42, -50] : [80, 384, -42, -50], l = Math.hypot(dx, dy);
     const b = ball(o, x, y, dx / l * 1300, dy / l * 1300);
     const ev = run(o, { seconds: 4, until: (w, ev) => ev.some(e => e.type === 'orbit') });
     assert.ok(ev.some(e => e.type === 'boost' && e.lane === side), 'boost ' + side);
-    assert.equal(count(ev, 'orbit'), 1, `loop from lane ${side}, g ${g}`);
+    assert.equal(count(ev, 'orbit'), 1, `loop from lane ${side}, g ${g}, L${lv}`);
     assert.equal(o.orbits, 1);
-    assert.equal(o.prog, 1, 'counts for the orbit mission');
-    assert.equal(o.score - (ev.filter(e => e.type === 'spin').reduce((a, e) => a + e.score, 0)), FP.SCORE.orbit);
+    assert.equal(o.score - o.bonus - (ev.filter(e => e.type === 'spin').reduce((a, e) => a + e.score, 0)), FP.SCORE.orbit);
+    if (lv === 5) {
+      assert.equal(o.prog, 1, 'counts for the orbit mission');
+      assert.equal(o.over, 'win', 'one loop wins level 5');
+      assert.equal(o.bonus, 2 * FP.SCORE.spare);
+    } else assert.equal(o.over, '');
     assert.equal(b.st, 'live');
   }
   // even a lazy ball going up the left lane is sprung over the top by the lane's lily pad
@@ -489,6 +496,32 @@ test('the orbit: up one side lane, over the frog and down the other is a loop; t
   assert.ok(sev.some(e => e.type === 'spinner'));
   assert.ok(count(sev, 'spin') >= 3);
   assert.ok(count(sev, 'spin') < 40, 'a spin scores a handful, not a fortune');
+});
+
+test('level 5 lights springs in the lane mouths: a shot a little off the lane goes up it, not on other levels', () => {
+  // 15° off the lane, from 60 px out: it hits a rail on level 4 and loops on level 5
+  for (const side of [0, 1]) for (const turn of [-15, 15]) for (const sp of [800, 1100, 1400]) {
+    const m = T.mouths[side], a = turn * Math.PI / 180, ux = m[2] * Math.cos(a) - m[3] * Math.sin(a), uy = m[2] * Math.sin(a) + m[3] * Math.cos(a);
+    const up = {};
+    for (const lv of [4, 5]) {
+      const o = table(lv);
+      ball(o, m[0] - m[2] * 60, m[1] - m[3] * 60, ux * sp, uy * sp);
+      const ev = run(o, { seconds: 1 });
+      up[lv] = ev.some(e => e.type === 'boost' && e.lane === side);
+      if (lv === 5) assert.equal(count(run(o, { seconds: 3, until: w => w.orbits > 0 }), 'orbit'), 1, `the loop: lane ${side}, ${turn}°, ${sp}`);
+    }
+    assert.deepEqual(up, { 4: false, 5: true }, `lane ${side}, ${turn}°, ${sp}`);
+  }
+  // a ball coming down out of a lane, or a slow one rolling at a mouth, is left alone
+  for (const side of [0, 1]) for (const [dir, sp] of [[-1, 700], [1, 150]]) {
+    const m = T.mouths[side], path = {};
+    for (const lv of [4, 5]) {
+      const o = table(lv), b = ball(o, m[0] + m[2] * 4, m[1] + m[3] * 4, m[2] * dir * sp, m[3] * dir * sp);
+      run(o, { seconds: 0.5 });
+      path[lv] = [b.x, b.y, b.vx, b.vy];
+    }
+    assert.deepEqual(path[5], path[4], `lane ${side}, ${dir * sp}`);
+  }
 });
 
 test('ball save brings a drained ball back; after it a drain costs a ball; three lost balls end the game', () => {
@@ -654,4 +687,24 @@ test('level 1 is won quickly by a sloppy masher at every difficulty, and never l
     assert.ok(times[12] < 30, `d ${d}: the median win takes ${times[12].toFixed(1)} s`);
     assert.ok(times[23] < 90, `d ${d}: the slowest win takes ${times[23].toFixed(1)} s`);
   }
+});
+
+test('the ramp has no wall at level 5: a sloppy player wins it less often than level 4, not less than level 6', () => {
+  // at the first-visit difficulty; the lit lane springs and a single loop make the orbit fair
+  const N = 60, wins = {}, time = {};
+  for (const lv of [4, 5, 6]) {
+    wins[lv] = 0; time[lv] = 0;
+    for (let seed = 1; seed <= N; seed++) {
+      const w = FP.create(Object.assign({ level: lv, seed: seed * 7919 }, tune(0.35)));
+      run(w, { seconds: 10 * 60, input: sloppy(FP.rng(seed * 31)), until: w => !!w.over });
+      if (w.over === 'win') wins[lv]++;
+      const g = FP.create(Object.assign({ level: lv, seed: seed * 7919 }, tune(0.35))), r = FP.rng(seed * 17), mem = {};
+      run(g, { seconds: 10 * 60, input: w => FP.bot(w, r, 0.3, mem), until: w => !!w.over });
+      time[lv] += g.t / N;
+    }
+  }
+  const say = `wins of ${N}: L4 ${wins[4]}, L5 ${wins[5]}, L6 ${wins[6]}; a weak flipper's tries: L4 ${time[4].toFixed(0)} s, L5 ${time[5].toFixed(0)} s, L6 ${time[6].toFixed(0)} s`;
+  assert.ok(wins[5] >= N / 4, say);
+  assert.ok(wins[4] > wins[5] && wins[5] >= wins[6], say);
+  assert.ok(time[5] < time[6], say);
 });

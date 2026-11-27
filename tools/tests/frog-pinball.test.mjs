@@ -1,8 +1,9 @@
 // Frog Pinball in real Chromium, with the frame loop stepped by hand: Enter and Play start
 // level 1, real keys and mouse buttons move the flippers and the plunger, pause freezes the
 // table, restart resets it, a won level and a lost one reach the result screen, the level
-// map and the shop, a save that survives a reload, a save that fails, and no errors or
-// network requests at any point.
+// map and the shop, a save that survives a reload, a save that fails, the statistics (reaction
+// times only from a plunger press, free play's own difficulty), and no errors or network
+// requests at any point.
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import path from 'node:path';
@@ -31,9 +32,13 @@ async function game(t, { save, failSave = false, reduced = true } = {}) {
       if (save !== undefined) localStorage.setItem(KEY, JSON.stringify(save));
     }
     let kit;
-    const fp = window.fp = { failSave };
+    const fp = window.fp = { failSave, rt: [], cues: 0 };
     Object.defineProperty(window, 'Kit', { configurable: true, get: () => kit, set(value) {
       kit = value;
+      // the reaction times the game reports, and any cue it leaves for Kit to answer
+      const { react, cue } = kit.track;
+      kit.track.react = function (ms) { fp.rt.push(ms); return react.apply(this, arguments); };
+      kit.track.cue = function () { fp.cues++; return cue.apply(this, arguments); };
       kit.loop = (update, render) => {
         fp.step = (n = 1) => { for (let i = 0; i < n; i++) update(1 / 60); render(0); };
         fp.run = (n = 1) => { for (let i = 0; i < n; i++) update(1 / 60); };
@@ -54,6 +59,7 @@ async function game(t, { save, failSave = false, reduced = true } = {}) {
 }
 const state = page => page.evaluate(() => __game.state);
 const stored = page => page.evaluate(KEY => JSON.parse(localStorage.getItem(KEY)), KEY);
+const ddaSaved = page => page.evaluate(() => JSON.parse(localStorage.getItem('sg:frog-pinball:dda') || '{}'));
 const step = (page, n) => page.evaluate(n => fp.step(n), n);
 async function until(page, cond, max = 3600) {
   return page.evaluate(({ cond, max }) => {
@@ -260,6 +266,8 @@ test('a lost level: three drained balls end it, no Next; R plays again; free pla
   assert.equal(await page.locator('#btnNext').isVisible(), false);
   assert.equal(await page.locator('#resStars svg.on').count(), 0);
   assert.equal((await stored(page)).stars[3], 0);
+  const main = (await ddaSaved(page)).main;
+  assert.deepEqual(main, [0.224, 1], 'a lost mission is one result for the missions (0.35 + 0.18 × (0 - 0.7))');
   await page.keyboard.press('KeyR');
   s = await state(page);
   assert.equal(s.screen, 'play');
@@ -284,8 +292,50 @@ test('a lost level: three drained balls end it, no Next; R plays again; free pla
   assert.equal((await state(page)).result, 'end');
   assert.equal(await page.locator('#resStars').isVisible(), false, 'free play has no stars');
   assert.equal((await stored(page)).best[9], (await state(page)).score);
+  const dda = await ddaSaved(page);
+  assert.deepEqual(dda.main, main, 'free play leaves the missions\' difficulty alone');
+  assert.equal(dda.free[1], 1, 'free play has a difficulty of its own');
+  assert.ok(dda.free[0] < 0.35, 'balls that went quickly make free play gentler');
   await page.click('#btnMenu');
   assert.equal((await state(page)).screen, 'title');
+});
+
+test('a reaction time is the plunger press for a ball waiting after a drain: not a flip, a first ball, a saved ball or a ball that went by itself', async t => {
+  const page = await game(t, { save: { v: 1, stars: [2, 2, 1, 0, 0, 0, 0, 0, 0, 0], best: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], skin: 0, theme: 0, coach: true, seen: 0 } });
+  const rt = () => page.evaluate(() => fp.rt.slice());
+  await page.keyboard.press('Enter');
+  await step(page, 20);
+  await page.keyboard.press('Space');
+  await step(page, 30);
+  assert.equal((await state(page)).launched, true);
+  assert.deepEqual(await rt(), [], 'the first ball of a round is no reaction');
+  // a drained ball: the next one waits; a flip does not answer it, the plunger press does
+  await drain(page);
+  assert.ok(await until(page, 's.drains === 1 && !s.launched && s.by > 600', 120), 'the next ball waits');
+  await step(page, 30);
+  await page.keyboard.press('ArrowLeft');
+  await step(page, 30);
+  assert.deepEqual(await rt(), [], 'a flip is no answer');
+  await page.keyboard.press('Space');
+  await step(page, 30);
+  assert.equal((await state(page)).launched, true);
+  let times = await rt();
+  assert.equal(times.length, 1);
+  assert.ok(times[0] > 900 && times[0] < 1100, 'about a second: ' + times[0]);
+  // a saved ball goes by itself, whatever the child presses
+  await page.evaluate(() => { const w = __game.world, b = w.balls.find(q => q.st === 'live'); w.saveT = 5; b.x = 261; b.y = 712; b.vx = 0; b.vy = 500; });
+  assert.ok(await until(page, 's.saves === 1', 60));
+  await page.keyboard.press('Space');
+  await step(page, 30);
+  assert.equal((await state(page)).launched, true);
+  // a ball that launches by itself is no reaction either
+  await drain(page);
+  assert.ok(await until(page, 's.drains === 2 && !s.launched && s.by > 600', 120));
+  assert.ok(await until(page, 's.launched', 60 * 4), 'it launches by itself');
+  await page.keyboard.press('Space');
+  await step(page, 10);
+  assert.equal((await rt()).length, 1, 'still the one reaction time');
+  assert.equal(await page.evaluate(() => fp.cues), 0, 'no cue for Kit to answer with any key');
 });
 
 test('the level map and the shop: locked levels stay shut, skins and pond colours cost stars and are kept', async t => {
