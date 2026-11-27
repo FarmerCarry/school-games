@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>عاصفة الكرات</title>
+<link rel="icon" type="image/svg+xml" href="../../favicon.svg">
+<link rel="stylesheet" href="../../shared/game.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<svg class="defs" aria-hidden="true" focusable="false" width="0" height="0">
+  <symbol id="i-play" viewBox="0 0 64 64"><path d="M22 11 Q18 9 18 14 L18 50 Q18 55 22 53 L52 35 Q56 32 52 29 Z"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 64 64"><rect x="15" y="12" width="12" height="40" rx="5"/><rect x="37" y="12" width="12" height="40" rx="5"/></symbol>
+  <symbol id="i-again" viewBox="0 0 64 64"><path d="M50 30 A19 19 0 1 1 41 15" fill="none" stroke="currentColor" stroke-width="9" stroke-linecap="round"/><path d="M33 4 L52 13 L37 27 Z"/></symbol>
+  <symbol id="i-home" viewBox="0 0 64 64"><path d="M8 32 L32 10 L56 32 L49 32 L49 54 L37 54 L37 40 L27 40 L27 54 L15 54 L15 32 Z"/></symbol>
+  <symbol id="i-shop" viewBox="0 0 64 64"><path d="M10 22 L54 22 L50 54 L14 54 Z"/><path d="M22 24 L22 18 A10 10 0 0 1 42 18 L42 24" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 64 64"><rect x="8" y="8" width="20" height="20" rx="6"/><rect x="36" y="8" width="20" height="20" rx="6"/><rect x="8" y="36" width="20" height="20" rx="6"/><rect x="36" y="36" width="20" height="20" rx="6"/></symbol>
+  <symbol id="i-star" viewBox="0 0 64 64"><path d="M32 5 L40 23 L60 25 L45 38 L49 58 L32 48 L15 58 L19 38 L4 25 L24 23 Z" fill="#ffd93d" stroke="#2a1d4e" stroke-width="4" stroke-linejoin="round"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 64 64"><rect x="12" y="28" width="40" height="30" rx="7" fill="#9aa3c7" stroke="#2a1d4e" stroke-width="4"/><path d="M21 29 L21 21 A11 11 0 0 1 43 21 L43 29" fill="none" stroke="#2a1d4e" stroke-width="6"/></symbol>
+  <symbol id="i-inf" viewBox="0 0 64 64"><path d="M32 32 C24 20 8 20 8 32 C8 44 24 44 32 32 C40 20 56 20 56 32 C56 44 40 44 32 32 Z" fill="none" stroke="currentColor" stroke-width="8" stroke-linejoin="round"/></symbol>
+</svg>
+
+<canvas id="game" tabindex="0" aria-label="عاصفة الكرات"></canvas>
+
+<div id="ui">
+  <div id="hud" hidden>
+    <button type="button" id="btnPause" class="bs-btn bs-round" aria-label="استراحة" title="استراحة (P / Esc)"><svg aria-hidden="true"><use href="#i-pause"/></svg></button>
+  </div>
+
+  <section id="scrTitle" class="screen title" aria-label="عاصفة الكرات">
+    <h1 class="logo"><span class="l1">عاصفة</span> <span class="l2">الكرات</span><span class="x3" dir="ltr">×3</span></h1>
+    <button type="button" id="btnPlay" class="bs-btn bs-play ring" aria-label="العب"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
+    <div class="title-chips">
+      <span class="chip" id="titleLevel" aria-label="المرحلة"><small>المرحلة</small><b>1</b></span>
+      <span class="chip" id="titleStars" aria-label="النجوم"><svg aria-hidden="true"><use href="#i-star"/></svg><b>0</b></span>
+      <span class="chip" id="titleStorm" aria-label="أكبر عاصفة"><small>أكبر عاصفة</small><b>×1</b></span>
+    </div>
+    <div class="title-btns">
+      <button type="button" id="btnLevels" class="bs-btn bs-wide" aria-label="المراحل"><svg aria-hidden="true"><use href="#i-grid"/></svg><span>المراحل</span></button>
+      <button type="button" id="btnShop" class="bs-btn bs-wide shop" aria-label="المتجر"><svg aria-hidden="true"><use href="#i-shop"/></svg><span>المتجر</span><i class="new" id="shopNew" hidden>جديد!</i></button>
+      <button type="button" id="btnEndless" class="bs-btn bs-wide endless" aria-label="بلا نهاية"><svg aria-hidden="true"><use href="#i-inf"/></svg><span>بلا نهاية</span><i class="lock" id="endlessLock"><svg aria-hidden="true"><use href="#i-lock"/></svg></i></button>
+    </div>
+    <div class="howto">
+      <span><span class="sg-key">الفأرة</span> أو <span dir="ltr"><span class="sg-key">←</span> <span class="sg-key">→</span></span> حرّك المضرب</span>
+      <span><span class="sg-key">انقر</span> أو <span class="sg-key">مسافة</span> أطلق الكرة</span>
+      <span>التقط <b dir="ltr">×3</b> واصنع عاصفة!</span>
+    </div>
+  </section>
+
+  <section id="scrLevels" class="screen dim" aria-label="المراحل" hidden>
+    <div class="card levels-card">
+      <div class="card-head">
+        <button type="button" id="levelsBack" class="bs-btn bs-round back" aria-label="رجوع"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
+        <h2>المراحل</h2>
+        <span class="chip ink" id="levelsStars"><svg aria-hidden="true"><use href="#i-star"/></svg><b>0</b></span>
+      </div>
+      <div id="worlds"></div>
+    </div>
+  </section>
+
+  <section id="scrShop" class="screen dim" aria-label="المتجر" hidden>
+    <div class="card shop-card">
+      <div class="card-head">
+        <button type="button" id="shopBack" class="bs-btn bs-round back" aria-label="رجوع"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
+        <h2>المتجر</h2>
+        <span class="chip ink" id="shopStars"><svg aria-hidden="true"><use href="#i-star"/></svg><b>0</b></span>
+      </div>
+      <p class="hint">النجوم تفتح أشياء جديدة!</p>
+      <h3>الكرات</h3>
+      <div class="items" id="shopBalls" role="group" aria-label="الكرات"></div>
+      <h3>المضارب</h3>
+      <div class="items" id="shopPaddles" role="group" aria-label="المضارب"></div>
+    </div>
+  </section>
+
+  <section id="scrPause" class="screen dim" aria-label="استراحة" hidden>
+    <div class="card">
+      <h2>استراحة</h2>
+      <button type="button" id="btnResume" class="bs-btn bs-go" aria-label="تابع"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
+      <div class="row">
+        <button type="button" id="btnHome" class="bs-btn bs-round big" aria-label="البداية"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
+        <button type="button" id="btnRestart" class="bs-btn bs-round big" aria-label="أعد المرحلة"><svg aria-hidden="true"><use href="#i-again"/></svg></button>
+      </div>
+    </div>
+  </section>
+
+  <section id="scrResult" class="screen dim" aria-label="النتيجة" hidden>
+    <div class="card result-card">
+      <h2 id="resTitle">فوز!</h2>
+      <div class="stars" id="resStars"><svg class="st" aria-hidden="true"><use href="#i-star"/></svg><svg class="st" aria-hidden="true"><use href="#i-star"/></svg><svg class="st" aria-hidden="true"><use href="#i-star"/></svg></div>
+      <div class="res-score"><b id="resScore">0</b><small>نقطة</small></div>
+      <div class="res-best" id="resBest" hidden>رقم قياسي جديد!</div>
+      <div class="res-storm" id="resStorm"></div>
+      <button type="button" id="resUnlock" class="res-unlock" hidden><canvas width="120" height="120"></canvas><span><b>جديد في المتجر!</b><small></small></span></button>
+      <div class="row">
+        <button type="button" id="btnMenu" class="bs-btn bs-round big" aria-label="البداية"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
+        <button type="button" id="btnAgain" class="bs-btn bs-round big again" aria-label="مرة أخرى" title="مرة أخرى (R)"><svg aria-hidden="true"><use href="#i-again"/></svg></button>
+        <button type="button" id="btnNext" class="bs-btn bs-go next" aria-label="المرحلة التالية" title="التالية (Enter)"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
+      </div>
+    </div>
+  </section>
+
+  <section id="scrError" class="screen dim" hidden>
+    <div class="card"><h2>عذرًا!</h2><p>تعذّر تشغيل اللعبة. جرّب لعبة أخرى.</p></div>
+  </section>
+</div>
+<div id="live" class="sr" aria-live="polite"></div>
+
+<script src="../../shared/kit.js"></script>
+<script src="../../shared/juice.js"></script>
+<script src="levels.js"></script>
+<script src="engine.js"></script>
+<script src="art.js"></script>
+<script src="game.js"></script>
+</body>
+</html>
