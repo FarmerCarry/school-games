@@ -583,7 +583,7 @@
     var sp = w.spec;
     if (w.mode === 'levels') {
       progress(640, 18, 380, M.min(t.height, sp.goal), sp.goal, '#ffe14f');
-      ST.drawPiece(ctx, 'bun', 640 - 190 - 36, 54, 52, 26, {});
+      ST.drawPiece(ctx, 'bun', 640 - 190 - 36, 54, 52, 26);
       text('المرحلة ' + w.level, 640, 76, 24, '#fff', 'center', true);
     } else {
       panel(520, 12, 240, 70);
@@ -629,6 +629,8 @@
   }
 
   /* --------------------------------------------------------------- render */
+  // One options object for view.render and one look for the title's eater, refilled each frame.
+  var ro = { sway: sway, pop: pop }, peekLook = { x: 0, y: -0.4 };
   function render() {
     if (screen !== 'play' && screen !== 'title' && !dirty) return; // a still menu keeps its last frame
     if (screen === 'title' && calm() && !dirty) return;
@@ -637,14 +639,14 @@
     if (shake.power) ctx.translate(shake.x, shake.y);
     if (w) {
       var isDemo = w === demo;
-      view.render(w, {
-        t: time, theme: isDemo ? 'canteen' : themeOf(w), endless: !isDemo && w.mode === 'endless', eater: eaterId(),
-        debris: isDemo ? null : debris, sway: sway, pop: pop, guide: !isDemo && w.mode === 'levels' && w.level <= 2,
-        eaterHome: isDemo ? DEMO_HOME : null, eaterScale: isDemo ? 0.72 : w.mode === 'duo' ? 0.72 : 1
-      });
+      ro.t = time; ro.theme = isDemo ? 'canteen' : themeOf(w); ro.endless = !isDemo && w.mode === 'endless'; ro.eater = eaterId();
+      ro.debris = isDemo ? null : debris; ro.guide = !isDemo && w.mode === 'levels' && w.level <= 2;
+      ro.eaterHome = isDemo ? DEMO_HOME : null; ro.eaterScale = isDemo ? 0.72 : w.mode === 'duo' ? 0.72 : 1;
+      view.render(w, ro);
       if (isDemo && demo.phase !== 'eat' && demo.phase !== 'bunwait') {
-        var dc = demo.towers[0].cur, lx = dc ? M.max(-1, M.min(1, (dc.x - DEMO_HOME.x) / 600)) : -0.6;
-        view.peek(eaterId(), DEMO_HOME.x, DEMO_HOME.y, 150, time, { x: lx, y: -0.4 });
+        var dc = demo.towers[0].cur;
+        peekLook.x = dc ? M.max(-1, M.min(1, (dc.x - DEMO_HOME.x) / 600)) : -0.6;
+        view.peek(eaterId(), DEMO_HOME.x, DEMO_HOME.y, 150, time, peekLook);
       }
     } else { ctx.fillStyle = '#ffe2a8'; ctx.fillRect(0, 0, W, H); }
     ctx.restore();

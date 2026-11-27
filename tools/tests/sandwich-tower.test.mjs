@@ -306,6 +306,41 @@ test('the level map opens beaten levels only, and إلى القمر keeps the be
   assert.equal((await stored(page)).endless, 6);
 });
 
+test('a tall «إلى القمر» tower: the sky makes each gradient once, so the chomp back down makes none; frames reuse their draw options', async t => {
+  const page = await game(t, { save: beaten(0) });
+  await page.click('#btnEndless');
+  const r = await page.evaluate(() => {
+    const w = __game.world, tw = w.towers[0], proto = CanvasRenderingContext2D.prototype, make = proto.createLinearGradient;
+    const pieceOpts = new Set(), eaterOpts = new Set(), drawPiece = ST.drawPiece, drawEater = ST.drawEater;
+    let up = 0, down = 0, frames = 0, top = 0;
+    // a gradient made while the camera is below the highest point it reached is one made again
+    proto.createLinearGradient = function () { if (tw.cam < top) down++; else up++; return make.apply(this, arguments); };
+    ST.drawPiece = function (ctx, kind, x, y, pw, ph, o) { if (ctx.canvas.id === 'game') pieceOpts.add(o); return drawPiece.apply(this, arguments); };
+    ST.drawEater = function (ctx, id, x, y, r, o) { if (ctx.canvas.id === 'game') eaterOpts.add(o); return drawEater.apply(this, arguments); };
+    const step = () => { zp.step(1); frames++; top = Math.max(top, tw.cam); };
+    // 60 perfect drops, painting every frame on the way up
+    while (tw.height < 60) {
+      for (let n = 0; n < 600 && tw.phase !== 'slide'; n++) step();
+      tw.cur.x = tw.tx; ST.drop(w, 0);
+      for (let n = 0; n < 600 && tw.phase === 'fall'; n++) step();
+    }
+    // three misses end the run and the bun lands on top; then the eater chomps it back down
+    for (let k = 0; k < 3; k++) {
+      for (let n = 0; n < 600 && tw.phase !== 'slide'; n++) step();
+      tw.cur.x = tw.tx - 700; ST.drop(w, 0);
+    }
+    for (let n = 0; n < 4800 && w.phase !== 'done'; n++) step();
+    ST.drawPiece = drawPiece; ST.drawEater = drawEater; proto.createLinearGradient = make;
+    return { up, down, top, frames, phase: w.phase, cam: tw.cam, pieceOpts: pieceOpts.size, eaterOpts: eaterOpts.size };
+  });
+  assert.equal(r.phase, 'done', 'the chomp finished');
+  assert.ok(r.top > 1200 && r.cam < 1, `the camera climbed into the high sky and came back down (${r.top})`);
+  assert.ok(r.up <= Math.round(r.top / 25) + 1, `at most one sky gradient per 25 px band (${r.up} for ${r.frames} frames)`);
+  assert.equal(r.down, 0, 'the camera easing back down reuses the gradients made on the way up');
+  assert.equal(r.pieceOpts, 1, 'every piece is drawn with the one reused options object');
+  assert.equal(r.eaterOpts, 1, 'the eater is drawn with the one reused options object');
+});
+
 test('two players: S and Space for the left tower, ↓ and Enter for the right, clicks by half', async t => {
   const page = await game(t, { save: beaten(0) });
   await page.click('#btnDuo');

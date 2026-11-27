@@ -1,12 +1,18 @@
 /* Sandwich Tower (برج السندويش): everything drawn in code on one 2D canvas (1280x720
  * logical). Flat fills with chunky outlines, no shadows, no filters and no canvas reads;
- * gradients are made once per theme and the star field is one small tile drawn twice.
+ * gradients are made once per theme (endless: once per 25 px sky band) and the star field is
+ * one small tile drawn twice. The draw loop reuses its option objects and constant arrays.
  * ST.drawPiece and ST.drawEater also paint the previews on the eater screen.
  */
 (function () {
   'use strict';
   var ST = window.ST, M = Math, W = 1280, H = 720, TAU = M.PI * 2;
   var INK = '#3a2216';
+  // Constant arrays and reused option objects, so a frame allocates nothing.
+  var NO_OPT = {}, DASH5 = [5, 5], DASH10 = [10, 10], NO_DASH = [];
+  var SPRINKLE = ['#fff', '#4fd8ff', '#ffe14f', '#7dffb0'], PAD_COL = ['#ff4f6d', '#3ddc84', '#4fd8ff', '#ffe14f'], PAD_DX = [0, 1.6, 0, -1.6], PAD_DY = [-1.4, 0, 1.4, 0];
+  var EYES2 = [-0.36, 0.36], EYES3 = [-0.42, 0, 0.42], SPOTS = [-0.6, -0.3, 0.08, 0.55, -0.45, 0.06, 0.7, 0.05, 0.05, -0.75, 0.1, 0.05];
+  var LOOK0 = { x: 0, y: 0.6 }, LOOK_EAT = { x: -0.2, y: 0.9 }, PLANETS = ['#ff9a5c', '#7a8cff', '#ffd23f', '#ff7ac8'], CANDY = ['#ff7ac8', '#7dffb0', '#ffe14f', '#4fd8ff'];
   ST.INK = INK;
   ST.PLATE_Y = 612;      // the plate's top on screen while the camera is at 0
 
@@ -65,7 +71,7 @@
 
   // Draws one slab with its bottom centre at (x, yb). o: { t, face, zzz }.
   ST.drawPiece = function (ctx, kind, x, yb, w, h, o) {
-    o = o || {};
+    o = o || NO_OPT;
     var t = o.t || 0, x0 = x - w / 2, y0 = yb - h, lw = h < 24 ? 2.6 : 3.4, i, n;
     ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.strokeStyle = INK; ctx.lineWidth = lw;
     var showFace = o.face;
@@ -206,7 +212,7 @@
         ctx.quadraticCurveTo(x, y0 + 10, x0 + w - 8, y0 + 4); ctx.quadraticCurveTo(x0 + w - 6, y0 + h / 2, x0 + w - 8, yb - 4);
         ctx.quadraticCurveTo(x, yb - 8, x0 + 8, yb - 4); ctx.quadraticCurveTo(x0 + 6, y0 + h / 2, x0 + 8, y0 + 4); ctx.closePath(); fs(ctx, '#d4c6ff');
         ctx.fillStyle = '#ffffff'; ctx.globalAlpha = 0.6; ell(ctx, x0 + w * 0.28, y0 + h * 0.36, w * 0.12, h * 0.12); ctx.fill(); ctx.globalAlpha = 1;
-        ctx.lineWidth = 2; ctx.setLineDash([5, 5]); rrect(ctx, x0 + 12, y0 + 8, w - 24, h - 16, 8); ctx.stroke(); ctx.setLineDash([]);
+        ctx.lineWidth = 2; ctx.setLineDash(DASH5); rrect(ctx, x0 + 12, y0 + 8, w - 24, h - 16, 8); ctx.stroke(); ctx.setLineDash(NO_DASH);
         if (!showFace) showFace = 1;
         break;
       case 'donut':
@@ -217,10 +223,9 @@
         n = M.max(2, M.round(w / 26));
         for (i = n; i > 0; i--) { var dxx = x0 + w * (i - 0.5) / n; ctx.lineTo(dxx + 6, y0 + h * 0.5); ctx.quadraticCurveTo(dxx, y0 + h * (0.75 + hash(i, 11) * 0.2), dxx - 6, y0 + h * 0.5); }
         ctx.closePath(); fs(ctx, '#ff7ac8');
-        var sc = ['#fff', '#4fd8ff', '#ffe14f', '#7dffb0'];
         ctx.lineWidth = 3;
         for (var cc = 0; cc < 4; cc++) {
-          ctx.strokeStyle = sc[cc]; ctx.beginPath();
+          ctx.strokeStyle = SPRINKLE[cc]; ctx.beginPath();
           for (i = cc; i < M.floor(w / 10); i += 4) { var spx = x0 + 10 + i * 10 + hash(i, 1) * 5, spy = y0 + 5 + hash(i, 2) * (h * 0.28); ctx.moveTo(spx, spy); ctx.lineTo(spx + 4, spy + 2); }
           ctx.stroke();
         }
@@ -257,8 +262,8 @@
         ctx.fillStyle = '#fff'; ctx.lineWidth = 2;
         rrect(ctx, dx0 - ds * 2.2, dy0 - ds * 0.7, ds * 4.4, ds * 1.4, 2); ctx.fill(); ctx.stroke();
         rrect(ctx, dx0 - ds * 0.7, dy0 - ds * 2.2, ds * 1.4, ds * 4.4, 2); ctx.fill(); ctx.stroke();
-        var bx0 = x0 + w - M.max(gr * 0.9, w * 0.16), bcol = ['#ff4f6d', '#3ddc84', '#4fd8ff', '#ffe14f'];
-        for (i = 0; i < 4; i++) { ell(ctx, bx0 + [0, ds * 1.6, 0, -ds * 1.6][i], dy0 + [-ds * 1.4, 0, ds * 1.4, 0][i], ds * 0.8, ds * 0.8); fs(ctx, bcol[i]); }
+        var bx0 = x0 + w - M.max(gr * 0.9, w * 0.16);
+        for (i = 0; i < 4; i++) { ell(ctx, bx0 + PAD_DX[i] * ds, dy0 + PAD_DY[i] * ds, ds * 0.8, ds * 0.8); fs(ctx, PAD_COL[i]); }
         if (w > 120) { googly(ctx, x - h * 0.4, y0 + h * 0.42, h * 0.18, 0.3, 0.2); googly(ctx, x + h * 0.4, y0 + h * 0.42, h * 0.18, 0.3, 0.2); }
         showFace = 0;
         break;
@@ -325,9 +330,9 @@
   }
   // A giant face with its mouth in the lower half. o: { open 0..1, t, look {x,y}, happy }.
   ST.drawEater = function (ctx, id, x, y, r, o) {
-    o = o || {};
+    o = o || NO_OPT;
     var a = EATER_ART[id] || EATER_ART.hippo, open = M.max(0, M.min(1, o.open || 0)), t = o.t || 0;
-    var lw = M.max(3, r * 0.035), look = o.look || { x: 0, y: 0.6 };
+    var lw = M.max(3, r * 0.035), look = o.look || LOOK0;
     ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.strokeStyle = INK; ctx.lineWidth = lw;
     var my = y + r * 0.34, mrx = r * 0.76, mry = r * (0.06 + 0.5 * open), mcy = my + mry * 0.7;
     // things behind the head
@@ -384,13 +389,13 @@
       ell(ctx, x, my - r * 0.26, r * 0.09, r * 0.07); fs(ctx, '#5a3a24');
     }
     if (a.extra === 'gills') { ctx.beginPath(); for (var g = 0; g < 3; g++) { ctx.moveTo(x - r * (0.78 - g * 0.08), y - r * 0.05); ctx.quadraticCurveTo(x - r * (0.86 - g * 0.08), y + r * 0.08, x - r * (0.78 - g * 0.08), y + r * 0.2); ctx.moveTo(x + r * (0.78 - g * 0.08), y - r * 0.05); ctx.quadraticCurveTo(x + r * (0.86 - g * 0.08), y + r * 0.08, x + r * (0.78 - g * 0.08), y + r * 0.2); } ctx.stroke(); }
-    if (a.extra === 'spots') { ctx.fillStyle = a.dark; [[-0.6, -0.3, 0.08], [0.55, -0.45, 0.06], [0.7, 0.05, 0.05], [-0.75, 0.1, 0.05]].forEach(function (p) { ell(ctx, x + p[0] * r, y + p[1] * r, p[2] * r, p[2] * r); ctx.fill(); }); }
+    if (a.extra === 'spots') { ctx.fillStyle = a.dark; for (var sp = 0; sp < 12; sp += 3) { ell(ctx, x + SPOTS[sp] * r, y + SPOTS[sp + 1] * r, SPOTS[sp + 2] * r, SPOTS[sp + 2] * r); ctx.fill(); } }
     if (a.extra === 'bolts') for (var bs = -1; bs <= 1; bs += 2) { ell(ctx, x + bs * r * 1.04, y, r * 0.1, r * 0.16); fs(ctx, a.dark); }
     if (a.extra === 'cheeks' || a.top === 'ears' || a.top === 'hair') { ctx.fillStyle = 'rgba(255,110,160,0.45)'; ell(ctx, x - r * 0.68, y + r * 0.12, r * 0.13, r * 0.08); ctx.fill(); ell(ctx, x + r * 0.68, y + r * 0.12, r * 0.13, r * 0.08); ctx.fill(); }
     if (a.top === 'hair') { ctx.beginPath(); for (var hh = -1; hh <= 1; hh++) { ctx.moveTo(x + hh * r * 0.12, y - r * 0.86); ctx.quadraticCurveTo(x + hh * r * 0.2 + r * 0.1, y - r * 1.15, x + hh * r * 0.16 - r * 0.04, y - r * 1.05); } ctx.lineWidth = lw * 0.8; ctx.stroke(); ctx.lineWidth = lw; }
     // eyes
     var eyeY = y - r * 0.42, er = r * 0.2, happy = o.happy;
-    var eyes = a.eyes === 3 ? [-0.42, 0, 0.42] : [-0.36, 0.36];
+    var eyes = a.eyes === 3 ? EYES3 : EYES2;
     for (var e = 0; e < eyes.length; e++) {
       var ex = x + eyes[e] * r, ey = eyeY - (a.eyes === 3 && e === 1 ? r * 0.12 : 0), err = a.eyes === 3 ? er * 0.82 : er;
       if (a.top === 'ears') { ell(ctx, ex, ey + er * 0.1, err * 1.25, err * 1.15); fs(ctx, a.body); }
@@ -443,6 +448,7 @@
     var r = ((pa >> 16) * (1 - k) + (pb >> 16) * k) | 0, g = (((pa >> 8) & 255) * (1 - k) + ((pb >> 8) & 255) * k) | 0, bl = ((pa & 255) * (1 - k) + (pb & 255) * k) | 0;
     return 'rgb(' + r + ',' + g + ',' + bl + ')';
   }
+  var ALT_BANDS = ALT[ALT.length - 1][0] / 25;
   function altSky(A) {
     for (var i = 0; i < ALT.length - 1; i++) if (A < ALT[i + 1][0]) { var k = (A - ALT[i][0]) / (ALT[i + 1][0] - ALT[i][0]); return [mix(ALT[i][1], ALT[i + 1][1], k), mix(ALT[i][2], ALT[i + 1][2], k)]; }
     return [ALT[ALT.length - 1][1], ALT[ALT.length - 1][2]];
@@ -451,7 +457,10 @@
 
   ST.createView = function (ctx) {
     var v = { calm: false };
-    var grads = {}, starTile = null, altKey = -1, altGrad = null;
+    var grads = {}, starTile = null, altGrads = [], po = { t: 0, face: 0, zzz: false }, eo = { open: 0, t: 0, look: LOOK0, happy: false };
+    // The one options object each piece and eater draw call gets (drawPiece/drawEater never keep it).
+    function pieceOpt(t, face, zzz) { po.t = t; po.face = face; po.zzz = zzz; return po; }
+    function eaterOpt(open, t, look, happy) { eo.open = open; eo.t = t; eo.look = look; eo.happy = happy; return eo; }
     function grad(key, a, b) {
       if (!grads[key]) { var g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, a); g.addColorStop(1, b); grads[key] = g; }
       return grads[key];
@@ -497,11 +506,11 @@
         var py = ((hash(i, 7) * 1200 + off) % 1200) - 200, px = x0 + hash(i, 8) * (x1 - x0), pr = 22 + hash(i, 9) * 34;
         ctx.lineWidth = 3; ctx.strokeStyle = INK;
         if (candy) {
-          ell(ctx, px, py, pr, pr); fs(ctx, ['#ff7ac8', '#7dffb0', '#ffe14f', '#4fd8ff'][i]);
+          ell(ctx, px, py, pr, pr); fs(ctx, CANDY[i]);
           ctx.strokeStyle = '#fff'; ctx.lineWidth = pr * 0.25; ctx.beginPath(); ctx.arc(px, py, pr * 0.55, 0, M.PI * 1.4); ctx.stroke();
           ctx.strokeStyle = INK; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(px, py + pr); ctx.lineTo(px, py + pr * 2.2); ctx.stroke();
         } else {
-          ell(ctx, px, py, pr, pr); fs(ctx, ['#ff9a5c', '#7a8cff', '#ffd23f', '#ff7ac8'][i]);
+          ell(ctx, px, py, pr, pr); fs(ctx, PLANETS[i]);
           if (i % 2 === 0) { ctx.beginPath(); ctx.ellipse(px, py, pr * 1.7, pr * 0.4, -0.3, 0.1, M.PI - 0.1); ctx.lineWidth = 4; ctx.strokeStyle = '#ffe9a8'; ctx.stroke(); }
         }
       }
@@ -544,9 +553,10 @@
     function sky(x0, x1, theme, cam, t, endless) {
       var A = cam, th = THEMES[theme] || THEMES.canteen;
       if (endless) {
-        var key = M.round(A / 25);
-        if (key !== altKey || !altGrad) { altKey = key; var c = altSky(A); altGrad = ctx.createLinearGradient(0, 0, 0, H); altGrad.addColorStop(0, c[0]); altGrad.addColorStop(1, c[1]); }
-        ctx.fillStyle = altGrad; ctx.fillRect(x0, 0, x1 - x0, H);
+        // one gradient per 25 px band, each made the first time the camera reaches it
+        var key = M.max(0, M.min(ALT_BANDS, M.round(A / 25))), ag = altGrads[key];
+        if (!ag) { var c = altSky(key * 25); ag = altGrads[key] = ctx.createLinearGradient(0, 0, 0, H); ag.addColorStop(0, c[0]); ag.addColorStop(1, c[1]); }
+        ctx.fillStyle = ag; ctx.fillRect(x0, 0, x1 - x0, H);
         var sa = M.max(0, M.min(1, (A - 1500) / 700));
         if (sa > 0) starField(x0, x1, cam, sa);
         if (A > 2200) planets(x0, x1, cam, A > 3400);
@@ -615,8 +625,8 @@
         var rel = p.y / M.max(200, top), sx = p.x + sway * rel * rel;
         var age = w.t - p.at, sq = 1;
         if (age < 0.5 && !v.calm) sq = 1 - 0.28 * M.exp(-age * 9) * M.cos(age * 24) * (j === last - 1 ? 1 : 0.4);
-        if (sq !== 1) { ctx.save(); ctx.translate(sx, yb); ctx.scale(1 / M.sqrt(sq), sq); ST.drawPiece(ctx, p.kind, 0, 0, p.w, p.h, { t: t, face: p.face, zzz: !v.calm }); ctx.restore(); }
-        else ST.drawPiece(ctx, p.kind, sx, yb, p.w, p.h, { t: t, face: p.face, zzz: !v.calm });
+        if (sq !== 1) { ctx.save(); ctx.translate(sx, yb); ctx.scale(1 / M.sqrt(sq), sq); ST.drawPiece(ctx, p.kind, 0, 0, p.w, p.h, pieceOpt(t, p.face, !v.calm)); ctx.restore(); }
+        else ST.drawPiece(ctx, p.kind, sx, yb, p.w, p.h, pieceOpt(t, p.face, !v.calm));
       }
       var c = tw.cur;
       if (c && w.phase !== 'done') {
@@ -626,8 +636,8 @@
           var l = M.max(c.x - c.w / 2, tw.tx - tw.tw / 2), r = M.min(c.x + c.w / 2, tw.tx + tw.tw / 2);
           if (r > l) { ctx.fillStyle = 'rgba(58,34,22,0.25)'; rrect(ctx, l + swayTop, topY - 7, r - l, 8, 4); ctx.fill(); }
           if (o.guide) {
-            ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = 4; ctx.setLineDash([10, 10]);
-            ctx.beginPath(); ctx.moveTo(tw.tx + swayTop, topY - 6); ctx.lineTo(tw.tx + swayTop, cyb - c.h - 30); ctx.stroke(); ctx.setLineDash([]);
+            ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = 4; ctx.setLineDash(DASH10);
+            ctx.beginPath(); ctx.moveTo(tw.tx + swayTop, topY - 6); ctx.lineTo(tw.tx + swayTop, cyb - c.h - 30); ctx.stroke(); ctx.setLineDash(NO_DASH);
           }
         }
         if (c.move === 'swing' && tw.phase === 'slide') {
@@ -636,13 +646,13 @@
           ctx.save(); ctx.translate(c.x, hookY); ctx.rotate(-c.swing * 0.22);
           ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(-c.w * 0.3, 0); ctx.lineTo(0, -16); ctx.lineTo(c.w * 0.3, 0); ctx.stroke();
           ell(ctx, 0, -16, 7, 7); ctx.fillStyle = '#ffd23f'; ctx.fill(); ctx.stroke();
-          ST.drawPiece(ctx, c.kind, 0, c.h, c.w, c.h, { t: t, face: c.face, zzz: false });
+          ST.drawPiece(ctx, c.kind, 0, c.h, c.w, c.h, pieceOpt(t, c.face, false));
           ctx.restore();
         } else {
           var wob = c.wob && tw.phase === 'slide' && !v.calm ? M.sin(t * 22) * 0.07 : 0;
           var pop = o.pop && o.pop[tw.i] ? o.pop[tw.i] : 0, s = 1 + pop * 0.25;
           ctx.save(); ctx.translate(c.x, cyb); ctx.scale(s * (1 + wob), s * (1 - wob)); if (tw.phase === 'slide' && !v.calm) ctx.rotate(c.dir * M.min(0.06, c.v / 6000));
-          ST.drawPiece(ctx, c.kind, 0, 0, c.w, c.h, { t: t, face: c.face, zzz: false });
+          ST.drawPiece(ctx, c.kind, 0, 0, c.w, c.h, pieceOpt(t, c.face, false));
           ctx.restore();
           if (c.wob && tw.phase === 'slide') {
             ctx.strokeStyle = INK; ctx.lineWidth = 3; ctx.beginPath();
@@ -657,7 +667,7 @@
         var b = db[d];
         if (b.tower !== tw.i) continue;
         ctx.save(); ctx.translate(b.x, sy(tw, b.y)); ctx.rotate(b.rot);
-        ST.drawPiece(ctx, b.kind, 0, b.h / 2, b.w, b.h, { t: t, face: b.face });
+        ST.drawPiece(ctx, b.kind, 0, b.h / 2, b.w, b.h, pieceOpt(t, b.face, false));
         ctx.restore();
       }
       if (o.eater && w.eat && w.eat.tower === tw.i && (w.phase === 'eat' || w.phase === 'bunwait')) drawEat(w, tw, o, t);
@@ -666,7 +676,7 @@
     function drawEat(w, tw, o, t) {
       var e = w.eat, scale = o.eaterScale || 1, r = 205 * scale;
       var leftTop = sy(tw, ST.leftTop(tw)), aimY = leftTop - r * 0.6;
-      var hx = tw.tx, hy = aimY - r * 0.35, open = 0.25, look = { x: -0.2, y: 0.9 };
+      var hx = tw.tx, hy = aimY - r * 0.35, open = 0.25;
       if (w.phase === 'bunwait' || e.phase === 'in') {
         var k = w.phase === 'bunwait' ? 0 : M.min(1, e.pt / ST.EAT_IN), ease = 1 - M.pow(1 - k, 3);
         var homeX = o.eaterHome ? o.eaterHome.x : (tw.cx > 640 ? -r * 1.3 : W + r * 1.3), homeY = o.eaterHome ? o.eaterHome.y : hy;
@@ -683,10 +693,10 @@
         open = bp < 0.5 ? M.sin(bp / 0.5 * M.PI) * 0.75 : 0;
         hy -= bp * 30;
       }
-      ST.drawEater(ctx, o.eater, hx, hy, r, { open: open, t: t, look: look, happy: e.phase === 'burp' && e.pt > ST.BURP * 0.5 });
+      ST.drawEater(ctx, o.eater, hx, hy, r, eaterOpt(open, t, LOOK_EAT, e.phase === 'burp' && e.pt > ST.BURP * 0.5));
     }
     // The title's idle eater, peeking in from a corner.
-    v.peek = function (id, x, y, r, t, look) { ST.drawEater(ctx, id, x, y, r, { open: 0.15 + 0.1 * M.sin(t * 2), t: t, look: look }); };
+    v.peek = function (id, x, y, r, t, look) { ST.drawEater(ctx, id, x, y, r, eaterOpt(0.15 + 0.1 * M.sin(t * 2), t, look, false)); };
     v.cloud = cloud;
     return v;
   };
