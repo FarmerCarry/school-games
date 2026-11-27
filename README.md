@@ -215,7 +215,7 @@ cloud picnic pieces come from alternating sides and some wobble, and in the spac
 on a crane rope and fall slowly. From level 3 a piece that misses costs one of three hearts. «إلى
 القمر» climbs past the clouds into space and a candy galaxy, with milestones every 25 pieces. «تحدّي
 اللاعبين» puts two towers side by side (S/Space against ↓/Enter, or a click on your half); first to
-15 wins. Stars unlock seven eaters (a T-rex, a robot, a shark, a fluffy monster, an alien and
+15 wins. Stars unlock six more eaters (a T-rex, a robot, a shark, a fluffy monster, an alien and
 grandpa walrus). `Kit.dda` sets the slide speed and how wide a perfect is, and the light 2D canvas
 stays smooth on the lab PCs. P or Esc pauses.
 
@@ -230,10 +230,10 @@ moon, and a cute bunny you must not bonk. Ten bonks in a row start a six-second 
 every hole pops, points are doubled and a giant hammer bonks the neighbours too. Twelve timed levels
 in three worlds (حقل الخضار، الشاطئ، قاعدة القمر) with three star goals each; level 1 is almost
 impossible to lose. Winning level 4 opens «بلا نهاية», an endless garden with three hearts where
-every critter that gets away costs one. Stars unlock eight silly hammers, each with its own sound (a
-rubber chicken, a baguette, a giant spoon, a feather pillow, a fish, an inflatable hammer and a
-golden one). `Kit.dda` sets how long critters stay up, how often they pop and how many are up at
-once. P or Esc pauses.
+every critter that gets away costs one (except the bunny, which you must let go, and the frenzy's
+critters). Stars unlock seven more silly hammers, each with its own sound (a rubber chicken, a
+baguette, a giant spoon, a feather pillow, a fish, an inflatable hammer and a golden one). `Kit.dda`
+sets how long critters stay up, how often they pop and how many are up at once. P or Esc pauses.
 
 **عاصفة الكرات (Ball Storm)** is a goofy brick breaker where one ball becomes hundreds. Move a
 googly-eyed jelly paddle with the mouse or ← → / A D, and launch the ball with a click or Space (it
@@ -246,9 +246,11 @@ capsules give a giant paddle, fireballs, slow motion, a sticky paddle or a bubbl
 has three lives; its stars are for the win, for losing no life and for a quick clear. Level 1's
 bubble floor never pops, so nobody loses it. 15 levels in three worlds (candy land, space, the deep
 sea) plus «بلا نهاية», an endless mode that opens after level 5: brick rows keep sliding down, and
-the round ends when they reach the line above the paddle. Stars unlock six balls and four paddles (a
-tennis ball, an eyeball, a donut, a banana, a skateboard, a long cat…). `Kit.dda` sets the ball
-speed, paddle width and how often capsules drop. P or Esc pauses.
+the round ends when they reach the line above the paddle or the last of three lives is lost. Stars
+unlock six balls and four paddles (a tennis ball, an eyeball, a donut, a banana, a skateboard, a
+long cat…). `Kit.dda` sets the ball speed, paddle width, how often capsules drop and how strongly
+they drift to the paddle («بلا نهاية» has its own, which also sets how fast the rows slide). P or
+Esc pauses.
 
 **نطّة السحاب (Cloud Hop)** is a bouncy sky climber. Marshy the marshmallow bounces by himself every
 time he lands on top of a cloud; children steer him left and right with ← → or A/D, or by moving the
@@ -256,10 +258,11 @@ mouse, and wrap from one side of the screen to the other, climbing as high as th
 levels in three skies (سماء الصباح، غروب الحلوى، ليل الفضاء) end at a cloud castle. Along the way
 are trampolines, jelly springs, cookie clouds that crumble and grow back, thunder clouds, grumpy
 pigeons to stomp, UFO beams, and balloon, propeller-hat and rocket power-ups. Rescue bubbles catch a
-fall: unlimited in level 1, a few later. Candies, with a streak multiplier, buy eight characters,
-each with its own boing. Winning level 4 opens an endless mode whose sky climbs from morning to a
-candy galaxy and keeps the best height. `Kit.dda` sets the gaps, cloud widths and how many moving,
-crumbling and grumpy things appear. P or Esc pauses.
+fall: unlimited in level 1, a few later. Candies, with a streak multiplier, buy seven more
+characters, each with its own boing. Winning level 4 opens an endless mode whose sky climbs from
+morning to a candy galaxy and keeps the best height. `Kit.dda` sets the gaps, cloud widths and how
+many moving, crumbling and grumpy things appear, and gives a PC that keeps struggling one extra
+rescue bubble. P or Esc pauses.
 
 **بينبول الضفدع (Frog Pinball)** is a goofy swamp-party pinball table. ← / A / Z and → / D / / work
 the flippers, and so do the left and right mouse buttons (alone or together); hold Space or ↓ to
@@ -267,11 +270,11 @@ pull the plunger (a quick tap always reaches the table); P or Esc pauses. Three 
 bumpers go "بونغ!", three rubber-duck drop targets raise the multiplier (up to ×5) and light the
 kickbacks, the orbit loop scores "لفّة!", and a giant frog gulps a ball shot into its mouth ("غلب!")
 and burps it back out ("بُرررب!"); three feeds start «مطر الكرات» multiball. Nine mission levels
-(bumpers, ducks, feed the frog, 5,000 points, a loop, three feeds, ×3 multiplier, 20,000 points,
-two ball rains), then free play with a saved best. Level 1 cannot be lost: every ball comes back,
-both kickbacks stay lit, the slope is gentler and a lily bud springs balls back. Stars unlock 6 ball
-skins and night and candy ponds. `Kit.dda` sets gravity, ball save and bumper kick; physics run at
-480 Hz.
+(bumpers, ducks, feed the frog, 5,000 points, a loop, three feeds, ×3 multiplier, 20,000 points, two
+ball rains), each opened by the one before, and free play with a saved best, which opens once level
+1 is won. Level 1 cannot be lost: every ball comes back, both kickbacks stay lit, the slope is
+gentler and a lily bud springs balls back. Stars unlock 6 ball skins and night and candy ponds.
+`Kit.dda` sets gravity, ball save and bumper kick; physics run at 480 Hz.
 
 **حديقة الكلمات (Word Garden)** is a spelling game: a picture and its word with a glowing gap; type
 the missing letter and a flower grows in the garden. The school keyboard is always on screen and the

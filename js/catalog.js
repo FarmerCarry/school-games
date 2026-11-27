@@ -181,7 +181,7 @@ window.GAMES = [
     controls: [{ keys: ['←', '→', 'A', 'D'], action: 'وجّه مارشي' }, { keys: ['الفأرة'], action: 'حرّك الفأرة فيتبعها مارشي' }, { keys: ['P', 'Esc'], action: 'استراحة' }] },
   { slug: 'ball-storm', roundMinutes: [1, 3], inputStyle: 'mixed', title: 'عاصفة الكرات', en: 'Ball Storm brick breaker breakout paddle balls multiply x3 chaos jelly bricks', tags: 'كرات كرة طوب مكعبات جيلي مضرب تكسير مضاعفة مئات الكرات breakout bricks', cats: ['arcade'], players: '1', color: '#b36bff',
     blurb: 'كرة واحدة تصير مئة! حطّم مكعبات الجيلي بمضربك والتقط ×3 لتملأ الشاشة بعاصفة من الكرات!',
-    tip: 'اضرب الكرة بطرف المضرب لترسلها مائلة. الجوهرة <b>×3</b> تقسم كل كرة إلى ثلاث!',
+    tip: 'اضرب الكرة بطرف المضرب لترسلها مائلة. التقط كبسولة <b>×3</b> بمضربك فتنقسم كل كرة إلى ثلاث!',
     controls: [{ keys: ['الفأرة'], action: 'حرّك المضرب' }, { keys: ['←', '→', 'A', 'D'], action: 'حرّك المضرب' }, { keys: ['انقر', 'مسافة'], action: 'أطلق الكرة' }, { keys: ['P', 'Esc'], action: 'استراحة' }] },
   { slug: 'frog-pinball', roundMinutes: [2, 4], inputStyle: 'mixed', title: 'بينبول الضفدع', en: 'Frog Pinball flipper table bumpers silly frog gulp burp ducks multiball', tags: 'بينبول فليبر كرة ضفدع بط مصدات طاولة pinball flipper', cats: ['arcade'], players: '1', color: '#2fcf7a',
     blurb: 'أطعم الضفدع العملاق الكرة فيبلعها ثم بُرررب! يطلقها من جديد! اضرب البط والمصدّات واصنع مطر الكرات!',

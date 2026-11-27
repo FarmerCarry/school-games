@@ -88,16 +88,16 @@ export const scenarios = {
   // The runner stands on the start pad until ↑ (or Space, W, the mouse) is held; every
   // new keycap row it steps on counts a step. Restart puts it back on the pad.
   'zoom-plus-one': defaults(['#btnPlay'], `${g}.state.screen === 'play'`, `[${g}.state.z,${g}.state.speed,${g}.state.steps,${g}.state.phase]`, hold('ArrowUp', 900), '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.z < 0`),
-  // Sandwich Tower: the next piece slides by itself; only a drop (Space, Enter, ↓ or a click)
+  // Sandwich Tower: the next piece slides by itself; only a drop (Space, Enter, ↓, S or a click)
   // lands it on the tower. Restart starts the level again with an empty plate.
   'sandwich-tower': defaults(['#btnPlay'], `${g}.state.screen === 'play'`, `[${g}.state.t,${g}.state.x,${g}.state.drops,${g}.state.height]`, hold('Space', 120), '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.drops === 0`),
   // Bonk Garden: critters pop up by themselves; only a swing (a click, or a hole's key) counts.
   'bonk-garden': defaults(['#btnPlay'], `${g}.state.screen === 'play'`, `[${g}.state.t,${g}.state.score,${g}.state.swings,${g}.state.up]`, hold('KeyS', 120), '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.swings === 0 && ${g}.state.score === 0`),
   // Cloud Hop: Marshy bounces up by itself; only steering (← →, A D or the mouse) moves it sideways.
   'cloud-hop': defaults(['#btnPlay'], `${g}.state.screen === 'play'`, `[${g}.state.t,${g}.state.x,${g}.state.y,${g}.state.height]`, hold('ArrowRight', 300), '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.height < 1 && ${g}.state.t < 2`),
-  // Ball Storm: the ball waits on the paddle; only the mouse or ← → move the paddle.
+  // Ball Storm: the ball waits on the paddle; only the mouse, ← → or A D move the paddle.
   'ball-storm': defaults(['#btnPlay'], `${g}.state.screen === 'play'`, `[${g}.state.t,${g}.state.paddle,${g}.state.bx,${g}.state.by,${g}.state.bricks]`, hold('ArrowRight', 300), '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && !${g}.state.launched && ${g}.state.t < 2`),
-  // Frog Pinball: the ball rolls by itself; only ← (or A, Z, a left click) lifts the left flipper.
+  // Frog Pinball: the ball rolls by itself; only ← (or A, Z, Left Shift, a left click) lifts the left flipper.
   'frog-pinball': defaults(['#btnPlay'], `${g}.state.screen === 'play'`, `[${g}.state.t,${g}.state.bx,${g}.state.by,${g}.state.score,${g}.state.flipL]`, hold('ArrowLeft', 300), '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.score === 0 && ${g}.state.t < 2`),
   'swing-hook': defaults(['#btnPlay'], `${g}.mode === 'play'`, select(`${g}.state()`, ['x','y','timer','hooked']), hold('Space', 200), '#pauseBtn', `${g}.mode === 'pause'`, '#psRestart', `${g}.state().timer < 1`),
   'moto-madness': defaults(['#btnPlay','.mm-tile[data-i="0"]'], `${g}.state === 'play'`, `[${g}.world.bike.x,${g}.world.bike.y,${g}.world.time]`, hold('ArrowUp', 280), '#pauseBtn', `${g}.state === 'paused'`, '#btnRestart', `!${g}.world.started`),

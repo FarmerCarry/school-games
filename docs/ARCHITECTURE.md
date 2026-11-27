@@ -241,7 +241,7 @@ ranges. The full contract is [`TELEMETRY.md`](TELEMETRY.md).
 |---|---|
 | rounds, outcome and score | all 58 (connect-four and tic-tac-toe through `shared/board-game.js`); no score: block-world, critter-mart, pizza-clicker, tank-splat, the board games and two-player rounds |
 | hits and misses | air-hockey, ball-storm, balloon-blast, bonk-garden, bubble-bop, chaos-island, cloud-hop, desk-karts, dino-3d, egg-rush, frog-pinball, hoop-heads, juicy-drop, key-runner, keyboard-obby, lucky-lake, magic-crayon, math-gates, recess-kitchen, road-hopper, robo-swarm, sandwich-tower, seek-zoom, shortcut-factory, skybound-golf, splat-catapult, steady-hand, toy-castle, typing-test, word-garden, zoom-plus-one |
-| reaction times (`Kit.track.cue` / `react`) | ball-storm, bonk-garden, bubble-bop, chaos-island, cloud-hop, dino-3d, frog-pinball, key-runner, keyboard-obby, lucky-lake, road-hopper, robo-swarm, shortcut-factory, skybound-golf, typing-test, word-garden |
+| reaction times (`Kit.track.cue` / `react`) | ball-storm, bonk-garden, bubble-bop, chaos-island, cloud-hop, dino-3d, frog-pinball, key-runner, keyboard-obby, math-gates, road-hopper, shortcut-factory, skybound-golf, typing-test, word-garden |
 | difficulty tier and level | every game that uses `Kit.dda` (reported by Kit at each read) |
 | tutorial start and done | the games with a first-time coach |
 
