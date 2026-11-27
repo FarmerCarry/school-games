@@ -39,7 +39,9 @@ function main() {
     'bubble-bop-rules.test.mjs', 'fire-and-ice-engine.test.mjs', 'juice.test.mjs', 'thumb-encoding.test.mjs',
     'splat-catapult-engine.test.mjs', 'recess-kitchen-engine.test.mjs', 'desk-karts-engine.test.mjs',
     'toy-castle-engine.test.mjs', 'magic-crayon-engine.test.mjs', 'juicy-drop-engine.test.mjs', 'robo-swarm-engine.test.mjs',
-    'balloon-blast-engine.test.mjs', 'hoop-heads-engine.test.mjs', 'zoom-plus-one-engine.test.mjs'
+    'balloon-blast-engine.test.mjs', 'hoop-heads-engine.test.mjs', 'zoom-plus-one-engine.test.mjs',
+    'sandwich-tower-engine.test.mjs', 'bonk-garden-engine.test.mjs', 'cloud-hop-engine.test.mjs',
+    'ball-storm-engine.test.mjs', 'frog-pinball-engine.test.mjs'
   ]);
   const files = fs.readdirSync(path.join(repo, 'tools/tests')).filter(file => file.endsWith('.test.mjs')).sort();
   for (const file of shared) {

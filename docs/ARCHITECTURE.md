@@ -11,7 +11,7 @@ this file wins and they are updated to match.
 | Play tracking | **Anonymous play statistics only** ("Play statistics" below): the fast build may send what is played on each PC, never who plays it, to the school's own statistics server, and only when the build is given its address (`SG_TELEMETRY_URL`). No names, accounts, profiles or ages; no local play statistics or teacher statistics page; no third-party analytics. Nothing else on the site uses the network. |
 | Players | **No profiles.** No "who's playing", guests, age bands or XP: children open a game and play. Each game's progress and difficulty belong to the PC. |
 | Classroom settings | **None.** No classroom panel, quiet/effects preset, session timer or hand-over. The topbar 🔊 button mutes the portal and the games. |
-| Difficulty | Every game scales from a gentle start to real challenge via tiered levels or endless ramps, and 28 of the 53 games also adapt dynamically (`Kit.dda`) to how children play on that PC. |
+| Difficulty | Every game scales from a gentle start to real challenge via tiered levels or endless ramps, and 33 of the 58 games also adapt dynamically (`Kit.dda`) to how children play on that PC. |
 
 ## Audience and pillars
 
@@ -82,11 +82,11 @@ the portal only through `postMessage` via Kit.
 ### Byte policy
 
 Kit is inlined into every game page, so every minified byte in `shared/kit.js` costs
-53 bytes of offline cache.
+58 bytes of offline cache.
 
 * The play statistics in `shared/kit.js` (`Kit.stats`, `Kit.track`, `sg:telemetry`):
-  **about 2,060 minified bytes** (measured with the build's esbuild options), about 109 KB of
-  offline cache over the 53 game pages. Further growth needs a budget decision.
+  **about 2,060 minified bytes** (measured with the build's esbuild options), about 119 KB of
+  offline cache over the 58 game pages. Further growth needs a budget decision.
 * `shared/juice.js`: **≤ 4,500 minified bytes**, loaded only by pages that use it
   (`<script src="../../shared/juice.js">` after `kit.js`; the portal loads
   `shared/juice.js` before `js/site.js`).
@@ -239,9 +239,9 @@ ranges. The full contract is [`TELEMETRY.md`](TELEMETRY.md).
 
 | Reports | Games |
 |---|---|
-| rounds, outcome and score | all 53 (connect-four and tic-tac-toe through `shared/board-game.js`); no score: block-world, critter-mart, pizza-clicker, tank-splat, the board games and two-player rounds |
-| hits and misses | air-hockey, balloon-blast, bubble-bop, chaos-island, desk-karts, dino-3d, egg-rush, hoop-heads, juicy-drop, key-runner, keyboard-obby, lucky-lake, magic-crayon, math-gates, recess-kitchen, road-hopper, robo-swarm, seek-zoom, shortcut-factory, skybound-golf, splat-catapult, steady-hand, toy-castle, typing-test, word-garden, zoom-plus-one |
-| reaction times (`Kit.track.cue` / `react`) | bubble-bop, chaos-island, dino-3d, key-runner, keyboard-obby, lucky-lake, road-hopper, robo-swarm, shortcut-factory, skybound-golf, typing-test, word-garden |
+| rounds, outcome and score | all 58 (connect-four and tic-tac-toe through `shared/board-game.js`); no score: block-world, critter-mart, pizza-clicker, tank-splat, the board games and two-player rounds |
+| hits and misses | air-hockey, ball-storm, balloon-blast, bonk-garden, bubble-bop, chaos-island, cloud-hop, desk-karts, dino-3d, egg-rush, frog-pinball, hoop-heads, juicy-drop, key-runner, keyboard-obby, lucky-lake, magic-crayon, math-gates, recess-kitchen, road-hopper, robo-swarm, sandwich-tower, seek-zoom, shortcut-factory, skybound-golf, splat-catapult, steady-hand, toy-castle, typing-test, word-garden, zoom-plus-one |
+| reaction times (`Kit.track.cue` / `react`) | ball-storm, bonk-garden, bubble-bop, chaos-island, cloud-hop, dino-3d, frog-pinball, key-runner, keyboard-obby, lucky-lake, road-hopper, robo-swarm, shortcut-factory, skybound-golf, typing-test, word-garden |
 | difficulty tier and level | every game that uses `Kit.dda` (reported by Kit at each read) |
 | tutorial start and done | the games with a first-time coach |
 
