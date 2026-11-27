@@ -681,16 +681,10 @@
     reset: function () { prevS[0] = prevS[1] = false; prevJ[0] = prevJ[1] = false; }
   });
 
-  canvas.addEventListener('webglcontextlost', function (e) {
-    e.preventDefault();
-    contextLost = true;
-    $('ctxNotice').hidden = false;
-  });
-  canvas.addEventListener('webglcontextrestored', function () {
-    contextLost = false;
-    $('ctxNotice').hidden = true;
-    dirty = true;
-    if (state === 'pause') render();
+  Kit.webgl.watchContext(canvas, {
+    notice: 'ctxNotice',
+    onLost: function () { contextLost = true; },
+    onRestored: function () { contextLost = false; dirty = true; if (state === 'pause') render(); }
   });
 
   /* --------------------------------------------------------------- Compatibility & Test Handle */

@@ -3,10 +3,14 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { launchChromium } from './browser.mjs';
 import { classroomNavigation, isRetryableNavigationError } from './classroom-nav.mjs';
 import { startTestServer } from './test-server.mjs';
 import { reportPassed } from './playtest-report.mjs';
 import { clickControl } from './ui-input.mjs';
+import { SHARED_TESTS, parseShard, parseSuiteArgs, selectSuiteFiles, shardFiles } from './test-suite.mjs';
+import { DEFAULT_CHECK_CONCURRENCY, parseConcurrency, shouldRetryPlaytest } from './check-all.mjs';
+import { PLAYTEST_BROWSER_ARGS, runPlaytest } from './playtest.mjs';
 
 test('playtest failures include actions, evaluations, and every failed resource', () => {
   const clean = () => ({ pageErrors: [], consoleErrors: [], externalRequests: [], failedRequests: [], notes: [], evals: [] });
@@ -78,4 +82,87 @@ test('test server serves the site icon and reports real missing/unsafe paths', a
     assert.equal(path.dirname(path.resolve(root)), tempRoot);
     fs.rmSync(root, { recursive: true, force: true });
   }
+});
+
+test('test-suite sharding validates specs and partitions browser tests with 100% coverage and zero overlap', () => {
+  assert.ok(SHARED_TESTS.has('perf-measurement.test.mjs'), 'perf-measurement runs once in shared');
+  assert.deepEqual(parseShard('1/4'), { index: 1, total: 4 });
+  assert.deepEqual(parseShard('4/4'), { index: 4, total: 4 });
+  for (const bad of ['', '0/4', '5/4', '1/0', '1', 'a/b', '1/2/3']) {
+    assert.throws(() => parseShard(bad), /Invalid shard/, bad);
+  }
+  assert.deepEqual(parseSuiteArgs(['browser', '--shard=2/4', '--list']), { suite: 'browser', shard: { index: 2, total: 4 }, list: true });
+  assert.deepEqual(parseSuiteArgs(['browser', '--shard', '3/4']), { suite: 'browser', shard: { index: 3, total: 4 }, list: false });
+  assert.throws(() => parseSuiteArgs(['browser', '--unknown']), /Unknown option/);
+
+  const fullBrowser = selectSuiteFiles('browser');
+  const fullShared = selectSuiteFiles('shared');
+  assert.ok(fullShared.includes('tools/tests/perf-measurement.test.mjs'));
+  assert.ok(!fullBrowser.includes('tools/tests/perf-measurement.test.mjs'));
+
+  const seen = new Set();
+  const shards = [];
+  for (let i = 1; i <= 4; i++) {
+    const slice = selectSuiteFiles('browser', { shard: `${i}/4` });
+    assert.ok(slice.length > 0, `shard ${i}/4 is non-empty`);
+    // Deterministic across repeated calls
+    assert.deepEqual(slice, shardFiles(fullBrowser, { index: i, total: 4 }));
+    for (const file of slice) {
+      assert.equal(seen.has(file), false, `duplicate file across shards: ${file}`);
+      seen.add(file);
+    }
+    shards.push(slice);
+  }
+  assert.deepEqual([...seen].sort(), [...fullBrowser].sort(), 'shard union equals full browser suite');
+  const telemetryShard = shards.findIndex(s => s.includes('tools/tests/telemetry-catalog.test.mjs'));
+  const bgmShard = shards.findIndex(s => s.includes('tools/tests/zero-bgm.test.mjs'));
+  assert.notEqual(telemetryShard, bgmShard, 'heavy full-catalog browser suites are placed in separate shards');
+});
+
+test('check-all concurrency parsing and crash/hang retry policy', () => {
+  assert.equal(parseConcurrency(undefined), DEFAULT_CHECK_CONCURRENCY);
+  assert.equal(parseConcurrency(''), DEFAULT_CHECK_CONCURRENCY);
+  assert.equal(parseConcurrency('2'), 2);
+  for (const bad of ['0', '-1', '1.5', 'fast']) {
+    assert.throws(() => parseConcurrency(bad), /Invalid SG_CHECK_CONCURRENCY/, bad);
+  }
+  const base = { ok: false, pageErrors: [], consoleErrors: [], externalRequests: [], failedRequests: [], notes: [], harnessErrors: [] };
+  assert.equal(shouldRetryPlaytest({ ...base, ok: true }), false);
+  assert.equal(shouldRetryPlaytest({ ...base, pageErrors: ['Error: boom'], harnessErrors: ['Timeout 20000ms'] }, { concurrency: 3 }), false);
+  assert.equal(shouldRetryPlaytest({ ...base, consoleErrors: ['bad'], harnessErrors: ['Target closed'] }, { concurrency: 3 }), false);
+  assert.equal(shouldRetryPlaytest({ ...base, harnessErrors: ['Target page, context or browser has been closed'] }, { concurrency: 1 }), true);
+  assert.equal(shouldRetryPlaytest({ ...base, harnessErrors: ['Error: Playtest timed out after 120000ms'] }, { concurrency: 1 }), true);
+  assert.equal(shouldRetryPlaytest({ ...base, harnessErrors: ['Assertion failed'] }, { concurrency: 1 }), false);
+  assert.equal(shouldRetryPlaytest({ ...base, harnessErrors: ['Timeout 20000ms exceeded'] }, { concurrency: 1 }), false);
+  assert.equal(shouldRetryPlaytest({ ...base, harnessErrors: ['Timeout 20000ms exceeded'] }, { concurrency: 3 }), true);
+  assert.equal(shouldRetryPlaytest({ ...base, harnessErrors: ['any error'] }, { concurrency: 1, browserConnected: false }), true);
+});
+
+test('runPlaytest reuses one browser across isolated contexts without leaking storage or errors', async t => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'school-games-playtest-reuse-'));
+  t.after(() => fs.rmSync(tempRoot, { recursive: true, force: true }));
+  const server = await startTestServer(tempRoot, {
+    pages: {
+      '/games/ok/index.html': '<!doctype html><link rel="icon" href="data:,"><script>localStorage.setItem("leaked","yes"); window.value = 42;</script>',
+      '/games/check/index.html': '<!doctype html><link rel="icon" href="data:,"><script>window.leaked = localStorage.getItem("leaked");</script>',
+      '/games/err/index.html': '<!doctype html><link rel="icon" href="data:,"><script>throw new Error("isolated boom");</script>'
+    }
+  });
+  t.after(() => server.close());
+  const browser = await launchChromium({ args: PLAYTEST_BROWSER_ARGS });
+  t.after(() => browser.close());
+
+  const [r1, r2, r3] = await Promise.all([
+    runPlaytest({ browser, origin: server.origin, slug: 'ok', outDir: path.join(tempRoot, 'out-ok'), actions: [{ eval: 'window.value' }] }),
+    runPlaytest({ browser, origin: server.origin, slug: 'check', outDir: path.join(tempRoot, 'out-check'), actions: [{ eval: 'window.leaked' }] }),
+    runPlaytest({ browser, origin: server.origin, slug: 'err', outDir: path.join(tempRoot, 'out-err'), actions: [{ wait: 50 }] })
+  ]);
+  assert.equal(browser.isConnected(), true, 'shared browser remains connected');
+  assert.equal(r1.ok, true);
+  assert.equal(r1.evals[0].value, 42);
+  assert.equal(r2.ok, true);
+  assert.equal(r2.evals[0].value, null, 'localStorage did not leak between BrowserContexts');
+  assert.equal(r3.ok, false);
+  assert.ok(r3.pageErrors.some(e => e.includes('isolated boom')));
+  assert.equal(r1.pageErrors.length, 0, 'errors in one context do not contaminate siblings');
 });

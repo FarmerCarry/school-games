@@ -74,9 +74,8 @@
   KO.createView = function (canvas) {
     var T = window.THREE;
     if (!T) throw new Error('three.js is unavailable');
-    var renderer = new T.WebGLRenderer({ canvas: canvas, antialias: true, powerPreference: 'high-performance' });
-    var ratio = Math.min(window.devicePixelRatio || 1, 1.5);
-    renderer.setPixelRatio(ratio);
+    var wgl = Kit.webgl.createRenderer(canvas);
+    var renderer = wgl.renderer, ratio = wgl.ratio;
     var scene = new T.Scene(), camera = new T.PerspectiveCamera(44, 16 / 9, 0.1, 160);
     scene.fog = new T.Fog(0xffffff, 26, 62);
     var hemi = new T.HemisphereLight(0xffffff, 0xb59bd6, 1.9), sun = new T.DirectionalLight(0xffffff, 1.9);

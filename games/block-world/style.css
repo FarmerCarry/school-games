@@ -3,14 +3,12 @@ body { background: #0d102b; cursor: default; }
 #ui { position: absolute; left: 0; top: 0; width: 1280px; height: 720px; transform-origin: 0 0; pointer-events: none; z-index: 10; }
 .ov, .sc-confirm, .islot { display: flex; align-items: center; justify-content: center; }
 .ov { position: absolute; inset: 0; pointer-events: auto; }
-.ov[hidden], .pbtn[hidden], #cursorStack[hidden], #saveError[hidden] { display: none; }
+.ov[hidden], .pbtn[hidden], #cursorStack[hidden] { display: none; }
 .sc-ic, .mode img, .q img, .station img, .ing img, .need img, .islot img, #invPick img, .crow .out, .cname small img, #cursorStack img { image-rendering: pixelated; }
 .tag, .sc-plus, .sc-name, .sc-stars, .sc-mode, .sc-confirm, #skinName, #totalStars, .diff-desc, #pauseStars, .loadbox, #masterStars, .islot span, #hotTip, .station.on::after, .cname, #cursorStack span { font-weight: 700; }
 
 .pbtn { position: fixed; top: 10px; right: 62px; z-index: 20; width: 44px; height: 44px; border-radius: 50%; border: 2px solid rgba(255,255,255,.3); background: rgba(16,20,48,.65); color: #fff; font: 700 18px var(--sg-font); cursor: pointer; }
 .pbtn:hover { background: rgba(16,20,48,.9); }
-#saveError { position: fixed; bottom: 8px; left: 50%; transform: translateX(-50%); max-width: calc(100% - 24px); box-sizing: border-box; padding: 6px 14px; border-radius: 14px; background: #472134; color: #fff; z-index: 200; font: 700 15px var(--sg-font); text-align: center; box-shadow: 0 4px 12px #0008; }
-#saveRetry { font-size: 14px; padding: 4px 14px; min-block-size: 34px; margin: 0 10px 0 0; vertical-align: middle; }
 
 #title { flex-direction: column; justify-content: flex-start; background: linear-gradient(180deg, rgba(10,14,40,.18) 0%, rgba(10,14,40,.08) 28%, rgba(10,14,40,.62) 68%, rgba(10,14,40,.86) 100%); }
 .logo { margin: 18px 0 0; display: flex; gap: 18px; align-items: flex-end; direction: rtl; }

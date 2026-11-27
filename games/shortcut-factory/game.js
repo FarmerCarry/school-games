@@ -543,8 +543,11 @@
   Kit.lifecycle({ pause: () => pause(false), reset: () => { queue.length = 0; } });
   Kit.motion.onChange(() => { dirty = true; });
   window.addEventListener('pageshow', () => { dirty = true; });
-  canvas.addEventListener('webglcontextlost', e => { e.preventDefault(); contextLost = true; pause(false); $('contextNotice').hidden = false; });
-  canvas.addEventListener('webglcontextrestored', () => { contextLost = false; $('contextNotice').hidden = true; dirty = true; fit.resize(); });
+  Kit.webgl.watchContext(canvas, {
+    notice: 'contextNotice',
+    onLost: () => { contextLost = true; pause(false); },
+    onRestored: () => { contextLost = false; dirty = true; fit.resize(); }
+  });
   let loop = null;
   try {
     view = SF.createView(canvas);

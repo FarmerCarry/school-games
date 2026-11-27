@@ -6,7 +6,7 @@
   var note = document.getElementById('updateNote');
   if (!status || !retry) return;
   var pageVersion = window.SG_OFFLINE_VERSION, availableVersion = null, reloadedVersion = null, refreshing = false;
-  var registration = null, starting = false, checking = false, checkingRepair = false, queued = false, queuedRepair = false, sequence = 0, installingTimer = 0, observedWorker = null, shown = '';
+  var registration = null, starting = false, startAgain = false, checking = false, checkingRepair = false, queued = false, queuedRepair = false, sequence = 0, installingTimer = 0, observedWorker = null, shown = '';
   // offeredVersion: a newer version that is verified on this PC and waits for a tap.
   // activeVersion: the version of the worker that answered last; serverCheckAt: the last look at version.json.
   var offeredVersion = null, activeVersion = null, serverCheckAt = 0, serverChecking = false, serverAgain = false, updatedAt = 0;
@@ -257,13 +257,26 @@
     starting = true;
     paint('preparing', 'جارٍ تجهيز الألعاب للعمل دون إنترنت…', false);
     try {
-      var owner = await navigator.serviceWorker.register(await workerUrl(), { updateViaCache: 'none' });
+      var owner;
+      try { owner = await navigator.serviceWorker.register(await workerUrl(), { updateViaCache: 'none' }); }
+      catch (err) {
+        // Reloading a cached page while offline can reject register() even though the active worker still controls it.
+        owner = await navigator.serviceWorker.getRegistration();
+        if (!hasWorker(owner)) throw err;
+      }
       registration = owner;
       owner.addEventListener('updatefound', function () { observe(owner, owner.installing); });
       observe(owner, owner.installing);
       if (owner.active) inspect(false);
     } catch (e) { paint('unavailable', 'تعذّر تجهيز الألعاب دون إنترنت — أعد المحاولة', true); }
-    finally { starting = false; }
+    finally {
+      starting = false;
+      if (startAgain) {
+        startAgain = false;
+        if (!hasWorker(registration)) start();
+        else inspect(shown !== 'ready');
+      }
+    }
   }
   retry.addEventListener('click', async function () {
     if (starting) return;
@@ -290,6 +303,7 @@
   window.addEventListener('online', function () {
     serverCheckAt = 0;
     if (serverChecking) serverAgain = true;
+    if (starting) { startAgain = true; return; }
     inspect(shown !== 'ready');
   });
   window.addEventListener('focus', function () { if (!document.hidden) inspect(false); });

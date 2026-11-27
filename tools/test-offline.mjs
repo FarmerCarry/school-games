@@ -345,16 +345,26 @@ try {
     // A cache on the way keeps serving the old sw.js. The portal asks the site's own
     // version.json (through its worker), finds v3, and fetches the worker at a new address.
     // An open game is never reloaded: the «new version» button waits for the round to end.
-    // The old sw.js is in place before the page comes back online: coming online looks at
-    // the site at once, and must not find the new worker at the plain address.
+    // Reload and start the game while offline with staleWorker in place, then reconnect:
+    // coming online looks at the site at once while the round is open, and must not find
+    // the new worker at the plain address.
     staleWorker = fs.readFileSync(path.join(v2.dir, 'sw.js'));
-    await offlineReload(context, [page]);
-    await page.goto(origin + BASE + '#/play/connect-four', { waitUntil: 'load' });
-    await page.waitForFunction(() => document.querySelector('#stage iframe') && !document.querySelector('#stage iframe').hasAttribute('inert'));
-    const roundFrame = page.frames().find(frame => frame.url().includes('/games/connect-four/'));
+    await context.setOffline(true);
+    let roundFrame;
+    try {
+      await page.reload({ waitUntil: 'load' });
+      assert.ok(await page.locator('#app .tile img').count() > 20, 'offline portal tiles');
+      await page.waitForFunction(() => document.getElementById('offlineStatus')?.dataset.state === 'ready');
+      await page.goto(origin + BASE + '#/play/connect-four', { waitUntil: 'load' });
+      await page.waitForFunction(() => document.querySelector('#stage iframe') && !document.querySelector('#stage iframe').hasAttribute('inert'));
+      roundFrame = page.frames().find(frame => frame.url().includes('/games/connect-four/'));
+      await roundFrame.evaluate(() => parent.postMessage({ type: 'sg:round', version: 1, phase: 'start', result: '' }, location.origin));
+      await page.evaluate(() => { window.promptSentinel = 'same-doc'; });
+    } finally { await context.setOffline(false); }
+    // A document reloaded while CDP offline starts with navigator.onLine === true,
+    // so lifting setOffline(false) does not emit window's online event in Chromium.
+    await page.evaluate(() => window.dispatchEvent(new Event('online')));
     const round = open => roundFrame.evaluate(open => parent.postMessage({ type: 'sg:round', version: 1, phase: open ? 'start' : 'end', result: '' }, location.origin), open);
-    await round(true);
-    await page.evaluate(() => { window.promptSentinel = 'same-doc'; });
     await waitFor(() => inspector.evaluate(async ({ scope, url }) => {
       const reg = await navigator.serviceWorker.getRegistration(scope);
       return reg?.active?.scriptURL === url;
@@ -378,9 +388,10 @@ try {
       document.getElementById('updateNote').hidden, v3.version), 'a tap reloads into the new version and reopens the same game');
     staleWorker = null;
     await page.evaluate(() => { location.hash = '#/'; });
+    await page.waitForFunction(() => document.body.className === 'route-home' && !document.querySelector('#stage iframe'));
 
     await kill(inspector, page, origin + BASE, killBuild);
-    check(true, 'kill switch unregisters its worker and removes its scoped cache');
+    check(await page.evaluate(() => !navigator.serviceWorker.controller), 'kill switch unregisters its worker, reloads hash routes, and removes its scoped cache');
     check(errors.length === 0, 'offline game initialization and updates have no page errors: ' + errors.join(' | '));
 
     // A cleared old cache must also recover after deployment changed the portal

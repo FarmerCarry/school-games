@@ -781,18 +781,10 @@
   Kit.motion.onChange(function (r) { if (view) view.calm = r; dirty = true; });
   window.addEventListener('resize', layout);
   window.addEventListener('pageshow', function () { dirty = true; });
-  canvas.addEventListener('webglcontextlost', function (e) {
-    e.preventDefault();
-    contextLost = true;
-    pauseGame(false);
-    $('ctxNotice').hidden = false;
-  });
-  canvas.addEventListener('webglcontextrestored', function () {
-    contextLost = false;
-    $('ctxNotice').hidden = true;
-    snap = true;
-    dirty = true;
-    layout();
+  Kit.webgl.watchContext(canvas, {
+    notice: 'ctxNotice',
+    onLost: function () { contextLost = true; pauseGame(false); },
+    onRestored: function () { contextLost = false; snap = true; dirty = true; layout(); }
   });
 
   try {
@@ -801,26 +793,19 @@
     refreshTitleUI();
     setMode('title');
 
-    var started3D = false;
-    var boot3D = function () {
-      if (started3D || failed) return;
-      started3D = true;
-      try {
-        view = A.createView(canvas);
-        view.calm = Kit.motion.reduced();
-        layout();
-        view.prepare(function () {
-          if (failed) return;
-          try {
-            view.sync(demo, { dt: 0, t: 0, mode: 'title', snap: true });
-            view.render();
-            view.whenDrawn(goLive, 5000);
-          } catch (e) { fail(e); }
-        });
-      } catch (e) { fail(e); }
-    };
-    requestAnimationFrame(function () { setTimeout(boot3D, 0); });
-    setTimeout(boot3D, 80);
+    Kit.webgl.boot(function () {
+      view = A.createView(canvas);
+      view.calm = Kit.motion.reduced();
+      layout();
+      view.prepare(function () {
+        if (failed) return;
+        try {
+          view.sync(demo, { dt: 0, t: 0, mode: 'title', snap: true });
+          view.render();
+          view.whenDrawn(goLive, 5000);
+        } catch (e) { fail(e); }
+      });
+    }, { guard: function () { return !failed; }, onError: fail });
   } catch (err) {
     fail(err);
   }

@@ -18,21 +18,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  checks:
-    name: Test source and fast build
+  build:
+    name: Build fast site and check budgets
     # Pinned: ubuntu-latest becomes Ubuntu 26 from 19 October 2026. Move on deliberately,
     # once Playwright's --with-deps install supports the new image.
     runs-on: ubuntu-24.04
-    # The checks took about 48 minutes in October. On 22 October 2026 the --with-deps install
-    # alone took 11 minutes instead of 18 seconds on two runs in a row, and both hit a
-    # 60-minute limit in the last test step. With 44 games and the statistics tests they take
-    # 66 to 83 minutes (13 November 2026), and on 14 November main run 43535718530 was
-    # cancelled at the 90-minute limit while its last gameplay step was still passing. 120
-    # leaves room for a slow runner and slow package mirrors.
-    # Each step has its own limit as well. On 23 October 2026 the shared-rules step (normally
-    # ~41s) was still running after 30 minutes and would only have failed at this job limit,
-    # which also blocks the Pages deploy.
-    timeout-minutes: 120
+    timeout-minutes: 20
     permissions:
       contents: read
       pages: read
@@ -62,21 +53,66 @@ jobs:
       - name: Install development tools
         timeout-minutes: 10
         run: npm ci
+      - name: Build the fast site
+        timeout-minutes: 10
+        run: npm run build
+        env:
+          # The address of the school's anonymous play statistics server (docs/TELEMETRY.md):
+          # the school's Cloudflare Worker, unless the SG_TELEMETRY_URL repository variable
+          # names another server.
+          SG_TELEMETRY_URL: ${{ vars.SG_TELEMETRY_URL || 'https://school-games-telemetry.services-agreement137.workers.dev/v1/batch' }}
+      - name: Check built asset performance budgets
+        timeout-minutes: 5
+        run: npm run perf:assets -- --report artifacts/asset-budgets.json
+      - name: Upload asset performance report
+        if: always() && hashFiles('artifacts/asset-budgets.json') != ''
+        uses: actions/upload-artifact@v6
+        with:
+          name: asset-performance-budgets
+          path: artifacts/asset-budgets.json
+          if-no-files-found: error
+      - name: Upload built site for test jobs
+        uses: actions/upload-artifact@v6
+        with:
+          name: site-build
+          path: _site
+          include-hidden-files: true
+          overwrite: true
+          if-no-files-found: error
+          retention-days: 1
+      - name: Upload the verified fast site
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: _site
+
+  shared-and-balance:
+    name: Shared tests and Block Burst balance
+    needs: [build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install development tools
+        timeout-minutes: 10
+        run: npm ci
       - name: Install Chromium and its system dependencies
         # 11 minutes has happened when the package mirror stalled. 25 fails a hung install
         # and still covers that day.
         timeout-minutes: 25
         run: npx playwright install --with-deps --no-shell chromium
-      - name: Smoke-test all source games
-        timeout-minutes: 15
-        run: npm run check
-        env:
-          SG_ARTIFACT_DIR: .work/smoke-source
       - name: Test shared rules, build safety and harnesses once
         # Normally ~41s (54s on the slower green run). The harness names a stuck test after
         # 10 minutes; 20 lets that failure print, and kills a wedged process before the job limit.
         timeout-minutes: 20
         run: node tools/ci-run.mjs npm run test:shared
+      - name: Test harness tooling helpers
+        timeout-minutes: 5
+        run: node tools/ci-run.mjs npm run test:tooling
       - name: Verify Block Burst balance when its levels or rules change
         # Seeded play is about 4 minutes. 20 covers a slow run.
         timeout-minutes: 20
@@ -99,65 +135,51 @@ jobs:
             [ -n "${changed:-}" ] && printf 'Changed since %s:\n%s\n' "$base" "$changed"
             node tools/ci-run.mjs node games/block-burst/verify-levels.js
           fi
-      - name: Test source gameplay and portal regressions
-        # About 26 to 37 minutes on green runs (44 games, 13 and 14 November 2026).
-        timeout-minutes: 60
-        run: node tools/ci-run.mjs npm run test:browser
-      - name: Test local board games and computer opponents
-        timeout-minutes: 10
-        run: npm run test:board-games
-        env:
-          SG_BOARD_SCREENSHOTS: .work/boards-source
-      - name: Build the fast site
-        timeout-minutes: 10
-        run: npm run build
-        env:
-          # The address of the school's anonymous play statistics server (docs/TELEMETRY.md):
-          # the school's Cloudflare Worker, unless the SG_TELEMETRY_URL repository variable
-          # names another server.
-          SG_TELEMETRY_URL: ${{ vars.SG_TELEMETRY_URL || 'https://school-games-telemetry.services-agreement137.workers.dev/v1/batch' }}
-      - name: Check built asset performance budgets
-        timeout-minutes: 5
-        run: npm run perf:assets -- --report artifacts/asset-budgets.json
-      - name: Upload asset performance report
-        if: always() && hashFiles('artifacts/asset-budgets.json') != ''
-        uses: actions/upload-artifact@v6
+
+  smoke-and-offline:
+    name: Smoke, board games and offline checks
+    needs: [build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
-          name: asset-performance-budgets
-          path: artifacts/asset-budgets.json
-          if-no-files-found: error
-      - name: Measure software-rendered startup and active frames (informational)
-        continue-on-error: true
-        timeout-minutes: 8
-        run: node tools/perf.mjs --samples 5 --seconds 5 --json artifacts/runtime-performance.json portal hoop-heads splat-strike steady-hand
-        env:
-          SG_ROOT: _site
-      - name: Upload informational runtime performance report
-        if: always() && hashFiles('artifacts/runtime-performance.json') != ''
-        uses: actions/upload-artifact@v6
-        with:
-          name: runtime-performance-software-${{ github.sha }}
-          path: artifacts/runtime-performance.json
-          if-no-files-found: error
-          retention-days: 14
-      - name: Test board games in the single-file fast build
+          node-version: 22
+          cache: npm
+      - name: Install development tools
         timeout-minutes: 10
-        run: npm run test:board-games
+        run: npm ci
+      - name: Install Chromium and its system dependencies
+        timeout-minutes: 25
+        run: npx playwright install --with-deps --no-shell chromium
+      - name: Download built site
+        uses: actions/download-artifact@v6
+        with:
+          name: site-build
+          path: _site
+      - name: Smoke-test all source games
+        timeout-minutes: 15
+        run: npm run check
         env:
-          SG_ROOT: _site
-          SG_BOARD_SCREENSHOTS: .work/boards-built
+          SG_ARTIFACT_DIR: .work/smoke-source
       - name: Smoke-test all built games
         timeout-minutes: 15
         run: npm run check
         env:
           SG_ROOT: _site
           SG_ARTIFACT_DIR: .work/smoke-built
-      - name: Test optimized gameplay and portal regressions
-        # About 22 to 31 minutes on green runs (44 games, 13 and 14 November 2026).
-        timeout-minutes: 60
-        run: node tools/ci-run.mjs npm run test:browser
+      - name: Test local board games and computer opponents
+        timeout-minutes: 10
+        run: npm run test:board-games
+        env:
+          SG_BOARD_SCREENSHOTS: .work/boards-source
+      - name: Test board games in the single-file fast build
+        timeout-minutes: 10
+        run: npm run test:board-games
         env:
           SG_ROOT: _site
+          SG_BOARD_SCREENSHOTS: .work/boards-built
       - name: Test offline installation, updates and the kill switch
         timeout-minutes: 10
         run: npm run test:offline
@@ -173,11 +195,122 @@ jobs:
             .work/boards-built
           if-no-files-found: ignore
           retention-days: 14
-      - name: Upload the verified fast site
-        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-        uses: actions/upload-pages-artifact@v5
+
+  scenarios-and-regressions:
+    name: Scenario mutations and browser regressions
+    needs: [build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
+          node-version: 22
+          cache: npm
+      - name: Install development tools
+        timeout-minutes: 10
+        run: npm ci
+      - name: Install Chromium and its system dependencies
+        timeout-minutes: 25
+        run: npx playwright install --with-deps --no-shell chromium
+      - name: Download built site
+        uses: actions/download-artifact@v6
+        with:
+          name: site-build
           path: _site
+      - name: Test source gameplay scenario mutations
+        timeout-minutes: 15
+        run: node tools/ci-run.mjs npm run test:scenarios
+      - name: Test built gameplay scenario mutations
+        timeout-minutes: 10
+        run: node tools/ci-run.mjs npm run test:scenarios
+        env:
+          SG_ROOT: _site
+      - name: Test source browser regressions
+        timeout-minutes: 15
+        run: node tools/ci-run.mjs npm run test:regressions -- --browser-only
+      - name: Test built browser regressions
+        timeout-minutes: 15
+        run: node tools/ci-run.mjs npm run test:regressions -- --browser-only
+        env:
+          SG_ROOT: _site
+
+  browser-suite:
+    name: Browser suite (${{ matrix.target }} ${{ matrix.shard }})
+    needs: [build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [source, built]
+        shard: ['1/4', '2/4', '3/4', '4/4']
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install development tools
+        timeout-minutes: 10
+        run: npm ci
+      - name: Install Chromium and its system dependencies
+        timeout-minutes: 25
+        run: npx playwright install --with-deps --no-shell chromium
+      - name: Download built site
+        if: matrix.target == 'built'
+        uses: actions/download-artifact@v6
+        with:
+          name: site-build
+          path: _site
+      - name: Test source gameplay and portal suite (${{ matrix.shard }})
+        if: matrix.target == 'source'
+        timeout-minutes: 30
+        run: node tools/ci-run.mjs node tools/test-suite.mjs browser --shard=${{ matrix.shard }}
+      - name: Test optimized gameplay and portal suite (${{ matrix.shard }})
+        if: matrix.target == 'built'
+        timeout-minutes: 30
+        run: node tools/ci-run.mjs node tools/test-suite.mjs browser --shard=${{ matrix.shard }}
+        env:
+          SG_ROOT: _site
+
+  perf-info:
+    name: Software runtime performance (informational)
+    needs: [build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install development tools
+        timeout-minutes: 10
+        run: npm ci
+      - name: Install Chromium and its system dependencies
+        timeout-minutes: 25
+        run: npx playwright install --with-deps --no-shell chromium
+      - name: Download built site
+        uses: actions/download-artifact@v6
+        with:
+          name: site-build
+          path: _site
+      - name: Measure software-rendered startup and active frames (informational)
+        continue-on-error: true
+        timeout-minutes: 8
+        run: node tools/perf.mjs --samples 5 --seconds 5 --json artifacts/runtime-performance.json portal hoop-heads splat-strike steady-hand
+        env:
+          SG_ROOT: _site
+      - name: Upload informational runtime performance report
+        if: always() && hashFiles('artifacts/runtime-performance.json') != ''
+        uses: actions/upload-artifact@v6
+        with:
+          name: runtime-performance-software-${{ github.sha }}
+          path: artifacts/runtime-performance.json
+          if-no-files-found: error
+          retention-days: 14
 
   classroom-windows:
     name: Test downloaded folder on Windows Edge
@@ -226,7 +359,13 @@ jobs:
   deploy:
     name: Deploy verified fast site
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    needs: [checks, classroom-windows]
+    needs:
+      - build
+      - shared-and-balance
+      - smoke-and-offline
+      - browser-suite
+      - scenarios-and-regressions
+      - classroom-windows
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:

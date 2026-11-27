@@ -18,7 +18,7 @@ let browser, server;
 
 before(async () => {
   server = await startTestServer(root);
-  browser = await launchChromium({ args: ['--disable-gpu-vsync', '--disable-frame-rate-limit'] });
+  browser = await launchChromium();
 });
 after(async () => {
   await browser?.close();

@@ -499,7 +499,6 @@ h1, h2, h3 { font-weight: 700; margin: 0; }
 }
 
 .empty { text-align: center; padding: 40px 20px 10px; }
-.empty.small { padding: 24px 20px 0; }
 .empty h2 { font-size: 34px; }
 .empty p { font-size: 20px; color: var(--ink-soft); margin: 8px 0 18px; }
 .empty-emoji { font-size: 64px; animation: bob 2.4s ease-in-out infinite; }
@@ -796,7 +795,6 @@ h1, h2, h3 { font-weight: 700; margin: 0; }
   white-space: nowrap;
 }
 .toast.show { transform: translate(-50%, 0); opacity: 1; }
-.toast.gold { padding: 14px 30px; background: #ffcc00; color: #3a2a00; font-size: 23px; box-shadow: 0 6px 0 #d69a00, 0 10px 28px rgba(28, 34, 80, 0.3); }
 
 /* The «new version» button (js/offline.js): in the game's bar, only between rounds. */
 .update-note {
@@ -933,7 +931,6 @@ h1, h2, h3 { font-weight: 700; margin: 0; }
 .pbtn[hidden], .offline-status [hidden] { display: none; }
 .offline-status { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 10px; margin-top: 10px; font-size: 15px; }
 .offline-status span { padding: 4px 12px; }
-.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
 [data-sg-motion="reduce"] *, [data-sg-motion="reduce"] *::before, [data-sg-motion="reduce"] *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition: none !important; }
 @media (max-width: 560px) {
   .play-bar { flex-wrap: wrap; justify-content: center; }

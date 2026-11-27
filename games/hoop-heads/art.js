@@ -10,36 +10,13 @@
   function wx(px) { return (px - 640) * SCALE; }
   function wy(py) { return (600 - py) * SCALE; }
 
-  function softwareGL() {
-    var gl = null;
-    try {
-      var c = document.createElement('canvas');
-      var opts = { powerPreference: 'high-performance' };
-      gl = c.getContext('webgl2', opts) || c.getContext('webgl', opts);
-      if (!gl) return false;
-      var name = String(gl.getParameter(gl.RENDERER) || '');
-      if (/^webkit webgl$/i.test(name)) {
-        var info = gl.getExtension('WEBGL_debug_renderer_info');
-        if (info) name = String(gl.getParameter(info.UNMASKED_RENDERER_WEBGL) || '');
-      }
-      return /swiftshader|llvmpipe|softpipe|software|basic render|\bwarp\b/i.test(name);
-    } catch (e) {
-      return false;
-    } finally {
-      try { var lose = gl && gl.getExtension('WEBGL_lose_context'); if (lose) lose.loseContext(); } catch (e) { /* ignore */ }
-    }
-  }
-
   function createView(canvas) {
     var T = window.THREE;
     var E = window.HoopHeadsEngine;
     if (!T) throw new Error('three.js unavailable');
 
-    var software = softwareGL();
-    var renderer = new T.WebGLRenderer({ canvas: canvas, antialias: !software, powerPreference: 'high-performance' });
-    var ratio = software ? 0.75 : Math.min(window.devicePixelRatio || 1, 1.5);
-    renderer.setPixelRatio(ratio);
-    if (T.SRGBColorSpace) renderer.outputColorSpace = T.SRGBColorSpace;
+    var wgl = Kit.webgl.createRenderer(canvas, { srgb: true });
+    var software = wgl.software, renderer = wgl.renderer;
 
     var scene = new T.Scene();
     var skyColor = new T.Color(0x56c8ff);
@@ -1218,8 +1195,7 @@
     }
 
     /* ---------------------------------------------------- Software WebGL Fence Pacing */
-    var gl0 = renderer.getContext();
-    var pace = software && typeof gl0.fenceSync === 'function' ? { sync: null, t0: 0, busy: 0 } : null;
+    var pace = Kit.webgl.pacer(renderer, { software: software });
 
     var view = {
       renderer: renderer,
@@ -1230,27 +1206,10 @@
       burst: burst,
       shake: addShake,
       sync: sync,
-      mayDraw: function (now, playing) {
-        if (!pace || playing) return true;
-        if (pace.sync) {
-          var done = true;
-          try { done = gl0.isContextLost() || gl0.getSyncParameter(pace.sync, gl0.SYNC_STATUS) === gl0.SIGNALED; } catch (e) { done = true; }
-          if (!done && now - pace.t0 < 1000) return false;
-          try { gl0.deleteSync(pace.sync); } catch (e) { /* ignore */ }
-          pace.sync = null;
-          pace.busy = Math.min(500, now - pace.t0);
-        }
-        return now - pace.t0 >= pace.busy * 2;
-      },
+      mayDraw: pace.mayDraw,
       render: function () {
         renderer.render(scene, camera);
-        if (!pace) return;
-        try {
-          if (pace.sync) gl0.deleteSync(pace.sync);
-          pace.sync = gl0.fenceSync(gl0.SYNC_GPU_COMMANDS_COMPLETE, 0);
-          gl0.flush();
-          pace.t0 = performance.now();
-        } catch (e) { pace = null; }
+        pace.markDrawn();
       },
       resize: function (w, h) {
         renderer.setSize(w, h, false);
@@ -1261,18 +1220,9 @@
         try { renderer.compile(scene, camera); } catch (e) { /* ignore */ }
         done();
       },
-      whenDrawn: function (done, limit) {
-        var gl = renderer.getContext(), t0 = performance.now(), syncObj = null;
-        try { if (gl.fenceSync) { syncObj = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0); gl.flush(); } } catch (e) { syncObj = null; }
-        (function poll() {
-          var fin = !syncObj || gl.isContextLost() || performance.now() - t0 > (limit || 5000);
-          if (!fin) { try { fin = gl.getSyncParameter(syncObj, gl.SYNC_STATUS) === gl.SIGNALED; } catch (e) { fin = true; } }
-          if (!fin) { setTimeout(poll, 16); return; }
-          if (syncObj) { try { gl.deleteSync(syncObj); } catch (e) { /* ignore */ } }
-          done();
-        })();
-      },
+      whenDrawn: pace.whenDrawn,
       dispose: function () {
+        pace.dispose();
         renderer.dispose();
       }
     };

@@ -549,3 +549,17 @@ test('a look at the site made while offline does not delay the next one once bac
   await flush(); await flush(); await flush();
   assert.equal(slow.latestAsks, 2, 'the look made offline is followed by one made online');
 });
+
+test('an offline reload whose register() rejects falls back to its existing active worker and honors online during startup', async () => {
+  const active = worker('activated');
+  const existing = registration({ active });
+  // Empty registrations list causes register() to throw, simulating an offline script fetch error.
+  const page = controller([], { existing });
+  await flush(); await flush();
+  assert.equal(page.status['data-state'], 'ready', 'adopts the active offline worker instead of showing unavailable');
+  assert.equal(active.latestAsks, 1);
+  active.latest = 'abcdef0123456789';
+  page.window.emit('online');
+  await flush(); await flush(); await flush();
+  assert.equal(active.latestAsks, 2, 'reconnecting checks version.json immediately');
+});

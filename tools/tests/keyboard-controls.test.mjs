@@ -12,7 +12,7 @@ let server, browser, origin;
 before(async () => {
   server = await startTestServer(root);
   origin = server.origin;
-  browser = await launchChromium({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+  browser = await launchChromium();
 });
 
 after(async () => {

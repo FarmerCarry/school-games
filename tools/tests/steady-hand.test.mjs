@@ -11,10 +11,7 @@ import { startTestServer } from '../test-server.mjs';
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const root = process.env.SG_ROOT ? path.resolve(repo, process.env.SG_ROOT) : repo;
 let browser, server;
-// Real mouse moves wait for a frame; with the game's loop stepped by hand, these two flags
-// keep each move from waiting for a vsync that a headless software renderer paces slowly.
-// They change nothing in the game.
-before(async () => { server = await startTestServer(root); browser = await launchChromium({ args: ['--disable-gpu-vsync', '--disable-frame-rate-limit'] }); });
+before(async () => { server = await startTestServer(root); browser = await launchChromium(); });
 after(async () => { await browser?.close(); await server?.close(); });
 
 // A save with the first `open` levels lit (one star each), so later levels can be picked.

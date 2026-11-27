@@ -53,7 +53,7 @@ test('every catalog entry is well-formed, including Lucky Lake', () => {
     if (typeof game.title !== 'string' || !ARABIC.test(game.title)) problems.push(where + ': Arabic title');
     if (typeof game.blurb !== 'string' || !ARABIC.test(game.blurb)) problems.push(where + ': Arabic blurb');
     if (typeof game.en !== 'string' || !game.en.trim()) problems.push(where + ': English name');
-    if (game.tags != null && typeof game.tags !== 'string') problems.push(where + ': tags');
+    if ('tags' in game) problems.push(where + ': unexpected tags');
     if (game.tip != null && typeof game.tip !== 'string') problems.push(where + ': tip');
     if (!Array.isArray(game.cats) || game.cats.length === 0 || game.cats.some(id => !categories.has(id))) problems.push(where + ': cats');
     if (typeof game.players !== 'string' || !/^\d+(?:-\d+)?$/.test(game.players)) problems.push(where + ': players');
@@ -77,7 +77,7 @@ test('every catalog entry is well-formed, including Lucky Lake', () => {
   const lake = games.find(game => game.slug === 'lucky-lake');
   assert.ok(lake, 'lucky-lake catalog entry');
   assert.equal(lake.title, 'بحيرة الحظ');
-  assert.equal(lake.en.includes('Lucky Lake'), true);
+  assert.equal(lake.en, 'Lucky Lake');
   assert.equal(lake.players, '1-2');
   assert.equal(lake.inputStyle, 'mixed');
   assert.equal(lake.color, '#2ec4ff');
@@ -87,6 +87,7 @@ test('every catalog entry is well-formed, including Lucky Lake', () => {
   assert.equal(lake.blurb.includes('\uFFFD'), false);
   assert.equal(lake.controls.length, 7);
   assert.deepEqual([...Object.keys(lake)].sort(), [
-    'blurb', 'cats', 'color', 'controls', 'en', 'inputStyle', 'players', 'roundMinutes', 'slug', 'tags', 'tip', 'title'
+    'blurb', 'cats', 'color', 'controls', 'en', 'inputStyle', 'players', 'roundMinutes', 'slug', 'tip', 'title'
   ]);
+  for (const category of catalog.window.CATEGORIES) assert.equal('tags' in category, false, category.id + ': unexpected tags');
 });

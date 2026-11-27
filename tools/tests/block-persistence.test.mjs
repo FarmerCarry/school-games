@@ -67,15 +67,15 @@ test('real quota failure never advertises a saved world and Save & Quit retains 
     error: __game.G.saveError, flash: __game.G.savedFlash,
     world: Kit.store('block-world').get('slot1', null), slot: __game.meta.slots[0]
   })), { error: 'world', flash: 0, world: null, slot: null });
-  assert.equal(await page.locator('#saveError').isVisible(), true);
+  assert.equal(await page.locator('.sg-save-status[data-state="failed"]').isVisible(), true);
   await page.locator('#pausebtn').click();
   await page.locator('#quitBtn').click();
   assert.equal(await page.evaluate(() => __game.G.mode), 'pause');
   assert.equal(await page.evaluate(() => __game.G.slot), 1);
   await page.evaluate(() => localStorage.removeItem('quota-fixture'));
-  await page.locator('#saveRetry').click();
+  await page.locator('.sg-save-status button').click();
   assert.equal(await page.evaluate(() => __game.G.saveError), null);
-  assert.equal(await page.locator('#saveError').isVisible(), false);
+  assert.equal(await page.locator('.sg-save-status[data-state="saved"]').isVisible(), true);
   await page.locator('#quitBtn').click();
   assert.equal(await page.evaluate(() => __game.G.mode), 'title');
   await restore(page);
@@ -139,15 +139,16 @@ test('a failed pointer retry returns control to gameplay while keyboard retries 
     Storage.prototype.setItem = function () { throw new DOMException('blocked', 'SecurityError'); };
   });
   await create(page);
-  await page.locator('#saveRetry').click();
+  const retryBtn = page.locator('.sg-save-status button');
+  await retryBtn.click();
   assert.equal(await page.evaluate(() => __game.G.saveError), 'world');
   await page.keyboard.down('KeyD');
   assert.equal(await page.evaluate(() => Kit.keys.down('KeyD')), true);
   await page.keyboard.up('KeyD');
-  await page.locator('#saveRetry').focus();
+  await retryBtn.focus();
   await page.keyboard.press('Space');
-  assert.equal(await page.evaluate(() => document.activeElement.id), 'saveRetry');
-  await page.locator('#saveRetry').click();
+  assert.equal(await page.evaluate(() => document.activeElement === document.querySelector('.sg-save-status button')), true);
+  await retryBtn.click();
   await page.keyboard.press('Escape');
   await page.evaluate(() => stepGame());
   assert.equal(await page.evaluate(() => __game.G.mode), 'pause');

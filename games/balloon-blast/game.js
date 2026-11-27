@@ -1,4 +1,4 @@
-/* Balloon Blast — Canvas renderer (Kit.art), one-shot SFX (Kit.juice), UI, shop, and telemetry. */
+/* Balloon Blast — Canvas renderer, one-shot SFX (Kit.juice), UI, shop, and telemetry. */
 (function () {
   'use strict';
 
@@ -7,7 +7,6 @@
   var canvas = $('game'), ui = $('ui'), W = 1280, H = 720, TILE = D.TILE;
   var OX = (W - D.COLS * TILE) / 2, OY = 96, pausePainted = false;
 
-  if (Kit.art && typeof Kit.art.init === 'function') Kit.art.init({ canvas: canvas, mode: '2d', theme: 'day' });
   function place(v) {
     ui.style.transform = 'translate(' + canvas.style.left + ',' + canvas.style.top + ') scale(' + v.scale + ')';
     pausePainted = false;
@@ -55,12 +54,9 @@
     }
   };
 
-  /* ---- Procedural Cartoon Sprites via Kit.art.sprite (Bounded Static Keys) ---- */
+  /* ---- Procedural Cartoon Sprites (Bounded Static Keys) ---- */
   var SPR = {}, localSprites = {}, bakedArena = null;
   function makeSprite(key, w, h, drawFn) {
-    if (Kit.art && typeof Kit.art.sprite === 'function') {
-      try { var res = Kit.art.sprite(key, w, h, drawFn); if (res) return res.canvas || res; } catch (e) {}
-    }
     if (!localSprites[key]) {
       var cv = document.createElement('canvas'); cv.width = w; cv.height = h;
       drawFn(cv.getContext('2d'), w, h); localSprites[key] = cv;

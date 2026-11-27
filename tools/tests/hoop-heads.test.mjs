@@ -4,7 +4,6 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { launchChromium } from '../browser.mjs';
 import { startTestServer } from '../test-server.mjs';
-import { testHoopRewards } from '../regressions-hoop.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const root = process.env.SG_ROOT ? path.resolve(repo, process.env.SG_ROOT) : repo;
@@ -232,14 +231,4 @@ test('Hoop Heads 3D result screen blocks mashed keys during lock, warns & retrie
     storedGames: 1,
     restarted: 'play'
   });
-});
-
-test('Hoop Heads 3D rewards & 5-stage ladder persistence match regression contract', async t => {
-  const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, serviceWorkers: 'block' });
-  const page = await context.newPage();
-  const errors = [];
-  page.on('pageerror', e => errors.push(e.message));
-  t.after(async () => { await context.close(); assert.deepEqual(errors, []); });
-  const { checks } = await testHoopRewards({ page, baseURL: `${server.origin}/` });
-  assert.equal(checks, 4);
 });

@@ -497,8 +497,11 @@
   Kit.lifecycle({ pause: function () { pause(); }, reset: function () { /* keys are reset by Kit */ } });
   Kit.motion.onChange(function (r) { if (view) view.calm = r; dirty = true; });
   window.addEventListener('pageshow', function () { dirty = true; });
-  canvas.addEventListener('webglcontextlost', function (e) { e.preventDefault(); contextLost = true; pause(); $('contextNotice').hidden = false; });
-  canvas.addEventListener('webglcontextrestored', function () { contextLost = false; $('contextNotice').hidden = true; dirty = true; fit.resize(); });
+  Kit.webgl.watchContext(canvas, {
+    notice: 'contextNotice',
+    onLost: function () { contextLost = true; pause(); },
+    onRestored: function () { contextLost = false; dirty = true; fit.resize(); }
+  });
 
   var loop = null;
   try {

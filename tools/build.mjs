@@ -10,7 +10,7 @@
  * GitHub's 10-minute cache expires, a separate check with the server), so the build cuts
  * the number of files a page needs:
  *   - each game becomes ONE html file: its CSS/JS plus shared/kit.js and shared/game.css are
- *     minified and inlined. Fonts, three.js and shared/artkit.js stay shared files (cached once).
+ *     minified and inlined. Fonts, three.js and shared/{artkit,juice,webgl}.js stay shared files (cached once).
  *   - the portal becomes one html file with its CSS, JS, the catalog and all thumbnails inlined.
  *   - sw.js: an offline cache. After the first visit the whole site is stored on the PC, pages
  *     open without asking the server, and it still works if the internet drops. Each build
@@ -247,18 +247,22 @@ function cssFor(file, htmlDir) {
 }
 
 /* Inline every local stylesheet and script of an html page.
- * three.js and the art kit stay external (one shared download, not a copy in every game).
+ * three.js and the shared opt-in libraries (artkit, juice, webgl) stay external
+ * (one shared download cached once with ?v=<hash>, not duplicated per game).
  * tools/artkit-demo.html is a review page and is not shipped. */
-const ART_REL = 'shared/artkit.js';
-let artBuilt = null;
-let artVersion = '';
-function loadArt() {
-  const file = path.join(ROOT, ART_REL);
-  if (!fs.existsSync(file)) return;
-  let code = read(file);
-  if (MINIFY) code = esbuild.transformSync(code, { loader: 'js', minify: true, target: 'chrome100', legalComments: 'none', charset: 'utf8' }).code;
-  artBuilt = code;
-  artVersion = crypto.createHash('sha256').update(code).digest('hex').slice(0, 8);
+const EXTERNAL_SHARED = ['shared/artkit.js', 'shared/juice.js', 'shared/webgl.js'];
+const EXTERNAL_SHARED_RE = /(?:^|\/)(?:lib\/three\/|shared\/(?:artkit|juice|webgl)\.js(?:\?[^"]*)?$)/i;
+const sharedBuilt = new Map();
+const sharedVersion = new Map();
+function loadExternalShared() {
+  for (const rel of EXTERNAL_SHARED) {
+    const file = path.join(ROOT, rel);
+    if (!fs.existsSync(file)) continue;
+    let code = read(file);
+    if (MINIFY) code = esbuild.transformSync(code, { loader: 'js', minify: true, target: 'chrome100', legalComments: 'none', charset: 'utf8' }).code;
+    sharedBuilt.set(rel, code);
+    sharedVersion.set(rel, crypto.createHash('sha256').update(code).digest('hex').slice(0, 8));
+  }
 }
 function inlinePage(htmlFile, extra) {
   const dir = path.dirname(htmlFile);
@@ -271,23 +275,27 @@ function inlinePage(htmlFile, extra) {
   });
   html = html.replace(/<script\b([^>]*)>\s*<\/script>/gi, (tag, attrs) => {
     const src = (attrs.match(/\bsrc="([^"]+)"/i) || [])[1];
-    if (!src || !isLocal(src) || /(^|\/)(lib\/three\/|shared\/artkit\.js)/.test(src)) return tag;
+    if (!src || !isLocal(src) || EXTERNAL_SHARED_RE.test(src)) return tag;
     if (extra && extra.skip && extra.skip.includes(src)) return '';
     if (attrs.replace(/\bsrc="[^"]+"/i, '').trim()) throw new Error(`${htmlFile}: unsupported script attributes: ${tag}`);
     let code = jsFor(path.resolve(dir, src));
     if (extra && extra.before && extra.before[src]) code = extra.before[src] + '\n' + code;
     return '<script>' + code + '</script>';
   });
-  if (artVersion) html = html.replace(/(\bsrc="(?:\.\.\/)*shared\/artkit\.js)(?:\?[^"]*)?"/gi, '$1?v=' + artVersion + '"');
-  if (/shared\/artkit\.js/.test(html) && artBuilt == null) throw new Error(htmlFile + ': shared/artkit.js is missing');
-  const left = html.match(/<script\b[^>]*\bsrc="(?!(?:\.\.\/)*(?:lib\/three\/|shared\/artkit\.js(?:\?[^"]*)?))[^"]+"/gi);
+  for (const rel of EXTERNAL_SHARED) {
+    const escaped = rel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const ver = sharedVersion.get(rel);
+    if (ver) html = html.replace(new RegExp('(\\bsrc="(?:\\.\\.\\/)*' + escaped + ')(?:\\?[^"]*)?"', 'gi'), '$1?v=' + ver + '"');
+    if (new RegExp(escaped).test(html) && !sharedBuilt.has(rel)) throw new Error(htmlFile + ': ' + rel + ' is missing');
+  }
+  const left = html.match(/<script\b[^>]*\bsrc="(?!(?:\.\.\/)*(?:lib\/three\/|shared\/(?:artkit|juice|webgl)\.js(?:\?[^"]*)?))[^"]+"/gi);
   if (left) throw new Error(`${htmlFile}: scripts left un-inlined: ${left.join(', ')}`);
   return html;
 }
 
 /* --------------------------------------------------------------- games */
 try {
-  loadArt();
+  loadExternalShared();
   const cat = { window: {} };
   vm.runInNewContext(read(path.join(ROOT, 'js/catalog.js')), cat);
   const catalogSlugs = cat.window.GAMES.map(g => g.slug);
@@ -328,7 +336,7 @@ try {
   for (const f of fs.readdirSync(path.join(ROOT, 'shared/fonts'))) statics.push('shared/fonts/' + f);
   if (fs.existsSync(path.join(ROOT, 'icons'))) for (const f of fs.readdirSync(path.join(ROOT, 'icons'))) statics.push('icons/' + f);
   for (const f of statics) if (fs.existsSync(path.join(ROOT, f))) copy(f);
-  if (artBuilt != null) write(ART_REL, artBuilt);
+  for (const [rel, code] of sharedBuilt) write(rel, code);
   write('.nojekyll', '');
 
   /* ------------------------------------------------------ service worker */
@@ -647,7 +655,10 @@ self.addEventListener('activate', function (event) {
     await cleanLegacyCaches(names);
     await self.registration.unregister();
     var list = await self.clients.matchAll({ type: 'window' });
-    await Promise.all(list.map(function (c) { return c.navigate(c.url).catch(function () {}); }));
+    await Promise.all(list.map(function (c) {
+      if (c.frameType === 'nested') return;
+      return c.navigate(c.url.split('#')[0]).catch(function () {});
+    }));
   })());
 });
 `;

@@ -12,7 +12,7 @@ let server, browser, origin;
 before(async () => {
   server = await startTestServer(site);
   origin = server.origin;
-  browser = await launchChromium({ headless: true, args: ['--no-sandbox'] });
+  browser = await launchChromium();
 });
 
 after(async () => {

@@ -545,8 +545,11 @@
   Kit.lifecycle({ pause: pause, reset: function () { lastInput = [null, null]; } });
   Kit.motion.onChange(function () { dirty = true; });
   window.addEventListener('pageshow', function () { dirty = true; });
-  canvas.addEventListener('webglcontextlost', function (e) { e.preventDefault(); contextLost = true; pause(); $('contextNotice').hidden = false; });
-  canvas.addEventListener('webglcontextrestored', function () { contextLost = false; $('contextNotice').hidden = true; dirty = true; fit.resize(); });
+  Kit.webgl.watchContext(canvas, {
+    notice: 'contextNotice',
+    onLost: function () { contextLost = true; pause(); },
+    onRestored: function () { contextLost = false; dirty = true; fit.resize(); }
+  });
   var loop = null;
   try {
     view = ER.createView(canvas, { software: software });
@@ -564,14 +567,7 @@
     };
     loop = Kit.loop(update, render);
     // Tell the portal only once the first frame is really drawn (software WebGL can lag behind).
-    var gl = view.gl, sync = null, waited = 0;
-    try { if (gl.fenceSync) { sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0); gl.flush(); } } catch (e) { sync = null; }
-    (function poll() {
-      var done = !sync;
-      if (!done) { try { done = gl.getSyncParameter(sync, gl.SYNC_STATUS) === gl.SIGNALED; } catch (e) { done = true; } }
-      if (done || waited++ > 120) { if (sync) { try { gl.deleteSync(sync); } catch (e) { /* ignore */ } } Kit.ready(); return; }
-      setTimeout(poll, 25);
-    })();
+    Kit.webgl.whenDrawn(view.gl, function () { Kit.ready(); }, 3000);
   } catch (error) {
     if (loop) loop.stop();
     for (var k in SCREENS) $(SCREENS[k]).hidden = true;

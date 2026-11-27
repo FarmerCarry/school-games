@@ -125,17 +125,12 @@
   // Light graphics (Kit.gfx) for PCs that can't keep it smooth: no antialiasing from the
   // next start, and from the moment it turns on fewer pixels (the HUD stays sharp).
   var gfx = Kit.gfx('rail-rush', { apply: applyGfx });
-  var renderer;
-  try {
-    renderer = new T.WebGLRenderer({ canvas: canvas, antialias: !LQ && !gfx.light, alpha: true, powerPreference: 'high-performance' });
-  } catch (e) {
-    $('nogl').hidden = false;
-    return;
-  }
-  var UI_PR = LQ ? 0.5 : Math.min(window.devicePixelRatio || 1, 1.5);
-  function glRatio() { return LQ ? 0.5 : gfx.light ? Math.min(window.devicePixelRatio || 1, 1) * 0.75 : UI_PR; }
-  var PR = glRatio();
-  renderer.setPixelRatio(PR);
+  var wgl = Kit.webgl.createRenderer(canvas, { software: false, gfx: gfx, low: LQ, alpha: true, noGL: true });
+  if (!wgl) return;
+  var renderer = wgl.renderer;
+  var UI_PR = Kit.webgl.pixelRatio({ software: false, low: LQ });
+  function glRatio() { return Kit.webgl.pixelRatio({ software: false, gfx: gfx, low: LQ }); }
+  var PR = wgl.ratio;
   function applyGfx() {
     PR = glRatio();
     dres.ratio = PR; dres.min = PR * 0.6; dres.n = 0; dres.bad = 0;
@@ -1136,7 +1131,7 @@
   var dummy = new T.Object3D(), moversBuf = [];
   var camPos = new T.Vector3(0, 2, 5), camLook = new T.Vector3(0, 1, 0), tmpV = new T.Vector3(), tmpL = new T.Vector3();
   var lastT = performance.now(), renderDirty = true;
-  canvas.addEventListener('webglcontextrestored', function () { renderDirty = true; });
+  Kit.webgl.watchContext(canvas, { onRestored: function () { renderDirty = true; } });
   // camera shake and confetti follow the shared reduced-motion setting
   var reducedMotion = Kit.motion.reduced();
   Kit.motion.onChange(function (r) { reducedMotion = r; if (r) stopConfetti(); });

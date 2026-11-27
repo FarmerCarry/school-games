@@ -34,14 +34,24 @@ function assetPath(root, file, directory = false) {
   return current;
 }
 
+const OPTIONAL_SHARED = [
+  ['juiceBytes', 'shared:juice', 'shared/juice.js'],
+  ['webglBytes', 'shared:webgl', 'shared/webgl.js']
+];
+
 function validateConfig(config) {
-  const keys = ['format', 'portalBytes', 'gameHtmlBytes', 'threeBytes', 'fontBytes', 'artBytes', 'precacheBytes'];
-  if (!object(config) || config.format !== 1 || Object.keys(config).length !== keys.length ||
-      keys.some(key => !Object.hasOwn(config, key))) throw new Error('invalid budget config: expected format 1 and all documented keys');
+  const requiredKeys = ['format', 'portalBytes', 'gameHtmlBytes', 'threeBytes', 'fontBytes', 'artBytes', 'precacheBytes'];
+  const allowedKeys = new Set([...requiredKeys, ...OPTIONAL_SHARED.map(([key]) => key)]);
+  if (!object(config) || config.format !== 1 ||
+      requiredKeys.some(key => !Object.hasOwn(config, key)) ||
+      Object.keys(config).some(key => !allowedKeys.has(key))) {
+    throw new Error('invalid budget config: expected format 1 and all documented keys');
+  }
   const budget = (value, label) => {
     if (!Number.isSafeInteger(value) || value <= 0) throw new Error('invalid positive finite integer byte limit: ' + label);
   };
   for (const key of ['portalBytes', 'threeBytes', 'artBytes', 'precacheBytes']) budget(config[key], key);
+  for (const [key] of OPTIONAL_SHARED) if (Object.hasOwn(config, key)) budget(config[key], key);
   for (const [key, pattern] of [['gameHtmlBytes', SLUG], ['fontBytes', FONT]]) {
     if (!object(config[key]) || !Object.keys(config[key]).length) throw new Error('invalid empty budget map: ' + key);
     for (const [name, value] of Object.entries(config[key])) {
@@ -126,12 +136,23 @@ export function checkAssetBudgets({ root, configPath, catalogPath }) {
     }
     measure('three.js', ['lib/three/three.min.js'], config.threeBytes);
     measure('shared:artkit', ['shared/artkit.js'], config.artBytes);
+    const extraRequired = [];
+    for (const [key, metricName, file] of OPTIONAL_SHARED) {
+      const hasBudget = Object.hasOwn(config, key);
+      const existsOnDisk = fs.existsSync(path.join(root, ...file.split('/')));
+      if (hasBudget) {
+        measure(metricName, [file], config[key]);
+        extraRequired.push(file);
+      } else if (existsOnDisk) {
+        fail('shared asset has no explicit budget: ' + file);
+      }
+    }
     for (const name of [...new Set([...Object.keys(config.fontBytes), ...diskFonts])].sort()) {
       measure('font:' + name, ['shared/fonts/' + name], config.fontBytes[name] ?? null);
     }
 
     const files = precacheFiles(fs.readFileSync(assetPath(root, 'sw.js'), 'utf8'));
-    const required = ['index.html', 'lib/three/three.min.js', 'shared/artkit.js', ...slugs.map(slug => 'games/' + slug + '/index.html'),
+    const required = ['index.html', 'lib/three/three.min.js', 'shared/artkit.js', ...extraRequired, ...slugs.map(slug => 'games/' + slug + '/index.html'),
       ...Object.keys(config.fontBytes).map(name => 'shared/fonts/' + name)];
     for (const file of required) if (!files.includes(file)) fail('required asset missing from FILES: ' + file);
     measure('offline-precache', files, config.precacheBytes);

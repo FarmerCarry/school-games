@@ -209,22 +209,18 @@
     if (t && t.parentNode !== document.body) document.body.appendChild(t);
   }
   var toastTimer = 0;
-  // cls 'gold' is the bigger level-up toast.
-  function toast(msg, cls) {
+  function toast(msg) {
     var t = $('#toast'), host = overlayHost();
     if (!t) return;
     if (t.parentNode !== host) host.appendChild(t);
     t.textContent = msg;
-    t.className = 'toast show' + (cls ? ' ' + cls : '');
+    t.className = 'toast show';
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { t.classList.remove('show'); }, cls ? 3200 : 2600);
+    toastTimer = setTimeout(function () { t.classList.remove('show'); }, 2600);
   }
   // Portal sounds (shared/juice.js) are optional: the portal works silently without them.
   function juice(name, x) {
     try { var j = window.Juice; if (j && typeof j[name] === 'function') j[name](x); } catch (e) { /* sounds are optional */ }
-  }
-  function focusEl(el) {
-    try { el.focus({ preventScroll: true }); } catch (e) { el.focus(); }
   }
   // No decorative motion with reduced motion.
   function calm() {
@@ -975,9 +971,9 @@
   }
 
   /* ------------------------------------------------------------ events */
-  function go(hash, replace) {
+  function go(hash) {
     if (location.hash === hash) { render(); return; }
-    if (replace) location.replace(hash); else location.hash = hash;
+    location.hash = hash;
   }
 
   function surprise() {

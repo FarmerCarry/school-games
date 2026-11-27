@@ -10,17 +10,15 @@
  * Kit.art.rand() (mulberry32). Hit-stop freezes art timers only; update(dt)
  * from Kit.loop is never changed. Version 1 is additive only.
  *
- *   Kit.art.init({ canvas, ctx, mode:'2d'|'webgl', theme? })
- *   Kit.art.pal / shade(hex,amt) / ramp(a,b,n)
+ *   Kit.art.init({ canvas, ctx, mode:'2d', theme? })
+ *   Kit.art.pal / shade(hex,amt) / stops()
  *   Kit.art.round / blob / outlined / gloss / shadow
  *   Kit.art.sprite / blit / bake / glow / vignette / sky / layer
- *   Kit.art.fx / shake / hitstop / spring / blink / tween / ease / pop / flash
- *   Kit.art.texture / three.pixelRatio / three.lights / three.blobShadow
+ *   Kit.art.fx / shake / hitstop / spring / blink / pop / flash
  *   Kit.art.quality.tier / quality.on(fn) / quality.frame(ms)
  *   Kit.art.loop(update, render) / Kit.art.rand()
  *   Kit.art.blink() returns 0..1 (shared eyelid). Pass a plain object to keep
  *   a separate timer per character: Kit.art.blink(hero) each frame.
- *   Kit.art.tween(...) returns { v, done, update(dt) }.
  *   Kit.art.fx(cap) returns { burst, update, draw }.
  *   Kit.art.pop(text, x, y, opts) plus pop.update(dt) and pop.draw(ctx).
  *   Kit.art.flash(color, ms) plus flash.update(dt) and flash.draw(ctx, w, h).
@@ -31,7 +29,7 @@
   var W = window, Kit = W.Kit;
   if (!Kit || Kit.art) return;
 
-  var art = { version: 1 };
+  var art = {};
   var ready = false, tier = 2, startTier = 2, themeName = 'day';
   var viewCanvas = null, fitView = null, fitWrapped = false, bucket = 1;
   var cache = new Map(), pixels = 0, tinted = new Map();
@@ -40,7 +38,6 @@
   var hitUntil = 0, fl = { t: 0, ms: 0, color: '#fff', last: -1e15 };
   var slots = null, sh = { x: 0, y: 0, trauma: 0 };
   var COLORS = [], shadeCache = Object.create(null);
-  var shadowGeo = null, shadowMat = null, texCache = new Map();
   var rng = 0x6d2b79f5;
   var NO = {};
   var THEMES = {
@@ -86,7 +83,6 @@
     team: Object.freeze(['#0072B2', '#E69F00', '#009E73', '#CC79A7']),
     ui: '#fff7ea', uiInk: '#1b1640', uiSoft: '#ffe3b0'
   });
-  art.theme = 'day';
 
   function hexToRgb(hex) {
     var h = String(hex || ''), n;
@@ -110,21 +106,6 @@
     hit = rgbToHex(rgb[0], rgb[1], rgb[2]);
     shadeCache[key] = hit;
     return hit;
-  };
-  function mix(a, b, t) {
-    var A = hexToRgb(a), B = hexToRgb(b);
-    if (!A || !B) return t < 0.5 ? a : b;
-    return rgbToHex(A[0] + (B[0] - A[0]) * t | 0, A[1] + (B[1] - A[1]) * t | 0, A[2] + (B[2] - A[2]) * t | 0);
-  }
-  art.ramp = function (a, b, n) {
-    var out = [], i, t;
-    n = n | 0;
-    if (n < 1) return out;
-    for (i = 0; i < n; i++) {
-      t = n === 1 ? 0 : i / (n - 1);
-      out.push(mix(a, b, t));
-    }
-    return out;
   };
   art.stops = function () { return THEMES[themeName] || THEMES.day; };
 
@@ -473,29 +454,6 @@
     return s.v || 0;
   };
 
-  art.ease = {
-    outQuad: function (t) { return t * (2 - t); },
-    inOut: function (t) { return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t; },
-    outBack: function (t) { var c = 1.70158; return 1 + (t - 1) * (t - 1) * ((c + 1) * (t - 1) + c); },
-    outElastic: function (t) {
-      if (t === 0 || t === 1) return t;
-      return Math.pow(2, -10 * t) * Math.sin((t - 0.075) * 6.2831853 / 0.3) + 1;
-    }
-  };
-  art.tween = function (from, to, ms, easeFn) {
-    var o = { v: from, done: false, u: 0 }, dur = (ms || 1) / 1000;
-    easeFn = easeFn || art.ease.outQuad;
-    o.update = function (dt) {
-      if (reduced()) { o.u = 1; o.v = to; o.done = true; return o.v; }
-      if (frozen()) return o.v;
-      o.u = dur > 0 ? Math.min(1, o.u + dt / dur) : 1;
-      o.done = o.u >= 1;
-      o.v = from + (to - from) * easeFn(o.u);
-      return o.v;
-    };
-    return o;
-  };
-
   function ensurePops() {
     var i;
     if (slots) return;
@@ -579,48 +537,6 @@
   };
   art.flash = flash;
 
-  art.texture = function (key, w, h, draw) {
-    var s = sprite('tex:' + key, w, h, draw), THREE = W.THREE, id, tex;
-    if (!THREE || !s.canvas) return s;
-    id = key + ':' + s.canvas.width + 'x' + s.canvas.height;
-    if (texCache.has(id)) return texCache.get(id);
-    tex = new THREE.CanvasTexture(s.canvas);
-    tex.needsUpdate = true;
-    texCache.set(id, tex);
-    return tex;
-  };
-  art.three = {
-    pixelRatio: function () {
-      var caps = [0.75, 1, 1.5], dpr = W.devicePixelRatio || 1;
-      return Math.min(dpr, caps[tier] == null ? 1 : caps[tier]);
-    },
-    lights: function (scene, opt) {
-      var THREE = W.THREE, hemi, sun;
-      if (!THREE || !scene || !scene.add) return null;
-      opt = opt || NO;
-      hemi = new THREE.HemisphereLight(opt.sky == null ? 0xb7d4ff : opt.sky, opt.ground == null ? 0x3d6b3a : opt.ground, 0.85);
-      sun = new THREE.DirectionalLight(opt.sun == null ? 0xfff4d0 : opt.sun, 0.9);
-      sun.position.set(30, 60, 20);
-      sun.castShadow = tier > 0;
-      scene.add(hemi);
-      scene.add(sun);
-      return { hemi: hemi, sun: sun };
-    },
-    blobShadow: function () {
-      var THREE = W.THREE, s, map, mesh;
-      s = rad('blobshadow', 64, 64, 'rgba(0,0,0,.45)', 'rgba(0,0,0,0)', 0.03, 0.5);
-      if (!THREE || !s.canvas) return s;
-      if (!shadowGeo) {
-        map = new THREE.CanvasTexture(s.canvas);
-        shadowGeo = new THREE.PlaneGeometry(1, 1);
-        shadowMat = new THREE.MeshBasicMaterial({ map: map, transparent: true, depthWrite: false });
-      }
-      mesh = new THREE.Mesh(shadowGeo, shadowMat);
-      mesh.rotation.x = -Math.PI / 2;
-      return mesh;
-    }
-  };
-
   function paintTier() {
     var el = doc() && doc().documentElement;
     if (el && el.setAttribute) el.setAttribute('data-sg-art', String(tier));
@@ -695,7 +611,7 @@
     var saved, fonts;
     opt = opt || NO;
     viewCanvas = opt.canvas || viewCanvas;
-    if (opt.theme && THEMES[opt.theme]) { themeName = opt.theme; art.theme = opt.theme; }
+    if (opt.theme && THEMES[opt.theme]) themeName = opt.theme;
     inject();
     if (!ready) {
       ready = true;

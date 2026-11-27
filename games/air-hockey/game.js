@@ -592,25 +592,16 @@
   }
 
   /* ---------------------------------------------------------------- init */
-  function detectSoft() {
-    try {
-      var c = document.createElement('canvas'), gl = c.getContext('webgl');
-      if (!gl) return false;
-      var ext = gl.getExtension('WEBGL_debug_renderer_info');
-      var name = String(gl.getParameter(ext ? ext.UNMASKED_RENDERER_WEBGL : gl.RENDERER));
-      var lose = gl.getExtension('WEBGL_lose_context');
-      if (lose) lose.loseContext();
-      return /swiftshader|llvmpipe|software|basic render/i.test(name);
-    } catch (e) { return false; }
-  }
-
   Kit.muteButton();
   Kit.lifecycle({ pause: pause, reset: function () { keyMode = false; } });
-  canvas.addEventListener('webglcontextlost', function (e) { e.preventDefault(); contextLost = true; pause(); $('contextNotice').hidden = false; });
-  canvas.addEventListener('webglcontextrestored', function () { contextLost = false; $('contextNotice').hidden = true; applySkins(); fit.resize(); });
+  Kit.webgl.watchContext(canvas, {
+    notice: 'contextNotice',
+    onLost: function () { contextLost = true; pause(); },
+    onRestored: function () { contextLost = false; applySkins(); fit.resize(); }
+  });
   var loop = null;
   try {
-    soft = detectSoft();
+    soft = Kit.webgl.isSoftware();
     view = AHScene.create(canvas, { T: E.T, soft: soft });
     view.calm = calm();
     applySkins();

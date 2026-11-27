@@ -719,17 +719,10 @@
 
   window.addEventListener('resize', layout);
   window.addEventListener('pageshow', function () { dirty = true; });
-  canvas.addEventListener('webglcontextlost', function (e) {
-    e.preventDefault();
-    contextLost = true;
-    pauseGame();
-    $('contextNotice').hidden = false;
-  });
-  canvas.addEventListener('webglcontextrestored', function () {
-    contextLost = false;
-    $('contextNotice').hidden = true;
-    dirty = true;
-    layout();
+  Kit.webgl.watchContext(canvas, {
+    notice: 'contextNotice',
+    onLost: function () { contextLost = true; pauseGame(); },
+    onRestored: function () { contextLost = false; dirty = true; layout(); }
   });
 
   function failInit(err) {
@@ -775,10 +768,7 @@
   try {
     buildWorldTabs();
     setupTitleShowcase();
-    var begun = false;
-    var begin = function () { if (!begun) { begun = true; setTimeout(start3D, 0); } };
-    requestAnimationFrame(begin);
-    setTimeout(begin, 100);
+    Kit.webgl.boot(start3D, { guard: function () { return !failed; }, onError: failInit, fallbackMs: 100 });
   } catch (err) {
     failInit(err);
   }

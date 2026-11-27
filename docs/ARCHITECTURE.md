@@ -23,7 +23,7 @@ this file wins and they are updated to match.
   adaptive pacing helps.
 * **Zero background music.** Only tactile, procedural SFX (see below).
 * **Lightweight.** No audio files, no fetched assets, one file per game in the fast
-  build (with `three.min.js` and `shared/artkit.js` cached once as shared files),
+  build (with `three.min.js` and `shared/{artkit,juice,webgl}.js` cached once as shared files),
   procedural canvas/SVG/three.js art, offline cache.
 * **Private by construction.** There is nothing to identify a child: no names, accounts,
   profiles or ages. Beyond each game's own progress and difficulty in that browser, the only
@@ -65,11 +65,12 @@ time, after a 2 s tail). Any start in a window, or any output above −60 dBFS, 
 
 ```
 games/<slug>/            game code (the UI layer calls Kit.dda, Kit.stats, Kit.track; engines stay pure)
-shared/juice.js          Kit.juice  — procedural SFX engine (opt-in; portal + games)
-shared/artkit.js         Kit.art    — opt-in drawing kit (one shared file, not inlined)
+shared/juice.js          Kit.juice  — procedural SFX engine (opt-in; portal + games; one shared file, not inlined)
+shared/artkit.js         Kit.art    — opt-in 2D drawing kit (one shared file, not inlined)
+shared/webgl.js          Kit.webgl  — opt-in WebGL guardrails for 3D games (one shared file, not inlined)
 shared/kit.js            Kit        — lifecycle, input, audio graph, saving, scaling, Kit.dda,
                                       Kit.gfx, play statistics (Kit.stats, Kit.track, sg:telemetry)
-js/catalog.js            the games, categories and site name
+js/catalog.js            the 58 games, categories and site name (clean English titles in `en`; no search `tags`)
 js/telemetry.js          SGTelemetry — the ONLY network sender: anonymous play statistics
                                       to the school's server, off without an address
 js/site.js               portal shell, iframe host, routes, favourites and recent games
@@ -87,13 +88,16 @@ Kit is inlined into every game page, so every minified byte in `shared/kit.js` c
 * The play statistics in `shared/kit.js` (`Kit.stats`, `Kit.track`, `sg:telemetry`):
   **about 2,060 minified bytes** (measured with the build's esbuild options), about 119 KB of
   offline cache over the 58 game pages. Further growth needs a budget decision.
-* `shared/juice.js`: **≤ 4,500 minified bytes**, loaded only by pages that use it
-  (`<script src="../../shared/juice.js">` after `kit.js`; the portal loads
-  `shared/juice.js` before `js/site.js`).
-* `shared/artkit.js`: **≤ 14,500 minified bytes**, one external file. It is not
-  inlined, so a byte there is paid once per PC, not once per game. Paint Tanks,
-  Cake Guards, Beat Dash and Sneaky Levels (`troll-level`) load it. The build
-  leaves it external and adds `?v=` (the first 8 hex characters of its sha256).
+* `shared/juice.js`: **≤ 4,600 minified bytes**, one external file cached once with
+  `?v=<hash>` (not inlined; loaded by the portal before `js/site.js` and by 34 games
+  after `kit.js`).
+* `shared/webgl.js`: **≤ 7,500 minified bytes**, one external file cached once with
+  `?v=<hash>` (not inlined; loaded by 3D Three.js games after `kit.js`).
+* `shared/artkit.js`: **≤ 13,000 minified bytes**, one external file cached once with
+  `?v=<hash>`. It is not inlined, so a byte there is paid once per PC, not once per game.
+  Eight games load it: Beat Dash (`beat-dash`), Block World (`block-world`), Cake Guards
+  (`cake-guards`), Lucky Lake (`lucky-lake`), Math Gates (`math-gates`), Splat Catapult
+  (`splat-catapult`), Paint Tanks (`tank-splat`) and Sneaky Levels (`troll-level`).
   `tools/artkit-demo.html` is a review page and is not shipped.
 * Per-game budgets in `tools/asset-budgets.json` are reviewed numbers: when a change
   legitimately grows a page, raise its budget to the new size plus a small margin and
@@ -168,6 +172,27 @@ gfx.set(false)       // the child's choice; kept for this game
 * What light means is the game's: no antialiasing (from the next start), a 0.75 pixel ratio
   (Moto Madness: a 0.8 M pixel canvas instead of 1.8 M), no shadows in Road Hopper, no
   star field in Neon Slope.
+
+### `Kit.webgl` (`shared/webgl.js`) — school-PC WebGL guardrails
+
+Classic zero-dependency IIFE loaded after `shared/kit.js` by 3D Three.js games (kept
+external with `?v=<hash>` in the fast build). Nothing runs at load.
+
+* `Kit.webgl.probe(force?)` / `Kit.webgl.isSoftware(glOrRenderer?)`: cached software-GPU
+  detection checking `RENDERER` and `WEBGL_debug_renderer_info` (`swiftshader`, `llvmpipe`,
+  `softpipe`, `software`, `microsoft basic render`, `basic render`, `warp`, `mesa`) and
+  releasing the throwaway probe context with `WEBGL_lose_context`.
+* `Kit.webgl.pixelRatio(opts?)` / `Kit.webgl.createRenderer(canvas, opts?)`: clamps DPR
+  for hardware (default max `1.5`), software GPUs (`0.75`), `Kit.gfx` light mode, or low
+  mode (`0.5`), disabling MSAA on software/light renderers.
+* `Kit.webgl.pacer(rendererOrGl, opts?)` / `Kit.webgl.whenDrawn(rendererOrGl, done, limit?)`:
+  WebGL2 `fenceSync` + `getSyncParameter`/`clientWaitSync` frame pacing (with `gl.finish()`
+  WebGL1 fallback) so software renderers never starve input or portal readiness.
+* `Kit.webgl.watchContext(canvas, opts?)`: wires `webglcontextlost` (`preventDefault()`)
+  and `webglcontextrestored`, toggling an optional notice element and firing callbacks.
+* `Kit.webgl.showNoGL(opts?)`: reveals `#nogl` or creates an RTL Arabic fallback panel.
+* `Kit.webgl.boot(fn, opts?)`: deferred 3D initialization via `requestAnimationFrame(() => setTimeout(fn, 0))`
+  plus a fallback timer (`80 ms`) so background tabs and stubbed-rAF checks still boot.
 
 ## Juice (shared/juice.js)
 

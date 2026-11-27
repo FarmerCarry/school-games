@@ -140,7 +140,9 @@ function buildFixture(t) {
   write('games/demo/index.html', '<!doctype html><body>Demo</body>');
   write('games/demo/thumb.svg', '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400"><rect fill="#ff00ff" width="400" height="400"/></svg>');
   write('shared/fonts/LICENSE-Test.txt', 'Test font license');
-  write('tools/playtest.mjs', 'console.log(JSON.stringify({ok:true,pageErrors:[],consoleErrors:[],externalRequests:[],failedRequests:[],harnessErrors:[],notes:[]}));');
+  write('tools/browser.mjs', 'export async function launchChromium() { return { isConnected: () => true, close: async () => {} }; }\n');
+  write('tools/test-server.mjs', 'export async function startTestServer() { return { origin: "http://127.0.0.1:0", close: async () => {} }; }\n');
+  write('tools/playtest.mjs', 'export const PLAYTEST_BROWSER_ARGS = [];\nexport async function runPlaytest() { return { ok: true, pageErrors: [], consoleErrors: [], externalRequests: [], failedRequests: [], harnessErrors: [], notes: [] }; }\n');
   const built = spawnSync(process.execPath, ['tools/build.mjs', '--no-minify'], { cwd: root, encoding: 'utf8', timeout: 30000 });
   assert.equal(built.status, 0, built.stderr);
   return { root, write, portal: fs.readFileSync(path.join(root, '_site/index.html'), 'utf8') };

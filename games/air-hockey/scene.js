@@ -30,10 +30,8 @@
     if (!T) throw new Error('three.js is unavailable');
     opts = opts || {};
     var E = opts.T; // engine table constants
-    var soft = !!opts.soft;
-    var renderer = new T.WebGLRenderer({ canvas: canvas, antialias: !soft, powerPreference: 'high-performance' });
-    var ratio = soft ? 0.7 : Math.min(window.devicePixelRatio || 1, 1.5);
-    renderer.setPixelRatio(ratio);
+    var wgl = Kit.webgl.createRenderer(canvas, { software: !!opts.soft, softRatio: 0.7 });
+    var soft = wgl.software, renderer = wgl.renderer, ratio = wgl.ratio;
     var scene = new T.Scene();
     var camera = new T.PerspectiveCamera(40, 16 / 9, 0.1, 90);
     var pickCam = camera.clone();

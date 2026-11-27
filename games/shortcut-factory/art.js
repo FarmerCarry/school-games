@@ -8,11 +8,8 @@
   SF.createView = function (canvas) {
     var T = window.THREE;
     if (!T) throw new Error('three.js missing');
-    var software = SF.softwareGL();
-    var renderer = new T.WebGLRenderer({ canvas: canvas, antialias: !software, powerPreference: 'high-performance', alpha: false });
-    var ratio = software ? 0.75 : Math.min(window.devicePixelRatio || 1, 1.5);
-    renderer.setPixelRatio(ratio);
-    renderer.outputColorSpace = T.SRGBColorSpace;
+    var wgl = Kit.webgl.createRenderer(canvas, { alpha: false, srgb: true });
+    var software = wgl.software, renderer = wgl.renderer, ratio = wgl.ratio;
     renderer.setClearColor(0xa9dcff, 1);
     var scene = new T.Scene();
     scene.fog = new T.Fog(0xa9dcff, 26, 46);
@@ -473,40 +470,18 @@
     };
 
     /* ---------------------------------------------------- render & sizes */
-    var gl0 = renderer.getContext();
-    var pace = software && typeof gl0.fenceSync === 'function' ? { sync: null, t0: 0, busy: 0 } : null;
+    var pace = Kit.webgl.pacer(renderer, { software: software });
+    var lastDraw = 0;
     // Menus on a software renderer: wait for the last frame to finish before the next one.
     view.mayDraw = function (now, playing) {
-      if (!pace || playing) return true;
-      if (pace.sync) {
-        var done = true;
-        try { done = gl0.isContextLost() || gl0.getSyncParameter(pace.sync, gl0.SYNC_STATUS) === gl0.SIGNALED; } catch (e) { done = true; }
-        if (!done && now - pace.t0 < 1000) return false;
-        try { gl0.deleteSync(pace.sync); } catch (e) { /* context lost */ }
-        pace.sync = null;
-        pace.busy = Math.min(500, now - pace.t0);
-      }
-      return now - pace.t0 >= Math.max(60, pace.busy * 2);
+      return pace.mayDraw(now, playing) && (!pace.active || playing || now - lastDraw >= 60);
     };
     view.render = function () {
       renderer.render(scene, camera);
-      if (!pace) return;
-      try {
-        if (pace.sync) gl0.deleteSync(pace.sync);
-        pace.sync = gl0.fenceSync(gl0.SYNC_GPU_COMMANDS_COMPLETE, 0); gl0.flush(); pace.t0 = performance.now();
-      } catch (e) { pace = null; }
+      pace.markDrawn();
+      lastDraw = performance.now();
     };
-    view.whenDrawn = function (done, limit) {
-      var t0 = performance.now(), sync = null;
-      try { if (gl0.fenceSync) { sync = gl0.fenceSync(gl0.SYNC_GPU_COMMANDS_COMPLETE, 0); gl0.flush(); } } catch (e) { sync = null; }
-      (function poll() {
-        var fin = !sync || gl0.isContextLost() || performance.now() - t0 > limit;
-        if (!fin) { try { fin = gl0.getSyncParameter(sync, gl0.SYNC_STATUS) === gl0.SIGNALED; } catch (e) { fin = true; } }
-        if (!fin) { setTimeout(poll, 16); return; }
-        if (sync) { try { gl0.deleteSync(sync); } catch (e) { /* ignore */ } }
-        done();
-      })();
-    };
+    view.whenDrawn = pace.whenDrawn;
     view.resize = function (w, h) {
       renderer.setSize(w, h, false);
       camera.aspect = w / Math.max(1, h); camera.updateProjectionMatrix();

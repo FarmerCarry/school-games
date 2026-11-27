@@ -514,8 +514,11 @@
   Kit.lifecycle({ pause: () => pause(false), reset: () => { queue.length = 0; } });
   Kit.motion.onChange(r => { if (view) view.calm = r; dirty = true; });
   window.addEventListener('pageshow', () => { dirty = true; });
-  canvas.addEventListener('webglcontextlost', e => { e.preventDefault(); contextLost = true; pause(false); $('contextNotice').hidden = false; });
-  canvas.addEventListener('webglcontextrestored', () => { contextLost = false; $('contextNotice').hidden = true; snap = true; dirty = true; if (view) view.rebake(); fit.resize(); });
+  Kit.webgl.watchContext(canvas, {
+    notice: 'contextNotice',
+    onLost: () => { contextLost = true; pause(false); },
+    onRestored: () => { contextLost = false; snap = true; dirty = true; if (view) view.rebake(); fit.resize(); }
+  });
   hudCanvas.addEventListener('contextrestored', () => { H.reset(); dirty = true; });
   if (document.fonts && document.fonts.load) {
     // The legends are printed into the key atlas: print them again once the font is there.

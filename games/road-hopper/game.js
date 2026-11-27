@@ -55,19 +55,15 @@
   function has(id) { return save.owned.indexOf(id) >= 0; }
 
   /* ============================================================ renderer */
-  var canvas = $('gl'), renderer;
+  var canvas = $('gl');
   // Light graphics (Kit.gfx) for PCs that can't keep it smooth: no antialiasing from the
   // next start, and from the moment it turns on no shadows and fewer pixels.
   var gfx = Kit.gfx('road-hopper', { apply: applyGfx });
-  try {
-    renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: !gfx.light, powerPreference: 'high-performance' });
-  } catch (e) {
-    document.body.insertAdjacentHTML('beforeend', '<div class="sg-overlay"><div class="sg-panel"><h1 class="sg-title">عذرًا!</h1><p class="sg-sub">هذا الجهاز لا يدعم الرسوم ثلاثية الأبعاد.</p></div></div>');
-    return;
-  }
-  function glRatio() { return gfx.light ? Math.min(window.devicePixelRatio || 1, 1) * 0.75 : Math.min(window.devicePixelRatio || 1, 1.5); }
-  var basePR = glRatio();
-  renderer.setPixelRatio(basePR);
+  var wgl = Kit.webgl.createRenderer(canvas, { software: false, gfx: gfx, noGL: true });
+  if (!wgl) return;
+  var renderer = wgl.renderer;
+  function glRatio() { return Kit.webgl.pixelRatio({ software: false, gfx: gfx }); }
+  var basePR = wgl.ratio;
   renderer.shadowMap.enabled = !gfx.light;
   renderer.shadowMap.type = THREE.PCFShadowMap;
   var scene = new THREE.Scene();
@@ -918,7 +914,7 @@
   // a restored canvas or late fonts) and then the graphics card is left idle. Falling
   // confetti still finishes first.
   var lastR = performance.now(), redraw = true;
-  canvas.addEventListener('webglcontextrestored', function () { redraw = true; });
+  Kit.webgl.watchContext(canvas, { onRestored: function () { redraw = true; } });
   function render() {
     var now = performance.now(), rdt = Math.min(0.05, (now - lastR) / 1000);
     lastR = now;

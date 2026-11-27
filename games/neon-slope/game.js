@@ -106,17 +106,15 @@
   function zoneInfo(z) { return ZONES[z % ZONES.length]; }
 
   /* =========================================================== RENDERER */
-  var canvas = $('gl'), renderer;
+  var canvas = $('gl');
   // Light graphics (Kit.gfx) for PCs that can't keep it smooth: no antialiasing from the
   // next start, and from the moment it turns on fewer pixels and no star field.
   var gfx = Kit.gfx('neon-slope', { apply: applyGfx });
-  try {
-    renderer = new T.WebGLRenderer({ canvas: canvas, antialias: !gfx.light, powerPreference: 'high-performance' });
-  } catch (e) { renderer = null; }
-  if (!renderer) { $('nogl').hidden = false; $('title').hidden = true; return; }
-  function glRatio() { return gfx.light ? Math.min(window.devicePixelRatio || 1, 1) * 0.75 : Math.min(window.devicePixelRatio || 1, 1.5); }
-  var DPR = glRatio();
-  renderer.setPixelRatio(DPR);
+  var wgl = Kit.webgl.createRenderer(canvas, { software: false, gfx: gfx, noGL: { hide: 'title' } });
+  if (!wgl) return;
+  var renderer = wgl.renderer;
+  function glRatio() { return Kit.webgl.pixelRatio({ software: false, gfx: gfx }); }
+  var DPR = wgl.ratio;
   function applyGfx() {
     DPR = glRatio();
     dres.ratio = DPR; dres.min = DPR * 0.6; dres.n = 0; dres.bad = 0;
@@ -1824,7 +1822,7 @@
 
   // A paused scene is drawn once, then again only after a resize, a restored context or a late font.
   var renderDirty = true;
-  canvas.addEventListener('webglcontextrestored', function () { renderDirty = true; });
+  Kit.webgl.watchContext(canvas, { onRestored: function () { renderDirty = true; } });
   function resize() {
     renderDirty = true;
     var w = window.innerWidth, h = window.innerHeight;

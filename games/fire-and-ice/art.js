@@ -65,38 +65,12 @@
     }
   ];
 
-  function softwareGL() {
-    var gl = null;
-    try {
-      var c = document.createElement('canvas');
-      var opts = { powerPreference: 'high-performance' };
-      gl = c.getContext('webgl2', opts) || c.getContext('webgl', opts);
-      if (!gl) return false;
-      var name = String(gl.getParameter(gl.RENDERER) || '');
-      if (/^webkit webgl$/i.test(name)) {
-        var info = gl.getExtension('WEBGL_debug_renderer_info');
-        if (info) name = String(gl.getParameter(info.UNMASKED_RENDERER_WEBGL) || '');
-      }
-      return /swiftshader|llvmpipe|softpipe|software|basic render|\bwarp\b/i.test(name);
-    } catch (e) {
-      return false;
-    } finally {
-      try {
-        var lose = gl && gl.getExtension('WEBGL_lose_context');
-        if (lose) lose.loseContext();
-      } catch (e) { /* ignore */ }
-    }
-  }
-
   FI.createView = function (canvas) {
     var T = window.THREE;
     if (!T) throw new Error('three.js is unavailable');
 
-    var software = softwareGL();
-    var renderer = new T.WebGLRenderer({ canvas: canvas, antialias: !software, powerPreference: 'high-performance' });
-    var ratio = software ? 0.75 : Math.min(window.devicePixelRatio || 1, 1.5);
-    renderer.setPixelRatio(ratio);
-    if (T.SRGBColorSpace) renderer.outputColorSpace = T.SRGBColorSpace;
+    var wgl = Kit.webgl.createRenderer(canvas, { srgb: true });
+    var software = wgl.software, renderer = wgl.renderer, ratio = wgl.ratio;
 
     var scene = new T.Scene();
     var camera = new T.PerspectiveCamera(30, 16 / 9, 1, 130);
@@ -1316,33 +1290,14 @@
     }
 
     /* ---------------------------------- software WebGL pacing & fencing */
-    var gl0 = renderer.getContext();
-    var pace = software && typeof gl0.fenceSync === 'function' ? { sync: null, t0: 0, busy: 0 } : null;
-
-    view.mayDraw = function (now, playing) {
-      if (!pace || playing) return true;
-      if (pace.sync) {
-        var done = true;
-        try { done = gl0.isContextLost() || gl0.getSyncParameter(pace.sync, gl0.SYNC_STATUS) === gl0.SIGNALED; } catch (e) { done = true; }
-        if (!done && now - pace.t0 < 1000) return false;
-        try { gl0.deleteSync(pace.sync); } catch (e) { /* ignore */ }
-        pace.sync = null;
-        pace.busy = Math.min(500, now - pace.t0);
-      }
-      return now - pace.t0 >= pace.busy * 2;
-    };
+    var pace = Kit.webgl.pacer(renderer, { software: software });
+    view.mayDraw = pace.mayDraw;
 
     var draws = 0;
     view.render = function () {
       renderer.render(scene, camera);
       draws++;
-      if (!pace) return;
-      try {
-        if (pace.sync) gl0.deleteSync(pace.sync);
-        pace.sync = gl0.fenceSync(gl0.SYNC_GPU_COMMANDS_COMPLETE, 0);
-        gl0.flush();
-        pace.t0 = performance.now();
-      } catch (e) { pace = null; }
+      pace.markDrawn();
     };
 
     var slowCount = 0;
@@ -1357,19 +1312,7 @@
       return false;
     };
 
-    view.whenDrawn = function (done, limit) {
-      var gl = renderer.getContext(), t0 = performance.now(), sync = null;
-      try { if (gl.fenceSync) { sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0); gl.flush(); } } catch (e) { sync = null; }
-      (function poll() {
-        var finished = !sync || gl.isContextLost() || performance.now() - t0 > limit;
-        if (!finished) {
-          try { finished = gl.getSyncParameter(sync, gl.SYNC_STATUS) === gl.SIGNALED; } catch (e) { finished = true; }
-        }
-        if (!finished) { setTimeout(poll, 16); return; }
-        if (sync) { try { gl.deleteSync(sync); } catch (e) { /* ignore */ } }
-        done();
-      })();
-    };
+    view.whenDrawn = pace.whenDrawn;
 
     view.loadLevel = loadLevel;
     view.update = update;

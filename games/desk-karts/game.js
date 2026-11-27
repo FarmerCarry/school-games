@@ -648,15 +648,10 @@
     reset: function () { prevP1Item = false; prevP2Item = false; }
   });
 
-  canvas.addEventListener('webglcontextlost', function (e) {
-    e.preventDefault();
-    contextLost = true;
-    $('ctxNotice').hidden = false;
-  });
-  canvas.addEventListener('webglcontextrestored', function () {
-    contextLost = false;
-    $('ctxNotice').hidden = true;
-    dirty = true;
+  Kit.webgl.watchContext(canvas, {
+    notice: 'ctxNotice',
+    onLost: function () { contextLost = true; },
+    onRestored: function () { contextLost = false; dirty = true; }
   });
 
   /* --------------------------------------------------------------- Debug / Test Handle */

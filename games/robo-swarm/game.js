@@ -1,4 +1,4 @@
-/* هجوم الروبوتات — Crisp 1280x720 Canvas renderer, Kit.art sprites, Kit.juice SFX, UI & telemetry. */
+/* هجوم الروبوتات — Crisp 1280x720 Canvas renderer, procedural sprites, Kit.juice SFX, UI & telemetry. */
 (function () {
   'use strict';
 
@@ -6,7 +6,6 @@
   var VW = D.VIEW_W, VH = D.VIEW_H, TILE = 256;
   var canvas = document.getElementById('game'), uiEl = document.getElementById('ui');
 
-  if (Kit.art && Kit.art.init) Kit.art.init({ canvas: canvas, mode: '2d', theme: 'neon' });
   var view = Kit.fit(canvas, VW, VH, { onResize: syncUi });
   var ctx = view.ctx, dirty = true;
 
@@ -42,7 +41,6 @@
   Kit.muteButton();
 
   function bake(key, w, h, fn) {
-    if (Kit.art && Kit.art.sprite) return Kit.art.sprite(key, w, h, fn);
     var c = document.createElement('canvas'); c.width = w; c.height = h;
     fn(c.getContext('2d'), w, h); return c;
   }

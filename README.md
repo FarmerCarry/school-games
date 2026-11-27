@@ -516,7 +516,7 @@ screens for silence.
 Everything the home page shows comes from **`js/catalog.js`**:
 
 - **Hide a game:** add `hidden: true` to its entry.
-- **Feature a game** first in the catalog: set `hot: true`.
+- **Feature a game** first in the catalog: set `hot: <rank>` (1 leads) or `hot: true`.
 - **Rename the site:** change `name` in `window.SITE` (currently "ألعاب الفسحة").
 
 ## For developers
@@ -529,8 +529,9 @@ js/telemetry.js           the only network sender: anonymous play statistics to 
 games/<slug>/             one folder per game (index.html + thumb.svg + its own files)
 shared/kit.js             tiny helper library all games use (sound, saving, input, scaling, lifecycle,
                           difficulty control Kit.dda, play statistics Kit.stats and Kit.track)
-shared/juice.js           procedural sound effects (Kit.juice in games, Juice in the portal)
+shared/juice.js           procedural sound effects (Kit.juice in games, Juice in the portal; kept as one shared file in the fast build)
 shared/artkit.js          2D cartoon drawing kit (Kit.art; kept as one shared file in the fast build)
+shared/webgl.js           school-PC WebGL guardrails for 3D games (Kit.webgl; kept as one shared file in the fast build)
 shared/game.css           shared game page styles + the Fredoka font
 lib/three/                three.js r159 (MIT) for the 3D games
 docs/ARCHITECTURE.md      the platform contract: runtime, Kit, the portal, sound, difficulty
@@ -565,7 +566,7 @@ npm test                        # deterministic bug regressions and browser chec
 npm run test:unit                # the regression files under tools/tests/
 npm run test:shared              # source-independent rules, build safety and tool fixtures
 npm run test:browser             # gameplay and portal checks for the selected SG_ROOT
-npm run test:tooling             # test server, report and audio-probe helper checks
+npm run test:tooling             # test server, playtest report, sharding, browser-reuse and classroom-nav checks
 npm run test:scenarios           # prove inert Start/Pause buttons or input fail the gameplay checks
 npm run test:classroom           # downloaded folder, Arabic/spaced paths, denied storage
 npm run test:regressions         # additional gameplay and portal keyboard checks

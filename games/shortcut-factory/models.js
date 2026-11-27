@@ -7,25 +7,7 @@
   'use strict';
   var SF = window.SF;
 
-  function softwareGL() {
-    var gl = null;
-    try {
-      var c = document.createElement('canvas'), opts = { powerPreference: 'high-performance' };
-      gl = c.getContext('webgl2', opts) || c.getContext('webgl', opts);
-      if (!gl) return false;
-      var name = String(gl.getParameter(gl.RENDERER) || '');
-      if (/^webkit webgl$/i.test(name)) {
-        var info = gl.getExtension('WEBGL_debug_renderer_info');
-        if (info) name = String(gl.getParameter(info.UNMASKED_RENDERER_WEBGL) || '');
-      }
-      return /swiftshader|llvmpipe|softpipe|software|basic render|\bwarp\b/i.test(name);
-    } catch (e) {
-      return false;
-    } finally {
-      try { var lose = gl && gl.getExtension('WEBGL_lose_context'); if (lose) lose.loseContext(); } catch (e) { /* ignore */ }
-    }
-  }
-  SF.softwareGL = softwareGL;
+  SF.softwareGL = function () { return Kit.webgl.isSoftware(); };
 
   // Shared building helpers, filled in by createView (they need THREE).
   var H = SF.art = {};

@@ -19,19 +19,7 @@
 
   // A quick look at the graphics before the real renderer: software WebGL (no graphics card)
   // draws fewer pixels without MSAA and paces the menus (docs/PERFORMANCE.md).
-  function probe() {
-    try {
-      var c = document.createElement('canvas');
-      var gl = c.getContext('webgl2') || c.getContext('webgl') || c.getContext('experimental-webgl');
-      if (!gl) return { ok: false, software: false };
-      var ext = gl.getExtension('WEBGL_debug_renderer_info');
-      var name = ext ? String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)) : '';
-      var lose = gl.getExtension('WEBGL_lose_context');
-      if (lose) lose.loseContext();
-      return { ok: true, software: /swiftshader|llvmpipe|softpipe|basic render|software|microsoft basic/i.test(name) };
-    } catch (e) { return { ok: false, software: false }; }
-  }
-  JDArt.probe = probe;
+  JDArt.probe = function () { return Kit.webgl.probe(); };
 
   // A tiny seeded random for texture speckles (the same picture on every PC).
   var seed = 7;
@@ -225,12 +213,10 @@
   JDArt.createView = function (canvas) {
     var T = window.THREE;
     if (!T) throw new Error('three.js is unavailable');
-    var info = probe();
+    var info = Kit.webgl.probe();
     if (!info.ok) throw new Error('WebGL is unavailable');
-    var soft = info.software;
-    var renderer = new T.WebGLRenderer({ canvas: canvas, antialias: !soft, powerPreference: 'high-performance' });
-    var ratio = soft ? 0.75 : Math.min(window.devicePixelRatio || 1, 1.5);
-    renderer.setPixelRatio(ratio);
+    var wgl = Kit.webgl.createRenderer(canvas, { software: info.software });
+    var soft = wgl.software, renderer = wgl.renderer, ratio = wgl.ratio;
     renderer.setClearColor(0xffe7bd, 1);
     var scene = new T.Scene(), camera = new T.PerspectiveCamera(33, 16 / 9, 0.5, 140);
     scene.fog = new T.Fog(0xffe4bc, 38, 90);

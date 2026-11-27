@@ -41,6 +41,11 @@ import { runScenario, prepareScenario } from './game-scenarios.mjs';
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 // SG_ROOT=_site tests the fast build made by tools/build.mjs instead of the source files.
 const ROOT = process.env.SG_ROOT ? path.resolve(REPO, process.env.SG_ROOT) : REPO;
+
+export const PLAYTEST_BROWSER_ARGS = ['--autoplay-policy=no-user-gesture-required'];
+
+const keyName = k => (k === 'Space' || k === ' ') ? ' ' : k;
+
 function parseArgs(argv) {
   const a = { _: [] };
   for (let i = 0; i < argv.length; i++) {
@@ -50,116 +55,166 @@ function parseArgs(argv) {
   return a;
 }
 
-const args = parseArgs(process.argv.slice(2));
-const slug = args._[0];
-if (!slug && !args.path) {
-  console.error('usage: node tools/playtest.mjs <slug> [--actions file.json] [--out dir] [--size WxH] [--path /page.html]');
-  process.exit(2);
+export async function runPlaytest({
+  browser,
+  origin,
+  slug,
+  pagePath = `/games/${slug}/index.html`,
+  outDir,
+  viewport = { width: 1280, height: 720 },
+  actions = [{ wait: 1200 }, { shot: 'loaded' }],
+  timeoutMs = 120000
+}) {
+  fs.mkdirSync(outDir, { recursive: true });
+  fs.rmSync(path.join(outDir, 'failure.png'), { force: true });
+  fs.rmSync(path.join(outDir, 'failure.html'), { force: true });
+
+  const report = {
+    url: origin + pagePath, consoleErrors: [], consoleWarnings: [], pageErrors: [],
+    failedRequests: [], externalRequests: [], screenshots: [], evals: [], fps: [], notes: [], harnessErrors: []
+  };
+
+  let context, page, actionInProgress, timer;
+  let timedOut = false;
+  let closing = false;
+
+  async function run(list) {
+    for (const a of list) {
+      actionInProgress = a;
+      if (a.wait != null) await page.waitForTimeout(a.wait);
+      else if (a.shot) {
+        const p = path.join(outDir, a.shot + '.png');
+        await page.screenshot({ path: p });
+        report.screenshots.push(p);
+      } else if (a.scenario) report.scenario = await runScenario(page, a.scenario);
+      else if (a.click) await page.mouse.click(a.click[0], a.click[1]);
+      else if (a.rclick) await page.mouse.click(a.rclick[0], a.rclick[1], { button: 'right' });
+      else if (a.clickText) await page.getByText(a.clickText, { exact: false }).first().click({ timeout: 3000 });
+      else if (a.clickSel) await page.locator(a.clickSel).first().click({ timeout: 3000 });
+      else if (a.move) await page.mouse.move(a.move[0], a.move[1], { steps: a.steps || 5 });
+      else if (a.drag) {
+        await page.mouse.move(a.drag[0][0], a.drag[0][1]);
+        await page.mouse.down();
+        await page.mouse.move(a.drag[1][0], a.drag[1][1], { steps: a.steps || 20 });
+        await page.mouse.up();
+      } else if (a.press) await page.keyboard.press(keyName(a.press));
+      else if (a.hold) {
+        await page.keyboard.down(keyName(a.hold));
+        await page.waitForTimeout(a.ms || 300);
+        await page.keyboard.up(keyName(a.hold));
+      } else if (a.holdMany) {
+        for (const k of a.holdMany) await page.keyboard.down(keyName(k));
+        await page.waitForTimeout(a.ms || 300);
+        for (const k of a.holdMany) await page.keyboard.up(keyName(k));
+      } else if (a.eval) {
+        try { report.evals.push({ expr: a.eval, value: await page.evaluate(a.eval) }); }
+        catch (e) { report.evals.push({ expr: a.eval, error: String(e) }); throw e; }
+      } else if (a.assert) {
+        const value = await page.evaluate(a.assert);
+        if (!value) throw new Error('Assertion failed: ' + (a.message || a.assert));
+      } else if (a.fps) {
+        const fps = await page.evaluate(ms => new Promise(res => {
+          let n = 0; const t0 = performance.now();
+          function f() { n++; if (performance.now() - t0 < ms) requestAnimationFrame(f); else res(n * 1000 / (performance.now() - t0)); }
+          requestAnimationFrame(f);
+        }), a.fps);
+        report.fps.push(Math.round(fps));
+      } else if (a.resize) await page.setViewportSize({ width: a.resize[0], height: a.resize[1] });
+      else if (a.reload) await page.reload();
+      else if (a.repeat != null) { for (let i = 0; i < a.repeat; i++) await run(a.do || []); }
+      else throw new Error('Unknown playtest action: ' + JSON.stringify(a));
+    }
+  }
+
+  if (timeoutMs > 0) {
+    timer = setTimeout(() => {
+      timedOut = true;
+      closing = true;
+      context?.close().catch(() => {});
+    }, timeoutMs);
+    timer.unref?.();
+  }
+
+  try {
+    context = await browser.newContext({ viewport });
+    page = await context.newPage();
+    if (actions.some(a => a.scenario)) await prepareScenario(page, slug);
+    page.on('console', msg => {
+      if (msg.type() === 'error') report.consoleErrors.push(msg.text());
+      else if (msg.type() === 'warning') report.consoleWarnings.push(msg.text());
+    });
+    page.on('pageerror', err => report.pageErrors.push(String(err && err.stack || err)));
+    page.on('requestfailed', r => {
+      if (!closing) report.failedRequests.push(r.url() + ' :: ' + (r.failure() && r.failure().errorText));
+    });
+    page.on('request', r => {
+      const url = r.url();
+      if (!url.startsWith(origin) && !url.startsWith('data:') && !url.startsWith('blob:')) report.externalRequests.push(url);
+    });
+    page.on('response', r => { if (r.status() >= 400) report.failedRequests.push(r.url() + ' :: HTTP ' + r.status()); });
+    await page.goto(origin + pagePath, { waitUntil: 'load', timeout: 20000 });
+    await run(actions);
+  } catch (e) {
+    if (page && !timedOut && !page.isClosed()) {
+      try {
+        const failurePath = path.join(outDir, 'failure.png');
+        await page.screenshot({ path: failurePath, timeout: 5000 });
+        report.screenshots.push(failurePath);
+        const html = await Promise.race([
+          page.content(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('content timeout')), 3000))
+        ]);
+        fs.writeFileSync(path.join(outDir, 'failure.html'), html);
+      } catch (_) { /* A closed or crashed browser may have no screenshot. */ }
+    }
+    const reason = timedOut ? `Error: Playtest timed out after ${timeoutMs}ms` : String(e);
+    report.harnessErrors.push('harness error during ' + JSON.stringify(actionInProgress || { navigation: pagePath }) + ': ' + reason);
+  } finally {
+    clearTimeout(timer);
+    closing = true;
+    if (context) await context.close().catch(() => {});
+  }
+
+  report.ok = report.harnessErrors.length === 0 && reportPassed(report);
+  fs.writeFileSync(path.join(outDir, 'report.json'), JSON.stringify(report, null, 2) + '\n');
+  return report;
 }
-const pagePath = args.path || `/games/${slug}/index.html`;
-const outDir = args.out ? path.resolve(args.out) : fs.mkdtempSync(path.join(os.tmpdir(), 'school-games-playtest-'));
-fs.mkdirSync(outDir, { recursive: true });
-const [vw, vh] = (args.size || '1280x720').split('x').map(Number);
 
-let actions = [{ wait: 1200 }, { shot: 'loaded' }];
-if (args.actions) actions = JSON.parse(fs.readFileSync(args.actions, 'utf8'));
-if (args['actions-json']) actions = JSON.parse(args['actions-json']);
+async function main() {
+  const args = parseArgs(process.argv.slice(2));
+  const slug = args._[0];
+  if (!slug && !args.path) {
+    console.error('usage: node tools/playtest.mjs <slug> [--actions file.json] [--out dir] [--size WxH] [--path /page.html]');
+    process.exit(2);
+  }
+  const pagePath = args.path || `/games/${slug}/index.html`;
+  const outDir = args.out ? path.resolve(args.out) : fs.mkdtempSync(path.join(os.tmpdir(), 'school-games-playtest-'));
+  const [vw, vh] = (args.size || '1280x720').split('x').map(Number);
 
-const { origin, close: closeServer } = await startTestServer(ROOT);
+  let actions = [{ wait: 1200 }, { shot: 'loaded' }];
+  if (args.actions) actions = JSON.parse(fs.readFileSync(args.actions, 'utf8'));
+  if (args['actions-json']) actions = JSON.parse(args['actions-json']);
 
-const report = {
-  url: origin + pagePath, consoleErrors: [], consoleWarnings: [], pageErrors: [],
-  failedRequests: [], externalRequests: [], screenshots: [], evals: [], fps: [], notes: [], harnessErrors: []
-};
-
-let browser, page, actionInProgress;
-
-const keyName = k => (k === 'Space' || k === ' ') ? ' ' : k;
-
-async function run(list) {
-  for (const a of list) {
-    actionInProgress = a;
-    if (a.wait != null) await page.waitForTimeout(a.wait);
-    else if (a.shot) {
-      const p = path.join(outDir, a.shot + '.png');
-      await page.screenshot({ path: p });
-      report.screenshots.push(p);
-    } else if (a.scenario) report.scenario = await runScenario(page, a.scenario);
-    else if (a.click) await page.mouse.click(a.click[0], a.click[1]);
-    else if (a.rclick) await page.mouse.click(a.rclick[0], a.rclick[1], { button: 'right' });
-    else if (a.clickText) await page.getByText(a.clickText, { exact: false }).first().click({ timeout: 3000 });
-    else if (a.clickSel) await page.locator(a.clickSel).first().click({ timeout: 3000 });
-    else if (a.move) await page.mouse.move(a.move[0], a.move[1], { steps: a.steps || 5 });
-    else if (a.drag) {
-      await page.mouse.move(a.drag[0][0], a.drag[0][1]);
-      await page.mouse.down();
-      await page.mouse.move(a.drag[1][0], a.drag[1][1], { steps: a.steps || 20 });
-      await page.mouse.up();
-    } else if (a.press) await page.keyboard.press(keyName(a.press));
-    else if (a.hold) {
-      await page.keyboard.down(keyName(a.hold));
-      await page.waitForTimeout(a.ms || 300);
-      await page.keyboard.up(keyName(a.hold));
-    } else if (a.holdMany) {
-      for (const k of a.holdMany) await page.keyboard.down(keyName(k));
-      await page.waitForTimeout(a.ms || 300);
-      for (const k of a.holdMany) await page.keyboard.up(keyName(k));
-    } else if (a.eval) {
-      try { report.evals.push({ expr: a.eval, value: await page.evaluate(a.eval) }); }
-      catch (e) { report.evals.push({ expr: a.eval, error: String(e) }); throw e; }
-    } else if (a.assert) {
-      const value = await page.evaluate(a.assert);
-      if (!value) throw new Error('Assertion failed: ' + (a.message || a.assert));
-    } else if (a.fps) {
-      const fps = await page.evaluate(ms => new Promise(res => {
-        let n = 0; const t0 = performance.now();
-        function f() { n++; if (performance.now() - t0 < ms) requestAnimationFrame(f); else res(n * 1000 / (performance.now() - t0)); }
-        requestAnimationFrame(f);
-      }), a.fps);
-      report.fps.push(Math.round(fps));
-    } else if (a.resize) await page.setViewportSize({ width: a.resize[0], height: a.resize[1] });
-    else if (a.reload) await page.reload();
-    else if (a.repeat != null) { for (let i = 0; i < a.repeat; i++) await run(a.do || []); }
-    else throw new Error('Unknown playtest action: ' + JSON.stringify(a));
+  const { origin, close: closeServer } = await startTestServer(ROOT);
+  let browser;
+  try {
+    browser = await launchChromium({ args: PLAYTEST_BROWSER_ARGS });
+    const report = await runPlaytest({
+      browser,
+      origin,
+      slug,
+      pagePath,
+      outDir,
+      viewport: { width: vw, height: vh },
+      actions
+    });
+    console.log(JSON.stringify(report, null, 2));
+    process.exitCode = report.ok ? 0 : 1;
+  } finally {
+    if (browser) await browser.close().catch(() => {});
+    await closeServer();
   }
 }
 
-try {
-  browser = await launchChromium({
-    args: ['--autoplay-policy=no-user-gesture-required']
-  });
-  const context = await browser.newContext({ viewport: { width: vw, height: vh } });
-  page = await context.newPage();
-  if (actions.some(a => a.scenario)) await prepareScenario(page, slug);
-  page.on('console', msg => {
-    if (msg.type() === 'error') report.consoleErrors.push(msg.text());
-    else if (msg.type() === 'warning') report.consoleWarnings.push(msg.text());
-  });
-  page.on('pageerror', err => report.pageErrors.push(String(err && err.stack || err)));
-  page.on('requestfailed', r => report.failedRequests.push(r.url() + ' :: ' + (r.failure() && r.failure().errorText)));
-  page.on('request', r => {
-    const url = r.url();
-    if (!url.startsWith(origin) && !url.startsWith('data:') && !url.startsWith('blob:')) report.externalRequests.push(url);
-  });
-  page.on('response', r => { if (r.status() >= 400) report.failedRequests.push(r.url() + ' :: HTTP ' + r.status()); });
-  await page.goto(origin + pagePath, { waitUntil: 'load', timeout: 20000 });
-  await run(actions);
-} catch (e) {
-  if (page) {
-    try {
-      const failurePath = path.join(outDir, 'failure.png');
-      await page.screenshot({path: failurePath}); report.screenshots.push(failurePath);
-      fs.writeFileSync(path.join(outDir, 'failure.html'), await page.content());
-    } catch (_) { /* A closed or crashed browser may have no screenshot. */ }
-  }
-  report.harnessErrors.push('harness error during ' + JSON.stringify(actionInProgress || { navigation: pagePath }) + ': ' + String(e));
-} finally {
-  if (browser) await browser.close();
-  await closeServer();
-}
-
-report.ok = report.harnessErrors.length === 0 && reportPassed(report);
-fs.writeFileSync(path.join(outDir, 'report.json'), JSON.stringify(report, null, 2) + '\n');
-console.log(JSON.stringify(report, null, 2));
-process.exitCode = report.ok ? 0 : 1;
-
+const entry = process.argv[1] ? path.resolve(process.argv[1]) : '';
+if (entry === fileURLToPath(import.meta.url)) await main();

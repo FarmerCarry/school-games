@@ -935,18 +935,10 @@
   Kit.motion.onChange(function (r) { if (view) view.calm = r; dirty = true; });
   window.addEventListener('resize', layout);
   window.addEventListener('pageshow', function () { dirty = true; });
-  canvas.addEventListener('webglcontextlost', function (e) {
-    e.preventDefault();
-    contextLost = true;
-    pauseGame(false);
-    $('context-notice').hidden = false;
-  });
-  canvas.addEventListener('webglcontextrestored', function () {
-    contextLost = false;
-    $('context-notice').hidden = true;
-    snap = true;
-    dirty = true;
-    layout();
+  Kit.webgl.watchContext(canvas, {
+    notice: 'context-notice',
+    onLost: function () { contextLost = true; pauseGame(false); },
+    onRestored: function () { contextLost = false; snap = true; dirty = true; layout(); }
   });
   if (document.fonts && document.fonts.load) {
     document.fonts.load('700 40px Fredoka', 'رائع 5').then(function () { dirty = true; }, function () {});
@@ -1014,14 +1006,7 @@
     refreshTitle();
     layout();
     setMode('title');
-    var started = false;
-    var kick = function () {
-      if (started) return;
-      started = true;
-      setTimeout(guarded(init3D), 0);
-    };
-    requestAnimationFrame(kick);
-    setTimeout(kick, 100);
+    Kit.webgl.boot(init3D, { guard: function () { return !failed; }, onError: showError, fallbackMs: 100 });
   } catch (err) {
     showError(err);
   }

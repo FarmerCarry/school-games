@@ -239,7 +239,7 @@
   }
   // Every key press and click: engaged time, then (key repeats aside) how long the event
   // waited for the page and the reaction time to a pending cue. Only a click or a key the
-  // game accepts (Kit.keys.acceptsEvent) answers the cue.
+  // game accepts (Kit.isGameKeyEvent) answers the cue.
   function input(e, key) {
     engage();
     if (roundId && !e.repeat) ri++;
@@ -460,22 +460,15 @@
     src.start(t0); src.stop(t0 + dur + 0.02);
   };
 
-  // Ready-made effects. Call e.g. Kit.sfx.coin().
+  // Ready-made effects. Call e.g. Kit.sfx.win().
   Kit.sfx = {
     click: function () { audio.tone({ freq: 660, type: 'triangle', dur: 0.05, vol: 0.15 }); },
-    coin: function () {
-      audio.tone({ freq: 988, type: 'triangle', dur: 0.07, vol: 0.18 });
-      audio.tone({ freq: 1319, type: 'triangle', dur: 0.16, vol: 0.18, delay: 0.07 });
-    },
-    jump: function () { audio.tone({ freq: 300, to: 700, type: 'triangle', dur: 0.14, vol: 0.18 }); },
     land: function () { audio.tone({ freq: 160, to: 80, type: 'triangle', dur: 0.08, vol: 0.25 }); },
-    hit: function () { audio.noise({ dur: 0.15, vol: 0.35, filter: 1800, to: 300 }); audio.tone({ freq: 180, to: 60, type: 'sawtooth', dur: 0.15, vol: 0.2 }); },
     pop: function () { audio.tone({ freq: 500, to: 1200, type: 'sine', dur: 0.08, vol: 0.3 }); },
     boom: function () { audio.noise({ dur: 0.6, vol: 0.5, filter: 1200, to: 60 }); },
     power: function () { [523, 659, 784, 1047].forEach(function (f, i) { audio.tone({ freq: f, type: 'triangle', dur: 0.09, vol: 0.15, delay: i * 0.06 }); }); },
     win: function () { [523, 659, 784, 1047, 784, 1047].forEach(function (f, i) { audio.tone({ freq: f, type: 'triangle', dur: 0.16, vol: 0.3, delay: i * 0.1 }); }); },
-    lose: function () { [392, 330, 262, 196].forEach(function (f, i) { audio.tone({ freq: f, type: 'triangle', dur: 0.22, vol: 0.3, delay: i * 0.15 }); }); },
-    whoosh: function () { audio.noise({ dur: 0.25, vol: 0.2, filter: 3000, to: 400 }); }
+    lose: function () { [392, 330, 262, 196].forEach(function (f, i) { audio.tone({ freq: f, type: 'triangle', dur: 0.22, vol: 0.3, delay: i * 0.15 }); }); }
   };
 
   /* ------------------------------------------------------------ keyboard */
@@ -505,7 +498,6 @@
   var BLOCK = { ArrowUp: 1, ArrowDown: 1, ArrowLeft: 1, ArrowRight: 1, Space: 1, PageUp: 1, PageDown: 1, Home: 1, End: 1 };
   Kit.keys = {
     isNativeTarget: nativeKeyTarget,
-    acceptsEvent: acceptsKeyEvent,
     // Only games with a Tab action reserve it, and only while that action is available.
     captureTab: function (active) { tabCapture = active; },
     down: function (code) { return !!held[code]; },

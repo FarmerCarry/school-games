@@ -1202,15 +1202,15 @@
       }),
       animals: G.animals.map(function (a) { return { t: a.type, x: +(a.x + a.w / 2).toFixed(2), y: +(a.y + a.h).toFixed(2), s: a.sheared ? 1 : 0 }; })
     };
-    if (!store.set('slot' + G.slot, data)) return showSaveError('world');
+    if (!store.set('slot' + G.slot, data)) return failSave('world');
     meta.slots[G.slot - 1] = {
       name: G.name, gm: G.gm, diff: G.diff, stars: starCount(),
       max: questsFor(G.gm).length, play: Mrn(G.play), last: Date.now()
     };
     meta.lastSlot = G.slot;
-    if (!saveMeta()) return showSaveError('meta');
+    if (!saveMeta()) return failSave('meta');
     G.saveError = null;
-    saveErrorEl.hidden = true;
+    saveStatus.saved();
     G.savedFlash = 1.5;
     renderDirty = true;
     return true;
@@ -1815,29 +1815,11 @@
   var titleBusy = false, pausedInventory = false;
   var selSlot = meta.lastSlot || 1;
 
-  // Save error alert banner (#saveError & #saveRetry contract)
-  var saveErrorEl = document.createElement('div'), saveErrorText = document.createElement('span');
-  saveErrorEl.id = 'saveError'; saveErrorEl.hidden = true; saveErrorEl.dir = 'rtl';
-  saveErrorEl.setAttribute('role', 'alert');
-  saveErrorEl.appendChild(saveErrorText);
-  var saveRetry = document.createElement('button');
-  saveRetry.id = 'saveRetry'; saveRetry.className = 'sg-btn secondary'; saveRetry.type = 'button';
-  saveRetry.textContent = 'حاول الحفظ مجددًا';
-  saveRetry.onclick = function (e) {
-    e.stopPropagation();
-    saveGame();
-    if (e.detail > 0) saveRetry.blur();
-  };
-  saveErrorEl.appendChild(saveRetry);
-  document.body.appendChild(saveErrorEl);
-
-  function showSaveError(kind) {
+  var saveStatus = Kit.saveStatus({ retry: saveGame });
+  function failSave(kind) {
     G.savedFlash = 0; G.saveError = kind;
     renderDirty = true;
-    saveErrorText.textContent = kind === 'meta'
-      ? 'تم حفظ العالم، لكن تعذر تحديث قائمة العوالم. حاول مجددًا.'
-      : 'تعذر حفظ العالم. مساحة التخزين ممتلئة أو غير متاحة. حاول مجددًا.';
-    saveErrorEl.hidden = false;
+    saveStatus.failed();
     return false;
   }
 
@@ -1890,7 +1872,7 @@
 
   function toTitle() {
     Kit.stats.end('end', starCount());
-    G.saveError = null; G.savedFlash = 0; saveErrorEl.hidden = true;
+    G.saveError = null; G.savedFlash = 0;
     G.mode = 'title'; G.slot = 0;
     hideAll();
     pauseBtn.hidden = true;

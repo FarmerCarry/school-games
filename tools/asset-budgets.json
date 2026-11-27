@@ -1,6 +1,6 @@
 {
   "format": 1,
-  "portalBytes": 521000,
+  "portalBytes": 514000,
   "gameHtmlBytes": {
     "air-hockey": 108500,
     "ball-storm": 111500,
@@ -62,12 +62,14 @@
     "zoom-plus-one": 79000
   },
   "threeBytes": 750000,
-  "artBytes": 14300,
+  "artBytes": 13000,
+  "juiceBytes": 4600,
+  "webglBytes": 7500,
   "fontBytes": {
     "baloo-bhaijaan-2-arabic-500-normal.woff2": 25000,
     "baloo-bhaijaan-2-arabic-700-normal.woff2": 25000,
     "fredoka-latin-500-normal.woff2": 18500,
     "fredoka-latin-700-normal.woff2": 18000
   },
-  "precacheBytes": 8300000
+  "precacheBytes": 8120000
 }

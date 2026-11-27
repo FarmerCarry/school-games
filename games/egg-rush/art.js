@@ -6,17 +6,7 @@
   var ER = window.ER, M = Math;
 
   // Whether WebGL here is drawn by the processor (SwiftShader, llvmpipe, Basic Render Driver).
-  ER.softwareGL = function () {
-    try {
-      var c = document.createElement('canvas'), gl = c.getContext('webgl2') || c.getContext('webgl');
-      if (!gl) return false;
-      var ext = gl.getExtension('WEBGL_debug_renderer_info');
-      var name = String(ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER));
-      var lose = gl.getExtension('WEBGL_lose_context');
-      if (lose) lose.loseContext();
-      return /swiftshader|llvmpipe|softpipe|software|basic render|\bwarp\b/i.test(name);
-    } catch (e) { return false; }
-  };
+  ER.softwareGL = function () { return Kit.webgl.isSoftware(); };
 
   var THEMES = [
     { sky: 0x4fb2ff, horizon: 0xd5f0ff, ground: 0x7fd65a, ground2: 0x6cc54b, track: 0xe8553f, line: 0xffffff, curbA: 0xffffff, curbB: 0xe8343a, fog: 0xd5f0ff },
@@ -29,10 +19,8 @@
     var T = window.THREE;
     if (!T) throw new Error('three.js is unavailable');
     opts = opts || {};
-    var software = !!opts.software;
-    var renderer = new T.WebGLRenderer({ canvas: canvas, antialias: !software, powerPreference: 'high-performance' });
-    var ratio = software ? 0.75 : M.min(window.devicePixelRatio || 1, 1.5);
-    renderer.setPixelRatio(ratio);
+    var wgl = Kit.webgl.createRenderer(canvas, { software: !!opts.software });
+    var software = wgl.software, renderer = wgl.renderer, ratio = wgl.ratio;
     renderer.setScissorTest(false);
     var scene = new T.Scene();
     scene.fog = new T.Fog(0xd5f0ff, 45, 150);

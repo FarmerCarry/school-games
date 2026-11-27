@@ -1,14 +1,13 @@
 // Recess Kitchen 3D (games/recess-kitchen/) in real Chromium:
 // Title screen with zero idle audio, 1P keyboard movement/dash/full burger cooking & serving,
 // 2P Co-op independent controls & telemetry, Endless Rush, Wardrobe purchase & save quota retry,
-// Pause freeze & Restart reset, Result stars & level unlock, and native HTML keyboard isolation.
+// Pause freeze & Restart reset, and Result stars & level unlock.
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { launchChromium } from '../browser.mjs';
 import { startTestServer } from '../test-server.mjs';
-import { testNativeControlGame } from '../regressions-keyboard.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const root = process.env.SG_ROOT ? path.resolve(repo, process.env.SG_ROOT) : repo;
@@ -16,7 +15,7 @@ let browser, server;
 
 before(async () => {
   server = await startTestServer(root);
-  browser = await launchChromium({ args: ['--disable-gpu-vsync', '--disable-frame-rate-limit'] });
+  browser = await launchChromium();
 });
 
 after(async () => {
@@ -259,8 +258,4 @@ test('solo round win unlocks level 1-2, awards stars & coins, and reports DDA', 
   assert.equal(res.save.levels[0].stars, 2);
   assert.equal(res.dda.length, 1);
   assert.equal(await page.locator('#btnNext').isHidden(), false, 'Next level button shown after unlock');
-});
-
-test('native HTML controls stay isolated from gameplay keyboard handlers', async () => {
-  await testNativeControlGame({ browser, origin: server.origin, slug: 'recess-kitchen' });
 });

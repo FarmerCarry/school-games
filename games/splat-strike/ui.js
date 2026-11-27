@@ -57,23 +57,19 @@
   /* ================================================================ RENDERER */
   var canvas = $('gl'), uiEl = $('ui');
   var LQ = /[?&]lq\b/.test(location.search);
-  var renderer;
-  try {
-    // anti-aliasing is fixed for the life of the context, so judge it by the widest the canvas can get:
-    // the portal's fullscreen button grows this same canvas from the small frame to the whole screen
-    var maxW = Math.max(window.innerWidth, (window.screen && window.screen.width) || 0);
-    var aa = save.set.qual === 'high' || (save.set.qual === 'auto' && !LQ && !save.set.aaOff && maxW * Math.min(window.devicePixelRatio || 1, 1.25) <= 1600);
-    renderer = new T.WebGLRenderer({ canvas: canvas, antialias: aa, powerPreference: 'high-performance' });
-  } catch (e) { $('nogl').hidden = false; $('title').hidden = true; return; }
+  // anti-aliasing is fixed for the life of the context, so judge it by the widest the canvas can get:
+  // the portal's fullscreen button grows this same canvas from the small frame to the whole screen
+  var maxW = Math.max(window.innerWidth, (window.screen && window.screen.width) || 0);
+  var aa = save.set.qual === 'high' || (save.set.qual === 'auto' && !LQ && !save.set.aaOff && maxW * Math.min(window.devicePixelRatio || 1, 1.25) <= 1600);
+  function basePR() {
+    return Kit.webgl.pixelRatio({ software: false, low: LQ, max: save.set.qual === 'low' ? 0.8 : 1.25 });
+  }
+  var wgl = Kit.webgl.createRenderer(canvas, { software: false, antialias: aa, low: LQ, max: save.set.qual === 'low' ? 0.8 : 1.25, noGL: { hide: 'title' } });
+  if (!wgl) return;
+  var renderer = wgl.renderer;
   renderer.autoClear = false;
   renderer.info.autoReset = false;
-  function basePR() {
-    var d = window.devicePixelRatio || 1;
-    if (LQ) return 0.5;
-    return save.set.qual === 'low' ? Math.min(d, 0.8) : Math.min(d, 1.25);
-  }
-  var PR = basePR();
-  renderer.setPixelRatio(PR);
+  var PR = wgl.ratio;
   var camera = G.camera = new T.PerspectiveCamera(save.set.fov, 16 / 9, 0.05, 400);
   camera.rotation.order = 'YXZ';
 
@@ -1367,7 +1363,7 @@
   // restored GL context or the tab coming back. The settings panel opened from pause keeps drawing,
   // so a field-of-view change shows right away. lastR stays current, so resuming has no time jump.
   var lastR = performance.now(), stillDrawn = false, setEl = $('settings');
-  canvas.addEventListener('webglcontextrestored', function () { stillDrawn = false; });
+  Kit.webgl.watchContext(canvas, { onRestored: function () { stillDrawn = false; } });
   document.addEventListener('visibilitychange', function () { stillDrawn = false; });
   function render(alpha) {
     var t0 = performance.now(), dt = Math.min(0.1, (t0 - lastR) / 1000); lastR = t0;

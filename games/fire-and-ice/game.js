@@ -764,24 +764,24 @@
       return;
     }
 
-    canvas.addEventListener('webglcontextlost', function (e) {
-      e.preventDefault();
-      contextLost = true;
-      if (mode === 'play') pauseGame();
-      contextNotice.hidden = false;
-    });
-    canvas.addEventListener('webglcontextrestored', function () {
-      contextLost = false;
-      contextNotice.hidden = true;
-      view.resize(window.innerWidth, window.innerHeight);
-      if (world) {
-        view.loadLevel(world);
-        view.applyHat(save.hat);
-        view.update(world, 0, renderCtx());
+    Kit.webgl.watchContext(canvas, {
+      notice: contextNotice,
+      onLost: function () {
+        contextLost = true;
+        if (mode === 'play') pauseGame();
+      },
+      onRestored: function () {
+        contextLost = false;
+        view.resize(window.innerWidth, window.innerHeight);
+        if (world) {
+          view.loadLevel(world);
+          view.applyHat(save.hat);
+          view.update(world, 0, renderCtx());
+        }
+        dirty = true;
+        view.render();
+        dirty = false;
       }
-      dirty = true;
-      view.render();
-      dirty = false;
     });
 
     view.calm = isReducedMotion();

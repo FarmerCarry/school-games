@@ -112,7 +112,7 @@ test('loading without Kit defines nothing and does not throw', () => {
 test('the only global is Kit.art, and nothing runs at load', () => {
   const h = harness();
   assert.equal(h.window.Art, undefined);
-  assert.equal(h.art.version, 1);
+  assert.equal(typeof h.art.init, 'function');
   assert.equal(h.document.getElementById('sg-art'), null);
   assert.equal(h.document.documentElement.getAttribute('data-sg-art'), undefined);
   assert.equal(h.allocs(), 0);
@@ -125,7 +125,7 @@ test('Math.random is never used, pools stay capped, and CSS is injected once und
   const canvas = mockCanvas();
   assert.doesNotThrow(() => {
     h.art.init({ canvas, ctx, mode: '2d', theme: 'candy' });
-    assert.equal(h.art.theme, 'candy');
+    assert.deepEqual([...h.art.stops()], ['#ffd0ea', '#c9f2ff']);
     assert.equal(h.art.quality.tier, 2);
     assert.equal(h.document.documentElement.getAttribute('data-sg-art'), '2');
     const style = h.document.getElementById('sg-art');
@@ -138,7 +138,6 @@ test('Math.random is never used, pools stay capped, and CSS is injected once und
     assert.equal(h.styles.length, 1, 'the style tag is injected once');
     h.art.shade('#336699', -0.5);
     h.art.shade('#336699', -0.5);
-    assert.equal(h.art.ramp('#000000', '#ffffff', 3).length, 3);
     h.art.round(ctx, 0, 0, 40, 20, 6);
     h.art.blob(ctx, 10, 10, 12, 0.2, 1);
     h.art.outlined(ctx, '#3ddc84', 3);
@@ -167,20 +166,10 @@ test('Math.random is never used, pools stay capped, and CSS is injected once und
     h.art.blink();
     const hero = {};
     h.art.blink(hero);
-    const tw = h.art.tween(0, 10, 200, h.art.ease.outBack);
-    tw.update(0.05);
-    h.art.tween(0, 1, 100, h.art.ease.outElastic).update(0.02);
-    h.art.tween(0, 1, 100, h.art.ease.inOut).update(0.02);
-    h.art.tween(0, 1, 100, h.art.ease.outQuad).update(0.02);
     h.art.pop('+10', 20, 20, { color: '#ffcc00', size: 28 });
     h.art.pop.update(0.05); h.art.pop.draw(ctx);
     h.art.flash('#ffffff', 80);
     h.art.flash.update(0.016); h.art.flash.draw(ctx, 100, 80);
-    const tex = h.art.texture('decal', 8, 8, c => c.fillRect(0, 0, 8, 8));
-    assert.ok(tex.canvas);
-    assert.equal(typeof h.art.three.pixelRatio(), 'number');
-    assert.equal(h.art.three.lights(null), null);
-    assert.ok(h.art.three.blobShadow().canvas);
     h.art.quality.frame(16);
     assert.ok(h.art.rand() >= 0 && h.art.rand() < 1);
     const a = harness();
@@ -319,40 +308,6 @@ test('reduced motion disables shake, hit-stop and flash, and hit-stop does not c
   spring.update(0.016);
   assert.equal(spring.sx, 1);
   assert.equal(spring.sy, 1);
-  const tw = h.art.tween(0, 5, 1000, h.art.ease.outQuad);
-  tw.update(0.01);
-  assert.equal(tw.v, 5);
-});
-
-test('WebGL helpers follow the tier and do not require three.js', () => {
-  const h = harness({ stored: { 'sg:art:tier': '0' } });
-  h.window.devicePixelRatio = 3;
-  h.art.init({ canvas: mockCanvas(), ctx: mockCtx(), mode: 'webgl' });
-  assert.equal(h.art.three.pixelRatio(), 0.75);
-  const high = harness();
-  high.window.devicePixelRatio = 3;
-  high.art.init({ canvas: mockCanvas(), ctx: mockCtx(), mode: 'webgl' });
-  assert.equal(high.art.three.pixelRatio(), 1.5);
-  const scene = { added: [], add(node) { this.added.push(node); } };
-  high.window.THREE = {
-    CanvasTexture: function (canvas) { this.canvas = canvas; this.needsUpdate = false; },
-    HemisphereLight: function (sky, ground) { this.sky = sky; this.ground = ground; },
-    DirectionalLight: function () { this.position = { set() {} }; this.castShadow = false; },
-    PlaneGeometry: function () {},
-    MeshBasicMaterial: function (opts) { this.opts = opts; },
-    Mesh: function (geo, mat) { this.geo = geo; this.mat = mat; this.rotation = { x: 0 }; }
-  };
-  const lights = high.art.three.lights(scene, {});
-  assert.equal(scene.added.length, 2);
-  assert.equal(lights.sun.castShadow, true);
-  const tex = high.art.texture('ground', 8, 8, c => c.fillRect(0, 0, 8, 8));
-  assert.equal(tex.needsUpdate, true);
-  const shadow = high.art.three.blobShadow();
-  assert.ok(Math.abs(shadow.rotation.x + Math.PI / 2) < 1e-9);
-  h.window.THREE = high.window.THREE;
-  const lowScene = { added: [], add(node) { this.added.push(node); } };
-  const lowLights = h.art.three.lights(lowScene, {});
-  assert.equal(lowLights.sun.castShadow, false);
 });
 
 test('fonts.ready rebuilds sprites once, and the minified kit fits artBytes', async () => {
@@ -391,9 +346,6 @@ test('a built page that loads the kit rewrites ?v= and the review page is not sh
   write('js/catalog.js', 'window.GAMES = [{ slug: "demo" }];');
   write('js/site.js', 'window.portalReady = true;');
   write('js/offline.js', readFileSync(path.join(repo, 'js/offline.js'), 'utf8'));
-  write('teacher.html', '<!doctype html><html><head><link rel="stylesheet" href="css/teacher.css"></head><body><script src="js/catalog.js"></script><script src="js/teacher.js"></script></body></html>');
-  write('js/teacher.js', 'window.SGTeacher = {};');
-  write('css/teacher.css', 'main { color: navy; }');
   write('games/demo/index.html', '<!doctype html><html><body><script src="../../shared/artkit.js"></script><script src="game.js"></script></body></html>');
   write('games/demo/game.js', 'window.gameReady = true;');
   write('games/demo/thumb.svg', '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400"></svg>');
