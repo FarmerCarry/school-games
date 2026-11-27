@@ -17,7 +17,7 @@
   <symbol id="i-shop" viewBox="0 0 64 64"><path d="M10 22 L54 22 L50 54 L14 54 Z"/><path d="M22 24 L22 18 A10 10 0 0 1 42 18 L42 24" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round"/></symbol>
   <symbol id="i-grid" viewBox="0 0 64 64"><rect x="8" y="8" width="20" height="20" rx="6"/><rect x="36" y="8" width="20" height="20" rx="6"/><rect x="8" y="36" width="20" height="20" rx="6"/><rect x="36" y="36" width="20" height="20" rx="6"/></symbol>
   <symbol id="i-star" viewBox="0 0 64 64"><path d="M32 5 L40 23 L60 25 L45 38 L49 58 L32 48 L15 58 L19 38 L4 25 L24 23 Z" fill="#ffd93d" stroke="#2a1d4e" stroke-width="4" stroke-linejoin="round"/></symbol>
-  <symbol id="i-lock" viewBox="0 0 64 64"><rect x="12" y="28" width="40" height="30" rx="7" fill="#9aa3c7" stroke="#2a1d4e" stroke-width="4"/><path d="M21 29 L21 21 A11 11 0 0 1 43 21 L43 29" fill="none" stroke="#2a1d4e" stroke-width="6"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 64 64"><path d="M21 30 L21 21 A11 11 0 0 1 43 21 L43 30" fill="none" stroke="#2a1d4e" stroke-width="13"/><path d="M21 30 L21 21 A11 11 0 0 1 43 21 L43 30" fill="none" stroke="#eef1ff" stroke-width="6"/><rect x="12" y="28" width="40" height="30" rx="7" fill="#ffd93d" stroke="#2a1d4e" stroke-width="4"/><circle cx="32" cy="42" r="5" fill="#2a1d4e"/></symbol>
   <symbol id="i-inf" viewBox="0 0 64 64"><path d="M32 32 C24 20 8 20 8 32 C8 44 24 44 32 32 C40 20 56 20 56 32 C56 44 40 44 32 32 Z" fill="none" stroke="currentColor" stroke-width="8" stroke-linejoin="round"/></symbol>
 </svg>
 
@@ -40,6 +40,7 @@
       <button type="button" id="btnLevels" class="bs-btn bs-wide" aria-label="المراحل"><svg aria-hidden="true"><use href="#i-grid"/></svg><span>المراحل</span></button>
       <button type="button" id="btnShop" class="bs-btn bs-wide shop" aria-label="المتجر"><svg aria-hidden="true"><use href="#i-shop"/></svg><span>المتجر</span><i class="new" id="shopNew" hidden>جديد!</i></button>
       <button type="button" id="btnEndless" class="bs-btn bs-wide endless" aria-label="بلا نهاية"><svg aria-hidden="true"><use href="#i-inf"/></svg><span>بلا نهاية</span><i class="lock" id="endlessLock"><svg aria-hidden="true"><use href="#i-lock"/></svg></i></button>
+      <p class="tip" id="endlessTip" aria-hidden="true" hidden></p>
     </div>
     <div class="howto">
       <span><span class="sg-key">الفأرة</span> أو <span dir="ltr"><span class="sg-key">←</span> <span class="sg-key">→</span></span> حرّك المضرب</span>

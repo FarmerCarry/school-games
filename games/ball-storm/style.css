@@ -71,6 +71,13 @@ html[data-sg-motion="reduce"] .ring::after { opacity: 0.9; transform: none; }
 .bs-wide .lock { position: absolute; left: -14px; top: -14px; width: 44px; height: 44px; }
 .bs-wide .lock svg { width: 44px; height: 44px; }
 .bs-wide.locked { filter: saturate(0.4) brightness(0.85); }
+.tip {
+  position: absolute; top: calc(100% + 18px); left: 0; margin: 0; padding: 6px 18px; white-space: nowrap; border-radius: 18px;
+  background: #fff; color: var(--ink); border: 4px solid var(--ink); box-shadow: 0 5px 0 var(--ink); font-size: 24px; font-weight: 700; transform-origin: 40px 0;
+}
+.tip::before { content: ''; position: absolute; top: -12px; left: 30px; width: 16px; height: 16px; background: #fff; border: 4px solid var(--ink); border-width: 4px 0 0 4px; transform: rotate(45deg); }
+.tip.pop { animation: bs-pop 0.35s ease-out; }
+@keyframes bs-pop { 0% { scale: 0.8; } 45% { scale: 1.14; } 100% { scale: 1; } }
 .howto {
   position: absolute; left: 110px; right: 110px; bottom: 22px; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 28px;
   padding: 12px 20px; border-radius: 26px; background: rgba(42, 29, 78, 0.85); border: 4px solid #fff; color: #fff; font-size: 24px; pointer-events: none;
@@ -113,6 +120,7 @@ html[data-sg-motion="reduce"] .ring::after { opacity: 0.9; transform: none; }
 .lvl.endless-btn { flex-direction: row; gap: 12px; height: 70px; margin: 16px auto 0; padding: 0 30px; background: #b36bff; color: #fff; font-size: 30px; font-weight: 700; }
 .lvl.endless-btn svg { width: 48px; height: 48px; fill: none; stroke: #fff; }
 .lvl.endless-btn small { font-size: 20px; opacity: 0.9; }
+.lvl.endless-btn.locked { background: #d8d2ee; color: var(--ink); }
 
 /* Shop */
 .shop-card { width: 1060px; padding: 18px 28px 26px; }
@@ -131,6 +139,8 @@ html[data-sg-motion="reduce"] .ring::after { opacity: 0.9; transform: none; }
 .item.locked { background: #d8d2ee; }
 .item.locked canvas { opacity: 0.35; }
 .item.fresh { background: #fff6b8; }
+.item.pop { animation: bs-pop 0.4s ease-out, bs-glow 0.6s ease-out; }
+@keyframes bs-glow { 0% { box-shadow: 0 5px 0 var(--ink), 0 0 0 0 #ffe14f; } 100% { box-shadow: 0 5px 0 var(--ink), 0 0 0 26px rgba(255, 225, 79, 0); } }
 .wiggle { animation: bs-wiggle 0.45s ease-in-out; }
 @keyframes bs-wiggle { 0%, 100% { translate: 0 0; } 20% { translate: -9px 0; } 50% { translate: 9px 0; } 80% { translate: -5px 0; } }
 
@@ -158,4 +168,10 @@ html[data-sg-motion="reduce"] .ring::after { opacity: 0.9; transform: none; }
 .res-unlock b { font-size: 26px; }
 .res-unlock small { font-size: 20px; }
 .next { width: 120px; height: 120px; }
+/* stars, a new best and an unlock all at once: a shorter card that keeps its shadow on the stage */
+.result-card.tight { padding-top: 12px; }
+.result-card.tight h2 { font-size: 54px; line-height: 1.25; }
+.result-card.tight .stars .st { width: 76px; height: 76px; }
+.result-card.tight .res-score b { font-size: 50px; }
+.result-card.tight .row { margin-top: 14px; }
 html[data-sg-motion="reduce"] .res-best, html[data-sg-motion="reduce"] .logo .x3, html[data-sg-motion="reduce"] .bs-wide .new { animation: none; }

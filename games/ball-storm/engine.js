@@ -183,7 +183,8 @@
       level: lv, endless: !lv, spec: spec, seed: (o.seed >>> 0) || 7,
       t: 0, pt: 0, phase: 'play', ev: [], fc: {}, won: false, clearAt: 0,
       lives: 3, score: 0, maxBalls: 1, pops: 0, caught: 0, launches: 0, moves: 0, paddleHits: 0,
-      px: W / 2, pv: 0, pwBase: (o.paddle || 180) + (lv === 1 ? 50 : lv === 2 ? 24 : spec ? -6 * spec.world : 0), pw: 0,
+      // a wider paddle that steps down over levels 1-3; later worlds are a little narrower
+      px: W / 2, pv: 0, pwBase: (o.paddle || 180) + ([50, 24, 12][lv - 1] || (spec ? -6 * spec.world : 0)), pw: 0,
       speedBase: (o.speed || 460) * (spec ? spec.speed : 1), speed: 0,
       // later worlds drop fewer capsules from plain jelly (gems always drop one)
       drop: (o.drop == null ? 0.07 : o.drop) * (spec ? [1, 0.75, 0.55][spec.world] : 0.8), magnet: o.magnet == null ? 0 : o.magnet,

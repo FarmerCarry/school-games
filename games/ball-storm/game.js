@@ -35,7 +35,8 @@
   function seed() { return (M.random() * 2147483647) | 0; }
   function params(level) {
     if (!level) return { level: 0, speed: ddaEndless.value(400, 560), paddle: ddaEndless.value(190, 150), drop: 0.08, magnet: ddaEndless.value(0.5, 0), descent: ddaEndless.value(3.4, 7.5), seed: seed() };
-    return { level: level, speed: dda.value(380, 560), paddle: dda.value(200, 150), drop: dda.value(0.12, 0.05), magnet: level <= 2 ? 0.9 : dda.value(0.6, 0), seed: seed() };
+    // The capsule magnet eases off over levels 1-3 instead of vanishing after level 2.
+    return { level: level, speed: dda.value(380, 560), paddle: dda.value(200, 150), drop: dda.value(0.12, 0.05), magnet: M.max(dda.value(0.6, 0), [0.9, 0.9, 0.6][level - 1] || 0), seed: seed() };
   }
 
   /* --------------------------------------------------------------- state */
@@ -154,12 +155,12 @@
   }
   function showResult() {
     if (!result) return;
-    var w = world, won = result.won, card = $('scrResult').querySelector('.card');
-    card.classList.toggle('lose', !won);
+    var w = world, won = result.won, best = w.endless && result.newBest, n = w.left, card = $('scrResult').querySelector('.card');
+    card.classList.toggle('lose', !won && !best);
     $('resTitle').textContent = w.endless ? 'انتهت العاصفة!' : won ? CHEERS[(w.level + w.lives) % CHEERS.length] : 'أوبس!';
     $('resScore').textContent = fmt(w.score);
     $('resBest').hidden = !result.newBest;
-    $('resStorm').textContent = w.endless ? 'أفضل نتيجة: ' + fmt(save.endless) : won ? 'أكبر عاصفة: ' + ltr('×' + w.maxBalls) : w.left <= 10 ? 'كنت قريبًا جدًا! باقي ' + w.left : 'حاول مرة أخرى!';
+    $('resStorm').textContent = w.endless ? 'أفضل نتيجة: ' + fmt(save.endless) : won ? 'أكبر عاصفة: ' + ltr('×' + w.maxBalls) : n <= 10 ? 'كنت قريبًا جدًا! بقي ' + (n === 1 ? 'مكعب واحد' : n === 2 ? 'مكعبان' : n + ' مكعبات') + ' فقط!' : 'حاول مرة أخرى!';
     var stars = $('resStars').querySelectorAll('.st');
     for (var i = 0; i < stars.length; i++) stars[i].classList.remove('on');
     $('resStars').hidden = !won || w.endless;
@@ -167,6 +168,7 @@
     next.hidden = !(won && !w.endless);
     var un = result.unlocked[0], u = $('resUnlock');
     u.hidden = !un;
+    card.classList.toggle('tight', !!un && result.newBest);
     if (un) {
       u.querySelector('small').textContent = un.name;
       var c = u.querySelector('canvas').getContext('2d');
@@ -176,9 +178,15 @@
     }
     resT = 0; resShown = 0;
     setScreen('result');
-    if (won) say('فزت! ' + result.stars + ' نجوم'); else say('انتهت المحاولة');
-    if (!won) J.fail();
-    (won ? next : $('btnAgain')).focus({ preventScroll: true });
+    if (won) say('فزت! ' + result.stars + ' نجوم'); else say(best ? 'رقم قياسي جديد!' : 'انتهت المحاولة');
+    if (best) {
+      J.levelUp(); J.chime(3); Kit.stats.busy();
+      for (var q = 0; q < 2; q++) fx.burst(170 + q * 940, 330, { count: 30, colors: colors(), speed: 480, life: 1.2 });
+    } else if (!won) J.fail();
+    // The keys stay with the game (Enter/Space, R, M, Esc): the default button only glows.
+    next.classList.toggle('ring', !next.hidden);
+    $('btnAgain').classList.toggle('ring', next.hidden);
+    focusGame();
   }
   function resultTick(dt) {
     if (!result) return;
@@ -229,7 +237,7 @@
     });
     var e = document.createElement('button'), open = BS.endlessOpen(save);
     e.type = 'button'; e.className = 'lvl endless-btn' + (open ? '' : ' locked');
-    e.innerHTML = '<svg aria-hidden="true"><use href="#i-inf"/></svg><span>بلا نهاية</span><small>' + (open ? (save.endless ? 'أفضل نتيجة ' + fmt(save.endless) : '') : 'افتحها بالفوز في المرحلة ' + BS.ENDLESS_AT) + '</small>';
+    e.innerHTML = '<svg aria-hidden="true"><use href="#i-' + (open ? 'inf' : 'lock') + '"/></svg><span>بلا نهاية</span><small>' + (open ? (save.endless ? 'أفضل نتيجة ' + fmt(save.endless) : '') : 'افتحها بالفوز في المرحلة ' + BS.ENDLESS_AT) + '</small>';
     e.addEventListener('click', function (ev) { ev.stopPropagation(); endless(e); });
     box.appendChild(e);
     $('levelsStars').querySelector('b').textContent = String(BS.totalStars(save));
@@ -258,7 +266,16 @@
     }
     J.select(); startRound(0);
   }
-  function showToast(text) { say(text); }
+  // A short bubble under the title's endless button (the level map's button says it on its face).
+  var toastT = 0;
+  function showToast(text) {
+    var t = $('endlessTip');
+    say(text);
+    t.textContent = text; t.hidden = screen !== 'title';
+    t.classList.remove('pop'); void t.offsetWidth; t.classList.add('pop');
+    clearTimeout(toastT);
+    toastT = setTimeout(function () { t.hidden = true; }, 2600);
+  }
 
   /* ---------------------------------------------------------------- shop */
   var itemBtns = [];
@@ -317,16 +334,11 @@
     else { refreshTitle(); setScreen('title'); }
   }
   function wear(kind, i, el) {
-    if (BS.wear(save, kind, i)) {
-      J.coin(4);
-      fx.burst(640, 360, { count: 26, colors: ['#ffe14f', '#ff4fb8', '#4fd8ff'], speed: 360 });
-      persist();
-    } else {
-      J.error();
-      el.classList.remove('wiggle'); void el.offsetWidth; el.classList.add('wiggle');
-    }
+    var ok = BS.wear(save, kind, i), anim = ok ? 'pop' : 'wiggle';
+    if (ok) { J.coin(4); persist(); } else J.error();
+    // the chosen item jumps and glows (the card hides the canvas behind it)
+    el.classList.remove('pop', 'wiggle'); void el.offsetWidth; el.classList.add(anim);
     refreshShop();
-    dirty = true;
   }
 
   /* ---------------------------------------------------------------- input */
@@ -514,7 +526,8 @@
         finish(true);
         break;
       case 'over':
-        if (w.endless) { J.fail(); showBanner('انتهت العاصفة!', '#ffe14f', 1.4, e.reason === 'line' ? 'وصلت الصفوف إلى الخط' : ''); }
+        // the result card plays the sound: a fail, or a fanfare for a new endless best
+        if (w.endless) showBanner('انتهت العاصفة!', '#ffe14f', 1.4, e.reason === 'line' ? 'وصلت الصفوف إلى الخط' : '');
         else showBanner('أوبس!', '#ff9aa8', 1.4);
         shake.add(10);
         finish(false);
@@ -589,7 +602,7 @@
     } else if (screen === 'result') {
       resultTick(dt);
       if (fx.list.length) { fx.update(dt); dirty = true; }
-    } else if (screen === 'shop' && fx.list.length) { fx.update(dt); dirty = true; }
+    }
     Kit.keys.endFrame();
   }
   function tick(dt) {
@@ -635,16 +648,15 @@
       pair('×' + w.n, 'كرة!', 0, 0, size, w.n >= 100 ? '#ff6fc4' : '#ffe14f', '#fff');
       ctx.restore();
     } else if (w.spec) label(ctx, w.spec.name, 640, 48, 30, '#fff', 'center', true);
-    // the best live combo
-    if (w.comboMax >= 3 && w.phase === 'play') pair('كومبو', '×' + w.comboMax, 640, 126, 26, '#fff', '#ff6fc4');
-    // power-up timers
-    var px = 74;
+    // the best live combo, in the top band beside the score (never over the bricks)
+    if (w.comboMax >= 3 && w.phase === 'play') pair('كومبو', '×' + w.comboMax, 408, 48, 24, '#fff', '#ff6fc4');
+    // power-up timers, under the paddle line where no ball is still in play
+    var px = 64, ty = F.FLOOR - 1;
     for (var k in w.pow) if (w.pow[k] > 0) {
-      var total = BS.POW[k];
-      ctx.beginPath(); ctx.arc(px, 132, 24, 0, M.PI * 2); ctx.fillStyle = 'rgba(20,8,48,0.75)'; ctx.fill();
-      ctx.beginPath(); ctx.arc(px, 132, 24, -M.PI / 2, -M.PI / 2 + M.PI * 2 * w.pow[k] / total); ctx.lineWidth = 5; ctx.strokeStyle = BS.CAP_ART[k].fill; ctx.stroke();
-      BS.powerIcon(ctx, k, px, 132, 30);
-      px += 60;
+      ctx.beginPath(); ctx.arc(px, ty, 18, 0, M.PI * 2); ctx.fillStyle = 'rgba(20,8,48,0.8)'; ctx.fill();
+      ctx.beginPath(); ctx.arc(px, ty, 18, -M.PI / 2, -M.PI / 2 + M.PI * 2 * w.pow[k] / BS.POW[k]); ctx.lineWidth = 4; ctx.strokeStyle = BS.CAP_ART[k].fill; ctx.stroke();
+      BS.powerIcon(ctx, k, px, ty, 23);
+      px += 46;
     }
     // the waiting ball: a bouncing arrow and the auto-launch ring
     if (!w.launched && w.phase === 'play') {
@@ -694,10 +706,14 @@
     } else {
       var px = M.max(260, M.min(1020, w.px)), slide = calm() ? 0 : M.sin(time * 4) * 30;
       ctx.save(); ctx.translate(px, 575);
-      panel(-210, -36, 420, 72, 'rgba(61,180,255,0.95)');
+      panel(-210, -36, 420, 72, 'rgba(61,180,255,0.8)');
       keycap(-170 - (slide < 0 ? 4 : 0), 0, 44, '←'); keycap(170 + (slide > 0 ? 4 : 0), 0, 44, '→');
       mouseIcon(-110 + slide * 0.5, 0);
       label(ctx, 'حرّك المضرب!', 30, 2, 30, '#fff', 'center', true);
+      ctx.restore();
+      // the hint sits where the balls come down to the paddle: they fly over it, never hide
+      ctx.save(); if (shake.power && screen === 'play') ctx.translate(shake.x, shake.y);
+      BS.drawBalls(ctx, w.pow.fire > 0 ? 'fire' : BS.BALLS[save.ball].id, w.n, w.x, w.y, w.dx, w.dy);
       ctx.restore();
     }
   }

@@ -37,7 +37,7 @@
       '.onononon.',
       '..nonono..',
       '...onon...'] },
-    { name: 'حلوى ملفوفة', world: 0, speed: 0.93, floor: 0, first: 'x3', par: 80, rows: [
+    { name: 'حلوى ملفوفة', world: 0, speed: 0.93, floor: 0, first: 'plus', par: 80, rows: [
       'v...rRrrRr...v',
       'vv.rwrwrwrw.vv',
       'vvvrrr3rrrrvvv',

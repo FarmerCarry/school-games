@@ -1,7 +1,7 @@
 // Ball Storm's pure engine in Node: the level pictures, serving, the paddle, bricks
 // (jelly, tough, steel, TNT, gems), capsules (×3, +10, power-ups), ×2 rings, the ball cap,
 // bubble floors, lives, winning and losing, the endless wall, save repair and unlocks,
-// a scripted good player on every level and a sloppy one on level 1.
+// a scripted good player on every level, a sloppy one on level 1 and a gentle ramp to level 4.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -79,6 +79,20 @@ function sloppy(seed) {
   return w => {
     if (w.t > until) { dir = [-1, 0, 1][Math.floor(rng() * 3)]; until = w.t + 0.3 + rng() * 1.5; }
     return { dir, target: null, launch: rng() < 0.01 };
+  };
+}
+// The weak aimer re-aims at the lowest falling ball only every 0.6 s, and misses by up to 80 px.
+function weak(seed) {
+  const rng = mulberry(seed);
+  let target = 640, next = 0;
+  return w => {
+    if (w.t > next) {
+      next = w.t + 0.6;
+      let best = -1, by = -1;
+      for (let i = 0; i < w.n; i++) if (w.dy[i] > 0 && w.y[i] > by) { by = w.y[i]; best = i; }
+      if (best >= 0) target = w.x[best] + (rng() - 0.5) * 160;
+    }
+    return { dir: 0, target, launch: rng() < 0.01 };
   };
 }
 function playOut(w, input, seconds = 400) {
@@ -436,6 +450,19 @@ test('every level is won by a scripted good player, even on the hardest settings
       }
     }
   }
+});
+
+test('no cliff after the easy levels: the helpers ease off over levels 1-3 and a weak aimer wins level 3 more often than level 4', () => {
+  const pw = [1, 2, 3, 4].map(level => world(level).pwBase);
+  assert.ok(pw[0] > pw[1] && pw[1] > pw[2] && pw[2] > pw[3], 'the paddle bonus steps down: ' + pw);
+  assert.equal(BS.LEVELS[2].first, 'plus', 'level 3 opens with +10 balls');
+  // game.js at a difficulty of 0.4 (a child who has just won level 1): the capsule magnet
+  // is 0.9 on levels 1-2, at least 0.6 on level 3, and follows the difficulty after that.
+  const at = (level, seed) => BS.create({ level, seed, speed: 452, paddle: 180, drop: 0.092, magnet: [0.9, 0.9, 0.6][level - 1] || 0.36 });
+  const wins = level => { let n = 0; for (let s = 1; s <= 40; s++) if (playOut(at(level, s * 104729), weak(s)).phase === 'won') n++; return n; };
+  const l2 = wins(2), l3 = wins(3), l4 = wins(4);
+  assert.ok(l2 >= l3 && l3 > l4, `wins out of 40: L2 ${l2}, L3 ${l3}, L4 ${l4}`);
+  assert.ok(l3 >= 28, 'L3 ' + l3 + '/40');
 });
 
 test('level 1 is won by a sloppy random player (and by one who does nothing) in nearly every seed', () => {

@@ -2,7 +2,8 @@
 // and #btnPlay start; a canvas click or a stray key does not), real keys and the mouse move
 // the paddle and launch, pause freezes and resume goes on, restart resets, a won and a lost
 // level both reach the result card, progress survives a reload, the level map, the shop,
-// the endless lock, a failing save shows its retry badge, and no errors or network requests.
+// the endless lock, a new endless best, a failing save shows its retry badge, and no errors
+// or network requests.
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import path from 'node:path';
@@ -201,6 +202,11 @@ test('winning level 1: the result card with stars, the next level, and progress 
   assert.equal(saved.stars[0], s.result.stars);
   assert.ok(saved.best[0] > 0);
   assert.equal(saved.coach, true, 'moving and launching finishes the hint');
+  assert.equal(await page.locator('#btnNext').evaluate(b => b.classList.contains('ring')), true, 'Next glows as the default');
+  const muted = await page.evaluate(() => Kit.audio.muted);
+  await page.keyboard.press('KeyM');
+  assert.equal(await page.evaluate(() => Kit.audio.muted), !muted, 'M mutes on the result card');
+  await page.keyboard.press('KeyM');
   await page.keyboard.press('Enter');
   s = await state(page);
   assert.equal(s.screen, 'play');
@@ -214,7 +220,7 @@ test('winning level 1: the result card with stars, the next level, and progress 
   assert.equal((await state(page)).level, 2, 'Play goes on from level 2');
 });
 
-test('losing the last life: the result card says so, Again plays the same level', async t => {
+test('losing the last life: the result card says how close it was, and R plays the same level again', async t => {
   const page = await game(t, { save: won(5) });
   await page.click('#btnPlay');
   let s = await state(page);
@@ -225,7 +231,7 @@ test('losing the last life: the result card says so, Again plays the same level'
   // The last life and no help: the ball drops past a paddle parked in the far corner.
   await page.evaluate(() => {
     const w = __game.world;
-    w.lives = 1; w.first = null; w.drop = 0; w.caps.length = 0; w.rings.length = 0;
+    w.lives = 1; w.first = null; w.drop = 0; w.caps.length = 0; w.rings.length = 0; w.left = 2;
     w.x[0] = 200; w.y[0] = 560; w.dx[0] = 0.1; w.dy[0] = 0.99;
   });
   await page.keyboard.down('ArrowRight');
@@ -237,9 +243,11 @@ test('losing the last life: the result card says so, Again plays the same level'
   assert.equal(await page.locator('#resTitle').textContent(), 'أوبس!');
   assert.equal(await page.locator('#btnNext').isVisible(), false);
   assert.equal(await page.locator('#resStars').isVisible(), false);
-  assert.equal(await page.evaluate(() => document.activeElement.id), 'btnAgain');
+  assert.equal(await page.locator('#resStorm').textContent(), 'كنت قريبًا جدًا! بقي مكعبان فقط!');
+  assert.equal(await page.evaluate(() => Kit.keys.isNativeTarget(document.activeElement)), false, 'no button takes the game keys');
+  assert.equal(await page.locator('#btnAgain').evaluate(b => b.classList.contains('ring')), true, 'Again glows as the default');
   assert.equal((await stored(page)).stars[5], 0, 'a loss gives no stars');
-  await page.click('#btnAgain');
+  await page.keyboard.press('KeyR');
   s = await state(page);
   assert.equal(s.screen, 'play');
   assert.equal(s.level, 6);
@@ -251,11 +259,17 @@ test('losing the last life: the result card says so, Again plays the same level'
 
 test('the level map opens won levels only; the shop dresses up with stars; endless opens after level 5', async t => {
   const page = await game(t, { save: won(2) });
+  assert.equal(await page.locator('#endlessTip').isVisible(), false);
   await page.click('#btnEndless');
   assert.equal((await state(page)).screen, 'title', 'endless is locked at first');
+  assert.equal(await page.locator('#endlessTip').isVisible(), true, 'a bubble says how to open it');
+  assert.match(await page.locator('#endlessTip').textContent(), /المرحلة 5/);
   await page.click('#btnLevels');
   assert.equal((await state(page)).screen, 'levels');
   assert.equal(await page.locator('#worlds .lvl.locked').count(), 13, 'levels 4-15 and endless are locked');
+  const lockedEndless = page.locator('#worlds .endless-btn');
+  assert.equal(await lockedEndless.locator('use').getAttribute('href'), '#i-lock');
+  assert.notEqual(await lockedEndless.evaluate(e => getComputedStyle(e).backgroundColor), 'rgb(179, 107, 255)', 'the locked endless button is greyed');
   await page.locator('#worlds .world').nth(0).locator('.lvl').nth(4).click();
   assert.equal((await state(page)).screen, 'levels', 'a locked level does not start');
   await page.locator('#worlds .world').nth(0).locator('.lvl').nth(1).click();
@@ -271,6 +285,7 @@ test('the level map opens won levels only; the shop dresses up with stars; endle
   assert.equal((await stored(page)).paddle, 0, 'locked: nothing changes');
   await page.locator('#shopBalls .item').nth(1).click();
   assert.equal((await stored(page)).ball, 1);
+  assert.match(await page.locator('#shopBalls .item').nth(1).getAttribute('class'), /\bpop\b/, 'the chosen item pops');
   assert.equal(await page.locator('#shopBalls .item').nth(1).getAttribute('aria-pressed'), 'true');
   await page.keyboard.press('Escape');
   assert.equal((await state(page)).screen, 'title');
@@ -283,6 +298,25 @@ test('the level map opens won levels only; the shop dresses up with stars; endle
   await later.keyboard.press('Space');
   await step(later, 120);
   assert.equal((await state(later)).phase, 'play');
+});
+
+test('a new endless best is celebrated: no fail sound, a fanfare and a happy card', async t => {
+  const page = await game(t, { save: Object.assign(won(5), { endless: 10 }) });
+  await page.evaluate(() => { window.sounds = []; for (const k of ['fail', 'levelUp', 'chime']) { const f = Kit.juice[k]; Kit.juice[k] = function () { sounds.push(k); return f.apply(this, arguments); }; } });
+  await page.click('#btnEndless');
+  await page.keyboard.press('Space');
+  await page.evaluate(() => { bs.run(300); __game.world.descent = 3000; sounds.length = 0; });
+  assert.ok(await until(page, 's.screen === "result"', 60 * 60));
+  const s = await state(page);
+  assert.equal(s.mode, 'endless');
+  assert.equal(s.result.newBest, true);
+  assert.equal(await page.locator('#resBest').isVisible(), true);
+  const sounds = await page.evaluate(() => sounds);
+  assert.equal(sounds.includes('fail'), false, 'no fail sound: ' + sounds);
+  assert.ok(sounds.includes('levelUp'), 'a fanfare: ' + sounds);
+  assert.equal(await page.locator('#scrResult .card').evaluate(c => c.classList.contains('lose')), false);
+  await page.keyboard.press('KeyR');
+  assert.equal((await state(page)).mode, 'endless', 'R plays endless again');
 });
 
 test('a save that fails says so and the game keeps going; Retry saves once storage works', async t => {
