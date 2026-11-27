@@ -9,7 +9,7 @@ import { startTestServer } from './test-server.mjs';
 import { reportPassed } from './playtest-report.mjs';
 import { clickControl } from './ui-input.mjs';
 import { SHARED_TESTS, parseShard, parseSuiteArgs, selectSuiteFiles, shardFiles } from './test-suite.mjs';
-import { DEFAULT_CHECK_CONCURRENCY, parseConcurrency, shouldRetryPlaytest } from './check-all.mjs';
+import { DEFAULT_CHECK_CONCURRENCY, DEFAULT_CI_CHECK_CONCURRENCY, defaultCheckConcurrency, parseConcurrency, shouldRetryPlaytest } from './check-all.mjs';
 import { PLAYTEST_BROWSER_ARGS, runPlaytest } from './playtest.mjs';
 
 test('playtest failures include actions, evaluations, and every failed resource', () => {
@@ -120,9 +120,27 @@ test('test-suite sharding validates specs and partitions browser tests with 100%
 });
 
 test('check-all concurrency parsing and crash/hang retry policy', () => {
-  assert.equal(parseConcurrency(undefined), DEFAULT_CHECK_CONCURRENCY);
-  assert.equal(parseConcurrency(''), DEFAULT_CHECK_CONCURRENCY);
-  assert.equal(parseConcurrency('2'), 2);
+  assert.equal(defaultCheckConcurrency({}), DEFAULT_CHECK_CONCURRENCY);
+  assert.equal(defaultCheckConcurrency({ CI: 'false' }), DEFAULT_CHECK_CONCURRENCY);
+  assert.equal(defaultCheckConcurrency({ CI: '0' }), DEFAULT_CHECK_CONCURRENCY);
+  assert.equal(defaultCheckConcurrency({ CI: 'true' }), DEFAULT_CI_CHECK_CONCURRENCY);
+  assert.equal(defaultCheckConcurrency({ CI: '1' }), DEFAULT_CI_CHECK_CONCURRENCY);
+
+  const prevCi = process.env.CI;
+  const prevConcurrency = process.env.SG_CHECK_CONCURRENCY;
+  try {
+    delete process.env.SG_CHECK_CONCURRENCY;
+    delete process.env.CI;
+    assert.equal(parseConcurrency(undefined), DEFAULT_CHECK_CONCURRENCY);
+    assert.equal(parseConcurrency(''), DEFAULT_CHECK_CONCURRENCY);
+    process.env.CI = 'true';
+    assert.equal(parseConcurrency(undefined), DEFAULT_CI_CHECK_CONCURRENCY);
+    assert.equal(parseConcurrency(''), DEFAULT_CI_CHECK_CONCURRENCY);
+    assert.equal(parseConcurrency('2'), 2);
+  } finally {
+    if (prevCi === undefined) delete process.env.CI; else process.env.CI = prevCi;
+    if (prevConcurrency === undefined) delete process.env.SG_CHECK_CONCURRENCY; else process.env.SG_CHECK_CONCURRENCY = prevConcurrency;
+  }
   for (const bad of ['0', '-1', '1.5', 'fast']) {
     assert.throws(() => parseConcurrency(bad), /Invalid SG_CHECK_CONCURRENCY/, bad);
   }
@@ -130,11 +148,16 @@ test('check-all concurrency parsing and crash/hang retry policy', () => {
   assert.equal(shouldRetryPlaytest({ ...base, ok: true }), false);
   assert.equal(shouldRetryPlaytest({ ...base, pageErrors: ['Error: boom'], harnessErrors: ['Timeout 20000ms'] }, { concurrency: 3 }), false);
   assert.equal(shouldRetryPlaytest({ ...base, consoleErrors: ['bad'], harnessErrors: ['Target closed'] }, { concurrency: 3 }), false);
+  assert.equal(shouldRetryPlaytest({ ...base, failedRequests: ['404'], harnessErrors: ['Start must reach gameplay'] }, { concurrency: 3 }), false);
+  assert.equal(shouldRetryPlaytest({ ...base, externalRequests: ['https://x'], harnessErrors: ['Start must reach gameplay'] }, { concurrency: 3 }), false);
   assert.equal(shouldRetryPlaytest({ ...base, harnessErrors: ['Target page, context or browser has been closed'] }, { concurrency: 1 }), true);
   assert.equal(shouldRetryPlaytest({ ...base, harnessErrors: ['Error: Playtest timed out after 120000ms'] }, { concurrency: 1 }), true);
   assert.equal(shouldRetryPlaytest({ ...base, harnessErrors: ['Assertion failed'] }, { concurrency: 1 }), false);
   assert.equal(shouldRetryPlaytest({ ...base, harnessErrors: ['Timeout 20000ms exceeded'] }, { concurrency: 1 }), false);
+  assert.equal(shouldRetryPlaytest({ ...base, harnessErrors: ['Error: block-world: Start must reach gameplay'] }, { concurrency: 1 }), false);
   assert.equal(shouldRetryPlaytest({ ...base, harnessErrors: ['Timeout 20000ms exceeded'] }, { concurrency: 3 }), true);
+  assert.equal(shouldRetryPlaytest({ ...base, harnessErrors: ['Error: splat-strike: countdown must reach active play'] }, { concurrency: 3 }), true);
+  assert.equal(shouldRetryPlaytest({ ...base, harnessErrors: ['Error: block-world: Start must reach gameplay'] }, { concurrency: 3 }), true);
   assert.equal(shouldRetryPlaytest({ ...base, harnessErrors: ['any error'] }, { concurrency: 1, browserConnected: false }), true);
 });
 

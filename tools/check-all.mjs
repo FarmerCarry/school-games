@@ -8,7 +8,7 @@
  *   node tools/check-all.mjs rail-rush  just one
  *
  * Reuses one HTTP server and one Chromium browser with isolated BrowserContexts
- * per game (SG_CHECK_CONCURRENCY defaults to 3). Exits non-zero if anything fails.
+ * per game (SG_CHECK_CONCURRENCY defaults to 1 in CI and 3 locally). Exits non-zero if anything fails.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -24,8 +24,14 @@ import { SENDER, networkUse, splitSender } from './lib/network-rules.mjs';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const DEFAULT_CHECK_CONCURRENCY = 3;
+export const DEFAULT_CI_CHECK_CONCURRENCY = 1;
 
-export function parseConcurrency(value = process.env.SG_CHECK_CONCURRENCY, fallback = DEFAULT_CHECK_CONCURRENCY) {
+export function defaultCheckConcurrency(env = process.env) {
+  const ci = env?.CI;
+  return ci && ci !== '0' && ci !== 'false' ? DEFAULT_CI_CHECK_CONCURRENCY : DEFAULT_CHECK_CONCURRENCY;
+}
+
+export function parseConcurrency(value = process.env.SG_CHECK_CONCURRENCY, fallback = defaultCheckConcurrency()) {
   if (value == null || value === '') return fallback;
   const text = String(value).trim();
   if (!/^[1-9]\d*$/.test(text)) {
@@ -35,7 +41,6 @@ export function parseConcurrency(value = process.env.SG_CHECK_CONCURRENCY, fallb
 }
 
 const CRASH_OR_HANG_PATTERN = /Target (?:page, context or browser has been )?closed|Browser has been closed|Page crashed|Target crashed|Playtest timed out/i;
-const CONCURRENT_TIMEOUT_PATTERN = /Timeout|timed out|navigation/i;
 
 export function shouldRetryPlaytest(report, { concurrency = 1, browserConnected = true } = {}) {
   if (!report || report.ok) return false;
@@ -51,7 +56,9 @@ export function shouldRetryPlaytest(report, { concurrency = 1, browserConnected 
   const harnessErrors = report.harnessErrors || [];
   if (!harnessErrors.length) return false;
   if (harnessErrors.some(msg => CRASH_OR_HANG_PATTERN.test(msg))) return true;
-  return concurrency > 1 && harnessErrors.some(msg => CONCURRENT_TIMEOUT_PATTERN.test(msg));
+  // Under concurrent SwiftShader load, scenario state waits can starve without
+  // any app/console/network error; retry those once in isolation.
+  return concurrency > 1;
 }
 
 function walk(dir) {
