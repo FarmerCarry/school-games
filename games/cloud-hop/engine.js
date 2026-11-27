@@ -393,7 +393,8 @@
       if (m.pt <= 0 || (w.castleY && m.y > w.castleY - 140)) {
         emit(w, 'powerEnd', m.power);
         m.power = null;
-        if (w.castleY && m.y > w.castleY - 140) m.vy = M.min(m.vy, 500);
+        // A flight that reaches the castle ends with a hop just over its top, to land on it.
+        if (w.castleY && m.y > w.castleY - 140) m.vy = M.sqrt(2 * CH.G * M.max(0, w.castleY + 60 - m.y));
       }
     } else m.vy = M.max(-CH.VFALL, m.vy - CH.G * dt);
     m.y += m.vy * dt;

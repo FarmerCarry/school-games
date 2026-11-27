@@ -232,6 +232,24 @@ test('the mouse steers only after it moves over the sky during play', async t =>
   s = await state(page);
   assert.equal(s.mouse, false);
   assert.ok(s.x < 1000);
+  // after a pause with the mouse, Marshy does not run off towards the pause button
+  const q = await page.evaluate(() => __game.point(700, 400));
+  await page.mouse.move(q.x, q.y, { steps: 4 });
+  await page.evaluate(() => ch.step(90));
+  s = await state(page);
+  assert.ok(s.mouse && Math.abs(s.x - 700) < 8, 'steering by mouse again: ' + s.x);
+  const box = await page.locator('#btnPause').boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 4 });
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  assert.equal((await state(page)).screen, 'pause');
+  const go = await page.locator('#btnResume').boundingBox();
+  await page.mouse.move(go.x + go.width / 2, go.y + go.height / 2, { steps: 4 });
+  await page.mouse.click(go.x + go.width / 2, go.y + go.height / 2);
+  await page.evaluate(() => ch.step(60));
+  const r = await state(page);
+  assert.equal(r.screen, 'play');
+  assert.equal(r.mouse, false, 'the mouse steers again only once it moves over the sky');
+  assert.ok(Math.abs(r.x - s.x) < 20, 'Marshy stays put after Resume: ' + s.x + ' -> ' + r.x);
 });
 
 test('the level map opens won levels only; the characters cost candies and are worn', async t => {
@@ -265,6 +283,39 @@ test('the level map opens won levels only; the characters cost candies and are w
   s = await state(page);
   assert.equal(s.screen, 'title');
   assert.equal(await page.locator('#titleCandies b').textContent(), '75');
+});
+
+test('a double-click on a title button does not go on to buy a character or start a level', async t => {
+  const page = await game(t, { save: SAVE({ unlocked: 6, stars: [1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0], candies: 300 }) });
+  await page.locator('#btnChars').dblclick();
+  assert.equal((await state(page)).screen, 'shop');
+  let saved = await page.evaluate(() => __game.save);
+  assert.deepEqual([saved.candies, saved.char, saved.chars.filter(Boolean).length], [300, 0, 1], 'nothing bought or worn');
+  await page.keyboard.press('Escape');
+  await page.locator('#btnLevels').dblclick();
+  assert.equal((await state(page)).screen, 'levels');
+  assert.deepEqual((await stats(page)).rounds, [], 'no level started');
+  // one click on a card or a tile still works
+  await page.keyboard.press('Escape');
+  await page.click('#btnChars');
+  await page.click('#chars .char:nth-child(4)');
+  saved = await page.evaluate(() => __game.save);
+  assert.deepEqual([saved.candies, saved.char], [130, 3]);
+});
+
+test('with every level won the title says the Play button goes to the endless sky', async t => {
+  const page = await game(t, { save: SAVE({ unlocked: 12, stars: [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3] }) });
+  assert.equal(await page.locator('#titleLevel small').textContent(), 'بلا نهاية');
+  assert.equal(await page.locator('#titleLevel b svg').count(), 1);
+  await page.click('#btnPlay');
+  assert.equal((await state(page)).level, 0);
+  await page.keyboard.press('Escape');
+  await page.click('#btnHome');
+  await page.evaluate(() => { const s = JSON.parse(localStorage.getItem('sg:cloud-hop:save')); s.stars[11] = 0; localStorage.setItem('sg:cloud-hop:save', JSON.stringify(s)); });
+  await page.reload();
+  await page.waitForFunction(() => window.__game && window.ch.step);
+  assert.equal(await page.locator('#titleLevel small').textContent(), 'المرحلة');
+  assert.equal(await page.locator('#titleLevel b').textContent(), '12');
 });
 
 test('the endless sky: open after level 4, one bubble, and the best height is kept', async t => {

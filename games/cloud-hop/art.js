@@ -594,7 +594,7 @@
         for (var s = 0; s < 3; s++) { star(ctx, x - p.w * 0.3 + s * p.w * 0.3, y - 26 - (s % 2) * 8, 7, t * 4); ctx.fill(); }
       }
     }
-    function castleAt(p, x, y, t) {
+    function castleAt(p, x, y, t, w) {
       var s = sprite('castle', 520, 460, 260, 430, castle);
       put(ctx, s, x, y - 16);
       // waving flags on the towers
@@ -606,12 +606,14 @@
         ctx.beginPath(); ctx.moveTo(fx, fy - 46); ctx.quadraticCurveTo(fx + 22, fy - 52 + wave, fx + 44, fy - 40 + wave); ctx.lineTo(fx, fy - 28); ctx.closePath();
         ctx.fillStyle = ['#ffe14f', '#4fe0b0', '#ffe14f'][i]; ctx.fill(); ctx.stroke();
       }
-      // the sign: قلعة الغيوم
-      var sy = y - 16 - 250;
+      // the sign: قلعة الغيوم (it fades out as the «وصلت!» banner pops up in its place)
+      var sy = y - 16 - 250, a = w.won ? 1 - w.pt / 0.2 : 1;
+      if (a <= 0) return;
+      ctx.globalAlpha = a;
       rrect(ctx, x - 112, sy - 26, 224, 52, 26); ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 4; ctx.stroke();
       ctx.font = '700 30px Fredoka'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.direction = 'rtl';
       ctx.fillStyle = '#ff4f9a'; ctx.fillText('قلعة الغيوم', x, sy + 2);
-      ctx.direction = 'ltr';
+      ctx.direction = 'ltr'; ctx.globalAlpha = 1;
     }
     function drawMarshy(w, o, sx, sy, t, dt) {
       var m = w.m, since = w.t - m.land, s = 70;
@@ -680,7 +682,7 @@
       for (i = 0; i < w.plats.length; i++) {
         var p = w.plats[i], sy = Y(p.y);
         if (sy < -80 || sy > H + 60) { if (!(p.kind === 'castle' && sy > -80 && sy < H + 520)) continue; }
-        if (p.kind === 'castle') { castleAt(p, p.x, sy, t); }
+        if (p.kind === 'castle') { castleAt(p, p.x, sy, t, w); }
       }
       for (i = 0; i < w.plats.length; i++) {
         var q = w.plats[i], qy = Y(q.y);

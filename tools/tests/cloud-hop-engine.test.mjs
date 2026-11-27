@@ -276,6 +276,21 @@ test('power-ups lift Marshy at a steady speed for a while, then end', () => {
   assert.ok(CH.POWERS.rocket.vy > CH.POWERS.hat.vy && CH.POWERS.hat.vy > CH.POWERS.balloon.vy);
 });
 
+test('a power-up flight that reaches the castle ends with a hop onto it', () => {
+  for (const kind of ['balloon', 'hat', 'rocket']) for (const x of [80, 640, 1200]) {
+    const w = lab(5);
+    w.castleY = 1500;
+    add(w, 'castle', 640, 1500, CH.W + 240);
+    fly(w, 800, 0, x);
+    w.m.power = kind; w.m.pt = CH.POWERS[kind].t; w.m.vy = CH.POWERS[kind].vy;
+    let top = 0;
+    const events = run(w, { seconds: 4, input: w => { top = Math.max(top, w.m.y); return {}; }, until: (w, ev) => ev.some(e => e.type === 'arrive' || e.type === 'fall') });
+    assert.ok(types(events).includes('arrive'), kind + ' at ' + x + ' lands on the castle');
+    assert.equal(w.falls, 0);
+    assert.ok(top > 1500 && top < 1500 + 120, kind + ': just over the top, not far above it: ' + (top - 1500));
+  }
+});
+
 test('candies add up, a streak of higher landings doubles then triples them', () => {
   const w = lab();
   w.items.push({ kind: 'candy', x: 640, y: 232, got: false, ph: 0 });

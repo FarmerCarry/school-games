@@ -56,8 +56,10 @@
 
   /* ------------------------------------------------------------ the title */
   function refreshTitle() {
-    var n = CH.nextLevel(save);
-    $('titleLevel').querySelector('b').textContent = n ? String(n) : '12';
+    var n = CH.nextLevel(save), lv = $('titleLevel');
+    // Every level won: Play goes to the endless sky, and the chip says so.
+    lv.querySelector('small').textContent = n ? 'المرحلة' : 'بلا نهاية';
+    lv.querySelector('b').innerHTML = n || '<svg aria-hidden="true"><use href="#i-inf"/></svg>';
     $('titleStars').querySelector('b').textContent = CH.totalStars(save) + '/36';
     $('titleCandies').querySelector('b').textContent = Kit.fmt(save.candies);
     var open = CH.endlessOpen(save);
@@ -91,7 +93,8 @@
     if (!save.played) { save.played = true; persist(); }
     coach = !save.coach;
     if (coach) Kit.stats.tutorial('start');
-    showBanner(level ? 'المرحلة ' + level : 'بلا نهاية', '#fff', 1.7, level ? CH.WORLDS[CH.worldOf(level)].name : 'إلى أعلى ما تستطيع!');
+    // On a first visit the steering hint shows instead of the level banner (it would cover it).
+    else showBanner(level ? 'المرحلة ' + level : 'بلا نهاية', '#fff', 1.7, level ? CH.WORLDS[CH.worldOf(level)].name : 'إلى أعلى ما تستطيع!');
     setScreen('play');
     say(level ? 'المرحلة ' + level : 'بلا نهاية');
   }
@@ -105,6 +108,7 @@
   function resume() {
     if (!world) { play(); return; }
     J.select();
+    mouse.on = false; // the pointer was on the pause screen: steer again once it moves over the sky
     setScreen('play');
   }
   function restart() { startRound(cur); }
@@ -282,7 +286,8 @@
   }
 
   /* ---------------------------------------------------------------- input */
-  function on(el, fn) { el.addEventListener('click', function (e) { e.stopPropagation(); fn(); if (e.detail > 0) el.blur(); }); }
+  // The second click of a double-click is ignored: it would land on the screen the first opened.
+  function on(el, fn) { el.addEventListener('click', function (e) { e.stopPropagation(); if (e.detail > 1) return; fn(); if (e.detail > 0) el.blur(); }); }
   on($('btnPlay'), play);
   on($('btnLevels'), openLevels);
   on($('btnChars'), openShop);
@@ -362,9 +367,11 @@
   }
   function float(text, x, y, color, size, vy) {
     if (floats.length > 36) floats.shift();
-    floats.push({ text: text, x: x, y: y, color: color || '#fff', size: size || 34, vy: vy || -120, life: 1, rtl: /[؀-ۿ]/.test(text) });
+    var o = { text: text, x: x, y: y, color: color || '#fff', size: size || 34, vy: vy || -120, life: 1, rtl: /[؀-ۿ]/.test(text) };
+    floats.push(o);
+    return o;
   }
-  function showBanner(text, color, secs, sub) { banner = { text: text, sub: sub || '', color: color || '#fff', t: 0, max: secs || 1.6, y: 205 }; }
+  function showBanner(text, color, secs, sub) { banner = { text: text, sub: sub || '', color: color || '#fff', t: 0, max: secs || 1.6, y: 185 }; }
   function burst(x, y, colors, n, speed, o) {
     o = o || {};
     fx.burst(x, y, { count: n, colors: colors, speed: speed, life: o.life || 0.6, size: o.size || 6, gravity: o.gravity == null ? 500 : o.gravity });
@@ -387,7 +394,7 @@
       case 'hop': boing(charId(), 1, 1); break;
       case 'mult':
         J.chime(2);
-        float('حلوى ×' + e.a, sx, sy - 140, '#ff9ee0', 54, -70);
+        float('حلوى \u2066×' + e.a + '\u2069', sx, sy - 140, '#ff9ee0', 54, -70);
         break;
       case 'candy':
         candyCount++;
@@ -481,7 +488,11 @@
       case 'mile':
         if (e.a % 50 === 0) { J.chime(1); float(CHEERS[(e.a / 50 - 1) % CHEERS.length], 640, 200, '#ffe14f', 50, -60); }
         else AU.tone({ freq: 880, to: 1320, type: 'triangle', dur: 0.08, vol: 0.06 });
-        float('⁦' + e.a + '⁩ م', 640 + (e.a % 20 ? 170 : -170), 70, '#fff', 34, -40);
+        // A fast climb (a power-up, a spring) updates the one milestone popup instead of piling them up.
+        var tag = '⁦' + e.a + '⁩ م', mf = null;
+        for (var i = 0; i < floats.length; i++) if (floats[i].mile) mf = floats[i];
+        if (mf) { mf.text = tag; mf.life = 1; }
+        else float(tag, 640 + (e.a % 20 ? 170 : -170), 70, '#fff', 34, -40).mile = true;
         if (!w.level && best0 > 0 && !passedBest && w.height > best0) {
           passedBest = true;
           showBanner('رقم قياسي جديد!', '#ffe14f', 1.6);
@@ -625,7 +636,7 @@
       ctx.globalAlpha = k > 0.8 ? M.max(0, (1 - k) / 0.2) : 1;
       ctx.save(); ctx.translate(640, banner.y); ctx.scale(s, s);
       text(banner.text, 0, 0, 92, banner.color, 'center', true);
-      if (banner.sub) text(banner.sub, 0, 76, 36, '#fff', 'center', true);
+      if (banner.sub) text(banner.sub, 0, 64, 36, '#fff', 'center', true); // clear of Marshy's first boing
       ctx.restore();
       ctx.globalAlpha = 1;
     }
