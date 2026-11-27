@@ -175,10 +175,17 @@ test('title demo, idle P1 stationary guarantee, ArrowUp launch, drift boost, pau
   st = await state(page);
   assert.ok(st.karts[0].boostT > 0.3, 'drift release grants mini-turbo');
 
-  // Pause freezes simulation AND stops redraws
+  // Pause freezes simulation AND stops redraws. With software WebGL the one paused frame
+  // waits for the GPU fence and its pacing in real time (art.js mayDraw), so let it land first.
+  const drawsBeforePause = (await state(page)).draws;
   await page.click('#btnPause');
   await step(page, 2);
+  for (let i = 0; i < 60 && (await state(page)).draws === drawsBeforePause; i++) {
+    await page.waitForTimeout(50);
+    await step(page, 1);
+  }
   const pausedA = await state(page);
+  assert.equal(pausedA.draws, drawsBeforePause + 1, 'the paused frame is drawn once');
   assert.equal(pausedA.screen, 'pause');
   await step(page, 40);
   const pausedB = await state(page);

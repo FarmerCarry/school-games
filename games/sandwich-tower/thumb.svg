@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <defs>
+    <radialGradient id="bg" cx="0.4" cy="0.45" r="0.75">
+      <stop offset="0" stop-color="#fff4c9"/>
+      <stop offset="0.6" stop-color="#ffd36e"/>
+      <stop offset="1" stop-color="#ffab3d"/>
+    </radialGradient>
+  </defs>
+  <rect width="400" height="400" fill="url(#bg)"/>
+  <g fill="#fff" opacity="0.28">
+    <path d="M0 0 L60 0 L0 60 Z M110 0 L170 0 L0 170 L0 110 Z M220 0 L280 0 L0 280 L0 220 Z"/>
+  </g>
+
+  <!-- the hungry hippo, mouth wide open -->
+  <g transform="translate(326 92)" stroke="#3a2216" stroke-width="6" stroke-linejoin="round">
+    <circle cx="-54" cy="-68" r="20" fill="#a66cf0"/><circle cx="54" cy="-70" r="20" fill="#a66cf0"/>
+    <circle cx="-54" cy="-68" r="9" fill="#ff9fc6" stroke="none"/><circle cx="54" cy="-70" r="9" fill="#ff9fc6" stroke="none"/>
+    <ellipse cx="0" cy="0" rx="86" ry="84" fill="#a66cf0"/>
+    <ellipse cx="0" cy="34" rx="70" ry="46" fill="#cfa6ff" stroke="none"/>
+    <ellipse cx="-30" cy="-36" rx="21" ry="22" fill="#fff" stroke-width="5"/>
+    <ellipse cx="24" cy="-40" rx="21" ry="22" fill="#fff" stroke-width="5"/>
+    <circle cx="-39" cy="-28" r="10" fill="#3a2216" stroke="none"/><circle cx="15" cy="-32" r="10" fill="#3a2216" stroke="none"/>
+    <circle cx="-42" cy="-32" r="3.5" fill="#fff" stroke="none"/><circle cx="12" cy="-36" r="3.5" fill="#fff" stroke="none"/>
+    <ellipse cx="-14" cy="-4" rx="6" ry="4" fill="#7a3fc4" stroke="none"/><ellipse cx="14" cy="-6" rx="6" ry="4" fill="#7a3fc4" stroke="none"/>
+    <ellipse cx="-2" cy="40" rx="50" ry="34" fill="#5a1428"/>
+    <ellipse cx="-2" cy="58" rx="30" ry="12" fill="#ff6b8a" stroke="none"/>
+    <rect x="-24" y="8" width="18" height="16" rx="3" fill="#fff" stroke-width="3.5"/>
+    <rect x="0" y="8" width="18" height="16" rx="3" fill="#fff" stroke-width="3.5"/>
+    <ellipse cx="-58" cy="18" rx="13" ry="8" fill="#ff8fc0" stroke="none" opacity="0.7"/>
+  </g>
+
+  <!-- plate -->
+  <ellipse cx="176" cy="330" rx="132" ry="17" fill="#dff1ff" stroke="#3a2216" stroke-width="5"/>
+  <ellipse cx="176" cy="326" rx="104" ry="9" fill="#b9dcff"/>
+
+  <g stroke="#3a2216" stroke-width="4.5" stroke-linejoin="round" stroke-linecap="round">
+    <!-- bottom bread -->
+    <rect x="86" y="296" width="180" height="28" rx="11" fill="#f7cf8a"/>
+    <path d="M96 304 Q176 298 256 304" fill="none" stroke="#e0a85a" stroke-width="4"/>
+    <!-- lettuce -->
+    <path d="M84 296 Q94 280 106 292 Q116 278 128 292 Q140 278 152 292 Q164 278 176 292 Q188 278 200 292 Q212 278 224 292 Q236 278 248 292 Q260 278 272 296 Z" fill="#7ed957"/>
+    <!-- tomato -->
+    <rect x="90" y="266" width="168" height="22" rx="10" fill="#ff5a4f"/>
+    <g fill="#ffd6c9" stroke="none"><circle cx="112" cy="277" r="4"/><circle cx="150" cy="277" r="4"/><circle cx="196" cy="277" r="4"/><circle cx="236" cy="277" r="4"/></g>
+    <!-- the sneaker -->
+    <path d="M100 262 L100 244 Q100 234 112 234 L150 236 Q170 222 196 230 L238 238 Q258 242 262 252 L262 262 Z" fill="#4f9bff"/>
+    <rect x="96" y="254" width="170" height="12" rx="6" fill="#fff"/>
+    <path d="M100 260 L262 260" stroke="#ff4f6d" stroke-width="3.5"/>
+    <path d="M160 236 L172 246 L184 236 L196 246" fill="none" stroke="#fff" stroke-width="4"/>
+    <path d="M214 244 L236 244 L226 236 Z" fill="#ffd23f" stroke-width="3"/>
+    <!-- cheese with drips -->
+    <path d="M92 214 L262 210 L264 226 L232 228 L226 242 L218 228 L140 230 L132 244 L124 230 L90 230 Z" fill="#ffd23f"/>
+    <!-- sleeping cat -->
+    <path d="M98 190 Q92 168 112 176" fill="none" stroke="#ff9a3d" stroke-width="9"/>
+    <path d="M98 190 Q92 168 112 176" fill="none" stroke-width="3"/>
+    <rect x="100" y="178" width="148" height="34" rx="17" fill="#ff9a3d"/>
+    <path d="M140 180 L144 196 M164 179 L166 196 M188 179 L188 196" fill="none" stroke="#d9661c" stroke-width="5"/>
+    <path d="M228 170 L232 150 L244 164 Z M262 164 L270 148 L276 168 Z" fill="#ff9a3d"/>
+    <circle cx="252" cy="186" r="26" fill="#ff9a3d"/>
+    <path d="M236 184 Q242 190 248 184 M256 182 Q262 188 268 182" fill="none" stroke-width="3.5"/>
+    <ellipse cx="252" cy="196" rx="4" ry="3" fill="#ff6b8a" stroke-width="2.5"/>
+    <!-- patty -->
+    <rect x="94" y="152" width="154" height="26" rx="12" fill="#8a4a22"/>
+    <path d="M112 160 L124 170 M146 160 L158 170 M180 160 L192 170 M214 160 L226 170" stroke="#5c2c10" stroke-width="4"/>
+    <!-- lettuce -->
+    <path d="M88 154 Q98 138 110 150 Q120 136 132 150 Q144 136 156 150 Q168 136 180 150 Q192 136 204 150 Q216 136 228 150 Q240 136 254 154 Z" fill="#7ed957"/>
+    <!-- the top bun, flying in -->
+    <g transform="rotate(-8 160 98)">
+      <path d="M84 112 Q84 64 160 62 Q236 64 236 112 Z" fill="#f2a64a"/>
+      <path d="M100 82 Q140 68 172 70" fill="none" stroke="#ffd59a" stroke-width="6"/>
+      <g fill="#fff6dc" stroke-width="2.5"><ellipse cx="124" cy="80" rx="5" ry="3"/><ellipse cx="160" cy="74" rx="5" ry="3"/><ellipse cx="198" cy="80" rx="5" ry="3"/><ellipse cx="140" cy="92" rx="5" ry="3"/><ellipse cx="182" cy="92" rx="5" ry="3"/></g>
+      <circle cx="146" cy="100" r="7" fill="#fff" stroke-width="3"/><circle cx="170" cy="100" r="7" fill="#fff" stroke-width="3"/>
+      <circle cx="148" cy="102" r="3" fill="#3a2216" stroke="none"/><circle cx="172" cy="102" r="3" fill="#3a2216" stroke="none"/>
+    </g>
+    <path d="M70 70 L52 66 M68 88 L46 88 M74 52 L60 42" fill="none" stroke="#fff" stroke-width="6"/>
+  </g>
+  <text x="226" y="128" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-weight="bold" font-size="22" fill="#3a2216" transform="rotate(-10 226 128)">z</text>
+
+  <!-- title -->
+  <g font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-weight="bold" text-anchor="middle" direction="rtl">
+    <text x="200" y="389" font-size="56" fill="#3a2216" stroke="#3a2216" stroke-width="16" stroke-linejoin="round">برج السندويش</text>
+    <text x="200" y="382" font-size="56" stroke="#3a2216" stroke-width="9" stroke-linejoin="round" paint-order="stroke"><tspan fill="#ffe14f">برج</tspan> <tspan fill="#fff">السندويش</tspan></text>
+  </g>
+</svg>

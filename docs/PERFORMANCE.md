@@ -1419,3 +1419,19 @@ limits `rail-rush` 142,000 → 144,500, `neon-slope` 122,000 → 124,500, `road-
 Tank Splat's tutorial match (#110) and Kit's frame hook (#107) and round messages (#108) each
 fit on their own, but together bring the built Tank Splat page to **117,096 bytes**, 96 over its
 limit: `tank-splat` 117,000 → 117,500.
+
+## Five new 2D arcade games, 27 November 2026
+
+برج السندويش (`sandwich-tower`), حديقة البونك (`bonk-garden`), نطّة السحاب (`cloud-hop`),
+عاصفة الكرات (`ball-storm`) and بينبول الضفدع (`frog-pinball`) are plain 2D-canvas games (no
+three.js, no shadows, no filters, no canvas reads, at most 1.5 device pixels), so none of them
+needs a light-graphics mode. Static art (skies, tables, gardens, brick and ball sprites) is drawn
+once into offscreen canvases; the draw loops reuse their objects and build each gradient once.
+All five hold 60 fps in headless Chromium with software rendering, including Ball Storm with 500
+balls (all balls of one skin are one path) and Frog Pinball's multiball (480 Hz physics, 8
+substeps a frame). Built HTML and limits: `sandwich-tower` **106,923** (`109,000`),
+`bonk-garden` **103,841** (`106,000`), `cloud-hop` **109,772** (`112,000`), `ball-storm`
+**109,003** (`111,500`), `frog-pinball` **110,857** (`113,000`). Their catalog entries and
+inlined thumbnails (5.7 KB each on average, under the site's 6.8 KB) bring the built portal from
+486,391 to **519,163 bytes** (limit `487,000` → `521,000`), and the offline precache (72 files,
+58 games) from 7,634,688 to **8,207,856 bytes** (limit `7,700,000` → `8,300,000`).

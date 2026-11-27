@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#6fcbff"/>
+      <stop offset="1" stop-color="#d4f3ff"/>
+    </linearGradient>
+    <linearGradient id="hole" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5a3a22"/>
+      <stop offset="0.5" stop-color="#3a2414"/>
+    </linearGradient>
+  </defs>
+  <rect width="400" height="400" fill="url(#sky)"/>
+  <path d="M-10 150 Q60 112 130 132 Q210 152 280 118 Q340 92 410 128 L410 170 L-10 170 Z" fill="#a6e87e"/>
+  <rect y="160" width="400" height="240" fill="#7cd651"/>
+  <rect y="196" width="400" height="30" fill="#70c947"/>
+  <rect y="262" width="400" height="44" fill="#70c947"/>
+  <rect y="346" width="400" height="60" fill="#70c947"/>
+  <!-- picket fence -->
+  <g fill="#ffffff" stroke="#2a1d4e" stroke-width="3" stroke-linejoin="round">
+    <rect x="-5" y="150" width="410" height="8" rx="3"/>
+    <path d="M6 172 L6 140 L14 132 L22 140 L22 172 Z M40 172 L40 140 L48 132 L56 140 L56 172 Z M342 172 L342 140 L350 132 L358 140 L358 172 Z M376 172 L376 140 L384 132 L392 140 L392 172 Z"/>
+  </g>
+  <!-- flowers -->
+  <g>
+    <circle cx="40" cy="250" r="7" fill="#ff5fa2"/><circle cx="52" cy="244" r="7" fill="#ff5fa2"/><circle cx="50" cy="258" r="7" fill="#ff5fa2"/><circle cx="46" cy="251" r="5" fill="#ff9f2e"/>
+    <circle cx="356" cy="236" r="7" fill="#ffffff"/><circle cx="368" cy="230" r="7" fill="#ffffff"/><circle cx="366" cy="244" r="7" fill="#ffffff"/><circle cx="362" cy="237" r="5" fill="#ff9f2e"/>
+  </g>
+  <!-- the hole -->
+  <g stroke="#2a1d4e" stroke-width="5">
+    <ellipse cx="200" cy="330" rx="150" ry="58" fill="#b77a43"/>
+    <ellipse cx="200" cy="320" rx="112" ry="38" fill="url(#hole)"/>
+  </g>
+  <!-- the surprised potato, squashed by the bonk -->
+  <g stroke="#2a1d4e" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M88 330 C78 266 120 208 200 210 C282 212 324 262 314 330 Z" fill="#d6a062" stroke-width="7"/>
+    <g fill="#ad7740" stroke="none">
+      <ellipse cx="120" cy="300" rx="8" ry="6"/><ellipse cx="282" cy="296" rx="7" ry="5"/><ellipse cx="250" cy="236" rx="6" ry="5"/>
+    </g>
+    <path d="M110 264 L92 236 M290 262 L310 234" fill="none" stroke-width="6"/>
+    <circle cx="90" cy="232" r="11" fill="#ffffff" stroke-width="5"/>
+    <circle cx="312" cy="230" r="11" fill="#ffffff" stroke-width="5"/>
+    <circle cx="164" cy="262" r="30" fill="#ffffff" stroke-width="6"/>
+    <circle cx="238" cy="258" r="26" fill="#ffffff" stroke-width="6"/>
+    <ellipse cx="200" cy="304" rx="17" ry="20" fill="#7a1f3d" stroke-width="5"/>
+    <ellipse cx="200" cy="314" rx="9" ry="6" fill="#ff7a9a" stroke="none"/>
+  </g>
+  <circle cx="172" cy="252" r="14" fill="#2a1d4e"/>
+  <circle cx="230" cy="248" r="12" fill="#2a1d4e"/>
+  <circle cx="167" cy="247" r="4" fill="#ffffff"/>
+  <circle cx="226" cy="244" r="3.5" fill="#ffffff"/>
+  <!-- the hole's front edge over the potato -->
+  <path d="M88 320 A112 38 0 0 0 312 320" fill="none" stroke="#c98d52" stroke-width="8"/>
+  <path d="M88 320 A112 38 0 0 0 312 320" fill="none" stroke="#2a1d4e" stroke-width="4"/>
+  <!-- dizzy stars -->
+  <g fill="#ffe14f" stroke="#2a1d4e" stroke-width="3" stroke-linejoin="round">
+    <path d="M118 196 l5 10 11 2 -8 8 2 11 -10 -5 -10 5 2 -11 -8 -8 11 -2 Z"/>
+    <path d="M232 180 l4 8 9 1 -6 6 1 9 -8 -4 -8 4 1 -9 -6 -6 9 -1 Z"/>
+  </g>
+  <!-- the rubber chicken hammer -->
+  <g stroke="#2a1d4e" stroke-linejoin="round" stroke-linecap="round" transform="translate(392 96) rotate(45)">
+    <path d="M-7 -6 L-12 -26 M7 -6 L12 -26" fill="none" stroke="#ff9f2e" stroke-width="6"/>
+    <ellipse cx="0" cy="44" rx="25" ry="54" fill="#ffe14f" stroke-width="6"/>
+    <ellipse cx="18" cy="48" rx="10" ry="22" fill="#ffd23f" stroke-width="4"/>
+    <rect x="-11" y="86" width="22" height="34" rx="11" fill="#ffe14f" stroke-width="5"/>
+    <circle cx="0" cy="128" r="30" fill="#ffe14f" stroke-width="6"/>
+    <g fill="#ff4f4f" stroke-width="4"><circle cx="-11" cy="158" r="9"/><circle cx="0" cy="162" r="10"/><circle cx="11" cy="158" r="9"/></g>
+    <path d="M24 136 L56 128 L24 120 Z" fill="#ff9f2e" stroke-width="4"/>
+    <ellipse cx="16" cy="108" rx="7" ry="11" fill="#ff4f4f" stroke-width="3.5"/>
+    <circle cx="6" cy="136" r="12" fill="#ffffff" stroke-width="4"/>
+    <circle cx="9" cy="140" r="6" fill="#2a1d4e" stroke="none"/>
+  </g>
+  <!-- BONK -->
+  <g stroke="#2a1d4e" stroke-linejoin="round">
+    <path d="M70 92 L92 70 L96 96 L126 80 L116 106 L148 112 L118 124 L134 148 L104 138 L96 164 L82 138 L56 150 L64 124 L36 116 L64 104 L52 78 Z" fill="#ffe14f" stroke-width="5"/>
+  </g>
+  <g font-family="Fredoka, Arial, sans-serif" font-weight="700" text-anchor="middle" stroke="#2a1d4e" paint-order="stroke" stroke-linejoin="round">
+    <text x="92" y="128" font-size="34" fill="#ffffff" stroke-width="8">بونك!</text>
+    <text x="196" y="60" font-size="50" fill="#ffffff" stroke-width="12">حديقة البونك</text>
+    <text x="46" y="214" font-size="34" fill="#ffffff" stroke-width="7">+1</text>
+  </g>
+</svg>

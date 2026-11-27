@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>حديقة البونك</title>
+<link rel="icon" type="image/svg+xml" href="../../favicon.svg">
+<link rel="stylesheet" href="../../shared/game.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<svg class="defs" aria-hidden="true" focusable="false" width="0" height="0">
+  <symbol id="i-play" viewBox="0 0 64 64"><path d="M22 11 Q18 9 18 14 L18 50 Q18 55 22 53 L52 35 Q56 32 52 29 Z"/></symbol>
+  <symbol id="i-back" viewBox="0 0 64 64"><path d="M10 32 L46 32 M34 16 L52 32 L34 48" fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 64 64"><rect x="15" y="12" width="12" height="40" rx="5"/><rect x="37" y="12" width="12" height="40" rx="5"/></symbol>
+  <symbol id="i-again" viewBox="0 0 64 64"><path d="M50 30 A19 19 0 1 1 41 15" fill="none" stroke="currentColor" stroke-width="9" stroke-linecap="round"/><path d="M33 4 L52 13 L37 27 Z"/></symbol>
+  <symbol id="i-home" viewBox="0 0 64 64"><path d="M8 32 L32 10 L56 32 L49 32 L49 54 L37 54 L37 40 L27 40 L27 54 L15 54 L15 32 Z"/></symbol>
+  <symbol id="i-star" viewBox="0 0 64 64"><path d="M32 4 L40.5 21.5 L60 24.3 L46 38 L49.3 57.4 L32 48.3 L14.7 57.4 L18 38 L4 24.3 L23.5 21.5 Z" stroke="#2a1d4e" stroke-width="4.5" stroke-linejoin="round"/></symbol>
+  <symbol id="i-map" viewBox="0 0 64 64"><path d="M6 14 L22 8 L42 14 L58 8 L58 50 L42 56 L22 50 L6 56 Z" fill="#fff" stroke="#2a1d4e" stroke-width="4" stroke-linejoin="round"/><path d="M22 8 L22 50 M42 14 L42 56" stroke="#2a1d4e" stroke-width="4"/><circle cx="32" cy="30" r="6" fill="#ff4f6d"/></symbol>
+  <symbol id="i-hammer" viewBox="0 0 64 64"><rect x="28" y="24" width="9" height="36" rx="4" fill="#ffd23f" stroke="#2a1d4e" stroke-width="4"/><rect x="8" y="6" width="48" height="24" rx="11" fill="#ff4f6d" stroke="#2a1d4e" stroke-width="4"/><rect x="4" y="4" width="9" height="28" rx="4" fill="#ffd23f" stroke="#2a1d4e" stroke-width="3.5"/><rect x="51" y="4" width="9" height="28" rx="4" fill="#ffd23f" stroke="#2a1d4e" stroke-width="3.5"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 64 64"><path d="M20 28 L20 20 A12 12 0 0 1 44 20 L44 28" fill="none" stroke="currentColor" stroke-width="8"/><rect x="12" y="27" width="40" height="30" rx="8"/></symbol>
+  <symbol id="i-loop" viewBox="0 0 64 64"><path d="M32 32 C24 20 8 20 8 32 C8 44 24 44 32 32 C40 20 56 20 56 32 C56 44 40 44 32 32 Z" fill="none" stroke="currentColor" stroke-width="8" stroke-linejoin="round"/></symbol>
+</svg>
+
+<canvas id="game" tabindex="0" aria-label="حديقة البونك"></canvas>
+
+<div id="ui">
+  <div id="hud" hidden>
+    <button type="button" id="btnPause" class="bk-btn bk-round" aria-label="استراحة" title="استراحة (P / Esc)"><svg aria-hidden="true"><use href="#i-pause"/></svg></button>
+  </div>
+
+  <section id="scrTitle" class="screen" aria-label="حديقة البونك">
+    <h1 class="logo"><span class="l1">حديقة</span><span class="l2">البونك!</span></h1>
+    <button type="button" id="btnPlay" class="bk-btn bk-play ring" aria-label="العب"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
+    <div class="title-chips">
+      <span class="chip" id="titleStars" aria-label="النجوم"><svg aria-hidden="true"><use href="#i-star"/></svg><b>0</b></span>
+      <span class="chip" id="titleLevel" aria-label="المرحلة"><small>المرحلة</small><b>1</b></span>
+    </div>
+    <div class="title-side">
+      <button type="button" id="btnLevels" class="bk-btn bk-wide"><svg aria-hidden="true"><use href="#i-map"/></svg><span>المراحل</span></button>
+      <button type="button" id="btnHammers" class="bk-btn bk-wide pink"><svg aria-hidden="true"><use href="#i-hammer"/></svg><span>المطارق</span></button>
+    </div>
+    <div class="howto">
+      <span><span class="sg-key">انقر</span> على المشاغب: بونك!</span>
+      <span>أو الأزرار <span dir="ltr"><span class="sg-key">Q</span><span class="sg-key">W</span><span class="sg-key">E</span></span></span>
+      <span>لا تضرب الأرنب <svg class="bunny" viewBox="0 0 40 40" aria-hidden="true"><g stroke="#2a1d4e" stroke-width="3" stroke-linejoin="round"><ellipse cx="13" cy="11" rx="5" ry="10" fill="#fff"/><ellipse cx="27" cy="11" rx="5" ry="10" fill="#fff"/><ellipse cx="20" cy="26" rx="14" ry="12" fill="#fff"/></g><circle cx="15" cy="25" r="2.4" fill="#2a1d4e"/><circle cx="25" cy="25" r="2.4" fill="#2a1d4e"/><ellipse cx="20" cy="30" rx="2.6" ry="2" fill="#ff7aa8"/><circle cx="10" cy="30" r="2.6" fill="#ffb3cf"/><circle cx="30" cy="30" r="2.6" fill="#ffb3cf"/></svg></span>
+    </div>
+  </section>
+
+  <section id="scrPause" class="screen dim" aria-label="استراحة" hidden>
+    <div class="card">
+      <h2>استراحة</h2>
+      <button type="button" id="btnResume" class="bk-btn bk-go" aria-label="تابع"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
+      <div class="row">
+        <button type="button" id="btnHome" class="bk-btn bk-round big" aria-label="البداية"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
+        <button type="button" id="btnRestart" class="bk-btn bk-round big" aria-label="أعد المرحلة"><svg aria-hidden="true"><use href="#i-again"/></svg></button>
+      </div>
+    </div>
+  </section>
+
+  <section id="scrResult" class="screen dim" aria-label="النتيجة" hidden>
+    <div class="card res-card">
+      <div id="resBest" class="new-best" hidden>رقم قياسي جديد!</div>
+      <h2 id="resTitle">رائع!</h2>
+      <div class="res-stars" id="resStars">
+        <svg class="st" aria-hidden="true"><use href="#i-star"/></svg><svg class="st" aria-hidden="true"><use href="#i-star"/></svg><svg class="st" aria-hidden="true"><use href="#i-star"/></svg>
+      </div>
+      <div class="res-score"><small>النقاط</small><b id="resScore">0</b></div>
+      <div class="res-sub" id="resSub"></div>
+      <div id="resNote" class="res-note" hidden><canvas id="resHammer" width="150" height="120"></canvas><span></span></div>
+      <div class="row">
+        <button type="button" id="btnMenu" class="bk-btn bk-round big" aria-label="القائمة"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
+        <button type="button" id="btnAgain" class="bk-btn bk-round big" aria-label="مرة أخرى"><svg aria-hidden="true"><use href="#i-again"/></svg></button>
+        <button type="button" id="btnNext" class="bk-btn bk-go" aria-label="التالي"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
+      </div>
+    </div>
+  </section>
+
+  <section id="scrLevels" class="screen dim" aria-label="المراحل" hidden>
+    <div class="card wide-card">
+      <div class="card-head">
+        <button type="button" id="levelsBack" class="bk-btn bk-round" aria-label="رجوع"><svg aria-hidden="true"><use href="#i-back"/></svg></button>
+        <h2>المراحل</h2>
+        <span class="chip" id="levelsStars"><svg aria-hidden="true"><use href="#i-star"/></svg><b>0</b></span>
+      </div>
+      <div id="worlds"></div>
+      <button type="button" id="btnEndless" class="endless"><svg aria-hidden="true"><use href="#i-loop"/></svg><b>بلا نهاية</b><span></span></button>
+    </div>
+  </section>
+
+  <section id="scrHammers" class="screen dim" aria-label="المطارق" hidden>
+    <div class="card wide-card">
+      <div class="card-head">
+        <button type="button" id="hammersBack" class="bk-btn bk-round" aria-label="رجوع"><svg aria-hidden="true"><use href="#i-back"/></svg></button>
+        <h2>المطارق</h2>
+        <span class="chip" id="hammersStars"><svg aria-hidden="true"><use href="#i-star"/></svg><b>0</b></span>
+      </div>
+      <div id="hammerGrid" class="hammer-grid" role="group" aria-label="المطارق"></div>
+    </div>
+  </section>
+
+  <section id="scrError" class="screen dim" hidden>
+    <div class="card"><h2>عذرًا!</h2><p>تعذّر تشغيل اللعبة. جرّب لعبة أخرى.</p></div>
+  </section>
+</div>
+<div id="live" class="sr" aria-live="polite"></div>
+
+<script src="../../shared/kit.js"></script>
+<script src="../../shared/juice.js"></script>
+<script src="engine.js"></script>
+<script src="art.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

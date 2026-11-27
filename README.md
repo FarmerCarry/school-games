@@ -3,7 +3,7 @@
 A light, ad-free games website **in Arabic** for children aged 5–11: a small Poki-style portal
 with original browser games, all written from scratch for this site. The site and all of its
 games are in Arabic, laid out right-to-left. The games scale from a 5-year-old who has never
-held a mouse to an 11-year-old expert (28 of the 53 games—including Bubble Bop, Road Hopper,
+held a mouse to an 11-year-old expert (33 of the 58 games—including Bubble Bop, Road Hopper,
 Dino 3D, Beat Dash, Math Gates, Word Garden, Shortcut Factory, Robo Swarm and Balloon Blast—adapt
 their difficulty dynamically via `Kit.dda` to how children play on each PC), and none of them
 plays background music.
@@ -29,7 +29,7 @@ Only `js/telemetry.js` sends, and only when the fast build is given the server's
 the address, the offline ZIP run from a folder and a browser with Global Privacy Control send
 nothing. Details, the exact fields and how to turn it off: [`docs/TELEMETRY.md`](docs/TELEMETRY.md).
 
-## The games (53)
+## The games (58)
 
 | Game | English name | Players | Type |
 |---|---|---|---|
@@ -42,6 +42,11 @@ nothing. Details, the exact fields and how to turn it off: [`docs/TELEMETRY.md`]
 | عدّاء المفاتيح | Key Runner (find the keys on the school keyboard) | 1-2 | تحديات، لاعبان |
 | مغامرة الكيبورد | Keyboard Obby (hop across a giant 3D school keyboard) | 1 | تحديات، أركيد |
 | زوووم +1 | Zooom +1 (silly +1-speed runner on a road of giant keycaps) | 1 | جري، أركيد |
+| برج السندويش | Sandwich Tower (one-button sandwich stacker that a giant face eats + 2-player race) | 1-2 | أركيد، لاعبان |
+| حديقة البونك | Bonk Garden (goofy whack-a-mole with a squeaky hammer) | 1 | أركيد، تحديات |
+| نطّة السحاب | Cloud Hop (a bouncy marshmallow climbs the sky from cloud to cloud) | 1 | أركيد، تحديات |
+| عاصفة الكرات | Ball Storm (brick breaker where one ball becomes hundreds) | 1 | أركيد |
+| بينبول الضفدع | Frog Pinball (swamp-party pinball with a ball-gulping giant frog) | 1 | أركيد |
 | حديقة الكلمات | Word Garden (type the missing letter, Arabic + English) | 1 | ألغاز، تحديات |
 | مصنع الاختصارات | Shortcut Factory (Ctrl+C, V, X, Z and other shortcuts) | 1 | ألغاز، تحديات |
 | ضربة الطلاء | Splat Strike (3D paint-blaster arena vs bots) | 1 | تصويب، تحدي الروبوتات |
@@ -197,6 +202,79 @@ for a while, and chests hold trophies. Trophies buy bouncier shoes, a trophy mul
 runners (a potato, a rubber duck, a pickle, a cupcake, a golden toaster…). From stage 11 a rebirth starts
 again at stage 1 with more speed per step for good. Six candy themes, no end to the stages, `Kit.dda`
 sets how busy the road is, and the light 2D canvas stays smooth on the lab PCs. P or Esc pauses.
+
+**برج السندويش (Sandwich Tower)** is a goofy one-button stacker. An ingredient slides above the
+plate; press Space, Enter, ↓, S or click to drop it. Whatever hangs over the piece below is sliced
+off and tumbles away with a splat, so the next piece is only as wide as what was left. A drop right
+on top is **مثالي!**: it snaps into place, scores +3 with a rising chime, and three perfects in a
+row grow the piece back. Silly things land in the sandwich too: a snoring cat, a sneaker, a rubber
+duck, a pillow, a toaster with googly eyes, a cactus… When the sandwich is tall enough the top bun
+drops and a giant face (a purple hippo at first) slides in and eats it in big crunchy bites. Twelve
+levels in three worlds: the school canteen is a gentle slide (levels 1–2 cannot be lost), in the
+cloud picnic pieces come from alternating sides and some wobble, and in the space diner pieces swing
+on a crane rope and fall slowly. From level 3 a piece that misses costs one of three hearts. «إلى
+القمر» climbs past the clouds into space and a candy galaxy, with milestones every 25 pieces. «تحدّي
+اللاعبين» puts two towers side by side (S/Space against ↓/Enter, or a click on your half); first to
+15 wins. Stars unlock six more eaters (a T-rex, a robot, a shark, a fluffy monster, an alien and
+grandpa walrus). `Kit.dda` sets the slide speed and how wide a perfect is, and the light 2D canvas
+stays smooth on the lab PCs. P or Esc pauses.
+
+**حديقة البونك (Bonk Garden)** is a goofy whack-a-mole game. Googly-eyed potatoes and carrots pop
+out of a 3×3 garden (4×3 later); click one to bonk it with a squeaky toy hammer: «بونك!», it
+squashes flat with stars spinning round its head, and the combo climbs a pitch ladder. Keyboard
+players hit the holes with keys laid out like them (Q W E / A S D / Z X C, plus R F V on the bigger
+fields). New critters arrive one at a time, each with a one-line hint: a mushroom in a helmet that
+takes two bonks, a golden disco broccoli worth +5, a sneaky sock that hops to another hole, a pie
+thrower that splats harmless cream on the screen, crabs on the beach and bouncing aliens on the
+moon, and a cute bunny you must not bonk. Ten bonks in a row start a six-second «جنون!» frenzy:
+every hole pops, points are doubled and a giant hammer bonks the neighbours too. Twelve timed levels
+in three worlds (حقل الخضار، الشاطئ، قاعدة القمر) with three star goals each; level 1 is almost
+impossible to lose. Winning level 4 opens «بلا نهاية», an endless garden with three hearts where
+every critter that gets away costs one (except the bunny, which you must let go, and the frenzy's
+critters). Stars unlock seven more silly hammers, each with its own sound (a rubber chicken, a
+baguette, a giant spoon, a feather pillow, a fish, an inflatable hammer and a golden one). `Kit.dda`
+sets how long critters stay up, how often they pop and how many are up at once. P or Esc pauses.
+
+**عاصفة الكرات (Ball Storm)** is a goofy brick breaker where one ball becomes hundreds. Move a
+googly-eyed jelly paddle with the mouse or ← → / A D, and launch the ball with a click or Space (it
+also serves by itself after a few seconds). Each level is a picture made of smiling jelly bricks: a
+smiley, an ice cream, a burger, a cat, a rocket, a ringed planet, a UFO, a fish, an octopus, a crab,
+a giant face… Tough bricks need two or three hits, steel never breaks, TNT pops its neighbours and
+gems always drop a capsule. Catch **×3** and every ball splits into three, +10 sprays ten more, and
+×2 rings copy every ball that flies through them, up to a screen-filling storm of 500 balls. Other
+capsules give a giant paddle, fireballs, slow motion, a sticky paddle or a bubble shield. Each level
+has three lives; its stars are for the win, for losing no life and for a quick clear. Level 1's
+bubble floor never pops, so nobody loses it. 15 levels in three worlds (candy land, space, the deep
+sea) plus «بلا نهاية», an endless mode that opens after level 5: brick rows keep sliding down, and
+the round ends when they reach the line above the paddle or the last of three lives is lost. Stars
+unlock six balls and four paddles (a tennis ball, an eyeball, a donut, a banana, a skateboard, a
+long cat…). `Kit.dda` sets the ball speed, paddle width, how often capsules drop and how strongly
+they drift to the paddle («بلا نهاية» has its own, which also sets how fast the rows slide). P or
+Esc pauses.
+
+**نطّة السحاب (Cloud Hop)** is a bouncy sky climber. Marshy the marshmallow bounces by himself every
+time he lands on top of a cloud; children steer him left and right with ← → or A/D, or by moving the
+mouse, and wrap from one side of the screen to the other, climbing as high as they can. Twelve
+levels in three skies (سماء الصباح، غروب الحلوى، ليل الفضاء) end at a cloud castle. Along the way
+are trampolines, jelly springs, cookie clouds that crumble and grow back, thunder clouds, grumpy
+pigeons to stomp, UFO beams, and balloon, propeller-hat and rocket power-ups. Rescue bubbles catch a
+fall: unlimited in level 1, a few later. Candies, with a streak multiplier, buy seven more
+characters, each with its own boing. Winning level 4 opens an endless mode whose sky climbs from
+morning to a candy galaxy and keeps the best height. `Kit.dda` sets the gaps, cloud widths and how
+many moving, crumbling and grumpy things appear, and gives a PC that keeps struggling one extra
+rescue bubble. P or Esc pauses.
+
+**بينبول الضفدع (Frog Pinball)** is a goofy swamp-party pinball table. ← / A / Z and → / D / / work
+the flippers, and so do the left and right mouse buttons (alone or together); hold Space or ↓ to
+pull the plunger (a quick tap always reaches the table); P or Esc pauses. Three googly-eyed lily-pad
+bumpers go "بونغ!", three rubber-duck drop targets raise the multiplier (up to ×5) and light the
+kickbacks, the orbit loop scores "لفّة!", and a giant frog gulps a ball shot into its mouth ("غلب!")
+and burps it back out ("بُرررب!"); three feeds start «مطر الكرات» multiball. Nine mission levels
+(bumpers, ducks, feed the frog, 5,000 points, a loop, three feeds, ×3 multiplier, 20,000 points, two
+ball rains), each opened by the one before, and free play with a saved best, which opens once level
+1 is won. Level 1 cannot be lost: every ball comes back, both kickbacks stay lit, the slope is
+gentler and a lily bud springs balls back. Stars unlock 6 ball skins and night and candy ponds.
+`Kit.dda` sets gravity, ball save and bumper kick; physics run at 480 Hz.
 
 **حديقة الكلمات (Word Garden)** is a spelling game: a picture and its word with a glowing gap; type
 the missing letter and a flower grows in the garden. The school keyboard is always on screen and the

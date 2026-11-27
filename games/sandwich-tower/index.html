@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>برج السندويش</title>
+<link rel="icon" type="image/svg+xml" href="../../favicon.svg">
+<link rel="stylesheet" href="../../shared/game.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<svg class="defs" aria-hidden="true" focusable="false" width="0" height="0">
+  <symbol id="i-play" viewBox="0 0 64 64"><path d="M22 11 Q18 9 18 14 L18 50 Q18 55 22 53 L52 35 Q56 32 52 29 Z"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 64 64"><rect x="15" y="12" width="12" height="40" rx="5"/><rect x="37" y="12" width="12" height="40" rx="5"/></symbol>
+  <symbol id="i-again" viewBox="0 0 64 64"><path d="M50 30 A19 19 0 1 1 41 15" fill="none" stroke="currentColor" stroke-width="9" stroke-linecap="round"/><path d="M33 4 L52 13 L37 27 Z"/></symbol>
+  <symbol id="i-home" viewBox="0 0 64 64"><path d="M8 32 L32 10 L56 32 L49 32 L49 54 L37 54 L37 40 L27 40 L27 54 L15 54 L15 32 Z"/></symbol>
+  <symbol id="i-back" viewBox="0 0 64 64"><path d="M42 11 Q46 9 46 14 L46 50 Q46 55 42 53 L12 35 Q8 32 12 29 Z" transform="translate(64 0) scale(-1 1)"/></symbol>
+  <symbol id="i-star" viewBox="0 0 64 64"><path d="M32 4 L40 23 L60 24 L44 37 L50 58 L32 46 L14 58 L20 37 L4 24 L24 23 Z" fill="#ffd23f" stroke="#3a2216" stroke-width="4.5" stroke-linejoin="round"/></symbol>
+  <symbol id="i-star0" viewBox="0 0 64 64"><path d="M32 4 L40 23 L60 24 L44 37 L50 58 L32 46 L14 58 L20 37 L4 24 L24 23 Z" fill="#f1e2c4" stroke="#c9b28a" stroke-width="4.5" stroke-linejoin="round"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 64 64"><path d="M20 28 L20 20 A12 12 0 0 1 44 20 L44 28" fill="none" stroke="#3a2216" stroke-width="7"/><rect x="12" y="27" width="40" height="30" rx="8" fill="#ffc94f" stroke="#3a2216" stroke-width="5"/><circle cx="32" cy="41" r="4.5" fill="#3a2216"/></symbol>
+  <symbol id="i-map" viewBox="0 0 64 64"><path d="M6 14 L22 8 L42 14 L58 8 L58 50 L42 56 L22 50 L6 56 Z" fill="#7dd8ff" stroke="#3a2216" stroke-width="4.5" stroke-linejoin="round"/><path d="M22 8 L22 50 M42 14 L42 56" stroke="#3a2216" stroke-width="4"/><path d="M14 40 Q24 28 32 34 T50 22" fill="none" stroke="#ff4f6d" stroke-width="4" stroke-dasharray="5 5" stroke-linecap="round"/></symbol>
+  <symbol id="i-rocket" viewBox="0 0 64 64"><path d="M32 4 Q46 16 44 38 L20 38 Q18 16 32 4 Z" fill="#fff" stroke="#3a2216" stroke-width="4.5" stroke-linejoin="round"/><circle cx="32" cy="22" r="6" fill="#4fd8ff" stroke="#3a2216" stroke-width="3.5"/><path d="M20 30 L10 44 L20 42 Z M44 30 L54 44 L44 42 Z" fill="#ff4f6d" stroke="#3a2216" stroke-width="4" stroke-linejoin="round"/><path d="M24 40 Q32 62 40 40 Z" fill="#ffb02e" stroke="#3a2216" stroke-width="4" stroke-linejoin="round"/></symbol>
+  <symbol id="i-duo" viewBox="0 0 64 64"><circle cx="21" cy="24" r="11" fill="#ff8a3d" stroke="#3a2216" stroke-width="4.5"/><circle cx="43" cy="24" r="11" fill="#4f9bff" stroke="#3a2216" stroke-width="4.5"/><path d="M5 56 Q7 38 21 38 Q35 38 37 56 Z" fill="#ff8a3d" stroke="#3a2216" stroke-width="4.5" stroke-linejoin="round"/><path d="M27 56 Q29 38 43 38 Q57 38 59 56 Z" fill="#4f9bff" stroke="#3a2216" stroke-width="4.5" stroke-linejoin="round"/></symbol>
+  <symbol id="i-mouth" viewBox="0 0 64 64"><ellipse cx="32" cy="32" rx="28" ry="24" fill="#a66cf0" stroke="#3a2216" stroke-width="4.5"/><ellipse cx="32" cy="40" rx="18" ry="11" fill="#5a1428" stroke="#3a2216" stroke-width="4"/><rect x="24" y="29" width="7" height="7" rx="2" fill="#fff"/><rect x="33" y="29" width="7" height="7" rx="2" fill="#fff"/><circle cx="21" cy="18" r="7" fill="#fff" stroke="#3a2216" stroke-width="3"/><circle cx="43" cy="18" r="7" fill="#fff" stroke="#3a2216" stroke-width="3"/><circle cx="22" cy="20" r="3.5" fill="#3a2216"/><circle cx="44" cy="20" r="3.5" fill="#3a2216"/></symbol>
+</svg>
+
+<canvas id="game" tabindex="0" aria-label="برج السندويش"></canvas>
+
+<div id="ui">
+  <div id="hud" hidden>
+    <button type="button" id="btnPause" class="sw-btn sw-round" aria-label="استراحة" title="استراحة (P / Esc)"><svg aria-hidden="true"><use href="#i-pause"/></svg></button>
+  </div>
+
+  <section id="scrTitle" class="screen" aria-label="برج السندويش">
+    <h1 class="logo"><span class="l1">برج</span><span class="l2">السندويش</span></h1>
+    <button type="button" id="btnPlay" class="sw-btn sw-play ring" aria-label="العب"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
+    <span class="chip chip-level" id="titleLevel"><small>المرحلة</small><b>1</b></span>
+    <span class="chip chip-stars" id="titleStars"><svg aria-hidden="true"><use href="#i-star"/></svg><b>0</b></span>
+    <div class="modes">
+      <button type="button" id="btnLevels" class="sw-btn sw-wide"><svg aria-hidden="true"><use href="#i-map"/></svg><span>المراحل</span></button>
+      <button type="button" id="btnEndless" class="sw-btn sw-wide moon"><svg aria-hidden="true"><use href="#i-rocket"/></svg><span>إلى القمر</span></button>
+      <button type="button" id="btnDuo" class="sw-btn sw-wide duo"><svg aria-hidden="true"><use href="#i-duo"/></svg><span>تحدّي اللاعبين</span></button>
+      <button type="button" id="btnEaters" class="sw-btn sw-wide eat"><svg aria-hidden="true"><use href="#i-mouth"/></svg><span>الآكلون</span><i class="dot" id="eatersNew" hidden></i></button>
+    </div>
+    <div class="howto">
+      <span><span dir="ltr"><span class="sg-key">مسافة</span></span> أو <b>انقر</b> = أسقط القطعة</span>
+      <span>فوق البرج تمامًا = <b>مثالي!</b></span>
+    </div>
+  </section>
+
+  <section id="scrPause" class="screen dim" aria-label="استراحة" hidden>
+    <div class="card">
+      <h2>استراحة</h2>
+      <button type="button" id="btnResume" class="sw-btn sw-go" aria-label="تابع"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
+      <div class="row">
+        <button type="button" id="btnHome" class="sw-btn sw-round big" aria-label="البداية"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
+        <button type="button" id="btnRestart" class="sw-btn sw-round big" aria-label="أعد المرحلة"><svg aria-hidden="true"><use href="#i-again"/></svg></button>
+      </div>
+    </div>
+  </section>
+
+  <section id="scrResult" class="screen dim" aria-label="النتيجة" hidden>
+    <div class="card result-card">
+      <canvas id="resEater" width="240" height="220" aria-hidden="true"></canvas>
+      <h2 id="resTitle">رائع!</h2>
+      <p class="res-sub" id="resSub"></p>
+      <div class="res-stars" id="resStars"><svg aria-hidden="true"><use href="#i-star0"/></svg><svg aria-hidden="true"><use href="#i-star0"/></svg><svg aria-hidden="true"><use href="#i-star0"/></svg></div>
+      <div class="res-best" id="resBest" hidden>رقم قياسي جديد!</div>
+      <div class="res-chips">
+        <span class="chip light" id="resScore"><small>النقاط</small><b>0</b></span>
+        <span class="chip light" id="resPerf"><small>مثالي</small><b>0</b></span>
+        <div class="res-unlock" id="resUnlock" hidden><canvas width="200" height="180" aria-hidden="true"></canvas><span>آكل جديد: <b></b></span></div>
+      </div>
+      <div class="row">
+        <button type="button" id="btnMenu" class="sw-btn sw-round big" aria-label="القائمة"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
+        <button type="button" id="btnAgain" class="sw-btn sw-round big" aria-label="مرة أخرى" title="مرة أخرى (R)"><svg aria-hidden="true"><use href="#i-again"/></svg></button>
+        <button type="button" id="btnNext" class="sw-btn sw-go" aria-label="التالي" title="التالي (Enter)"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
+      </div>
+    </div>
+  </section>
+
+  <section id="scrLevels" class="screen dim" aria-label="المراحل" hidden>
+    <div class="card list-card">
+      <div class="list-head">
+        <button type="button" id="levelsBack" class="sw-btn sw-round" aria-label="رجوع"><svg aria-hidden="true"><use href="#i-back"/></svg></button>
+        <h2>المراحل</h2>
+        <span class="chip" id="levelsStars"><svg aria-hidden="true"><use href="#i-star"/></svg><b>0</b></span>
+      </div>
+      <div class="worlds" id="worlds"></div>
+    </div>
+  </section>
+
+  <section id="scrEaters" class="screen dim" aria-label="الآكلون" hidden>
+    <div class="card list-card">
+      <div class="list-head">
+        <button type="button" id="eatersBack" class="sw-btn sw-round" aria-label="رجوع"><svg aria-hidden="true"><use href="#i-back"/></svg></button>
+        <h2>الآكلون</h2>
+        <span class="chip" id="eatersStars"><svg aria-hidden="true"><use href="#i-star"/></svg><b>0</b></span>
+      </div>
+      <p class="list-tip">اجمع النجوم لتفتح أفواهًا جديدة!</p>
+      <div class="eaters" id="eaters" role="group" aria-label="الآكلون"></div>
+    </div>
+  </section>
+
+  <section id="scrError" class="screen dim" hidden>
+    <div class="card"><h2>عذرًا!</h2><p>تعذّر تشغيل اللعبة. جرّب لعبة أخرى.</p></div>
+  </section>
+</div>
+<div id="live" class="sr" aria-live="polite"></div>
+
+<script src="../../shared/kit.js"></script>
+<script src="../../shared/juice.js"></script>
+<script src="engine.js"></script>
+<script src="art.js"></script>
+<script src="game.js"></script>
+</body>
+</html>
