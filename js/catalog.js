@@ -75,7 +75,7 @@ window.GAMES = [
       { keys: ['6–0', 'Y–P', 'H–;', 'N–/'], action: 'اللاعب الثاني في سباق اثنين' },
       { keys: ['Esc'], action: 'إيقاف مؤقت' }
     ] },
-  { slug: 'word-garden', roundMinutes: [2, 5], inputStyle: 'keyboard', title: 'حديقة الكلمات', en: 'Word Garden Arabic spelling missing letter words typing keyboard English', tags: 'إملاء حروف كلمات حرف ناقص كتابة لوحة المفاتيح كيبورد حديقة زهور', cats: ['puzzle', 'challenge'], players: '1', color: '#5ccf4a', hot: 10,
+  { slug: 'word-garden', roundMinutes: [2, 5], inputStyle: 'keyboard', title: 'حديقة الكلمات', en: 'Word Garden spelling missing letter words typing keyboard Arabic English', tags: 'إملاء حروف كلمات حرف ناقص كتابة لوحة المفاتيح كيبورد حديقة زهور', cats: ['puzzle', 'challenge'], players: '1', color: '#5ccf4a', hot: 10,
     blurb: 'اكتب الحرف الناقص من الكلمة فتنبت زهرة في حديقتك! بالعربية والإنجليزية.',
     tip: 'إذا تعثّرت يضيء المفتاح الصحيح في لوحة المفاتيح أسفل الشاشة. اجمع البذور واشترِ بها نباتات وزينة لحديقتك.',
     controls: [{ keys: ['الحروف'], action: 'اكتب الحرف الناقص' }, { keys: ['Esc'], action: 'استراحة' }, { keys: ['Enter', 'R'], action: 'المرحلة التالية / مرة أخرى' }] },
@@ -224,7 +224,7 @@ window.GAMES = [
     blurb: 'توازن بالبيضة فوق الملعقة واركض في مضمار اليوم الرياضي، واقفز فوق الحواجز لتسبق الجميع أو تتحدى صديقك!',
     tip: 'الركض السريع يجعل البيضة تميل أكثر! مِل نحو البيضة بالأسهم لتبقى ثابتة فوق الملعقة.',
     controls: [{ keys: ['←', '→', 'A', 'D'], action: 'توازن بالبيضة واتجه يمينًا ويسارًا' }, { keys: ['↑', 'W'], action: 'اركض أسرع' }, { keys: ['مسافة'], action: 'اقفز فوق الحواجز' }, { keys: ['P', 'Esc'], action: 'استراحة' }] },
-  { slug: 'seek-zoom', roundMinutes: [1, 4], inputStyle: 'pointer', title: 'ابحث وكبّر', en: 'Seek and Zoom hidden objects find zoom magnifying glass lens mouse wheel look', tags: 'ابحث جد أشياء مخبأة مخفية بحث تكبير عدسة عجلة الفأرة ماوس تلميح حديقة سوق شاطئ ألعاب فضاء ملصقات', cats: ['puzzle'], players: '1', color: '#ff9f1c', hot: 8,
+  { slug: 'seek-zoom', roundMinutes: [1, 4], inputStyle: 'pointer', title: 'ابحث وكبّر', en: 'Seek & Zoom hidden objects find zoom magnifying glass lens mouse wheel look', tags: 'ابحث جد أشياء مخبأة مخفية بحث تكبير عدسة عجلة الفأرة ماوس تلميح حديقة سوق شاطئ ألعاب فضاء ملصقات', cats: ['puzzle'], players: '1', color: '#ff9f1c', hot: 8,
     blurb: 'حرّك العدسة المكبّرة فوق المكان وجِد الأشياء المخبّأة: طائرة ورقية حمراء، وثلاث بطّات، وقطًّا نائمًا!',
     tip: 'حرّك العدسة فوق المكان وأدر عجلة الفأرة (أو اضغط + و−) لتكبّر وترى الأشياء الصغيرة وداخل الصناديق، واضغط المصباح للتلميح. اضغط <b>P</b> أو <b>Esc</b> للاستراحة.',
     controls: [{ keys: ['انقر'], action: 'اختر الشيء الذي وجدته' }, { keys: ['الفأرة', '+', '−'], action: 'كبّر وصغّر بالعدسة' }, { keys: ['←', '↑', '→', '↓'], action: 'حرّك العدسة في المكان' }, { keys: ['H', 'المصباح'], action: 'تلميح يدلّك' }, { keys: ['P', 'Esc'], action: 'استراحة' }] },
