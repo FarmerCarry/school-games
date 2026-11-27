@@ -1,17 +1,20 @@
 {
   "format": 1,
-  "portalBytes": 487000,
+  "portalBytes": 521000,
   "gameHtmlBytes": {
     "air-hockey": 108500,
+    "ball-storm": 111500,
     "balloon-blast": 94000,
     "beat-dash": 127500,
     "blob-battle": 105500,
     "block-burst": 114000,
     "block-world": 145500,
+    "bonk-garden": 106000,
     "bubble-bop": 175000,
     "cake-guards": 92000,
     "candy-rope": 111500,
     "chaos-island": 107000,
+    "cloud-hop": 112000,
     "connect-four": 89500,
     "critter-mart": 161500,
     "desk-karts": 111000,
@@ -19,6 +22,7 @@
     "drift-king": 109000,
     "egg-rush": 120000,
     "fire-and-ice": 124000,
+    "frog-pinball": 113000,
     "hoop-heads": 112500,
     "juicy-drop": 95500,
     "key-runner": 120000,
@@ -37,6 +41,7 @@
     "recess-kitchen": 119000,
     "road-hopper": 119000,
     "robo-swarm": 84500,
+    "sandwich-tower": 109000,
     "seek-zoom": 134500,
     "shortcut-factory": 132500,
     "skybound-golf": 117000,
@@ -64,5 +69,5 @@
     "fredoka-latin-500-normal.woff2": 18500,
     "fredoka-latin-700-normal.woff2": 18000
   },
-  "precacheBytes": 7700000
+  "precacheBytes": 8300000
 }
