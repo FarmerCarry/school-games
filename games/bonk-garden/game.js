@@ -284,7 +284,7 @@
       return;
     }
     if (screen === 'result') {
-      if (c === 'Enter' || c === 'Space') { e.preventDefault(); if ($('btnNext').hidden) again(); else next(); }
+      if (c === 'Enter' || c === 'Space') { e.preventDefault(); if (resultT > 0.6) { if ($('btnNext').hidden) again(); else next(); } }
       else if (c === 'KeyR' && resultT > 0.6) again();
       else if (c === 'Escape') { J.back(); toTitle(); }
       return;

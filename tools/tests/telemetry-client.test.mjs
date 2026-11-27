@@ -236,7 +236,7 @@ async function checkBatches(page, list) {
     assert.ok(b.ev.length >= 1 && b.ev.length <= 200 && JSON.stringify(b).length <= 32768);
     for (const ev of b.ev) {
       assert.equal(ev.length, ARITY[ev[0]], JSON.stringify(ev));
-      if (ev[0] === 'go') assert.equal(ev[5], 0, 'no plays before: there are no players');
+      if (ev[0] === 'go') assert.ok(int(ev[5]) && ev[5] <= 1e6, 'plays before on this PC: ' + ev[5]);
       if (ev[0] === 'se') assert.equal(ev[3], 'u', 'a session ends only when its page goes');
     }
     assert.ok(int(b.w) && b.w >= Math.max(...b.ev.map(ev => ev[1])) && b.w <= 691200, 'w ' + b.w);
@@ -319,15 +319,12 @@ test('real rounds reach the statistics server as the contract says, with nothing
   await home(page);
   // Leaving the game sends at once.
   await until(() => allEvents(state).some(ev => ev[0] === 'gx' && ev[3] === 'tic-tac-toe'), 'tic-tac-toe closing');
-  // The surprise button picks at random. Pin it to a game this test has not already
-  // opened: a repeat of tic-tac-toe or the starter makes the old close look like the
-  // new one, and the check reads the earlier visit.
-  await page.evaluate(avoid => {
-    const slugs = GAMES.map(game => game.slug);
-    const index = Math.max(0, slugs.findIndex(slug => !avoid.includes(slug)));
-    Math.random = () => (index + 0.5) / slugs.length;
-  }, [starter, 'tic-tac-toe']);
+  // The surprise button opens the roulette preview modal and only launches once confirmed.
+  await page.evaluate(() => { Math.random = () => 0.1; });
   await page.locator('#surprise').click();
+  await page.locator('#surprisePlay:not([disabled])').waitFor();
+  assert.equal(allEvents(state).some(ev => ev[0] === 'go' && ev[4] === 'surprise'), false, 'previewing surprise emits no go event');
+  await page.locator('#surprisePlay').click();
   await ready(page);
   const surprised = await page.evaluate(() => decodeURIComponent(location.hash.split('/')[2]));
   await page.locator('#favBtn').click();
@@ -982,4 +979,73 @@ test('w: split batches and retries of one session date the same start; queued ba
   assert.deepEqual(bare(again), bare(two));
   await checkBatches(page, list.slice(3));
   serverKeeps(list);
+});
+
+test('sg:site:plays counts prior opens per PC across reloads, bounds to known slugs, falls back silently when storage blocks, and clears on opt-out', async t => {
+  const state = await setup(t), { page } = state;
+  await page.goto(origin + '/seed.html');
+  // Seed polluted data: unknown slug, prototype name, negative/huge counts, and one valid count.
+  await page.evaluate(() => {
+    localStorage.setItem('sg:site:plays', JSON.stringify({
+      'air-hockey': 2,
+      'unknown-game': 99,
+      constructor: 5,
+      'pool-party': -3,
+      'drift-king': 9e9
+    }));
+  });
+  await page.goto(origin + '/');
+  // First open in this session sees prior count 2, increments to 3, and prunes unknown/bad keys.
+  await play(page, 'air-hockey');
+  await home(page);
+  await until(() => allEvents(state).some(ev => ev[0] === 'gx' && ev[3] === 'air-hockey'), 'first air-hockey close');
+  let map = JSON.parse(await tm(page, 'sg:site:plays'));
+  assert.deepEqual(map, { 'air-hockey': 3, 'drift-king': 1000000 }, 'bounded to known catalog slugs and clamped');
+
+  // Across a page reload, opening air-hockey again sends playsBefore = 3 and saves 4.
+  await page.reload();
+  await play(page, 'air-hockey');
+  await home(page);
+  await until(() => allEvents(state).filter(ev => ev[0] === 'go' && ev[3] === 'air-hockey').length === 2, 'second air-hockey open');
+  const opens = allEvents(state).filter(ev => ev[0] === 'go' && ev[3] === 'air-hockey');
+  assert.deepEqual(opens.map(ev => ev[5]), [2, 3], 'playsBefore increments across visits and reloads');
+  assert.equal(JSON.parse(await tm(page, 'sg:site:plays'))['air-hockey'], 4);
+
+  // New shelves (Bento hero -> featured, New -> catalog, 2P -> quick) keep valid launch sources.
+  await page.locator('.bento-grid .tile[data-slug]').first().click();
+  await ready(page);
+  const bentoSlug = await page.evaluate(() => decodeURIComponent(location.hash.split('/')[2]));
+  await home(page);
+  await until(() => allEvents(state).some(ev => ev[0] === 'go' && ev[3] === bentoSlug && ev[4] === 'featured'), 'bento featured source');
+  await page.locator('.new-grid .tile[data-slug]').first().click();
+  await ready(page);
+  const newSlug = await page.evaluate(() => decodeURIComponent(location.hash.split('/')[2]));
+  await home(page);
+  await until(() => allEvents(state).some(ev => ev[0] === 'go' && ev[3] === newSlug && ev[4] === 'catalog'), 'new shelf catalog source');
+  await page.locator('.friends-grid .tile[data-slug]').first().click();
+  await ready(page);
+  const friendsSlug = await page.evaluate(() => decodeURIComponent(location.hash.split('/')[2]));
+  await home(page);
+  await until(() => allEvents(state).some(ev => ev[0] === 'go' && ev[3] === friendsSlug && ev[4] === 'quick'), 'friends shelf quick source');
+  await checkBatches(page, batches(state));
+
+  // Blocked storage falls back silently to 0 without throwing.
+  const blocked = await setup(t), bp = blocked.page;
+  await bp.addInitScript(() => {
+    Storage.prototype.getItem = () => { throw new Error('blocked'); };
+    Storage.prototype.setItem = () => { throw new Error('blocked'); };
+  });
+  await bp.goto(origin + '/');
+  await play(bp, 'air-hockey');
+  await home(bp);
+  await until(() => allEvents(blocked).some(ev => ev[0] === 'go' && ev[3] === 'air-hockey'), 'blocked storage open');
+  assert.equal(allEvents(blocked).find(ev => ev[0] === 'go' && ev[3] === 'air-hockey')[5], 0);
+
+  // Opt-out (GPC) clears existing sg:site:plays.
+  const opted = await setup(t, { gpc: true }), op = opted.page;
+  await op.goto(origin + '/seed.html');
+  await op.evaluate(() => localStorage.setItem('sg:site:plays', JSON.stringify({ 'air-hockey': 5 })));
+  await op.goto(origin + '/');
+  assert.equal(await op.evaluate(() => SGTelemetry.active()), false);
+  assert.equal(await tm(op, 'sg:site:plays'), null, 'opt-out clears sg:site:plays');
 });

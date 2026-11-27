@@ -192,7 +192,8 @@
       type: new Uint8Array(N), hp: new Uint8Array(N), max: new Uint8Array(N), col: new Uint8Array(N), gem: new Uint8Array(N),
       hitAt: new Float32Array(N),
       rings: [], ringId: 0, caps: [],
-      n: 0, x: new Float32Array(CAP), y: new Float32Array(CAP), dx: new Float32Array(CAP), dy: new Float32Array(CAP),
+      n: 0, cap: o.cap > 0 ? M.min(CAP, o.cap | 0) : CAP,
+      x: new Float32Array(CAP), y: new Float32Array(CAP), dx: new Float32Array(CAP), dy: new Float32Array(CAP),
       combo: new Uint16Array(CAP), inRing: new Int16Array(CAP), stuck: new Uint8Array(CAP), soff: new Float32Array(CAP),
       stuckN: 0, stickT: 0, comboMax: 0,
       launched: false, serveT: SERVE, serveSide: 1,
@@ -227,7 +228,7 @@
 
   /* -------------------------------------------------------------- balls */
   function addBall(w, x, y, dx, dy) {
-    if (w.n >= CAP) return -1;
+    if (w.n >= w.cap) return -1;
     var i = w.n++;
     w.x[i] = x; w.y[i] = y; w.dx[i] = dx; w.dy[i] = dy;
     w.combo[i] = 0; w.inRing[i] = -1; w.stuck[i] = 0; w.soff[i] = 0;
@@ -484,7 +485,7 @@
           var g = rings[j], ex = x - g.x, ey = y - g.y, inside = ex * ex + ey * ey < RING_R * RING_R;
           if (inside && w.inRing[i] !== g.id) {
             w.inRing[i] = g.id;
-            if (g.life < 0) { g.life = RING_LIFE; emit(w, 'ringOn').x = g.x; }
+            if (g.life < 0) { g.life = RING_LIFE; var ro = emit(w, 'ringOn'); ro.x = g.x; ro.y = g.y; }
             var cpy = copyBall(w, i, (w.n & 1) ? 0.45 : -0.45);
             if (cpy >= 0) { var re = emit(w, 'ring', 6); if (re) { re.x = x; re.y = y; } }
           } else if (!inside && w.inRing[i] === g.id) w.inRing[i] = -1;

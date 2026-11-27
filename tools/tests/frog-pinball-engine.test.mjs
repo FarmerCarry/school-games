@@ -708,3 +708,23 @@ test('the ramp has no wall at level 5: a sloppy player wins it less often than l
   assert.ok(wins[4] > wins[5] && wins[5] >= wins[6], say);
   assert.ok(time[5] < time[6], say);
 });
+
+test('L1 and L8 star targets are achievable: bot earns 2-3 stars on L1 and clean win on L8 earns 3 stars', () => {
+  assert.deepEqual(plain(FP.LEVELS[0].stars), [6500, 9500]);
+  assert.deepEqual(plain(FP.LEVELS[7].stars), [22500, 25000]);
+  // Clean L8 win (goal 20,000 + 2 spare balls * 2,500 = 25,000) earns 3 stars; 1 spare ball (22,500) earns 2 stars
+  assert.equal(FP.stars(8, 22500), 2);
+  assert.equal(FP.stars(8, 25000), 3);
+  let l1TwoPlus = 0, l1Three = 0;
+  for (let seed = 1; seed <= 12; seed++) {
+    const w = FP.create({ level: 1, gravity: 1100, save: 10, kick: 400, seed });
+    const r = FP.rng(seed * 17), mem = {};
+    run(w, { seconds: 5 * 60, input: w => FP.bot(w, r, 0.75, mem), until: w => !!w.over });
+    assert.equal(w.over, 'win');
+    const st = FP.stars(1, w.score);
+    if (st >= 2) l1TwoPlus++;
+    if (st === 3) l1Three++;
+  }
+  assert.ok(l1TwoPlus >= 6, `L1 bot earned 2+ stars in ${l1TwoPlus}/12`);
+  assert.ok(l1Three >= 2, `L1 bot earned 3 stars in ${l1Three}/12`);
+});

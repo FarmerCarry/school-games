@@ -138,11 +138,15 @@ test('without steering Marshy never moves sideways (levels 1 to 4)', () => {
   }
 });
 
-test('keys steer with a little drift, wrap around the sides, and say "steer" once', () => {
+test('keys steer with a little drift, wrap around the sides, and say "steer" once in play after >20px travel', () => {
   const w = lab();
   let events = run(w, { seconds: 0.5, input: () => ({ dir: 1 }) });
   assert.ok(w.m.x > 640 + 100, 'moved right: ' + w.m.x);
-  assert.equal(types(events).filter(t => t === 'steer').length, 1);
+  assert.equal(types(events).filter(t => t === 'steer').length, 0, 'squat steering does not dismiss coach');
+  assert.equal(w.steered, false);
+  events = run(w, { seconds: 0.3, input: () => ({ dir: 1 }) });
+  assert.equal(w.phase, 'play');
+  assert.equal(types(events).filter(t => t === 'steer').length, 1, 'emits steer once in play after >20px travel');
   const x = w.m.x;
   run(w, { seconds: 0.05 });
   assert.ok(w.m.x > x, 'glides on a little after letting go');
@@ -156,15 +160,83 @@ test('keys steer with a little drift, wrap around the sides, and say "steer" onc
   assert.ok(!types(events).includes('steer'));
   run(w, { seconds: 0.5, input: () => ({ dir: -1 }) });
   assert.ok(w.m.x >= 0 && w.m.x < CH.W);
+  // A tiny nudge (<20px) in play does not mark steered
+  const nudge = lab();
+  fly(nudge, 100, 500, 640);
+  events = run(nudge, { seconds: 0.5, input: () => ({ mouseX: 650 }) });
+  assert.equal(nudge.steered, false, '10px nudge does not dismiss coach');
+  assert.ok(!types(events).includes('steer'));
 });
 
-test('the mouse eases Marshy to the pointer, straight across (never the wrapped way)', () => {
+test('the mouse eases Marshy to the pointer, straight across, and wraps smoothly at <24px from either edge', () => {
   const w = lab();
   run(w, { seconds: 1.5, input: () => ({ mouseX: 1000 }) });
   assert.ok(Math.abs(w.m.x - 1000) < 3, 'at the pointer: ' + w.m.x);
   run(w, { seconds: 3, input: () => ({ mouseX: 40 }) });
   assert.ok(Math.abs(w.m.x - 40) < 3, 'crossed the screen: ' + w.m.x);
   assert.equal(w.steered, true);
+  // Left edge wrap (<24px) smoothly crosses x=0 -> x=1280
+  w.m.x = 60; w.m.vx = 0;
+  run(w, { seconds: 0.6, input: () => ({ mouseX: 10 }) });
+  assert.ok(w.m.x > 900, 'mouse at left edge wrapped to right side: ' + w.m.x);
+  // Right edge wrap (>W-24) smoothly crosses x=1280 -> x=0
+  w.m.x = CH.W - 60; w.m.vx = 0;
+  run(w, { seconds: 0.6, input: () => ({ mouseX: CH.W - 10 }) });
+  assert.ok(w.m.x < 380, 'mouse at right edge wrapped to left side: ' + w.m.x);
+});
+
+test('levels 1 to 4 never require cross-seam jumps, and a mouse-only bot wins all 12 levels', () => {
+  // On L1-L4 every platform has a higher platform (or castle) reachable straight across without wrapping.
+  for (let n = 1; n <= 4; n++) {
+    const w = CH.create({ level: n, diff: 0.35, seed: 1 });
+    for (const cur of w.plats) {
+      if (cur.kind === 'castle') continue;
+      const canClimbStraight = w.plats.some(next => {
+        if (next.y <= cur.y || next.y - cur.y > 255) return false;
+        if (next.kind === 'castle') return true;
+        const reach = CH.VX * Math.max(0.2, CH.airTime(next.y - cur.y) - 0.14);
+        const cx = cur.amp ? cur.x0 : cur.x, nx = next.amp ? next.x0 : next.x;
+        return Math.abs(nx - cx) - (cur.w + next.w) / 2 <= reach;
+      });
+      assert.ok(canClimbStraight, `L${n} platform id=${cur.id} at x=${Math.round(cur.x)}, y=${Math.round(cur.y)} can climb without seam wrap`);
+    }
+  }
+  // A non-wrapping mouse bot (never entering the <24px edge-wrap zone) wins L1-L4.
+  const straightMouseBot = () => {
+    const mem = {};
+    return w => {
+      if (w.phase !== 'play' && w.phase !== 'squat') return {};
+      const m = w.m, top = m.y + (m.vy > 0 ? m.vy * m.vy / (2 * CH.G) : 0);
+      let best = null, bestScore = -1e9;
+      for (const p of w.plats) {
+        if (p.broken || p.y > top - 8 || p.y < m.y - 700) continue;
+        const dx = CH.platX(p, w.t + 0.35) - m.x;
+        const score = p.y - Math.abs(dx) * 0.25 + ((p.kind === 'tramp' || p.kind === 'jelly' || p.kind === 'castle') ? 300 : 0);
+        if (score > bestScore) { bestScore = score; best = p; }
+      }
+      if (!best) return { mouseX: 640 };
+      return { mouseX: CH.clamp(CH.platX(best, w.t + 0.25), 30, CH.W - 30) };
+    };
+  };
+  for (let n = 1; n <= 4; n++) {
+    const w = play(n, 0.35, straightMouseBot());
+    assert.ok(w.won, `non-wrapping mouse bot wins level ${n}: height ${w.height}, falls ${w.falls}`);
+  }
+  // A mouse-only bot (using edge-wrap <24px when wrapping is shorter) wins every level 1..12.
+  const mouseBot = () => {
+    const mem = {};
+    return w => {
+      const d = pilot(w, { mem });
+      if (w.phase !== 'play' && w.phase !== 'squat') return {};
+      if (d.dir === 0) return { mouseX: CH.clamp(w.m.x, 30, CH.W - 30) };
+      if (d.dir < 0) return { mouseX: w.m.x < 160 ? 8 : Math.max(24, w.m.x - 140) };
+      return { mouseX: w.m.x > CH.W - 160 ? CH.W - 8 : Math.min(CH.W - 24, w.m.x + 140) };
+    };
+  };
+  for (let n = 1; n <= 12; n++) {
+    const w = play(n, 0.35, mouseBot());
+    assert.ok(w.won, `mouse bot wins level ${n}: height ${w.height}, falls ${w.falls}`);
+  }
 });
 
 test('the boing happens only when falling onto the top of a platform', () => {

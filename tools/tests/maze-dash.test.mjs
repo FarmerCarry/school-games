@@ -203,3 +203,21 @@ test('a Rising Goo run left alive through the pause menu or R keeps its coins an
   const fresh = await page.evaluate(() => __game.state);
   assert.deepEqual([fresh.screen, fresh.mode, fresh.height, fresh.coins], ['play', 'endless', 0, 0], 'and starts a fresh run');
 });
+
+test('Endless mode starts with 3 hearts, respawns safely on first two hits, and ends on the third hit', async t => {
+  const page = await gamePage(t);
+  await page.evaluate(() => { __game.endless(); stepGame(5); });
+  assert.equal(await page.evaluate(() => __game.state.hearts), 3, 'Endless starts with 3 hearts');
+
+  // Hit 1 -> 2 hearts, respawns into play after dying animation
+  await page.evaluate(() => { __game.hit('spike'); stepGame(60); });
+  assert.deepEqual(await page.evaluate(() => [__game.state.screen, __game.state.phase, __game.state.hearts]), ['play', 'play', 2]);
+
+  // Wait out invulnerability, Hit 2 -> 1 heart, respawns into play
+  await page.evaluate(() => { stepGame(110); __game.hit('bat'); stepGame(60); });
+  assert.deepEqual(await page.evaluate(() => [__game.state.screen, __game.state.phase, __game.state.hearts]), ['play', 'play', 1]);
+
+  // Wait out invulnerability, Hit 3 -> 0 hearts, game over screen
+  await page.evaluate(() => { stepGame(110); __game.hit('spike'); stepGame(60); });
+  assert.deepEqual(await page.evaluate(() => [__game.state.screen, __game.state.hearts]), ['over', 0]);
+});

@@ -71,4 +71,11 @@ test('every game thumbnail is UTF-8 and free of Latin-1 mojibake', () => {
   assert.match(egg, /سباق البيض/);
   assert.match(egg, /direction="rtl"/);
   assert.match(egg, /Fredoka/);
+
+  for (const slug of ['tunnel-blitz', 'neon-slope', 'pool-party', 'dino-3d']) {
+    const svg = fs.readFileSync(path.join(repo, 'games', slug, 'thumb.svg'), 'utf8');
+    assert.doesNotMatch(svg, /<filter\b|<feGaussianBlur\b|<feDropShadow\b/i, slug + '/thumb.svg must not use slow SVG filters');
+  }
+  const tunnelBytes = fs.statSync(path.join(repo, 'games/tunnel-blitz/thumb.svg')).size;
+  assert.ok(tunnelBytes < 7000, 'tunnel-blitz/thumb.svg stays under 7 KB: ' + tunnelBytes);
 });

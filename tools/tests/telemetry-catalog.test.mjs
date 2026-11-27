@@ -18,7 +18,7 @@ const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const root = process.env.SG_ROOT ? path.resolve(repo, process.env.SG_ROOT) : repo;
 const catalog = { window: {} };
 vm.runInNewContext(fs.readFileSync(path.join(repo, 'js/catalog.js'), 'utf8'), catalog);
-const slugs = catalog.window.GAMES.filter(game => !game.hidden).map(game => game.slug);
+const slugs = catalog.window.GAMES.map(game => game.slug);
 const INGEST = 'https://ingest.test/v1/batch';
 const ARITY = { ss: 2, go: 7, ld: 5, er: 5, rs: 8, re: 14, gp: 5, gx: 7, tu: 5, fv: 5, se: 4 };
 const ID = /^(?!.*\d{3})[A-Za-z][\w:.-]{0,23}$/;

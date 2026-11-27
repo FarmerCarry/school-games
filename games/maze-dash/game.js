@@ -19,17 +19,19 @@
   var canvas = document.getElementById('game');
   var frameDirty = true; // a paused game repaints only after something visible changed
   function redraw() { frameDirty = true; }
-  var view = Kit.fit(canvas, W, H, { onResize: redraw });
+  var view = Kit.fit(canvas, W, H, { maxDpr: 1.5, onResize: redraw });
   var ctx = view.ctx;
   var store = Kit.store('maze-dash');
   var fx = Kit.particles();
   var shake = Kit.shake();
   var muteBtn = Kit.muteButton();
   muteBtn.setAttribute('aria-label', 'تشغيل الصوت أو كتمه');
+  var txtCache = Object.create(null);
+  function onFontsLoaded() { txtCache = Object.create(null); redraw(); }
   // Late fonts (Arabic letters and the HUD's digits) repaint a paused frame too.
   try {
-    document.fonts.load('700 40px Fredoka', 'بـ0').then(redraw, function () { /* Use fallback fonts. */ });
-    document.fonts.load('500 20px Fredoka', 'بـ0').then(redraw, function () { /* Use fallback fonts. */ });
+    document.fonts.load('700 40px Fredoka', 'بـ0').then(onFontsLoaded, function () { /* Use fallback fonts. */ });
+    document.fonts.load('500 20px Fredoka', 'بـ0').then(onFontsLoaded, function () { /* Use fallback fonts. */ });
   } catch (e) { /* ignore */ }
 
   var WORLDS = [
@@ -311,12 +313,19 @@
     ctx.fillText(str, x, y);
     ctx.direction = 'ltr';
   }
-  function fitSize(str, size, maxW, weight) {
-    ctx.font = (weight || 700) + ' ' + size + 'px Fredoka';
-    ctx.direction = ARABIC.test(str) ? 'rtl' : 'ltr';
-    var w = ctx.measureText(str).width;
+  function measureW(font, dir, str) {
+    var k = 'm|' + font + '|' + dir + '|' + str, v = txtCache[k];
+    if (v !== undefined) return v;
+    ctx.font = font; ctx.direction = dir;
+    v = ctx.measureText(str).width;
     ctx.direction = 'ltr';
-    return w > maxW ? Math.max(10, Math.floor(size * maxW / w)) : size;
+    return (txtCache[k] = v);
+  }
+  function fitSize(str, size, maxW, weight) {
+    var wgt = weight || 700, k = 'f|' + str + '|' + size + '|' + maxW + '|' + wgt, v = txtCache[k];
+    if (v !== undefined) return v;
+    var w = measureW(wgt + ' ' + size + 'px Fredoka', ARABIC.test(str) ? 'rtl' : 'ltr', str);
+    return (txtCache[k] = w > maxW ? Math.max(10, Math.floor(size * maxW / w)) : size);
   }
   function fmtTime(s) { s = Math.max(0, s); var m = Math.floor(s / 60), ss = Math.floor(s % 60); return m + ':' + (ss < 10 ? '0' : '') + ss; }
   var rr = MK.rr;
@@ -337,7 +346,7 @@
   }
 
   /* ------------------------------------------------ static backgrounds */
-  var bgCanvas = document.createElement('canvas'), crtCanvas = document.createElement('canvas');
+  var bgCanvas = document.createElement('canvas');
   // Painted once, and again when a GPU reset restores the canvases blank.
   function paintBg() {
     bgCanvas.width = W; bgCanvas.height = H;
@@ -350,19 +359,6 @@
     for (var y = 0; y <= H; y += 40) { b.beginPath(); b.moveTo(0, y + 0.5); b.lineTo(W, y + 0.5); b.stroke(); }
   }
   paintBg();
-  // CRT scanlines + vignette at device resolution (rebuilt when the canvas size
-  // changes), so the lines stay even instead of banding at scaled window sizes.
-  function buildCrt() {
-    var cw = canvas.width, ch = canvas.height, k = view.scale * view.dpr;
-    crtCanvas.width = cw; crtCanvas.height = ch;
-    var c = crtCanvas.getContext('2d');
-    var lw = Math.max(1, Math.round(k)), gap = Math.max(lw + 1, Math.round(3 * k));
-    c.fillStyle = 'rgba(0,0,0,' + (0.13 * gap / (3 * lw)).toFixed(3) + ')';
-    for (var y = 0; y < ch; y += gap) c.fillRect(0, y, cw, lw);
-    var v = c.createRadialGradient(cw / 2, ch / 2, ch * 0.45, cw / 2, ch / 2, ch);
-    v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,0.55)');
-    c.fillStyle = v; c.fillRect(0, 0, cw, ch);
-  }
 
   /* ------------------------------------------------------------ popups */
   function popup(str, wx, wy, color, size, life) {
@@ -432,7 +428,7 @@
     G.gen = G.world.gen = MDEndless.create(G.world);
     G.L = null; G.def = null;
     resetRunState();
-    G.hearts = 1;
+    G.hearts = 3;
     G.tile = 48;
     G.mx = Math.round((W - COLS * G.tile) / 2);
     G.pal = GOO_PALS[0]; G.palIdx = 0;
@@ -623,11 +619,12 @@
     fx.burst(px, py, { count: 36, colors: [MK.list[save.mask].body, '#fff', '#ff3fa4', '#ffe600'], speed: 380, life: 0.8, size: 8, gravity: 200 });
     P.hidden = true; P.moving = false;
     G.phase = 'dying'; G.phaseT = 0.75;
-    if (G.mode === 'level') G.hearts--;
-    else G.hearts = 0;
+    G.hearts = Math.max(0, G.hearts - 1);
     G.deathKind = kind;
-    if (G.mode === 'endless') commitOver();
-    else if (G.hearts <= 0) Kit.stats.end('lose');
+    if (G.hearts <= 0) {
+      if (G.mode === 'endless') commitOver();
+      else Kit.stats.end('lose');
+    }
   }
 
   function checkHazards() {
@@ -829,10 +826,17 @@
   }
 
   function afterDeath() {
-    if (G.mode === 'endless') { showOver(); return; }
-    if (G.hearts <= 0) { showFail(); return; }
+    if (G.hearts <= 0) {
+      if (G.mode === 'endless') showOver();
+      else showFail();
+      return;
+    }
     // respawn at the last safe resting spot
     resetPlayerSoft(P.safeX, P.safeY);
+    if (G.mode === 'endless' && G.gooY < P.safeY + 4.5) {
+      G.gooY = P.safeY + 4.5;
+      G.gooGrace = Math.max(G.gooGrace, 1.0);
+    }
     P.invuln = 1.6;
     G.phase = 'play';
     popup(G.hearts === 1 ? 'بقي قلب واحد!' : 'بقي قلبان!', P.x + 0.5, P.y - 0.3, '#ff6b9a', 26, 1.2);
@@ -881,10 +885,6 @@
       ctx.fillStyle = 'rgba(7,2,16,0.35)'; ctx.fillRect(0, 0, W, H);
       drawMenuMascots();
     }
-    if (crtCanvas.width !== canvas.width || crtCanvas.height !== canvas.height) buildCrt();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.drawImage(crtCanvas, 0, 0);
-    ctx.setTransform(k, 0, 0, k, 0, 0);
     if (G.freezeT > 0 && G.screen === 'play') {
       ctx.fillStyle = 'rgba(120,220,255,' + (Kit.motion.reduced() ? 0.12 : 0.12 + 0.04 * Math.sin(G.menuT * 6)) + ')';
       ctx.fillRect(0, 0, W, H);
@@ -980,8 +980,28 @@
   // per frame. Rects snap to device pixels, so tiles show no seams at scaled
   // window sizes (such as the portal's 1100×620), and the glow costs nothing per frame.
   var maze = { cv: document.createElement('canvas'), world: null, TS: 0, pal: null, k: 0, y0: 0, y1: -1, top: 0, w: 0, h: 0, genTop: 0 };
-  function invalidateCaches() { maze.world = null; crtCanvas.width = 0; paintBg(); frameDirty = true; }
-  [canvas, maze.cv, bgCanvas, crtCanvas].forEach(function (c) { c.addEventListener('contextrestored', invalidateCaches); });
+  var glowCache = Object.create(null);
+  function invalidateCaches() { maze.world = null; glowCache = Object.create(null); paintBg(); frameDirty = true; }
+  [canvas, maze.cv, bgCanvas].forEach(function (c) { c.addEventListener('contextrestored', invalidateCaches); });
+
+  function getGlowAtlas(pal, TS, k, isSpike) {
+    var key = (isSpike ? pal.spike : pal.edge) + '|' + TS + '|' + Math.round(k * 1000), a = glowCache[key];
+    if (a) return a;
+    var tP = Math.max(1, Math.round(TS * k)), gP = Math.max(1, Math.round(TS * 0.3 * k)), cX = tP + gP * 2;
+    var cols = isSpike ? pal.spikeGlow : pal.glow, cv = document.createElement('canvas');
+    cv.width = tP + gP * 4; cv.height = Math.max(tP, gP * 2);
+    var c = cv.getContext('2d');
+    function fillG(gr, rx, ry, rw, rh) {
+      gr.addColorStop(0, cols[0]); gr.addColorStop(0.4, cols[1]); gr.addColorStop(1, cols[2]);
+      c.fillStyle = gr; c.fillRect(rx, ry, rw, rh);
+    }
+    fillG(c.createLinearGradient(0, gP, 0, 0), 0, 0, tP, gP);
+    fillG(c.createLinearGradient(0, gP, 0, gP * 2), 0, gP, tP, gP);
+    fillG(c.createLinearGradient(tP + gP, 0, tP, 0), tP, 0, gP, tP);
+    fillG(c.createLinearGradient(tP + gP, 0, cX, 0), tP + gP, 0, gP, tP);
+    fillG(c.createRadialGradient(cX + gP, gP, 0, cX + gP, gP, gP), cX, 0, gP * 2, gP * 2);
+    return (glowCache[key] = { cv: cv, t: tP, g: gP, cX: cX });
+  }
 
   function drawMazeLayer(world, TS, pal, y0, y1) {
     var m = ctx.getTransform(), k = m.a, gen = world.gen;
@@ -1050,26 +1070,26 @@
     g.beginPath();
     for (i = 0; i < floor.length; i += 2) R(floor[i], floor[i + 1], TS, TS);
     g.fillStyle = 'rgba(255,255,255,0.025)'; g.fill();
-    // soft neon glow fading across the floor beside every wall (spike walls glow red)
+    // soft neon glow fading across the floor beside every wall (pre-baked tile atlas)
     var gd = TS * 0.3;
-    function glow(rx, ry, rw, rh, dx, dy, cols) {
+    var normAtlas = getGlowAtlas(pal, TS, k, false);
+    var spikeAtlas = null;
+    function blitGlow(at, sx, sy, sw, sh, rx, ry, rw, rh) {
       var X = Math.round(rx * k), Y = Math.round(ry * k) - top, X2 = Math.round((rx + rw) * k), Y2 = Math.round((ry + rh) * k) - top;
-      var sx = dx < 0 ? X2 : X, sy = dy < 0 ? Y2 : Y;
-      // a side fades straight out from the wall, an outer corner fades round it
-      var gr = dx && dy ? g.createRadialGradient(sx, sy, 0, sx, sy, gd * k) : g.createLinearGradient(sx, sy, dx > 0 ? X2 : X, dy > 0 ? Y2 : Y);
-      gr.addColorStop(0, cols[0]); gr.addColorStop(0.4, cols[1]); gr.addColorStop(1, cols[2]);
-      g.fillStyle = gr; g.fillRect(X, Y, X2 - X, Y2 - Y);
+      if (X2 > X && Y2 > Y) g.drawImage(at.cv, sx, sy, sw, sh, X, Y, X2 - X, Y2 - Y);
     }
     for (i = 0; i < walls.length; i++) {
-      var q = walls[i], cols = q.spike ? pal.spikeGlow : pal.glow;
-      if (q.up) glow(q.px, q.py - gd, TS, gd, 0, -1, cols);
-      if (q.dn) glow(q.px, q.py + TS, TS, gd, 0, 1, cols);
-      if (q.lf) glow(q.px - gd, q.py, gd, TS, -1, 0, cols);
-      if (q.rt) glow(q.px + TS, q.py, gd, TS, 1, 0, cols);
-      if (q.up && q.lf && q.ul) glow(q.px - gd, q.py - gd, gd, gd, -1, -1, cols);
-      if (q.up && q.rt && q.ur) glow(q.px + TS, q.py - gd, gd, gd, 1, -1, cols);
-      if (q.dn && q.lf && q.dl) glow(q.px - gd, q.py + TS, gd, gd, -1, 1, cols);
-      if (q.dn && q.rt && q.dr) glow(q.px + TS, q.py + TS, gd, gd, 1, 1, cols);
+      var q = walls[i];
+      var at = q.spike ? (spikeAtlas || (spikeAtlas = getGlowAtlas(pal, TS, k, true))) : normAtlas;
+      var tP = at.t, gP = at.g, cX = at.cX;
+      if (q.up) blitGlow(at, 0, 0, tP, gP, q.px, q.py - gd, TS, gd);
+      if (q.dn) blitGlow(at, 0, gP, tP, gP, q.px, q.py + TS, TS, gd);
+      if (q.lf) blitGlow(at, tP, 0, gP, tP, q.px - gd, q.py, gd, TS);
+      if (q.rt) blitGlow(at, tP + gP, 0, gP, tP, q.px + TS, q.py, gd, TS);
+      if (q.up && q.lf && q.ul) blitGlow(at, cX, 0, gP, gP, q.px - gd, q.py - gd, gd, gd);
+      if (q.up && q.rt && q.ur) blitGlow(at, cX + gP, 0, gP, gP, q.px + TS, q.py - gd, gd, gd);
+      if (q.dn && q.lf && q.dl) blitGlow(at, cX, gP, gP, gP, q.px - gd, q.py + TS, gd, gd);
+      if (q.dn && q.rt && q.dr) blitGlow(at, cX + gP, gP, gP, gP, q.px + TS, q.py + TS, gd, gd);
     }
     pass(pal.wall, function (q) { R(q.px, q.py, TS, TS); });
     // darker band behind the neon edge gives the walls some depth
@@ -1379,17 +1399,16 @@
   }
 
   function wrapLines(str, size, maxW) {
-    ctx.font = '700 ' + size + 'px Fredoka';
-    ctx.direction = 'rtl';
-    var words = str.split(' '), lines = [], cur = '';
+    var k = 'w|' + str + '|' + size + '|' + maxW, v = txtCache[k];
+    if (v) return v;
+    var font = '700 ' + size + 'px Fredoka', words = str.split(' '), lines = [], cur = '';
     for (var i = 0; i < words.length; i++) {
       var tryS = cur ? cur + ' ' + words[i] : words[i];
-      if (ctx.measureText(tryS).width > maxW && cur) { lines.push(cur); cur = words[i]; }
+      if (measureW(font, 'rtl', tryS) > maxW && cur) { lines.push(cur); cur = words[i]; }
       else cur = tryS;
     }
     if (cur) lines.push(cur);
-    ctx.direction = 'ltr';
-    return lines;
+    return (txtCache[k] = lines);
   }
   function drawTipCard() {
     var b = G.banner, a = Math.min(1, b.t * 2, (b.max - b.t) * 5);
@@ -1407,9 +1426,7 @@
   }
 
   function keycap(label, x, y) {
-    ctx.font = '700 17px Fredoka';
-    ctx.direction = 'ltr';
-    var w = Math.max(26, ctx.measureText(label).width + 14);
+    var w = Math.max(26, measureW('700 17px Fredoka', 'ltr', label) + 14);
     ctx.fillStyle = '#9aa3c7'; rr(ctx, x - w, y - 20, w, 26, 6); ctx.fill();
     ctx.fillStyle = '#fff'; rr(ctx, x - w, y - 23, w, 26, 6); ctx.fill();
     text(label, x - w / 2, y - 4, 17, '#1d2340', 'center');
@@ -1420,11 +1437,18 @@
     for (var i = 0; i < pairs.length; i++) {
       var w = keycap(pairs[i][0], x, y);
       x -= w + 8;
-      ctx.font = '500 19px Fredoka'; ctx.direction = 'rtl';
-      var tw = ctx.measureText(pairs[i][1]).width;
-      ctx.direction = 'ltr';
+      var tw = measureW('500 19px Fredoka', 'rtl', pairs[i][1]);
       text(pairs[i][1], x, y - 3, 19, 'rgba(255,255,255,0.75)', 'right', { weight: 500 });
       x -= tw + 22;
+    }
+  }
+
+  function drawHearts(y, sz) {
+    for (var i = 0; i < 3; i++) {
+      var hx = RP.cx + (1 - i) * 52, full = i < G.hearts;
+      heartPath(hx, y, sz);
+      ctx.fillStyle = full ? '#ff3f6c' : '#3a2458'; ctx.fill();
+      if (full) { ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.beginPath(); ctx.arc(hx - 9, y - 10, 4, 0, Math.PI * 2); ctx.fill(); }
     }
   }
 
@@ -1434,13 +1458,7 @@
     text('المرحلة ' + n, RP.cx, 112, 40, '#ffe600', 'center', { stroke: '#12031f' });
     var nm = G.def.name, fs = fitSize(nm, 24, RP.w - 30);
     text(nm, RP.cx, 148, fs, '#fff', 'center');
-    // hearts
-    for (var i = 0; i < 3; i++) {
-      var hx = RP.cx + (1 - i) * 52, full = i < G.hearts;
-      heartPath(hx, 196, 40);
-      ctx.fillStyle = full ? '#ff3f6c' : '#3a2458'; ctx.fill();
-      if (full) { ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.beginPath(); ctx.arc(hx - 9, 186, 4, 0, Math.PI * 2); ctx.fill(); }
-    }
+    drawHearts(196, 40);
     statLine('النقاط', G.dotsGot + '/' + G.dotsTotal, 262, function (x, y) { dotIcon(x, y, 12); });
     statLine('العملات', String(G.coinsGot), 312, function (x, y) { coinIcon(x, y, 11); });
     var over = G.time > G.def.par;
@@ -1453,7 +1471,7 @@
       ['بلا إصابة', G.hits === 0, 1],
       ['أسرع من ' + fmtTime(G.def.par), !over, 1]
     ];
-    for (i = 0; i < 3; i++) {
+    for (var i = 0; i < 3; i++) {
       var gy = 150 + i * 44, ok = goals[i][1];
       starPath(LP.x + LP.w - 36, gy - 9, 16);
       ctx.fillStyle = ok ? '#ffe600' : '#3a2458'; ctx.fill();
@@ -1466,12 +1484,13 @@
   }
 
   function drawEndlessHUD() {
-    panel(RP, 64, 300);
-    text('الارتفاع', RP.cx, 104, 24, '#d9c7ff', 'center', { weight: 500 });
-    text(G.maxHeight + ' م', RP.cx, 160, 56, '#b6ff3a', 'center', { stroke: '#12031f' });
-    statLine('النتيجة', String(scoreNow()), 222, null);
-    statLine('العملات', String(G.coinsGot), 270, function (x, y) { coinIcon(x, y, 11); });
-    statLine('الأفضل', String(save.bestScore), 318, null);
+    panel(RP, 64, 344);
+    text('الارتفاع', RP.cx, 100, 24, '#d9c7ff', 'center', { weight: 500 });
+    text(G.maxHeight + ' م', RP.cx, 152, 54, '#b6ff3a', 'center', { stroke: '#12031f' });
+    drawHearts(196, 38);
+    statLine('النتيجة', String(scoreNow()), 258, null);
+    statLine('العملات', String(G.coinsGot), 306, function (x, y) { coinIcon(x, y, 11); });
+    statLine('الأفضل', String(save.bestScore), 354, null);
     // goo meter (left panel)
     panel(LP, 64, 170);
     text('الهلام', LP.cx, 102, 28, '#7dff3a', 'center');
@@ -1833,7 +1852,8 @@
     skip: function (n) { startLevel(n); },
     endless: function () { startEndless(); },
     win: function () { if (G.screen === 'play' && G.mode === 'level') reachExit(); },
-    die: function () { if (G.screen === 'play') hit('spike'); },
+    die: function () { if (G.screen === 'play') { G.hearts = 1; hit('spike'); } },
+    hit: function (k) { if (G.screen === 'play') hit(k || 'spike'); },
     dash: function (d) { tryDash(d); },
     set god(v) { G.god = !!v; }, get god() { return G.god; },
     set autoplay(v) { G.autoplay = !!v; G.ai = null; }, get autoplay() { return G.autoplay; },

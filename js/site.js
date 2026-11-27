@@ -4,8 +4,9 @@
  * folder (file://).
  *
  * Routes (hash based):
- *   #/                home
- *   #/c/<category>    one category
+ *   #/                home (Poki-grade Bento Hero + curated shelves)
+ *   #/c/<category>    consolidated category group or single catalog category
+ *   #/quick/<filter>  quick filter (hot, friends, simple, short)
  *   #/favorites       saved favorites
  *   #/search/<text>   (old links) the home page
  *   #/play/<slug>     play a game
@@ -23,11 +24,21 @@
     exitHint: 'اضغط <b>Shift + Tab</b> من مساحة اللعب للعودة إلى أزرار اللعبة خارج الإطار.',
     home: 'الرئيسية',
     hot: 'الأكثر حماسًا الآن',
+    hotNav: 'الأكثر حماسًا',
+    hotShelf: 'اختيارات الفسحة الذهبية',
+    hotHint: 'أكثر الألعاب حماسًا وإثارة باختيار طلاب الصف.',
+    friendsNav: 'لاعبان',
+    friendsShelf: 'العب مع صديقك!',
+    newShelf: 'جديد في الفسحة',
+    newBadge: 'جديد',
     recent: 'تابع اللعب',
-    favs: 'ألعابك المفضلة',
+    favs: 'مفضّلتي',
+    favsShelf: 'مفضّلتك',
+    favsTitle: 'ألعابك المفضلة',
     all: 'كل الألعاب',
+    seeAll: 'عرض الكل',
     favsEmpty: 'لم تضف ألعابًا للمفضلة بعد',
-    favsPrompt: 'افتح لعبة واضغط زر القلب لحفظها هنا.',
+    favsPrompt: 'اضغط رمز القلب على أي بطاقة أو داخل اللعبة لحفظها هنا.',
     more: 'ألعاب أخرى ستحبها',
     toPlay: ' تنتظرك!',
     found: function (n) { return n === 1 ? 'وجدنا لعبة واحدة' : n === 2 ? 'وجدنا لعبتين' : 'وجدنا ' + nGames(n); },
@@ -41,6 +52,8 @@
     p2Badge: 'لاعبان',
     controls: 'طريقة اللعب',
     controlsNone: 'استخدم الفأرة ولوحة المفاتيح!',
+    controlsMore: function (n) { return '+ عرض الكل (' + n + ')'; },
+    controlsLess: 'عرض أقل',
     help: 'نصائح ومعلومات',
     tip1: 'المفاتيح لا تعمل؟ <b>انقر على اللعبة</b> أولًا!',
     tip2: 'اضغط <b>ملء الشاشة</b> لتكبير اللعبة.',
@@ -76,13 +89,19 @@
     friendHint: 'العبوا معًا على الجهاز نفسه — دون حسابات.',
     titleNotFound: 'لم نجد اللعبة',
     gameFallback: 'لعبة',
-    starterTitle: 'ابدأ من هنا',
-    starterGo: 'هيا',
+    starterTitle: 'أول مرة مع الفأرة؟',
+    starterAge: '(5–7 سنوات)',
+    starterGo: 'ابدأ الآن',
     starterBadge: 'نقطة البداية',
     mute: 'كتم الصوت',
     nextTitle: 'العب بعدها',
     nextGo: 'هيا',
-    nextClose: 'إخفاء'
+    nextClose: 'إخفاء',
+    surpriseTitle: 'لعبة المفاجأة!',
+    surpriseSpin: 'نختار لك لعبة رائعة…',
+    surprisePlay: 'العب الآن! ▶',
+    surpriseReroll: 'لفّ مرة أخرى 🎲',
+    surpriseClose: 'إغلاق'
   };
   // Arabic counting: 1 لعبة واحدة, 2 لعبتان, 3-10 ألعاب, 11+ لعبة.
   function nGames(n) {
@@ -106,38 +125,61 @@
   var SITE = window.SITE || { name: 'ألعاب الفسحة', tagline: '' };
   SITE.name = String(SITE.name || 'ألعاب الفسحة');
   var ALL_CATS = Array.isArray(window.CATEGORIES) ? window.CATEGORIES : [];
-  var GAMES = (Array.isArray(window.GAMES) ? window.GAMES : []).filter(function (g) {
-    return g && typeof g.slug === 'string' && g.slug && !g.hidden;
+  // Keep every catalog game addressable by direct #/play/<slug>, while storefront
+  // grids, categories, Surprise and Play-Next show only non-hidden curated games.
+  var ALL_GAMES = (Array.isArray(window.GAMES) ? window.GAMES : []).filter(function (g) {
+    return g && typeof g.slug === 'string' && g.slug;
   });
   var BY_SLUG = Object.create(null);
-  GAMES.forEach(function (g) {
+  var VISIBLE_BY_SLUG = Object.create(null);
+  var GAMES = [];
+  ALL_GAMES.forEach(function (g) {
     BY_SLUG[g.slug] = g;
     if (!Array.isArray(g.cats)) g.cats = [];
     if (!Array.isArray(g.controls)) g.controls = [];
     g.title = String(g.title || g.slug);
     g.color = /^#[0-9a-f]{3,8}$/i.test(g.color || '') ? g.color : '#4f7cff';
+    if (!g.hidden) {
+      GAMES.push(g);
+      VISIBLE_BY_SLUG[g.slug] = g;
+    }
   });
   var CAT_BY_ID = Object.create(null);
   ALL_CATS.forEach(function (c) { if (c && c.id) CAT_BY_ID[c.id] = c; });
-  // Only categories that actually have (visible) games.
-  var CATS = ALL_CATS.filter(function (c) {
-    return c && c.id && GAMES.some(function (g) { return g.cats.indexOf(c.id) >= 0; });
-  });
-  // White labels on these colors meet WCAG AA for normal-size text.
-  var CAT_COLORS = ['#a74200', '#b71c4a', '#6940bd', '#137a45', '#006aab', '#ae2566', '#806000', '#08776d'];
+  // White labels on these colors meet WCAG AA (>= 4.5:1) for normal-size text.
+  var CAT_COLORS = ['#a74200', '#b71c4a', '#6940bd', '#0e7540', '#0064a8', '#ae2566', '#806000', '#08776d'];
+  // Consolidated 1-row storefront category groups (all 11 catalog category IDs still resolve directly).
+  var NAV_GROUPS = [
+    { id: 'speed', label: 'سرعة وسباق', icon: '🏎️', color: '#a74200', cats: ['racing', 'running', 'sports'] },
+    { id: 'action', label: 'أكشن وتصويب', icon: '🎯', color: '#b71c4a', cats: ['shooter', 'battle', 'strategy'] },
+    { id: 'brain', label: 'ألغاز وتفكير', icon: '🧩', color: '#0e7540', cats: ['puzzle', 'idle'] },
+    { id: 'skills', label: 'مهارات وتحدي', icon: '⌨️', color: '#0064a8', cats: ['challenge', 'arcade'] }
+  ];
+  var NAV_GROUP_BY_ID = Object.create(null);
+  NAV_GROUPS.forEach(function (grp) { NAV_GROUP_BY_ID[grp.id] = grp; });
+
   var QUICK = Object.create(null);
-  QUICK.short = { label: T.shortRound, icon: '⏱️', match: function (g) { return Array.isArray(g.roundMinutes) && g.roundMinutes[1] <= 3; } };
-  QUICK.simple = { label: T.oneButton, icon: '👆', match: function (g) { return g.inputStyle === 'one-button'; } };
-  QUICK.friends = { label: T.playFriend, icon: '👥', match: isMulti };
+  QUICK.hot = { label: T.hotNav, icon: '🔥', color: '#c42718', src: 'featured', note: T.hotHint, match: function (g) { return !!g.hot; } };
+  QUICK.friends = { label: T.playFriend, icon: '👥', color: '#5936b8', src: 'quick', note: T.friendHint, match: isMulti };
+  QUICK.simple = { label: T.oneButton, icon: '👆', color: '#384d91', src: 'quick', note: T.oneButtonHint, match: function (g) { return g.inputStyle === 'one-button'; } };
+  QUICK.short = { label: T.shortRound, icon: '⏱️', color: '#0064a8', src: 'quick', note: T.estimates, match: function (g) { return Array.isArray(g.roundMinutes) && g.roundMinutes[1] <= 3; } };
   var INPUT_LABELS = { 'one-button': T.oneButton, pointer: T.pointer, keyboard: T.keyboard, mixed: T.mixedInput };
   function durationLabel(g) {
     return Array.isArray(g.roundMinutes) ? T.duration(g.roundMinutes[0], g.roundMinutes[1]) : T.openEnded;
   }
 
-  function gamesIn(catId) { return GAMES.filter(function (g) { return g.cats.indexOf(catId) >= 0; }); }
+  function gamesIn(catId) {
+    var grp = NAV_GROUP_BY_ID[catId];
+    if (grp) return GAMES.filter(function (g) { return g.cats.some(function (id) { return grp.cats.indexOf(id) >= 0; }); });
+    return GAMES.filter(function (g) { return g.cats.indexOf(catId) >= 0; });
+  }
   function isMulti(g) { return /[2-9]/.test(String(g.players || '')); }
   function catEmoji(g) { var c = CAT_BY_ID[g.cats[0]]; return (c && c.icon) || '🎮'; }
-  function catColor(id) { var i = ALL_CATS.findIndex(function (c) { return c.id === id; }); return CAT_COLORS[(i < 0 ? 0 : i) % CAT_COLORS.length]; }
+  function catColor(id) {
+    if (NAV_GROUP_BY_ID[id]) return NAV_GROUP_BY_ID[id].color;
+    var i = ALL_CATS.findIndex(function (c) { return c.id === id; });
+    return CAT_COLORS[(i < 0 ? 0 : i) % CAT_COLORS.length];
+  }
 
   /* --------------------------------------------------------- storage */
   var KEY_RECENT = 'sg:site:recent';
@@ -152,7 +194,7 @@
   function saveList(key, list) {
     try { window.localStorage.setItem(key, JSON.stringify(list)); return true; } catch (e) { return false; }
   }
-  function known(list) { return list.filter(function (s) { return !!BY_SLUG[s]; }); }
+  function known(list) { return list.filter(function (s) { return !!VISIBLE_BY_SLUG[s]; }); }
   function getRecent() { return known(loadList(KEY_RECENT)); }
   function loadFavs() { return temporaryFavs || loadList(KEY_FAVS); }
   function getFavs() { return known(loadFavs()); }
@@ -228,7 +270,7 @@
   }
   // A little burst of emoji flying out of an element.
   function burst(el, chars) {
-    if (calm()) return;
+    if (calm() || !el) return;
     var host = overlayHost();
     // The topbar is not drawn in fullscreen: the stars fly out of the toast instead.
     if (host !== document.body) el = $('#toast') || el;
@@ -325,29 +367,47 @@
     var t = window.SG_THUMBS;
     return (t && t[slug]) || 'games/' + esc(slug) + '/thumb.svg';
   }
-  function tileHTML(g) {
-    // Icon-only badges keep the names drawn in the thumbnail art readable.
+  function tileHTML(g, opts) {
+    opts = opts || {};
     var badges = '', tip = g.title + ' · ' + durationLabel(g) + ' · ' + (INPUT_LABELS[g.inputStyle] || '');
-    if (g.hot) { badges += '<b class="badge hot" aria-hidden="true">🔥</b>'; tip += ' · ' + T.hotBadge; }
+    if (opts.hero) {
+      badges += '<b class="badge badge-crown" aria-hidden="true">👑 #1</b>';
+      tip += ' · ' + T.hotBadge;
+    } else {
+      if (g.isNew) { badges += '<b class="badge badge-new" aria-hidden="true">' + T.newBadge + '</b>'; tip += ' · ' + T.newBadge; }
+      if (g.hot) { badges += '<b class="badge hot" aria-hidden="true">🔥</b>'; tip += ' · ' + T.hotBadge; }
+    }
     if (g.starter) { badges += '<b class="badge start" aria-hidden="true">🖱️</b>'; tip += ' · ' + T.starterBadge; }
     if (isMulti(g)) { badges += '<b class="badge p2" aria-hidden="true">👥</b>'; tip += ' · ' + T.p2Badge; }
-    return '<a class="tile" href="#/play/' + enc(g.slug) + '" data-slug="' + esc(g.slug) + '" title="' + esc(tip) + '"' +
+    var tileCls = 'tile' + (opts.hero ? ' hero-tile' : '') + (opts.compact ? ' tile-compact' : '');
+    var loadMode = opts.eager ? 'eager' : 'lazy';
+    var anchor = '<a class="' + tileCls + '" href="#/play/' + enc(g.slug) + '" data-slug="' + esc(g.slug) + '" title="' + esc(tip) + '"' +
       ' style="--c:' + g.color + ';--c2:' + deepen(g.color, 0.45) + ';--fbs:' + fbSize(g.title) + 'cqw" aria-label="' + esc(g.title) + '">' +
       '<span class="art">' +
         '<span class="fb" aria-hidden="true"><span class="fb-emoji">' + catEmoji(g) + '</span><span class="fb-title">' + esc(g.title) + '</span></span>' +
-        '<img src="' + thumbSrc(g.slug) + '" alt="" loading="lazy" decoding="async" draggable="false"' +
+        '<img src="' + thumbSrc(g.slug) + '" alt="" loading="' + loadMode + '" decoding="async" draggable="false"' +
         ' onload="this.parentNode.parentNode.classList.add(\'loaded\')"' +
         ' onerror="this.parentNode.parentNode.classList.add(\'noimg\');this.parentNode.removeChild(this)">' +
       '</span>' +
       (badges ? '<span class="badges">' + badges + '</span>' : '') +
       '<span class="label" aria-hidden="true">' + esc(g.title) + '</span>' +
       '</a>';
+    if (!opts.favBtn) return anchor;
+    var fav = isFav(g.slug);
+    var favLabel = (fav ? T.favOn : T.fav) + ': ' + g.title;
+    return '<div class="tile-wrap' + (opts.hero ? ' hero-wrap' : '') + '">' + anchor +
+      '<button type="button" class="tile-fav' + (fav ? ' on' : '') + '" data-fav-slug="' + esc(g.slug) + '" aria-pressed="' + fav + '" aria-label="' + esc(favLabel) + '" title="' + esc(fav ? T.favOn : T.fav) + '"><span aria-hidden="true">' + (fav ? '❤️' : '🤍') + '</span></button>' +
+      '</div>';
   }
-  function gridHTML(list, cls) {
-    return '<div class="grid ' + (cls || '') + '">' + list.map(function (g) { return tileHTML(g); }).join('') + '</div>';
+  function gridHTML(list, cls, opts) {
+    opts = opts || {};
+    var srcAttr = opts.tmSrc ? ' data-tm-src="' + esc(opts.tmSrc) + '"' : '';
+    return '<div class="grid ' + (cls || '') + '"' + srcAttr + '>' + list.map(function (g) {
+      return tileHTML(g, { favBtn: opts.favBtn !== false, eager: opts.eager, compact: opts.compact });
+    }).join('') + '</div>';
   }
-  function sectionHTML(icon, title, inner, more) {
-    return '<section class="sec">' +
+  function sectionHTML(icon, title, inner, more, secCls) {
+    return '<section class="sec' + (secCls ? ' ' + secCls : '') + '">' +
       '<div class="sec-head"><h2><span class="sec-icon" aria-hidden="true">' + icon + '</span><span>' + esc(title) + '</span></h2>' + (more || '') + '</div>' +
       inner + '</section>';
   }
@@ -366,28 +426,38 @@
   }
 
   function chipsHTML(route) {
-    var html = '<a class="chip' + (route.name === 'home' ? ' on' : '') + '" href="#/" style="--cc:#1c2250"' + (route.name === 'home' ? ' aria-current="page"' : '') + '>' +
-      '<span class="chip-ico" aria-hidden="true">🏠</span>' + T.home + '</a>';
-    html += '<a class="chip' + (route.name === 'favorites' ? ' on' : '') + '" href="#/favorites" style="--cc:#d6246e"' + (route.name === 'favorites' ? ' aria-current="page"' : '') + '><span class="chip-ico" aria-hidden="true">❤️</span>' + T.favs + '</a>';
-    CATS.forEach(function (c) {
-      var on = route.name === 'cat' && route.id === c.id;
-      html += '<a class="chip' + (on ? ' on' : '') + '" href="#/c/' + enc(c.id) + '" style="--cc:' + catColor(c.id) + '"' + (on ? ' aria-current="page"' : '') + '>' +
-        '<span class="chip-ico" aria-hidden="true">' + esc(c.icon || '🎮') + '</span>' + esc(c.label) + '</a>';
+    var favCount = getFavs().length;
+    var activeGroup = route.name === 'cat' ? (NAV_GROUP_BY_ID[route.id] ? route.id : (NAV_GROUPS.find(function (g) { return g.cats.indexOf(route.id) >= 0; }) || {}).id) : '';
+    var items = [
+      { href: '#/', on: route.name === 'home', cc: '#1c2250', ico: '🏠', lbl: T.home },
+      { href: '#/quick/hot', on: route.name === 'quick' && route.id === 'hot', cc: '#c42718', ico: '🔥', lbl: T.hotNav },
+      { href: '#/quick/friends', on: route.name === 'quick' && route.id === 'friends', cc: '#5936b8', ico: '👥', lbl: T.friendsNav }
+    ];
+    NAV_GROUPS.forEach(function (grp) {
+      items.push({ href: '#/c/' + enc(grp.id), on: activeGroup === grp.id, cc: grp.color, ico: grp.icon, lbl: grp.label });
     });
-    return html;
-  }
-  function quickHTML(route) {
-    return Object.keys(QUICK).map(function (id) {
-      var item = QUICK[id], active = route.name === 'quick' && route.id === id;
-      return '<a class="chip' + (active ? ' on' : '') + '" style="--cc:#384d91" href="#/quick/' + id + '"' + (active ? ' aria-current="page"' : '') + '><span aria-hidden="true">' + item.icon + '</span>' + item.label + '</a>';
+    items.push({ href: '#/favorites', on: route.name === 'favorites', cc: '#c2185b', ico: '❤️', lbl: T.favs, cnt: favCount });
+    var simpleOn = route.name === 'quick' && route.id === 'simple';
+    items.push({ href: simpleOn ? '#/' : '#/quick/simple', on: simpleOn, cc: '#384d91', ico: '👆', lbl: T.oneButton, cls: 'chip-toggle' });
+
+    return items.map(function (it) {
+      return '<a class="chip' + (it.cls ? ' ' + it.cls : '') + (it.on ? ' on' : '') + '" href="' + it.href + '" style="--cc:' + it.cc + '"' + (it.on ? ' aria-current="page"' : '') + '>' +
+        '<span class="chip-ico" aria-hidden="true">' + it.ico + '</span><span>' + esc(it.lbl) + '</span>' +
+        (it.cnt ? '<span class="chip-cnt">' + it.cnt + '</span>' : '') + '</a>';
     }).join('');
   }
+  function refreshChips() {
+    var el = $('#chips');
+    if (el) el.innerHTML = chipsHTML(parseRoute());
+  }
+
   function renderQuick(route) {
     var item = QUICK[route.id];
     if (!item) return notFound(T.noCat);
     var list = GAMES.filter(item.match);
-    return '<div class="banner" style="--cc:#384d91"><span class="banner-ico" aria-hidden="true">' + item.icon + '</span><div><h1>' + item.label + '</h1><p>' + T.found(list.length) + '</p></div></div>' +
-      '<p class="filter-note">' + (route.id === 'short' ? T.estimates : route.id === 'simple' ? T.oneButtonHint : T.friendHint) + '</p>' + gridHTML(list);
+    if (route.id === 'hot') list = byHotRank(list);
+    return '<div class="banner" style="--cc:' + item.color + '"><span class="banner-ico" aria-hidden="true">' + item.icon + '</span><div><h1>' + item.label + '</h1><p>' + T.found(list.length) + '</p></div></div>' +
+      '<p class="filter-note">' + item.note + '</p>' + gridHTML(list, '', { tmSrc: item.src });
   }
 
   // A featured game's place: catalog `hot: <rank>` (1 leads; `hot: true` comes after the ranked).
@@ -397,24 +467,24 @@
       return hotRank(a[0]) - hotRank(b[0]) || a[1] - b[1];
     }).map(function (x) { return x[0]; });
   }
-  function hotList() {
+  function hotList(limit) {
     var hot = GAMES.filter(function (g) { return g.hot; });
-    return (hot.length ? byHotRank(hot) : GAMES).slice(0, 6);
+    return (hot.length ? byHotRank(hot) : GAMES).slice(0, limit || 6);
   }
 
-  // Stable featured-first order, shared by home and category views.
-  // The beginner lesson leads, then hot games by rank, then the rest.
+  // Stable featured-first order: proven S-tier hot games lead by rank, then the rest,
+  // with the beginner lesson at the end (never duplicated as Tile #1 ahead of superstars).
   function featuredFirst(list) {
-    return list.filter(function (g) { return g.starter; })
-      .concat(byHotRank(list.filter(function (g) { return g.hot && !g.starter; })))
-      .concat(list.filter(function (g) { return !g.hot && !g.starter; }));
+    return byHotRank(list.filter(function (g) { return g.hot && !g.starter; }))
+      .concat(list.filter(function (g) { return !g.hot && !g.starter; }))
+      .concat(list.filter(function (g) { return g.starter; }));
   }
   function starterCard(g) {
     if (!g) return '';
     return '<a class="starter" href="#/play/' + enc(g.slug) + '" data-slug="' + esc(g.slug) + '">' +
       '<span class="starter-ico" aria-hidden="true">🖱️</span>' +
-      '<span class="starter-copy"><b>' + T.starterTitle + '</b><span>' + esc(g.title) + '</span><small>' + esc(g.blurb || '') + '</small></span>' +
-      '<span class="starter-go">' + T.starterGo + '</span></a>';
+      '<span class="starter-copy"><b>' + T.starterTitle + '</b> <span class="starter-age">' + T.starterAge + '</span> <span class="starter-sep" aria-hidden="true">—</span> <span class="starter-game">' + esc(g.title) + '</span></span>' +
+      '<span class="starter-go">' + T.starterGo + ' ▶</span></a>';
   }
 
   /* ---------------------------------------------------------------- mute */
@@ -433,6 +503,8 @@
     var mute = $('#muteBtn');
     personalMuted = !!storedPreference('muted', false);
     paintMute();
+    // Prevent mouse clicks from blurring the game iframe and triggering a pause.
+    mute.addEventListener('mousedown', function (e) { if (current) e.preventDefault(); });
     mute.addEventListener('click', function (e) {
       personalMuted = !personalMuted;
       writePreference('muted', personalMuted);
@@ -450,40 +522,68 @@
     });
   }
 
+  function homeFavsInner() {
+    var favs = getFavs().map(function (s) { return VISIBLE_BY_SLUG[s]; });
+    if (!favs.length) return '';
+    var more = favs.length > 6 ? '<a class="sec-more" href="#/favorites">' + T.seeAll + ' (' + favs.length + ') ‹</a>' : '';
+    return sectionHTML('❤️', T.favsShelf, gridHTML(favs.slice(0, 6), 'favorites-grid shelf-grid', { tmSrc: 'favorites' }), more, 'shelf-sec');
+  }
   function renderHome() {
     if (!GAMES.length) {
       return '<div class="empty"><div class="empty-emoji">🛠️</div><h2>' + T.soon + '</h2><p>' + T.soonSub + '</p></div>';
     }
-    var recent = getRecent().slice(0, 6).map(function (s) { return BY_SLUG[s]; });
+    var recent = getRecent().slice(0, 6).map(function (s) { return VISIBLE_BY_SLUG[s]; });
     var start = null;
     for (var i = 0; i < GAMES.length; i++) if (GAMES[i].starter) { start = GAMES[i]; break; }
-    return starterCard(start) +
-      (recent.length ? sectionHTML('🕹️', T.recent, gridHTML(recent, 'recent-grid')) : '') +
-      sectionHTML('🎮', T.all, gridHTML(featuredFirst(GAMES), 'catalog-grid'), '<span class="count">' + nGames(GAMES.length) + '</span>');
+
+    // Poki Bento Hero Spotlight: 1 big 2x2 flagship + 8 crisp 1x1 S-tier tiles (12 grid cells -> zero orphans at 6, 4, or 2 cols).
+    var bentoGames = hotList(9);
+    var bentoInner = '<div class="bento-grid" data-tm-src="featured">' + bentoGames.map(function (g, idx) {
+      return tileHTML(g, { hero: idx === 0, favBtn: true, eager: true });
+    }).join('') + '</div>';
+    var bentoMore = '<a class="sec-more" href="#/quick/hot">' + T.seeAll + ' ‹</a>';
+
+    // Brand-new games shelf
+    var newGames = GAMES.filter(function (g) { return g.isNew; });
+    var newSec = newGames.length ? sectionHTML('✨', T.newShelf, gridHTML(newGames, 'new-grid shelf-grid', { tmSrc: 'catalog' }), '', 'shelf-sec') : '';
+
+    // Dedicated 2-player shelf
+    var multiAll = featuredFirst(GAMES.filter(isMulti));
+    var friendsMore = multiAll.length > 8 ? '<a class="sec-more" href="#/quick/friends">' + T.seeAll + ' (' + multiAll.length + ') ‹</a>' : '';
+    var friendsSec = multiAll.length ? sectionHTML('👥', T.friendsShelf, gridHTML(multiAll.slice(0, 8), 'friends-grid shelf-grid', { tmSrc: 'quick' }), friendsMore, 'shelf-sec') : '';
+
+    return (!recent.length ? starterCard(start) : '') +
+      sectionHTML('🔥', T.hotShelf, bentoInner, bentoMore, 'bento-sec') +
+      (recent.length ? sectionHTML('🕹️', T.recent, gridHTML(recent, 'recent-grid shelf-grid', { tmSrc: 'recent' }), '', 'shelf-sec') : '') +
+      '<div id="homeFavsWrap">' + homeFavsInner() + '</div>' +
+      newSec +
+      friendsSec +
+      sectionHTML('🏆', T.all, gridHTML(featuredFirst(GAMES), 'catalog-grid'), '<span class="count">' + nGames(GAMES.length) + '</span>');
   }
 
   function renderFavorites() {
-    var list = getFavs().map(function (s) { return BY_SLUG[s]; });
-    return '<div class="banner" style="--cc:#d6246e"><span class="banner-ico" aria-hidden="true">❤️</span><div><h1>' + T.favs + '</h1><p>' + nGames(list.length) + '</p></div></div>' +
-      (list.length ? '<section class="sec">' + gridHTML(list, 'favorites-grid') + '</section>' :
+    var list = getFavs().map(function (s) { return VISIBLE_BY_SLUG[s]; });
+    return '<div class="banner" style="--cc:#c2185b"><span class="banner-ico" aria-hidden="true">❤️</span><div><h1>' + T.favsTitle + '</h1><p>' + nGames(list.length) + '</p></div></div>' +
+      (list.length ? '<section class="sec">' + gridHTML(list, 'favorites-grid', { tmSrc: 'favorites' }) + '</section>' :
         '<div class="empty"><h2>' + T.favsEmpty + '</h2><p>' + T.favsPrompt + '</p><a class="big-btn" href="#/">' + T.back + '</a></div>');
   }
 
   function renderCat(route) {
-    var c = CAT_BY_ID[route.id];
+    var grp = NAV_GROUP_BY_ID[route.id];
+    var c = grp || CAT_BY_ID[route.id];
     var list = c ? gamesIn(c.id) : [];
     if (!c || !list.length) return notFound(T.noCat);
     return '<div class="banner" style="--cc:' + catColor(c.id) + '">' +
         '<span class="banner-ico" aria-hidden="true">' + esc(c.icon || '🎮') + '</span>' +
         '<div><h1>' + esc(c.label) + '</h1><p>' + nGames(list.length) + T.toPlay + '</p></div>' +
       '</div>' +
-      '<section class="sec">' + gridHTML(featuredFirst(list)) + '</section>';
+      '<section class="sec">' + gridHTML(featuredFirst(list), '', { tmSrc: 'category' }) + '</section>';
   }
 
   function notFound(msg) {
     return '<div class="empty"><div class="empty-emoji">🙈</div><h2>' + T.oops + '</h2><p>' + esc(msg) + '</p>' +
       '<a class="big-btn" href="#/">' + T.back + '</a></div>' +
-      (GAMES.length ? sectionHTML('🔥', T.hot, gridHTML(hotList())) : '');
+      (GAMES.length ? sectionHTML('🔥', T.hot, gridHTML(hotList(6), '', { tmSrc: 'featured' })) : '');
   }
 
   var MOUSE_RE = /انقر|نقر|الفأرة|فأرة|الماوس|اسحب|سحب|click|mouse|drag/i;
@@ -495,14 +595,23 @@
     return '<kbd class="' + cls + '" dir="' + (ar ? 'rtl' : 'ltr') + '">' + (mouse ? '<span class="kc-ico" aria-hidden="true">🖱️</span>' : '') + '<span>' + esc(s) + '</span></kbd>';
   }
   function controlsHTML(g, meta) {
-    var rows = g.controls.map(function (c) {
+    var CAP = 4;
+    var extra = g.controls.length > CAP;
+    var rows = g.controls.map(function (c, idx) {
       // Keys keep keyboard order (← → reads left to right) even on an RTL page.
       var keys = (Array.isArray(c.keys) ? c.keys : [c.keys]).map(keycap).join('');
-      return '<li><span class="keys" dir="ltr">' + keys + '</span><span class="act">' + esc(c.action || '') + '</span></li>';
+      return '<li' + (idx >= CAP ? ' class="ctl-extra"' : '') + '><span class="keys" dir="ltr">' + keys + '</span><span class="act">' + esc(c.action || '') + '</span></li>';
     }).join('');
+    var moreBtn = extra ? '<button type="button" class="ctl-more" id="ctlMore" aria-expanded="false">' + T.controlsMore(g.controls.length) + '</button>' : '';
     return '<div class="card controls">' + (meta ? '<div class="pb-meta">' + meta + '</div>' : '') + '<h3>🎮 ' + T.controls + '</h3>' +
-      (rows ? '<ul class="ctl-list">' + rows + '</ul>' : '<p class="muted">' + T.controlsNone + '</p>') +
+      (rows ? '<ul class="ctl-list' + (extra ? ' ctl-collapsed' : '') + '" id="ctlList">' + rows + '</ul>' + moreBtn : '<p class="muted">' + T.controlsNone + '</p>') +
       '<p class="exit-hint">' + T.tip1 + ' ' + T.exitHint + '</p></div>';
+  }
+  function loadingCueHTML(g) {
+    var first = g.controls && g.controls[0];
+    if (!first) return '';
+    var keys = (Array.isArray(first.keys) ? first.keys : [first.keys]).slice(0, 4).map(keycap).join('');
+    return '<div class="stage-cue"><span class="keys" dir="ltr">' + keys + '</span><span class="stage-cue-act">' + esc(first.action || '') + '</span></div>';
   }
   var FS_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
@@ -516,17 +625,31 @@
     }).join('');
     var pl = '<span class="players">' + playersLabel(g.players) + '</span><span class="players">⏱️ ' + durationLabel(g) + '</span><span class="players">' + esc(INPUT_LABELS[g.inputStyle] || '') + '</span>';
 
-    // Related: shared categories first (most overlap), then hot, then the rest.
-    var more = GAMES.filter(function (o) { return o !== g; }).map(function (o) {
+    // Visible 3-tile «العب بعدها» rail in sidebar: top non-recent visible S-tier picks.
+    var rail = nextCandidates(g.slug).slice(0, 3);
+    var railSlugs = rail.map(function (o) { return o.slug; });
+
+    // Related shelf below stage: 6 unique visible games (shared categories + hot, avoiding sidebar duplicates when possible).
+    var relatedPool = GAMES.filter(function (o) { return o.slug !== g.slug; }).map(function (o) {
       var shared = o.cats.filter(function (id) { return g.cats.indexOf(id) >= 0; }).length;
-      return [shared * 10 + (o.hot ? 2 + (30 - Math.min(hotRank(o), 30)) / 100 : 0), o];
+      var inRail = railSlugs.indexOf(o.slug) >= 0 ? -5 : 0;
+      return [shared * 10 + (o.hot ? 2 + (30 - Math.min(hotRank(o), 30)) / 100 : 0) + inRail, o];
     }).sort(function (a, b) { return b[0] - a[0]; }).slice(0, 6).map(function (x) { return x[1]; });
+
+    var railHTML = rail.length ? '<div class="card side-next"><h3>⚡ ' + T.nextTitle + '</h3>' +
+      '<div class="side-next-grid" data-tm-src="related">' + rail.map(function (o) {
+        return tileHTML(o, { favBtn: false, compact: true });
+      }).join('') + '</div></div>' : '';
 
     return '<div class="play" id="play">' +
         '<div class="play-main" id="playMain">' +
           '<div class="stage-wrap" id="stageWrap">' +
             '<div class="stage loading" id="stage" style="--c:' + g.color + '">' +
-              '<div class="stage-loading" role="status"><svg aria-hidden="true" viewBox="0 0 64 64" width="84" height="84">' + iconSVG() + '</svg><span>' + T.loading + esc(g.title) + '…</span></div>' +
+              '<div class="stage-loading" role="status">' +
+                '<div class="stage-art-wrap"><img class="stage-thumb" src="' + thumbSrc(g.slug) + '" alt="" decoding="async" draggable="false" onerror="this.style.display=\'none\'"><svg class="stage-spin" aria-hidden="true" viewBox="0 0 64 64" width="44" height="44">' + iconSVG() + '</svg></div>' +
+                '<span class="stage-load-title">' + T.loading + esc(g.title) + '…</span>' +
+                loadingCueHTML(g) +
+              '</div>' +
               '<div class="stage-msg" id="stageMsg" role="alert" hidden><div class="empty-emoji" aria-hidden="true">🛠️</div><b>' + T.loadFailed + '</b><span>' + T.loadFailedSub + '</span><div class="stage-actions"><button type="button" class="pbtn" id="gameRetry">' + T.retry + '</button><a class="pbtn" href="' + esc(playReturn ? playReturn.hash : '#/') + '">' + T.returnGames + '</a></div></div>' +
               '<div class="next-card" id="nextCard" hidden></div>' +
             '</div>' +
@@ -541,12 +664,14 @@
             '</div>' +
           '</div>' +
         '</div>' +
-        '<aside class="play-side" id="playSide">' + controlsHTML(g, pl + cats) +
+        '<aside class="play-side" id="playSide">' +
+          controlsHTML(g, pl + cats) +
+          railHTML +
           '<details class="card help"><summary>💡 ' + T.help + '</summary>' +
             (g.blurb ? '<p>' + esc(g.blurb) + '</p>' : '') + '<p>' + T.tip2 + '</p><p>' + (g.tip || T.tip3) + '</p></details>' +
         '</aside>' +
       '</div>' +
-      sectionHTML('💖', T.more, gridHTML(more, 'recommendations'));
+      sectionHTML('💖', T.more, gridHTML(relatedPool, 'recommendations', { favBtn: false, tmSrc: 'related' }));
   }
 
   /* -------------------------------------------------------- play logic */
@@ -559,11 +684,12 @@
   var pendingReturn = null;
   var hadFullscreen = false;
   var frameAt = 0;        // when the current frame was made (performance.now())
+  var surpriseOpen = false;
   function routeHash() { return location.hash || '#/'; }
   function frameEl() { return $('#stage iframe'); }
-  // A paused game, its title/menu or a pending launch own the view.
+  // A paused game, its title/menu, a pending launch or the roulette modal own the view.
   window.SGUpdateSafe = function () {
-    return renderedHash !== null && !current && !frameEl() && parseRoute().name !== 'play';
+    return renderedHash !== null && !current && !frameEl() && !surpriseOpen && parseRoute().name !== 'play';
   };
   // An open game may offer the «new version» button (js/offline.js) only while no round is
   // being played: Kit says when a round starts and ends (sg:round). Tapping reloads the page,
@@ -597,7 +723,7 @@
     postGame(message);
   }
   function focusGame() {
-    if (portalFocus) return;
+    if (portalFocus || surpriseOpen) return;
     var f = frameEl();
     if (!f || !frameReady) return;
     try { f.focus({ preventScroll: true }); } catch (e) { try { f.focus(); } catch (e2) { /* ignore */ } }
@@ -638,25 +764,40 @@
     else if (type === 'sg:warn') noteGameWarn(e.data);
   }
   /* --------------------------------------------------------- play next */
-  // Between rounds (Kit's sg:round) the stage offers one next game, so a visit does not
-  // have to end at the menu. The pick is a featured game (catalog `hot` rank: the games
-  // children stay with), the more categories it shares with this game the better, and
-  // never this game or one of the last few played on this PC. The card waits a moment
-  // after a round ends, goes away when the next round starts, and ✕ hides it for the
-  // rest of the visit. It never takes keyboard focus from the game.
+  // Between rounds (Kit's sg:round) the stage offers one next game, weighted across
+  // top non-recent visible S-tier games so recommendations stay fresh and never monotonous.
   var nextTimer = 0, nextShut = false;
   var NEXT_DELAY = 1200;
-  function nextPick(slug) {
+  function nextCandidates(slug) {
     var g = BY_SLUG[slug];
-    if (!g) return null;
-    var skip = getRecent().slice(0, 4), best = null, bestScore = -1;
+    if (!g) return [];
+    var skip = getRecent().slice(0, 4);
+    var scored = [];
     GAMES.forEach(function (o) {
-      if (o === g || o.starter || skip.indexOf(o.slug) >= 0) return;
+      if (o.slug === g.slug || o.starter || skip.indexOf(o.slug) >= 0) return;
       var shared = o.cats.filter(function (id) { return g.cats.indexOf(id) >= 0; }).length;
       var score = (o.hot ? 40 - Math.min(hotRank(o), 30) : 0) + shared * 6 + (isMulti(o) && isMulti(g) ? 2 : 0);
-      if (score > bestScore) { best = o; bestScore = score; }
+      scored.push([score, o]);
     });
-    return best;
+    if (!scored.length) {
+      GAMES.forEach(function (o) { if (o.slug !== g.slug && !o.starter) scored.push([o.hot ? 40 - Math.min(hotRank(o), 30) : 0, o]); });
+    }
+    scored.sort(function (a, b) { return b[0] - a[0]; });
+    return scored.map(function (x) { return x[1]; });
+  }
+  function nextPick(slug) {
+    var list = nextCandidates(slug);
+    var hotPool = list.filter(function (o) { return o.hot; });
+    var top = (hotPool.length ? hotPool : list).slice(0, 6);
+    if (!top.length) return null;
+    // Weighted random across top 6 S-tier picks (weights 6..1) so play-next varies naturally.
+    var total = 0, weights = top.map(function (_, i) { var w = top.length - i; total += w; return w; });
+    var r = Math.random() * total;
+    for (var i = 0; i < top.length; i++) {
+      r -= weights[i];
+      if (r <= 0) return top[i];
+    }
+    return top[0];
   }
   function nextCardHTML(o) {
     return '<a class="next-go" href="#/play/' + enc(o.slug) + '" data-next="' + esc(o.slug) + '" style="--c:' + o.color + '">' +
@@ -823,7 +964,10 @@
     var stage = $('#stage');
     stage.addEventListener('mousedown', activateGame);
     stage.addEventListener('click', activateGame);
-    $('#favBtn').addEventListener('click', function (e) {
+    var favBtn = $('#favBtn');
+    // Prevent mouse click on heart from stealing iframe focus and pausing gameplay.
+    favBtn.addEventListener('mousedown', function (e) { e.preventDefault(); });
+    favBtn.addEventListener('click', function (e) {
       var result = toggleFav(slug), on = result.on;
       var b = this;
       tm('fav', slug, on);
@@ -835,10 +979,22 @@
       $('.pb-lbl', b).textContent = on ? T.favOn : T.fav;
       b.classList.remove('pop'); void b.offsetWidth; b.classList.add('pop');
       if (on) burst(b, ['❤️', '💖', '✨', '💗']);
+      refreshChips();
       toast(result.saved ? (on ? T.favAdded : T.favRemoved) : T.favTemporary);
       // After a mouse click the keys go back to the game (so Space doesn't press this button again).
       if (e.detail) activateGame();
     });
+    var ctlMore = $('#ctlMore');
+    if (ctlMore) {
+      ctlMore.addEventListener('click', function () {
+        var list = $('#ctlList');
+        if (!list) return;
+        var collapsed = list.classList.toggle('ctl-collapsed');
+        var total = list.children.length;
+        ctlMore.setAttribute('aria-expanded', String(!collapsed));
+        ctlMore.textContent = collapsed ? T.controlsMore(total) : T.controlsLess;
+      });
+    }
     $('#restartBtn').addEventListener('click', function () {
       var b = this;
       b.classList.remove('spin'); void b.offsetWidth; b.classList.add('spin');
@@ -857,12 +1013,13 @@
     var wide = window.innerWidth >= 1200;
     var ps = getComputedStyle(play);
     var availW = play.clientWidth - parseFloat(ps.paddingLeft) - parseFloat(ps.paddingRight);
-    if (wide) availW -= (side.offsetWidth || 270) + 20;
-    // Measure where the frame really starts, plus the bar's gap, and keep 10px of air below.
+    var gap = parseFloat(ps.columnGap) || 16;
+    if (wide) availW -= (side.offsetWidth || 272) + gap;
+    // Measure where the frame really starts, plus the bar's gap, and keep 8px of air below.
     var stageTop = stage.getBoundingClientRect().top + (window.pageYOffset || 0);
-    var fixed = stageTop + (parseFloat(getComputedStyle(bar).marginTop) || 0) + 10;
+    var fixed = stageTop + (parseFloat(getComputedStyle(bar).marginTop) || 0) + 8;
     var minW = Math.min(300, availW);
-    var w = Math.floor(Math.min(availW, Math.max(minW, (window.innerHeight - fixed - 64) * 16 / 9)));
+    var w = Math.floor(Math.min(availW, Math.max(minW, (window.innerHeight - fixed - 52) * 16 / 9)));
     wrap.classList.toggle('compact', w < 760);
     wrap.style.width = w + 'px';
     side.style.width = wide ? '' : w + 'px';
@@ -870,7 +1027,7 @@
     // the rendered bottom after each change instead of reusing its old top.
     // Shrinking monotonically also avoids oscillating across wrap breakpoints.
     for (var pass = 0; pass < 8; pass++) {
-      var overflow = bar.getBoundingClientRect().bottom + (window.pageYOffset || 0) - (window.innerHeight - 10);
+      var overflow = bar.getBoundingClientRect().bottom + (window.pageYOffset || 0) - (window.innerHeight - 8);
       if (overflow <= 0) break;
       var nextW = Math.floor(Math.max(minW, w - overflow * 16 / 9));
       if (nextW >= w) break;
@@ -884,13 +1041,14 @@
   /* ------------------------------------------------------------ render */
   var chipsKey = null;
   function render() {
+    closeSurprise(true);
     var route = parseRoute();
     var app = $('#app');
     var body = document.body;
     var active = document.activeElement;
     var previousGame = current;
     var returnState = previousGame && route.name !== 'play' && playReturn && routeHash() === playReturn.hash ? playReturn : null;
-    var moveFocus = active && ($('#chips').contains(active) || $('#quickFilters').contains(active) || app.contains(active));
+    var moveFocus = active && ($('#chips').contains(active) || app.contains(active));
     if (route.name === 'play' && !current && renderedHash) {
       playReturn = pendingReturn || { hash: renderedHash, scroll: window.pageYOffset || 0, slug: route.slug };
     }
@@ -899,10 +1057,9 @@
     clearTimeout(nextTimer);
     if (current && route.name !== 'play') exitFullscreen();
     body.className = 'route-' + route.name;
-    var nextChipsKey = route.name + (route.id || '');
+    var nextChipsKey = route.name + (route.id || '') + ':' + getFavs().length;
     if (chipsKey !== nextChipsKey) {
       $('#chips').innerHTML = chipsHTML(route);
-      $('#quickFilters').innerHTML = quickHTML(route);
       chipsKey = nextChipsKey;
     }
     var html, title, name = noEmoji(SITE.name);
@@ -915,11 +1072,11 @@
       else body.className = 'route-missing';
     } else if (route.name === 'cat') {
       html = renderCat(route);
-      var c = CAT_BY_ID[route.id];
+      var c = NAV_GROUP_BY_ID[route.id] || CAT_BY_ID[route.id];
       title = (c ? noEmoji(c.label) + ' — ' : '') + name;
     } else if (route.name === 'favorites') {
       html = renderFavorites();
-      title = T.favs + ' — ' + name;
+      title = T.favsTitle + ' — ' + name;
     } else if (route.name === 'quick') {
       html = renderQuick(route);
       title = (QUICK[route.id] ? QUICK[route.id].label + ' — ' : '') + name;
@@ -970,30 +1127,133 @@
     window.dispatchEvent(new Event('sg:sessionchange'));
   }
 
+  /* ---------------------------------------------- smart surprise modal */
+  var spinTimer = 0, surpriseChosen = null;
+  function pickSurprise(excludeSlug) {
+    var base = GAMES.filter(function (g) { return !g.starter && g.slug !== current && g.slug !== excludeSlug; });
+    if (!base.length) return GAMES[0] || null;
+    var recent = getRecent().slice(0, 8);
+    var fresh = base.filter(function (g) { return recent.indexOf(g.slug) < 0; });
+    var pool = fresh.length >= 3 ? fresh : base;
+    var flagships = pool.filter(function (g) { return g.hot; });
+    var discovery = pool.filter(function (g) { return !g.hot; });
+    var bucket = (flagships.length && discovery.length) ? (Math.random() < 0.7 ? flagships : discovery) : (flagships.length ? flagships : discovery);
+    return bucket[Math.floor(Math.random() * bucket.length)] || pool[0];
+  }
+  function paintSurpriseCard(g, spinning) {
+    var modal = $('#surpriseModal');
+    if (!modal || !g) return;
+    modal.classList.toggle('spinning', !!spinning);
+    modal.classList.toggle('landed', !spinning);
+    var meta = playersLabel(g.players) + ' · ⏱️ ' + durationLabel(g);
+    modal.innerHTML =
+      '<div class="roulette-card" style="--c:' + g.color + ';--c2:' + deepen(g.color, 0.45) + '">' +
+        '<button type="button" class="roulette-close" id="surpriseClose" aria-label="' + T.surpriseClose + '" title="' + T.surpriseClose + '"><span aria-hidden="true">✕</span></button>' +
+        '<div class="roulette-head"><span class="roulette-dice" aria-hidden="true">🎲</span><span class="roulette-kicker">' + (spinning ? T.surpriseSpin : T.surpriseTitle) + '</span></div>' +
+        '<div class="roulette-art">' +
+          '<img src="' + thumbSrc(g.slug) + '" alt="" decoding="async" draggable="false" onerror="this.style.display=\'none\'">' +
+        '</div>' +
+        '<h2 class="roulette-title" id="surpriseTitle">' + esc(g.title) + '</h2>' +
+        '<p class="roulette-blurb">' + esc(g.blurb || '') + '</p>' +
+        '<p class="roulette-meta">' + meta + '</p>' +
+        '<div class="roulette-actions">' +
+          '<button type="button" class="roulette-play" id="surprisePlay" data-slug="' + esc(g.slug) + '"' + (spinning ? ' disabled' : '') + '>' + T.surprisePlay + '</button>' +
+          '<button type="button" class="roulette-reroll" id="surpriseReroll"' + (spinning ? ' disabled' : '') + '>' + T.surpriseReroll + '</button>' +
+        '</div>' +
+      '</div>';
+  }
+  function spinSurprise(excludeSlug) {
+    clearTimeout(spinTimer);
+    var chosen = pickSurprise(excludeSlug);
+    if (!chosen) return;
+    surpriseChosen = chosen;
+    var modal = $('#surpriseModal');
+    if (!modal) return;
+    modal.hidden = false;
+    surpriseOpen = true;
+    var flashPool = GAMES.filter(function (g) { return !g.starter && g.slug !== chosen.slug; });
+    if (calm() || !flashPool.length) {
+      paintSurpriseCard(chosen, false);
+      var btn = $('#surprisePlay');
+      if (btn) btn.focus();
+      return;
+    }
+    var step = 0, totalSteps = 5;
+    function tick() {
+      if (!surpriseOpen) return;
+      if (step < totalSteps) {
+        var preview = flashPool[Math.floor(Math.random() * flashPool.length)] || chosen;
+        paintSurpriseCard(preview, true);
+        step++;
+        spinTimer = setTimeout(tick, 100);
+      } else {
+        paintSurpriseCard(chosen, false);
+        juice('pop');
+        var playBtn = $('#surprisePlay');
+        if (playBtn) playBtn.focus();
+      }
+    }
+    tick();
+  }
+  function closeSurprise(silent) {
+    clearTimeout(spinTimer);
+    if (!surpriseOpen) return;
+    surpriseOpen = false;
+    var modal = $('#surpriseModal');
+    if (modal) { modal.hidden = true; modal.classList.remove('spinning', 'landed'); }
+    if (!silent) {
+      if (current) activateGame();
+      else { var sb = $('#surprise'); if (sb) sb.focus(); }
+    }
+  }
+  function surprise() {
+    if (!GAMES.length) return;
+    var b = $('#surprise');
+    b.classList.remove('roll'); void b.offsetWidth; b.classList.add('roll');
+    juice('whoosh', 0.8);
+    spinSurprise(null);
+  }
+  function setupSurpriseModal() {
+    var modal = $('#surpriseModal');
+    if (!modal) return;
+    modal.addEventListener('click', function (e) {
+      if (e.target === modal) { closeSurprise(false); return; }
+      var playBtn = e.target.closest('#surprisePlay');
+      var rerollBtn = e.target.closest('#surpriseReroll');
+      var closeBtn = e.target.closest('#surpriseClose');
+      if (playBtn && surpriseChosen && !playBtn.disabled) {
+        var slug = surpriseChosen.slug;
+        closeSurprise(true);
+        juice('select');
+        tm('tag', slug, 'surprise');
+        go('#/play/' + enc(slug));
+      } else if (rerollBtn && !rerollBtn.disabled) {
+        juice('whoosh', 0.7);
+        spinSurprise(surpriseChosen && surpriseChosen.slug);
+      } else if (closeBtn) {
+        closeSurprise(false);
+      }
+    });
+  }
+
   /* ------------------------------------------------------------ events */
   function go(hash) {
     if (location.hash === hash) { render(); return; }
     location.hash = hash;
   }
 
-  function surprise() {
-    if (!GAMES.length) return;
-    var pool = GAMES.filter(function (g) { return g.slug !== current; });
-    var g = pool[Math.floor(Math.random() * pool.length)] || GAMES[0];
-    var b = $('#surprise');
-    b.classList.remove('roll'); void b.offsetWidth; b.classList.add('roll');
-    juice('whoosh', 0.8);
-    tm('tag', g.slug, 'surprise');
-    go('#/play/' + enc(g.slug));
-  }
-
   var SCROLL_KEYS = { ArrowUp: 1, ArrowDown: 1, ArrowLeft: 1, ArrowRight: 1, ' ': 1, Spacebar: 1, PageUp: 1, PageDown: 1 };
   function onKey(e) {
+    if (surpriseOpen && e.key === 'Escape') {
+      e.preventDefault();
+      closeSurprise(false);
+      return;
+    }
     var t = e.target;
     var inField = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
     // Native controls keep their own keyboard behavior and focus.
     var onControl = t && t.closest && t.closest('button, a[href], input, textarea, select, summary, [role="button"], [role="slider"]');
-    if (current && !inField && !onControl && SCROLL_KEYS[e.key]) {
+    if (current && !surpriseOpen && !inField && !onControl && SCROLL_KEYS[e.key]) {
       // In the play view keys belong to the game, never to page scrolling.
       e.preventDefault();
       activateGame();
@@ -1016,8 +1276,35 @@
   }
   function tileFrom(e) { var t = e.target; return t && t.closest ? t.closest('.tile[data-slug]') : null; }
   function watchTiles() {
+    // Quick heart toggle directly on home/category/favorites tiles.
+    document.addEventListener('click', function (e) {
+      var favEl = e.target && e.target.closest ? e.target.closest('.tile-fav[data-fav-slug]') : null;
+      if (!favEl) return;
+      e.preventDefault();
+      e.stopPropagation();
+      var slug = favEl.getAttribute('data-fav-slug');
+      var g = VISIBLE_BY_SLUG[slug];
+      if (!g) return;
+      var result = toggleFav(slug), on = result.on;
+      Array.prototype.forEach.call(document.querySelectorAll('.tile-fav[data-fav-slug="' + slug + '"]'), function (btn) {
+        btn.classList.toggle('on', on);
+        btn.setAttribute('aria-pressed', String(on));
+        btn.title = on ? T.favOn : T.fav;
+        btn.setAttribute('aria-label', (on ? T.favOn : T.fav) + ': ' + g.title);
+        var sp = $('span', btn);
+        if (sp) sp.textContent = on ? '❤️' : '🤍';
+      });
+      if (on) { juice('pop'); burst(favEl, ['❤️', '💖', '✨', '💗']); }
+      else juice('tap');
+      refreshChips();
+      var homeFavs = $('#homeFavsWrap');
+      if (homeFavs) homeFavs.innerHTML = homeFavsInner();
+      else if (parseRoute().name === 'favorites') render();
+      toast(result.saved ? (on ? T.favAdded : T.favRemoved) : T.favTemporary);
+    });
     // A game tile or the starter card plays the select sound (never a hover sound).
     document.addEventListener('click', function (e) {
+      if (e.target && e.target.closest && e.target.closest('.tile-fav')) return;
       var t = e.target && e.target.closest ? e.target.closest('.tile[data-slug], .starter') : null;
       if (!t || e.button || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
       juice('select');
@@ -1025,6 +1312,7 @@
       if (t.classList.contains('starter')) tm('tag', t.getAttribute('data-slug'), 'starter');
     });
     document.addEventListener('click', function (e) {
+      if (e.target && e.target.closest && e.target.closest('.tile-fav')) return;
       var tile = tileFrom(e);
       if (!tile || current || e.button > 0 || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
       var slug = tile.getAttribute('data-slug');
@@ -1057,6 +1345,7 @@
     });
 
     $('#surprise').addEventListener('click', surprise);
+    setupSurpriseModal();
     window.addEventListener('keydown', onKey, true);
     window.addEventListener('hashchange', render);
     window.addEventListener('message', onGameMessage);

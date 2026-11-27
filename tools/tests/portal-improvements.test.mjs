@@ -108,31 +108,77 @@ test('refresh verification cannot discard a game launched while the status reply
   assert.equal(await page.evaluate(() => window.refreshRaceSentinel), undefined, 'safe close later reloads cleanly');
 });
 
-test('personal games appear first and quick filters select matching games', async t => {
+test('storefront shelves, conditional starter, bento hero, hover hearts, roulette surprise, and quick filters work cleanly', async t => {
+  // Fresh PC (no recent history): conditional compact starter banner appears above Bento Hero.
+  const fresh = await pageFor(t);
+  await fresh.goto(origin);
+  const starter = fresh.locator('#app > a.starter');
+  assert.equal(await starter.count(), 1, 'conditional starter banner appears when recent is empty');
+  assert.equal(await starter.getAttribute('data-slug'), 'bubble-bop');
+  assert.match(await starter.innerText(), /أول مرة مع الفأرة/);
+  assert.equal(await fresh.locator('.bento-grid .tile').count(), 9, 'bento hero displays 1 flagship + 8 flanking S-tier tiles');
+  assert.equal(await fresh.locator('.bento-grid .tile.hero-tile').first().getAttribute('data-slug'), 'tunnel-blitz');
+  assert.equal(await fresh.locator('.catalog-grid .tile').first().getAttribute('data-slug'), 'tunnel-blitz', 'starter is never duplicated as tile #1');
+  assert.equal(await fresh.locator('.new-grid .tile').count(), 6, 'new shelf highlights the 6 brand-new games');
+  assert.ok(await fresh.locator('.friends-grid .tile').count() >= 6, '2-player shelf appears on home');
+
+  // Hover-heart button toggles favorite without navigating and updates the nav badge + home shelf.
+  await fresh.locator('.bento-grid .tile-fav[data-fav-slug="drift-king"]').click({ force: true });
+  assert.equal(await fresh.evaluate(() => location.hash), '', 'hearting a home tile stays on home');
+  assert.equal(await fresh.locator('#chips a[href="#/favorites"] .chip-cnt').textContent(), '1');
+  assert.equal(await fresh.locator('#homeFavsWrap .favorites-grid .tile[data-slug="drift-king"]').count(), 1);
+
+  // Returning PC (has recent history): starter banner hides; recent & favorites shelves appear cleanly.
   const page = await pageFor(t);
   await page.addInitScript(() => {
-    localStorage.setItem('sg:site:recent', '["pool-party"]');
-    localStorage.setItem('sg:site:favs', '["drift-king"]');
+    localStorage.setItem('sg:site:recent', '["pool-party","cake-guards"]');
+    localStorage.setItem('sg:site:favs', '["drift-king","critter-mart"]');
   });
   await page.goto(origin);
-  const starter = page.locator('#app > a.starter');
-  assert.equal(await starter.count(), 1, 'the beginner card leads the home page');
-  assert.equal(await starter.getAttribute('data-slug'), 'bubble-bop');
-  assert.match(await starter.innerText(), /ابدأ من هنا/);
-  assert.equal(await page.locator('#app > a.starter + section .recent-grid').count(), 1, 'continue playing appears before the complete catalog');
-  assert.equal(await page.locator('.catalog-grid .tile').first().getAttribute('data-slug'), 'bubble-bop');
-  assert.equal(await page.locator('.recent-grid .tile').getAttribute('data-slug'), 'pool-party');
+  assert.equal(await page.locator('#app > a.starter').count(), 0, 'starter banner hides once the PC has play history');
+  assert.deepEqual(await page.locator('.recent-grid .tile').evaluateAll(tiles => tiles.map(tile => tile.dataset.slug)), ['pool-party'], 'hidden duds stay out of recent shelf');
+  assert.deepEqual(await page.locator('#homeFavsWrap .favorites-grid .tile').evaluateAll(tiles => tiles.map(tile => tile.dataset.slug)), ['drift-king'], 'hidden duds stay out of favorites shelf');
   await page.locator('#chips a[href="#/favorites"]').click();
   await page.waitForFunction(() => document.body.className === 'route-favorites');
-  assert.deepEqual(await page.locator('.favorites-grid .tile').evaluateAll(tiles => tiles.map(tile => tile.dataset.slug)), ['drift-king'], 'favorites stay one click away without duplicating the catalog');
-  for (const id of ['short', 'simple', 'friends']) {
-    await page.locator(`#quickFilters a[href="#/quick/${id}"]`).click();
-    await page.waitForFunction(id => location.hash === `#/quick/${id}` && document.body.className === 'route-quick' && document.querySelector(`#quickFilters a[href="#/quick/${id}"]`)?.getAttribute('aria-current') === 'page', id);
+  assert.deepEqual(await page.locator('.favorites-grid .tile').evaluateAll(tiles => tiles.map(tile => tile.dataset.slug)), ['drift-king']);
+
+  for (const [id, inNav, heading] of [['hot', true, 'الأكثر حماسًا'], ['friends', true, 'العب مع صديق'], ['simple', true, 'زر واحد'], ['short', false, 'جولة قصيرة']]) {
+    if (inNav) await page.locator(`#chips a[href="#/quick/${id}"]`).click();
+    else await page.goto(`${origin}/#/quick/${id}`);
+    await page.waitForFunction(([id, heading]) => location.hash === `#/quick/${id}` && document.body.className === 'route-quick' && document.querySelector('#app h1')?.textContent === heading, [id, heading]);
     const slugs = await page.locator('#app .tile').evaluateAll(tiles => tiles.map(tile => tile.dataset.slug));
-    const expected = await page.evaluate(id => window.GAMES.filter(game => id === 'short' ? game.roundMinutes && game.roundMinutes[1] <= 3 : id === 'simple' ? game.inputStyle === 'one-button' : /[2-9]/.test(game.players)).map(game => game.slug), id);
+    const expected = await page.evaluate(id => {
+      const visible = window.GAMES.filter(g => !g.hidden);
+      if (id === 'hot') return visible.filter(g => g.hot).sort((a, b) => a.hot - b.hot).map(g => g.slug);
+      return visible.filter(game => id === 'short' ? game.roundMinutes && game.roundMinutes[1] <= 3 : id === 'simple' ? game.inputStyle === 'one-button' : /[2-9]/.test(game.players)).map(game => game.slug);
+    }, id);
     assert.deepEqual(slugs, expected, id);
     if (id === 'friends') assert.ok(slugs.includes('pool-party'));
   }
+
+  // Roulette Surprise modal previews before navigating and excludes hidden/starter/recent.
+  await page.locator('#logo').click();
+  await page.waitForFunction(() => document.body.className === 'route-home');
+  await page.locator('#surprise').click();
+  await page.locator('#surprisePlay:not([disabled])').waitFor();
+  const picked = await page.locator('#surprisePlay').getAttribute('data-slug');
+  assert.ok(picked && picked !== 'bubble-bop' && picked !== 'pool-party', 'surprise excludes starter and recent');
+  assert.equal(await page.evaluate(s => !!GAMES.find(g => g.slug === s && !g.hidden), picked), true, 'surprise excludes hidden duds');
+  assert.equal(await page.evaluate(() => document.body.className), 'route-home', 'modal preview does not mount iframe prematurely');
+  await page.locator('#surprisePlay').click();
+  await page.waitForFunction(s => location.hash === '#/play/' + s, picked);
+});
+
+test('clicking mute or heart during play never blurs or pauses the active game', async t => {
+  const page = await pageFor(t);
+  const frame = await openGame(page, 'air-hockey');
+  await clickControl(frame, '#btnPlay');
+  await frame.waitForFunction(() => !__game.state().demo && __game.state().screen === 'play' && !__game.state().paused);
+  await page.locator('#muteBtn').click();
+  await page.locator('#favBtn').click();
+  await page.waitForTimeout(120);
+  assert.equal(await frame.evaluate(() => __game.state().paused), false, 'mute and heart keep gameplay unpaused');
+  assert.equal(await page.locator('.side-next-grid .tile').count(), 3, '3-tile play-next rail is visible beside stage');
 });
 
 test('return to games restores the clicked section, keyboard focus, and scroll', async t => {

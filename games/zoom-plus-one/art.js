@@ -186,6 +186,30 @@
     googly(ctx, x - w * 0.14, y - h * 0.55, s * 0.09, M.sin(t * 3), 0.2); googly(ctx, x + w * 0.16, y - h * 0.55, s * 0.08, M.sin(t * 3), 0.2);
     ctx.beginPath(); ctx.arc(x, y - h * 0.32, s * 0.08, 0, M.PI); ctx.fillStyle = INK; ctx.fill();
   }
+  var FONTS = {};
+  function fontOf(px) {
+    var q = M.max(12, M.round(px / 4) * 4);
+    return FONTS[q] || (FONTS[q] = '700 ' + q + 'px Fredoka');
+  }
+  // Pre-rendered sprite sheet of all keycap glyphs (8x8 grid of 64x64 cells),
+  // avoiding per-frame ctx.font mutations and glyph rasterization on no-GPU PCs.
+  var GLYPH_CELL = 64, GLYPH_COLS = 8;
+  function buildGlyphAtlas() {
+    var cv = document.createElement('canvas');
+    cv.width = GLYPH_COLS * GLYPH_CELL;
+    cv.height = M.ceil(GLYPHS.length / GLYPH_COLS) * GLYPH_CELL;
+    var g = cv.getContext('2d');
+    g.fillStyle = 'rgba(255,255,255,0.9)';
+    g.font = '700 44px Fredoka';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.direction = 'ltr';
+    for (var i = 0; i < GLYPHS.length; i++) {
+      var col = i % GLYPH_COLS, row = (i / GLYPH_COLS) | 0;
+      g.fillText(GLYPHS[i], col * GLYPH_CELL + GLYPH_CELL / 2, row * GLYPH_CELL + GLYPH_CELL / 2);
+    }
+    return cv;
+  }
   function goldKey(ctx, x, y, s, t, rainbow) {
     var b = M.sin(t * 4) * s * 0.08, sp = M.cos(t * 3);
     var w = s * 0.7 * (0.35 + 0.65 * M.abs(sp));
@@ -199,7 +223,7 @@
     ctx.fill(); ctx.stroke();
     if (M.abs(sp) > 0.5) {
       ctx.fillStyle = rainbow ? '#fff' : '#fff6c2';
-      ctx.font = '700 ' + M.round(s * 0.34) + 'px Fredoka'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.direction = 'ltr';
+      ctx.font = fontOf(s * 0.34); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.direction = 'ltr';
       ctx.fillText(rainbow ? '×2' : '+10', x, y - s * 0.65 + b);
     }
   }
@@ -214,6 +238,13 @@
   ZP.createView = function (ctx) {
     var v = { calm: false, theme: -1, sky: null, sea: null, hills: [], stars: [], hitAt: {}, eyes: [{ x: 0, y: 0, vx: 0, vy: 0 }, { x: 0, y: 0, vx: 0, vy: 0 }] };
     var cam = { x: 2, z: -8, h: 3.3 };
+    var glyphAtlas = buildGlyphAtlas();
+    v.rebuildGlyphs = function () { glyphAtlas = buildGlyphAtlas(); };
+    // Reused projection output structs (zero per-frame heap allocations).
+    var P0 = { x: 0, y: 0, s: 0, dz: 0 }, PA = { x: 0, y: 0, s: 0, dz: 0 }, PB = { x: 0, y: 0, s: 0, dz: 0 };
+    var PC = { x: 0, y: 0, s: 0, dz: 0 }, PD = { x: 0, y: 0, s: 0, dz: 0 }, PE = { x: 0, y: 0, s: 0, dz: 0 }, PF = { x: 0, y: 0, s: 0, dz: 0 };
+    var runnerPos = { x: 0, y: 0, s: 0 };
+    var runnerOpts = { t: 0, run: 0, eyes: v.eyes, squash: 0, air: false, shoe: '' };
     function setTheme(i) {
       if (i === v.theme) return;
       v.theme = i;
@@ -232,9 +263,10 @@
       if (t.stars) for (var s = 0; s < 70; s++) v.stars.push([hash(s, 7) * W, hash(s, 9) * HORIZON, 1 + hash(s, 11) * 2.5]);
     }
     v.setTheme = setTheme;
-    function proj(X, Y, Z) {
-      var dz = Z - cam.z;
-      return { x: W / 2 + (X - cam.x) * F / dz, y: HORIZON + (cam.h - Y) * F / dz, s: F / dz, dz: dz };
+    function proj(X, Y, Z, out) {
+      var o = out || P0, dz = Z - cam.z, s = F / dz;
+      o.x = W / 2 + (X - cam.x) * s; o.y = HORIZON + (cam.h - Y) * s; o.s = s; o.dz = dz;
+      return o;
     }
     v.proj = proj;
     // Quad from four projected points.
@@ -274,20 +306,21 @@
     }
     // A wide platform (the pads at the start of each stage) with its gate.
     function pad(z0, z1, label, th, t) {
-      var a = proj(-0.7, 0.3, z0), b = proj(4.7, 0.3, z0), c = proj(4.7, 0.3, z1), d = proj(-0.7, 0.3, z1);
-      if (a.dz < 0.35) { var zc = cam.z + 0.35; a = proj(-0.7, 0.3, zc); b = proj(4.7, 0.3, zc); }
+      var a = proj(-0.7, 0.3, z0, PA), b = proj(4.7, 0.3, z0, PB), c = proj(4.7, 0.3, z1, PC), d = proj(-0.7, 0.3, z1, PD);
+      if (a.dz < 0.35) { var zc = cam.z + 0.35; a = proj(-0.7, 0.3, zc, PA); b = proj(4.7, 0.3, zc, PB); }
       if (c.dz < 0.35) return;
-      var a0 = proj(-0.7, -0.3, z0 < cam.z + 0.35 ? cam.z + 0.35 : z0), b0 = proj(4.7, -0.3, z0 < cam.z + 0.35 ? cam.z + 0.35 : z0);
+      var z0c = z0 < cam.z + 0.35 ? cam.z + 0.35 : z0;
+      var a0 = proj(-0.7, -0.3, z0c, PE), b0 = proj(4.7, -0.3, z0c, PF);
       quad(a, b, b0, a0, th.padDark);
       quad(a, b, c, d, th.pad);
       // checker stripes
       for (var k = 1; k < 6; k += 2) {
         var zz0 = z0 + (z1 - z0) * k / 6, zz1 = z0 + (z1 - z0) * (k + 1) / 6;
         if (zz0 - cam.z < 0.35) continue;
-        quad(proj(-0.7, 0.3, zz0), proj(4.7, 0.3, zz0), proj(4.7, 0.3, zz1), proj(-0.7, 0.3, zz1), 'rgba(255,255,255,0.35)');
+        quad(proj(-0.7, 0.3, zz0, PA), proj(4.7, 0.3, zz0, PB), proj(4.7, 0.3, zz1, PC), proj(-0.7, 0.3, zz1, PD), 'rgba(255,255,255,0.35)');
       }
       // the gate at the far end of the pad
-      var gl = proj(-0.6, 0.3, z1), gr = proj(4.6, 0.3, z1), gt = proj(2, 3.4, z1);
+      var gl = proj(-0.6, 0.3, z1, PA), gr = proj(4.6, 0.3, z1, PB), gt = proj(2, 3.4, z1, PC);
       if (gl.dz < 0.6) return;
       var pw = M.max(3, gl.s * 0.28);
       ctx.fillStyle = '#fff'; ctx.strokeStyle = INK; ctx.lineWidth = M.max(2, gl.s * 0.05);
@@ -296,7 +329,7 @@
       var bh = gl.s * 0.75;
       rrect(ctx, gl.x - pw, gt.y - bh * 0.6, gr.x - gl.x + pw * 2, bh, bh * 0.3); ctx.fillStyle = th.keys[0]; ctx.fill(); ctx.stroke();
       if (bh > 12) {
-        ctx.fillStyle = '#fff'; ctx.font = '700 ' + M.round(bh * 0.62) + 'px Fredoka'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.direction = 'rtl';
+        ctx.fillStyle = '#fff'; ctx.font = fontOf(bh * 0.62); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.direction = 'rtl';
         ctx.fillText(label, (gl.x + gr.x) / 2, gt.y - bh * 0.1);
         ctx.direction = 'ltr';
       }
@@ -306,19 +339,19 @@
       if (z1 - cam.z < 0.4) return;
       var zs = M.max(z0, cam.z + 0.4);
       var hs = 0.32 + (zs - z0) / ZP.RAMP * 1.1;
-      var a = proj(-0.5, hs, zs), b = proj(4.5, hs, zs), c = proj(4.5, 1.42, z1), d = proj(-0.5, 1.42, z1);
+      var a = proj(-0.5, hs, zs, PA), b = proj(4.5, hs, zs, PB), c = proj(4.5, 1.42, z1, PC), d = proj(-0.5, 1.42, z1, PD);
       var ok = speed >= need;
-      quad(proj(-0.5, -0.2, zs), proj(4.5, -0.2, zs), b, a, '#c9c3e8');
+      quad(proj(-0.5, -0.2, zs, PE), proj(4.5, -0.2, zs, PF), b, a, '#c9c3e8');
       quad(a, b, c, d, ok ? '#7dffb0' : '#ffffff');
       for (var k = 1; k < 4; k++) {
         var zz = z0 + ZP.RAMP * k / 4; if (zz < zs) continue;
-        var hh = 0.32 + (zz - z0) / ZP.RAMP * 1.1, l = proj(-0.5, hh, zz), r = proj(4.5, hh, zz);
+        var hh = 0.32 + (zz - z0) / ZP.RAMP * 1.1, l = proj(-0.5, hh, zz, PE), r = proj(4.5, hh, zz, PF);
         ctx.strokeStyle = ok ? '#3ccf7a' : '#e0dcf5'; ctx.lineWidth = M.max(1, l.s * 0.04); ctx.beginPath(); ctx.moveTo(l.x, l.y); ctx.lineTo(r.x, r.y); ctx.stroke();
       }
-      var mid = proj(2, 0.32 + 1.1 * 0.55, z0 + ZP.RAMP * 0.55);
+      var mid = proj(2, 0.32 + 1.1 * 0.55, z0 + ZP.RAMP * 0.55, PE);
       if (mid.s > 18) {
         ctx.save(); ctx.translate(mid.x, mid.y); ctx.scale(1, 0.55);
-        ctx.fillStyle = ok ? '#1f8a4c' : '#9a93c0'; ctx.font = '700 ' + M.round(mid.s * 0.8) + 'px Fredoka'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.direction = 'rtl';
+        ctx.fillStyle = ok ? '#1f8a4c' : '#9a93c0'; ctx.font = fontOf(mid.s * 0.8); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.direction = 'rtl';
         ctx.fillText('مسافة', 0, 0); ctx.direction = 'ltr';
         ctx.restore();
       }
@@ -329,7 +362,7 @@
       var z0 = row + 0.05, z1 = row + 0.95;
       if (z1 - cam.z < 0.4) return;
       if (z0 - cam.z < 0.4) z0 = cam.z + 0.4;
-      var near = proj(0, 0, z0), far = near.s < 22;
+      var near = proj(0, 0, z0, PE), far = near.s < 22;
       var ahead = row - build, pop = ahead > 0 ? 0 : M.min(1, -ahead / 1.6);
       var nk = th.keys.length;
       for (var lane = 0; lane < ZP.LANES; lane++) {
@@ -337,7 +370,7 @@
         if (pop <= 0) {
           // not built yet: a see-through outline
           if (far) continue;
-          var ga = proj(x0, 0.08, z0), gb = proj(x1, 0.08, z0), gc = proj(x1, 0.08, z1), gd = proj(x0, 0.08, z1);
+          var ga = proj(x0, 0.08, z0, PA), gb = proj(x1, 0.08, z0, PB), gc = proj(x1, 0.08, z1, PC), gd = proj(x0, 0.08, z1, PD);
           ctx.beginPath(); ctx.moveTo(ga.x, ga.y); ctx.lineTo(gb.x, gb.y); ctx.lineTo(gc.x, gc.y); ctx.lineTo(gd.x, gd.y); ctx.closePath();
           ctx.fillStyle = 'rgba(255,255,255,0.14)'; ctx.fill();
           ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 1.5; ctx.stroke();
@@ -345,35 +378,33 @@
         }
         var pressed = row <= maxRow ? M.min(1, M.max(0, (pz - row) / 0.7)) : 0;
         var hgt = (0.34 - 0.2 * pressed) * (v.calm ? (pop > 0 ? 1 : 0) : easeBack(pop));
-        var a = proj(x0, hgt, z0), b = proj(x1, hgt, z0), c = proj(x1, hgt, z1), d = proj(x0, hgt, z1);
-        if (!far) quad(a, b, proj(x1, -0.1, z0), proj(x0, -0.1, z0), th.dark[ci]);
+        var a = proj(x0, hgt, z0, PA), b = proj(x1, hgt, z0, PB), c = proj(x1, hgt, z1, PC), d = proj(x0, hgt, z1, PD);
+        if (!far) quad(a, b, proj(x1, -0.1, z0, PE), proj(x0, -0.1, z0, PF), th.dark[ci]);
         quad(a, b, c, d, row <= maxRow ? th.lit[ci] : th.keys[ci]);
         if (!far && a.s > 34) {
-          var g = GLYPHS[M.floor(hash(row, lane) * GLYPHS.length)];
-          var cx = (a.x + b.x + c.x + d.x) / 4, cy = (a.y + b.y + c.y + d.y) / 4;
-          ctx.save(); ctx.translate(cx, cy); ctx.scale(1, 0.55);
-          ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.font = '700 ' + M.round(a.s * 0.42) + 'px Fredoka';
-          ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.direction = 'ltr';
-          ctx.fillText(g, 0, 0);
-          ctx.restore();
+          var gi = M.floor(hash(row, lane) * GLYPHS.length);
+          var cx = (a.x + b.x + c.x + d.x) * 0.25, cy = (a.y + b.y + c.y + d.y) * 0.25;
+          var gw = a.s * 0.61, gh = gw * 0.55;
+          ctx.drawImage(glyphAtlas, (gi % GLYPH_COLS) * GLYPH_CELL, ((gi / GLYPH_COLS) | 0) * GLYPH_CELL, GLYPH_CELL, GLYPH_CELL, cx - gw * 0.5, cy - gh * 0.5, gw, gh);
         }
       }
     }
     function obstacle(o, j, w, t) {
       var x = o.kind === 'cube' ? ZP.cubeX(o, w.at) : o.lane, z = o.row + 0.5, y = 0.34;
-      var hitAt = v.hitAt[j];
       if (w.hit[j]) {
-        if (hitAt === undefined) return;
-        var k = t - hitAt; if (k > 1.2) return;
+        if (v.hitAt[j] === undefined) v.hitAt[j] = t;
+        var k = t - v.hitAt[j]; if (k > 1.2) return;
         y += 6 * k - 4 * k * k + 0.5; x += (x < 2 ? -1 : 1) * 4 * k; z += 3 * k;
+      } else if (v.hitAt[j] !== undefined) {
+        delete v.hitAt[j];
       }
-      var p = proj(x, y, z);
+      var p = proj(x, y, z, PA);
       if (p.dz < 0.6) return;
       if (o.kind === 'cube') cube(ctx, p.x, p.y, p.s * 0.95, t + j, THEMES[v.theme].keys[(j + 1) % 5]);
       else duck(ctx, p.x, p.y, p.s * 0.95, t + j);
     }
     function pickup(pk, t) {
-      var p = proj(pk.lane, 0.34, pk.row + 0.5);
+      var p = proj(pk.lane, 0.34, pk.row + 0.5, PA);
       if (p.dz < 0.6) return;
       if (pk.kind === 'chest') chest(ctx, p.x, p.y, p.s * 0.9, t);
       else goldKey(ctx, p.x, p.y, p.s, t + pk.row, pk.kind === 'turbo');
@@ -424,25 +455,28 @@
       if (w.phase === 'fall') drawSplash(w, o, t);
     };
     function drawRunner(w, o, t) {
-      var p = proj(w.x, 0.34 + M.max(0, w.y) - (w.y < 0 ? 0 : 0), w.z + 0.5);
+      var p = proj(w.x, 0.34 + M.max(0, w.y), w.z + 0.5, PA);
       if (p.dz < 0.5) return;
       var size = p.s * 1.05;
       var run = M.min(1, w.v / 8);
       var sq = o.squash || 0;
-      v.runnerAt = { x: p.x, y: p.y - size * 0.9, s: size };
-      ZP.drawRunner(ctx, o.skin, p.x, p.y, size, { t: t, run: w.phase === 'bonk' ? 0 : run, eyes: v.eyes, squash: sq, air: w.phase === 'fly', shoe: o.shoe });
+      runnerPos.x = p.x; runnerPos.y = p.y - size * 0.9; runnerPos.s = size;
+      v.runnerAt = runnerPos;
+      runnerOpts.t = t; runnerOpts.run = w.phase === 'bonk' ? 0 : run; runnerOpts.squash = sq; runnerOpts.air = w.phase === 'fly'; runnerOpts.shoe = o.shoe;
+      ZP.drawRunner(ctx, o.skin, p.x, p.y, size, runnerOpts);
       if (w.phase === 'bonk') {
         // dizzy stars
         for (var k = 0; k < 3; k++) { var a = t * 7 + k * 2.1; ctx.fillStyle = '#ffe14f'; blob(ctx, p.x + M.cos(a) * size * 0.4, p.y - size * 1.25 + M.sin(a) * size * 0.1, size * 0.06, size * 0.06); ctx.fill(); }
       }
     }
     function drawSplash(w, o, t) {
-      var p = proj(w.x, -0.6, w.z + 0.5);
+      var p = proj(w.x, -0.6, w.z + 0.5, PA);
       if (p.dz < 0.5) return;
       var k = w.pt, size = p.s * 1.05;
       // only the runner's top and flailing arms poke out of the jelly
       ctx.save(); ctx.beginPath(); ctx.rect(0, 0, W, p.y); ctx.clip();
-      ZP.drawRunner(ctx, o.skin, p.x, p.y + size * (0.2 + 0.7 * M.min(1, k * 2)) , size, { t: t, run: 1, eyes: v.eyes, air: true, shoe: o.shoe });
+      runnerOpts.t = t; runnerOpts.run = 1; runnerOpts.squash = 0; runnerOpts.air = true; runnerOpts.shoe = o.shoe;
+      ZP.drawRunner(ctx, o.skin, p.x, p.y + size * (0.2 + 0.7 * M.min(1, k * 2)), size, runnerOpts);
       ctx.restore();
       ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = 4;
       for (var r = 0; r < 3; r++) { var rr = (k * 1.6 + r * 0.3) % 1; ctx.globalAlpha = 1 - rr; blob(ctx, p.x, p.y, size * (0.4 + rr * 1.4), size * (0.12 + rr * 0.4)); ctx.stroke(); }

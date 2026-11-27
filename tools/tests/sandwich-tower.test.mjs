@@ -183,7 +183,7 @@ test('a won level: the bun, the chomp, three stars, the next level, and progress
 
 test('leaving during the bun, the chomp or the lost pause keeps the outcome: stars, the endless best, statistics, DDA', async t => {
   const page = await game(t, { save: { ...beaten(1), stars: [3, ...Array(11).fill(0)] } });
-  const tries = () => page.evaluate(() => (JSON.parse(localStorage.getItem('sg:sandwich-tower:dda')) || { main: [0, 0] }).main[1]);
+  const tries = (id = 'main') => page.evaluate(id => ((JSON.parse(localStorage.getItem('sg:sandwich-tower:dda')) || {})[id] || [0, 0])[1], id);
   const log = () => page.evaluate(() => zp.log);
   await page.click('#btnPlay');
   let s = await state(page);
@@ -199,7 +199,7 @@ test('leaving during the bun, the chomp or the lost pause keeps the outcome: sta
   assert.equal(await page.locator('#titleStars b').textContent(), '6');
   assert.equal(await page.locator('#eatersNew').isVisible(), true, 'the eater it unlocked is waiting');
   assert.deepEqual(await log(), ['win']);
-  assert.equal(await tries(), 1);
+  assert.equal(await tries('main'), 1);
 
   // إلى القمر out of hearts at 2: the window loses focus during the bun, then Restart.
   await page.click('#btnEndless');
@@ -213,7 +213,8 @@ test('leaving during the bun, the chomp or the lost pause keeps the outcome: sta
   assert.deepEqual([s.screen, s.mode, s.drops], ['play', 'endless', 0]);
   assert.equal((await stored(page)).endless, 2, 'Restart during the bun keeps the best height');
   assert.deepEqual(await log(), ['win', 'end']);
-  assert.equal(await tries(), 2);
+  assert.equal(await tries('main'), 1, 'endless does not touch campaign DDA');
+  assert.equal(await tries('endless'), 1, 'endless records to its own DDA key');
   await page.keyboard.press('Escape');
   await page.click('#btnHome');
   assert.deepEqual(await log(), ['win', 'end', 'quit'], 'a round with no outcome yet is still a quit');
@@ -225,7 +226,7 @@ test('leaving during the bun, the chomp or the lost pause keeps the outcome: sta
   await page.keyboard.press('Escape');
   await page.click('#btnHome');
   assert.deepEqual(await log(), ['win', 'end', 'quit', 'lose']);
-  assert.equal(await tries(), 3);
+  assert.equal(await tries('main'), 2);
 });
 
 test('a new eater fits on the result card with three stars and a new best', async t => {
@@ -402,4 +403,20 @@ test('a save that fails says so and the game keeps going; Retry saves once stora
   await page.evaluate(() => { zp.failSave = false; });
   await page.locator('.sg-save-status button').click();
   assert.equal((await stored(page)).coach, true);
+});
+
+test('the first-time hint is hidden while paused', async t => {
+  const page = await game(t);
+  await page.click('#btnPlay');
+  assert.equal((await state(page)).hint, true);
+  const drawn = async () => page.evaluate(() => {
+    const texts = [], fill = CanvasRenderingContext2D.prototype.fillText;
+    CanvasRenderingContext2D.prototype.fillText = function (s) { texts.push(String(s)); return fill.apply(this, arguments); };
+    try { zp.paint(); } finally { CanvasRenderingContext2D.prototype.fillText = fill; }
+    return texts.some(s => s.includes('انقر أو مسافة'));
+  });
+  assert.equal(await drawn(), true, 'hint draws during play');
+  await page.keyboard.press('Escape');
+  assert.equal((await state(page)).screen, 'pause');
+  assert.equal(await drawn(), false, 'hint is hidden while paused');
 });

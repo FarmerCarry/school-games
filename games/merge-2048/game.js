@@ -12,13 +12,17 @@
   // The latest value of every write that failed; each later save retries them,
   // and the warning stays up until all of them are on disk. Reads see them first,
   // so Continue after a visit to the menu keeps the board that is still in memory.
-  var dirty = {}, saveUI = Kit.saveStatus({ retry: saveGame });
+  var dirty = {}, saveTimer = 0, saveUI = Kit.saveStatus({ retry: saveGame });
   function put(k, v) { if (store.set(k, v)) delete dirty[k]; else dirty[k] = v; }
   function readSaved(k, d) { return k in dirty ? dirty[k] : store.get(k, d); }
   function flushSaves() {
+    clearTimeout(saveTimer); saveTimer = 0;
     Object.keys(dirty).forEach(function (k) { put(k, dirty[k]); });
     if (Object.keys(dirty).length) saveUI.failed(); else saveUI.saved();
   }
+  window.addEventListener('pagehide', flushSaves);
+  window.addEventListener('beforeunload', flushSaves);
+  document.addEventListener('visibilitychange', function () { if (document.hidden) flushSaves(); });
 
   var SLIDE = 0.1, POP = 0.24, SPAWN = 0.18;
   var SIZES = [3, 4, 5, 6];
@@ -602,9 +606,10 @@
     if (G.winPending) later(0.45, showWin);
   }
 
-  function saveGame() {
-    if (G.board) put('g' + G.N, { v: G.board.values(), s: G.score, u: G.undos, h: G.hist, w: G.won, k: G.keep, m: G.moves, sb: G.startBest });
-    flushSaves();
+  function saveGame(defer) {
+    if (G.board) dirty['g' + G.N] = { v: G.board.values(), s: G.score, u: G.undos, h: G.hist, w: G.won, k: G.keep, m: G.moves, sb: G.startBest };
+    if (defer === true) { clearTimeout(saveTimer); saveTimer = setTimeout(flushSaves, 250); }
+    else flushSaves();
   }
 
   function doMove(dir) {
@@ -629,7 +634,7 @@
     if (merges.length) later(SLIDE, function () { mergeFX(merges, gained); });
 
     if (G.score > save.best[N]) {
-      save.best[N] = G.score; put('best', save.best);
+      save.best[N] = G.score; dirty.best = save.best;
       if (!G.newBest && G.startBest > 0) {
         G.newBest = true;
         later(SLIDE + 0.1, function () { toast('🏆 رقم قياسي جديد!'); sfx.best(); confetti(40, true); }, true);
@@ -640,10 +645,10 @@
       var prevMax = G.maxT; G.maxT = mx;
       if (mx >= 128 && prevMax > 0 && mx !== WIN[N]) later(SLIDE + 0.05, function () { milestone(mx); });
     }
-    if (mx > save.bt[N]) { save.bt[N] = mx; put('bt', save.bt); }
+    if (mx > save.bt[N]) { save.bt[N] = mx; dirty.bt = save.bt; }
     if (mx > save.bestTile) {
       var prev = save.bestTile;
-      save.bestTile = mx; put('bestTile', mx);
+      save.bestTile = mx; dirty.bestTile = mx;
       THEMES.forEach(function (th) {
         if (th.req > prev && th.req <= mx) later(0.9, function () {
           // may wait behind a record toast: the HUD moves on when this one shows
@@ -657,7 +662,7 @@
     }
     if (!b.canMove()) markDead();
     refreshHUD();
-    saveGame();
+    saveGame(true);
   }
 
   function markDead() {
@@ -749,6 +754,7 @@
   function pause() {
     if (G.screen !== 'play') return;
     sfx.click();
+    saveGame();
     // the kept paused frame shows the settled board, without shake or bump
     fx.shake = fx.sx = fx.sy = fx.bx = fx.by = 0;
     G.board.settle(now);
@@ -765,6 +771,7 @@
 
   function showOver() {
     var N = G.N;
+    saveGame();
     Kit.stats.end('end', G.score);
     setScreen('over');
     $('overScore').textContent = Kit.fmt(G.score);
@@ -789,6 +796,8 @@
   function showWin() {
     if (G.screen !== 'play' || !G.winPending) return;
     G.winPending = false;
+    saveGame();
+    Kit.stats.end('win', G.score);
     setScreen('win');
     $('winNum').textContent = WIN[G.N];
     drawIcon($('winTile'), theme(), WIN[G.N]);
@@ -800,6 +809,7 @@
   function keepGoing() {
     if (G.screen !== 'win') return;
     sfx.click(); G.keep = true; saveGame();
+    if (!G.dead) Kit.stats.round('s' + G.N);
     setScreen('play');
     if (G.dead) showOver();
   }
@@ -939,9 +949,9 @@
     }
     $('bestTileLine').innerHTML = save.bestTile ? 'أكبر بلاطة صنعتها: <b dir="ltr">' + save.bestTile + '</b>' : 'افتح أشكالاً جديدة بصنع بلاطات كبيرة!';
     var d = liveSave(save.size);
-    $('playLbl').textContent = d ? '▶ تابع' : '▶ العب';
-    $('playSub').textContent = d ? 'النقاط: ' + Kit.fmt(d.s) : '';
-    $('btnNewT').hidden = !d;
+    $('playLbl').textContent = '▶ العب';
+    $('btnResumeT').hidden = !d;
+    $('resumeSub').textContent = d ? 'النقاط: ' + Kit.fmt(d.s) : '';
   }
   function selectSize(n) {
     if (SIZES.indexOf(n) < 0) return;
@@ -1010,7 +1020,7 @@
     switch (G.screen) {
       case 'title':
         if (e.repeat) return;
-        if (go) play(false);
+        if (go) play(true);
         else if (/^(Digit|Numpad)[3-6]$/.test(k)) selectSize(+k.slice(-1));
         else if (k === 'KeyT') { cycleTheme(); }
         break;
@@ -1077,8 +1087,8 @@
       }
     });
   }
-  on('btnPlay', function () { play(false); });
-  on('btnNewT', function () { play(true); });
+  on('btnPlay', function () { play(true); });
+  on('btnResumeT', function () { play(false); });
   on('btnUndo', undo);
   on('btnTheme', cycleTheme);
   on('btnPause', pause);

@@ -157,8 +157,13 @@ test('a first round from #btnPlay is won by clicking critters: stars, Next, the 
   assert.equal(saved.best[0], s.score);
   assert.equal(saved.coach, true);
   await page.keyboard.press('Enter');
+  assert.equal((await state(page)).screen, 'result', 'Enter right away is debounced on Result');
+  await page.keyboard.press('Space');
+  assert.equal((await state(page)).screen, 'result', 'Space right away is debounced on Result');
+  await step(page, 40);
+  await page.keyboard.press('Enter');
   s = await state(page);
-  assert.deepEqual([s.screen, s.level, s.score], ['play', 2, 0], 'Enter goes on to level 2');
+  assert.deepEqual([s.screen, s.level, s.score], ['play', 2, 0], 'Enter goes on to level 2 after debounce');
   await page.reload();
   await page.waitForFunction(() => window.__game && window.bg.step);
   assert.equal((await state(page)).screen, 'title');
@@ -176,6 +181,7 @@ test('a round with no input is lost: try again, no Next, and Enter plays the sam
   assert.equal(await page.locator('#resSub').textContent(), 'تحتاج 5 نقاط لنجمة');
   assert.equal(await page.locator('#btnNext').isVisible(), false);
   assert.equal((await stored(page)).stars[0], 0);
+  await step(page, 40);
   await page.keyboard.press('Enter');
   const again = await state(page);
   assert.deepEqual([again.screen, again.level, again.t], ['play', 1, 0]);
@@ -340,6 +346,7 @@ test('a round is kept from the moment it is decided: a pause, Home or Restart du
   assert.deepEqual(await statsLog(page), ['round:L1', 'end:win', 'round:L2', 'end:win']);
   assert.equal(await ddaResults(page), 2);
   // Restart during the outro starts a new try without a quit
+  await step(page, 40);
   await page.keyboard.press('Enter');
   assert.equal((await state(page)).level, 3);
   await decideRound(page, 1);

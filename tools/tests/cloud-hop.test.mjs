@@ -204,12 +204,17 @@ test('a thunder cloud never flashes fast: a gentle glow, stars that blink at 3 H
 test('level 1 won: stars, candies, the next level, and a save that survives a reload', async t => {
   const page = await game(t);
   await page.click('#btnPlay');
-  // keys work right after clicking Play
+  // keys work right after clicking Play (and squat steering does not dismiss coach)
   await page.keyboard.down('ArrowLeft');
   await page.evaluate(() => ch.step(20));
   await page.keyboard.up('ArrowLeft');
   assert.ok((await state(page)).x < 640);
+  assert.equal((await state(page)).coach, true, 'coach stays visible during squat');
   assert.ok(await until(page, 's.phase === "play" && s.height > 3', 120));
+  await page.keyboard.down('ArrowRight');
+  await page.evaluate(() => ch.step(20));
+  await page.keyboard.up('ArrowRight');
+  assert.equal((await state(page)).coach, false, 'steering in play dismisses coach');
   await lift(page);
   assert.ok(await until(page, 's.phase === "arrive"', 60));
   let s = await state(page);
@@ -408,7 +413,7 @@ test('a save that fails says so and the game keeps going; Retry saves once stora
   const page = await game(t, { failSave: true });
   await page.click('#btnPlay');
   await page.keyboard.down('ArrowRight');
-  await page.evaluate(() => ch.step(30));
+  await page.evaluate(() => ch.step(55));
   await page.keyboard.up('ArrowRight');
   await page.keyboard.press('Escape');
   assert.equal(await page.locator('.sg-save-status').isVisible(), true);
@@ -418,4 +423,42 @@ test('a save that fails says so and the game keeps going; Retry saves once stora
   const saved = await stored(page);
   assert.equal(saved.played, true);
   assert.equal(saved.coach, true);
+});
+
+test('coach survives a mouse nudge during squat, mouse edge-wraps across seam, and falling logs lose immediately', async t => {
+  const page = await game(t);
+  await page.click('#btnPlay');
+  // Small mouse nudge during squat does not dismiss coach
+  const near = await page.evaluate(() => __game.point(646, 360));
+  await page.mouse.move(near.x, near.y);
+  await page.evaluate(() => ch.step(25)); // still in squat
+  let s = await state(page);
+  assert.equal(s.phase, 'squat');
+  assert.equal(s.coach, true, 'coach survives squat nudge');
+  // Enter play and nudge <15px: coach still stays
+  await page.evaluate(() => ch.step(20));
+  const tiny = await page.evaluate(() => __game.point(655, 360));
+  await page.mouse.move(tiny.x, tiny.y);
+  await page.evaluate(() => ch.step(20));
+  s = await state(page);
+  assert.equal(s.phase, 'play');
+  assert.equal(s.coach, true, 'coach survives tiny <20px move in play');
+  // Mouse at left edge (<24px) smoothly wraps across the seam and dismisses coach
+  await page.evaluate(() => { __game.world.m.x = 70; __game.world.m.vx = 0; });
+  const edge = await page.evaluate(() => __game.point(8, 360));
+  await page.mouse.move(edge.x, edge.y);
+  await page.evaluate(() => ch.step(40));
+  s = await state(page);
+  assert.ok(s.x > 800, 'mouse at left edge wrapped across seam: ' + s.x);
+  assert.equal(s.coach, false, 'real travel in play dismisses coach');
+  // Leaving while in phase === 'fell' logs 'lose' immediately (never 'quit')
+  const page2 = await game(t, { save: SAVE({ unlocked: 5, stars: [1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0] }) });
+  await page2.click('#btnPlay');
+  await page2.evaluate(() => ch.step(50));
+  await page2.evaluate(() => { const w = __game.world; w.bubbles = 0; w.m.y = w.cam - 200; w.m.vy = -400; });
+  assert.ok(await until(page2, 's.phase === "fell"', 30));
+  assert.deepEqual((await stats(page2)).ends, ['lose'], 'lose logged immediately on falling');
+  await page2.keyboard.press('Escape');
+  await page2.click('#btnHome');
+  assert.deepEqual((await stats(page2)).ends, ['lose'], 'exiting during fall does not log quit');
 });

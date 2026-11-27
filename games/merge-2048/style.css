@@ -66,12 +66,13 @@ button { font-family: var(--sg-font); }
 
 .playrow { position: absolute; left: 0; right: 0; top: 530px; display: flex; justify-content: center; align-items: center; gap: 18px; }
 .bigbtn { font: inherit; font-weight: 700; cursor: pointer; border: 6px solid var(--ink); border-radius: 34px; background: var(--grn); color: var(--ink); padding: 2px 58px 12px; box-shadow: 0 9px 0 var(--ink); animation: pulse 1.2s ease-in-out infinite; line-height: 1.05; min-width: 330px; }
-.bigbtn span { display: block; font-size: 52px; }
-.bigbtn small { display: block; font-size: 18px; opacity: 0.75; margin-top: 2px; }
-.bigbtn small:empty { display: none; }
+.bigbtn span, .midbtn span { display: block; }
+.bigbtn span { font-size: 52px; }
 .bigbtn:hover { filter: brightness(1.08); }
 .bigbtn:active { transform: translateY(5px); box-shadow: 0 4px 0 var(--ink); }
-.midbtn { font: inherit; font-weight: 700; font-size: 22px; cursor: pointer; border: 5px solid var(--ink); border-radius: 26px; background: #fff; color: var(--ink); padding: 8px 22px; box-shadow: 0 6px 0 var(--ink); }
+.midbtn { font: inherit; font-weight: 700; font-size: 22px; cursor: pointer; border: 5px solid var(--ink); border-radius: 26px; background: #fff; color: var(--ink); padding: 8px 22px; box-shadow: 0 6px 0 var(--ink); line-height: 1.15; }
+.midbtn small { display: block; font-size: 15px; opacity: 0.72; margin-top: 2px; }
+.midbtn small:empty { display: none; }
 .midbtn:hover { filter: brightness(0.96); transform: translateY(-2px); }
 .midbtn:active { transform: translateY(4px); box-shadow: 0 2px 0 var(--ink); }
 .midbtn[hidden] { display: none; }

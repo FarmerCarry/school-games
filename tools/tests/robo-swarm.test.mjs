@@ -157,7 +157,7 @@ test('1P keyboard + mouse movement, EMP dash, and instant Holo Weapon Pod pickup
   const px1 = await page.evaluate(() => __game.px);
   assert.ok(px1 > px0 + 40, `ArrowRight moved P1 from ${px0} to ${px1}`);
 
-  // Mouse pointer move steers mech upward smoothly, and left-click triggers EMP dash
+  // Mouse pointer move steers mech upward smoothly, and left-click does NOT dash
   const py0 = await page.evaluate(() => __game.py);
   await page.mouse.move(640, 120);
   await page.evaluate(() => rs.step(18));
@@ -166,7 +166,22 @@ test('1P keyboard + mouse movement, EMP dash, and instant Holo Weapon Pod pickup
 
   await page.mouse.click(640, 120);
   await page.evaluate(() => rs.step(2));
-  assert.ok(await page.evaluate(() => __game.run.mechs[0].dashCd > 0.5), 'left-click triggers Turbo EMP Dash');
+  assert.equal(await page.evaluate(() => __game.run.mechs[0].dashCd), 0, 'left-click does not accidentally trigger dash');
+
+  // Right-click triggers Turbo EMP Dash, and Shift/Space trigger dash too
+  await page.mouse.click(640, 120, { button: 'right' });
+  await page.evaluate(() => rs.step(2));
+  assert.ok(await page.evaluate(() => __game.run.mechs[0].dashCd > 0.5), 'right-click triggers Turbo EMP Dash');
+
+  await page.evaluate(() => { __game.run.mechs[0].dashCd = 0; __game.run.mechs[0].dashT = 0; });
+  await page.keyboard.press('ShiftLeft');
+  await page.evaluate(() => rs.step(2));
+  assert.ok(await page.evaluate(() => __game.run.mechs[0].dashCd > 0.5), 'Shift triggers Turbo EMP Dash');
+
+  await page.evaluate(() => { __game.run.mechs[0].dashCd = 0; __game.run.mechs[0].dashT = 0; });
+  await page.keyboard.press('Space');
+  await page.evaluate(() => rs.step(2));
+  assert.ok(await page.evaluate(() => __game.run.mechs[0].dashCd > 0.5), 'Space triggers Turbo EMP Dash');
 
   // Instant Holo Weapon Pod pickup upgrades weapon without pausing or opening any modal
   const podUpgrade = await page.evaluate(() => {
@@ -364,4 +379,35 @@ test('pause freezes time completely, resume continues, and restart resets round 
       ['round', 'spark_1p']
     ]
   );
+});
+
+test('title defaults to Easy (6 HP), Enter/Space quick-starts, and sprite baking is cached across frames', async (t) => {
+  const page = await openGame(t);
+  assert.equal(await page.locator('#diffRow button[data-diff="easy"]').evaluate((b) => b.classList.contains('on')), true);
+
+  // Quick-start from title with Enter
+  await page.locator('#game').focus();
+  await page.keyboard.press('Enter');
+  await page.evaluate(() => rs.step(1));
+  assert.equal(await page.evaluate(() => __game.state), 'play');
+  assert.equal(await page.evaluate(() => __game.run.mechs[0].maxHp), 6, 'defaults to Easy (6 HP)');
+
+  // Verify sprite cache stops creating offscreen canvases after both anim frames warm up
+  const canvasAllocs = await page.evaluate(() => {
+    for (let k = 0; k < 5; k++) window.RSEngine.spawnEnemy(__game.run, k, 500 + k * 40, 400);
+    rs.step(20);
+    let created = 0;
+    const orig = Document.prototype.createElement;
+    Document.prototype.createElement = function (tag) {
+      if (String(tag).toLowerCase() === 'canvas') created++;
+      return orig.apply(this, arguments);
+    };
+    try {
+      rs.step(60);
+    } finally {
+      Document.prototype.createElement = orig;
+    }
+    return created;
+  });
+  assert.equal(canvasAllocs, 0, `expected 0 new offscreen canvases across 60 steady frames, got ${canvasAllocs}`);
 });

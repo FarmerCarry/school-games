@@ -319,6 +319,11 @@ test('the storm stops at 500 balls', () => {
   assert.equal(w.maxBalls, F.CAP);
   run(w, { seconds: 2 });
   assert.ok(w.n <= F.CAP);
+  // Custom cap option caps ball count (used by title demo <= 60).
+  const capped = bare(1, { cap: 60 });
+  placeBall(capped, 640, 300, 0.3, -1);
+  for (let i = 0; i < 6; i++) { capped.caps.push({ x: capped.px, y: F.PY - 8, kind: 'x3', t: 0 }); BS.step(capped, DT, idle()); }
+  assert.equal(capped.n, 60);
 });
 
 test('a ×2 ring gives every ball that flies into it a twin, then fades after a while', () => {
@@ -330,6 +335,7 @@ test('a ×2 ring gives every ball that flies into it a twin, then fades after a 
   let ev = run(w, { seconds: 0.4, until: (x, e) => e.some(v => v.type === 'ring') });
   assert.equal(w.n, 2, 'one twin');
   assert.equal(count(ev, 'ringOn'), 1);
+  assert.equal(ev.find(e => e.type === 'ringOn').y, g.y, 'ringOn includes ring y');
   run(w, { seconds: 0.2 });
   assert.equal(w.n, 2, 'only once per pass');
   ev = run(w, { seconds: F.RING_LIFE, until: (x, e) => e.some(v => v.type === 'ringGone') });

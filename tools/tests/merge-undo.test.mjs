@@ -83,13 +83,13 @@ for (const exit of ['menu', 'reload']) {
       return previous;
     }, exit);
     if (exit === 'reload') await page.reload();
-    await page.keyboard.press('Enter');
+    await page.locator('#btnResumeT').click();
     await awaitScreen(page, 'win');
     assert.deepEqual((await state(page)).values, winning.values);
     await page.locator('#btnKeep').click();
     if (exit === 'menu') await page.evaluate(() => window.__game.menu());
     else await page.reload();
-    await page.keyboard.press('Enter');
+    await page.locator('#btnResumeT').click();
     await afterScheduledResult(page, 'acknowledged win stays dismissed after ' + exit);
     const acknowledged = await state(page);
     assert.equal(acknowledged.screen, 'play');
@@ -116,7 +116,7 @@ test('Undo after acknowledgement never presents the same victory again', async t
     window.__game.move(3);
   });
   await page.reload();
-  await page.keyboard.press('Enter');
+  await page.locator('#btnResumeT').click();
   await afterScheduledResult(page, 'reloaded acknowledged win stays dismissed');
   const acknowledged = await state(page);
   assert.equal(acknowledged.screen, 'play');

@@ -172,3 +172,39 @@ test('Fire & Ice shows Arabic WebGL fallback when WebGL is unavailable', async t
   assert.equal(await page.locator('#scrError').isVisible(), true);
   assert.match(await page.locator('#scrError').textContent(), /الرسوم ثلاثية الأبعاد غير متاحة/);
 });
+
+test('Fire & Ice defaults to 1P solo, keeps explicit 2P toggle, and auto-switches to 2P on simultaneous WASD+Arrows', async t => {
+  const page = await gamePage(t);
+  assert.equal(await page.evaluate(() => __game.save.solo), true, 'fresh boot defaults to 1P solo');
+  assert.equal(await page.locator('#modeSolo').getAttribute('aria-pressed'), 'true');
+
+  // Explicit 2P toggle works on title
+  await page.locator('#modeDuo').click();
+  assert.equal(await page.evaluate(() => __game.save.solo), false);
+  await page.locator('#modeSolo').click();
+  assert.equal(await page.evaluate(() => __game.save.solo), true);
+
+  // Start playing in solo: Tab swaps hero and Space jumps right away
+  await page.locator('#playBtn').click();
+  assert.equal(await page.evaluate(() => __game.activeHero), 'fire');
+  await page.keyboard.press('Tab');
+  await page.evaluate(() => __game.bench(1));
+  assert.equal(await page.evaluate(() => __game.activeHero), 'ice');
+  await page.keyboard.down('Space');
+  await page.evaluate(() => __game.bench(3));
+  const iceVy = await page.evaluate(() => __game.world.ice.vy);
+  await page.keyboard.up('Space');
+  assert.ok(iceVy < -100, `Space jumps active hero in solo mode (vy=${iceVy})`);
+
+  // Pressing Arrow + WASD simultaneously auto-switches to 2P seamlessly and moves both heroes
+  const before = await page.evaluate(() => ({ fx: __game.world.fire.x, ix: __game.world.ice.x }));
+  await page.keyboard.down('ArrowRight');
+  await page.keyboard.down('KeyD');
+  await page.evaluate(() => __game.bench(10));
+  await page.keyboard.up('ArrowRight');
+  await page.keyboard.up('KeyD');
+  const after = await page.evaluate(() => ({ solo: __game.save.solo, fx: __game.world.fire.x, ix: __game.world.ice.x }));
+  assert.equal(after.solo, false, 'simultaneous WASD + Arrow input auto-switches to 2P');
+  assert.ok(after.fx > before.fx + 5, 'Fire moved via ArrowRight');
+  assert.ok(after.ix > before.ix + 5, 'Ice moved via KeyD');
+});

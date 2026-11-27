@@ -518,3 +518,18 @@ test('the duel: running out of hearts hands the win to the other player', () => 
   const ev = stepUntil(w, w => w.phase === 'done', 20);
   assert.equal(ev.find(e => e.type === 'done').winner, 1);
 });
+
+test('the duel clamps tower tx and sliding pieces away from the 640px center divider', () => {
+  const w = ST.create({ mode: 'duo', seed: 12 });
+  // Push P1 hard toward the right (divider at 640) and P2 hard toward the left (divider at 640)
+  for (let k = 0; k < 12; k++) {
+    const t0 = w.towers[0], t1 = w.towers[1];
+    dropAt(w, Math.min(t0.tw * 0.45, 90), 0);
+    dropAt(w, -Math.min(t1.tw * 0.45, 90), 1);
+    stepUntil(w, () => t0.phase === 'slide' && t1.phase === 'slide');
+    assert.ok(t0.tx + t0.tw / 2 < 630, `P1 tower edge stays left of 640 divider: tx=${t0.tx}, tw=${t0.tw}`);
+    assert.ok(t1.tx - t1.tw / 2 > 650, `P2 tower edge stays right of 640 divider: tx=${t1.tx}, tw=${t1.tw}`);
+    assert.ok(t0.cur.cx + t0.cur.amp + t0.cur.w / 2 < 635, `P1 sliding piece stays left of 640 divider`);
+    assert.ok(t1.cur.cx - t1.cur.amp - t1.cur.w / 2 > 645, `P2 sliding piece stays right of 640 divider`);
+  }
+});

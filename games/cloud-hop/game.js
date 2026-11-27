@@ -133,6 +133,7 @@
     persist();
   }
   function lost() {
+    if (result) return;
     var w = world, h = M.floor(w.height);
     if (w.level) {
       Kit.stats.end('lose', h);
@@ -469,6 +470,7 @@
         break;
       case 'falling':
         Kit.track.miss();
+        lost();
         AU.tone({ freq: 1100, to: 180, type: 'sine', dur: 0.9, vol: 0.13 });
         break;
       case 'lose':

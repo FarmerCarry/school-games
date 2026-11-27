@@ -133,9 +133,17 @@
   function attach(w, h) {
     var dx = w.x - h.cx, dy = w.y - h.cy;
     var d = Math.sqrt(dx * dx + dy * dy);
-    w.hook = h; w.len = Math.max(MINLEN, d); w.combo = 0; w.slack = true;
+    var sp = speed(w);
+    w.hook = h; w.len = Math.max(MINLEN, w.grounded > 0 ? d - 12 : d); w.combo = 0; w.slack = true;
+    if (sp < 120 && d > 1) {
+      var tx = -dy / d, ty = dx / d;
+      var sg = tx >= 0 ? 1 : -1;
+      w.vx += tx * sg * 180;
+      w.vy += ty * sg * 180;
+      if (w.grounded > 0) w.vy = Math.min(w.vy, -90);
+    }
     h.hitT = w.t;
-    w.ev.push({ type: 'grab', x: h.cx, y: h.cy, h: h, sp: speed(w) });
+    w.ev.push({ type: 'grab', x: h.cx, y: h.cy, h: h, sp: sp });
   }
 
   function release(w) {
@@ -203,8 +211,8 @@
       d = Math.sqrt(dx * dx + dy * dy) || 1;
       var tx = -dy / d, ty = dx / d;
       var vt = w.vx * tx + w.vy * ty;
-      if (dy > -0.35 * d && Math.abs(vt) > 20) {
-        var sg = vt > 0 ? 1 : -1;
+      if (dy > -0.35 * d) {
+        var sg = Math.abs(vt) > 20 ? (vt > 0 ? 1 : -1) : (tx >= 0 ? 1 : -1);
         w.vx += tx * ASSIST * sg * h; w.vy += ty * ASSIST * sg * h;
       }
     }

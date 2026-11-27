@@ -36,7 +36,7 @@
 
   /* --------------------------------------------------------------- state */
   var screen = 'title', world = null, demo = null, demoMem = {}, demoRnd = FP.rng(11), time = 0, lastT = 0;
-  var level = 1, roundOpen = false, outcome = null, endT = 0;
+  var level = 1, roundOpen = false, outcome = null, endT = 0, resultT = 0;
   var floats = [], banner = null, fx = Kit.particles(), shake = Kit.shake();
   var mouse = { l: false, r: false, pull: false, hl: false, hr: false, hp: false };
   var mood = { name: 'idle', t: 0, len: 0 }, frogFx = { burp: 0, multi: false }, tongue = { k: 0, x: 0, y: 0 };
@@ -143,6 +143,7 @@
   }
   function showResult() {
     var o = outcome;
+    resultT = 0;
     setScreen('result');
     $('resTitle').textContent = o.won ? 'أحسنت!' : o.kind === 'end' ? 'انتهى اللعب!' : 'انتهت الكرات!';
     var stars = $('resStars').children;
@@ -298,6 +299,7 @@
       return;
     }
     if (screen === 'result') {
+      if (resultT < 0.5) { if (c === 'Enter' || c === 'Space' || c === 'KeyR') e.preventDefault(); return; }
       if (c === 'Enter' || c === 'Space') { e.preventDefault(); next(); }
       else if (c === 'KeyR') again();
       else if (c === 'Escape') { J.back(); toTitle(); }
@@ -308,11 +310,11 @@
     if (screen === 'title' && (c === 'Enter' || c === 'Space')) { e.preventDefault(); play(); }
   });
   // The mouse: the left button is the left flipper, the right button the right one (Kit blocks
-  // the menu). A left click on the plunger lane while a ball waits pulls the plunger instead.
+  // the menu). Any left click/hold on the board while a ball waits in the shooter lane pulls the plunger.
   function inLane(e) { var p = fit.toLogical(e.clientX, e.clientY); return p.x > X0 + 470 && p.y > 300; }
   canvas.addEventListener('mousedown', function (e) {
     if (screen !== 'play' || !world) return;
-    if (e.button === 0) { if (FP.waiting(world) && inLane(e)) mouse.pull = mouse.hp = true; else mouse.l = mouse.hl = true; }
+    if (e.button === 0) { if (FP.waiting(world) && (!FP.liveCount(world) || inLane(e))) mouse.pull = mouse.hp = true; else mouse.l = mouse.hl = true; }
     else if (e.button === 2) mouse.r = mouse.hr = true;
   });
   window.addEventListener('mouseup', function (e) {
@@ -324,7 +326,7 @@
   canvas.addEventListener('pointerdown', function (e) {
     if (e.pointerType === 'mouse' || screen !== 'play' || !world) return;
     var p = fit.toLogical(e.clientX, e.clientY);
-    touches[e.pointerId] = FP.waiting(world) && p.x > X0 + 470 ? 'pull' : p.x < W / 2 ? 'l' : 'r';
+    touches[e.pointerId] = FP.waiting(world) && (!FP.liveCount(world) || p.x > X0 + 470) ? 'pull' : p.x < W / 2 ? 'l' : 'r';
     touchState();
   });
   function touchEnd(e) { if (touches[e.pointerId]) { delete touches[e.pointerId]; touchState(); } }
@@ -524,6 +526,8 @@
       for (var d = 0; d < demo.balls.length; d++) { var db = demo.balls[d]; db.spin = (db.spin || 0) + db.vx * dt / FP.R; }
       if (demo.over || demo.t > 90) demo = FP.create({ level: FP.FREE, gravity: 1000, seed: (time * 100) | 0 });
       dirty = true;
+    } else if (screen === 'result') {
+      resultT += dt;
     }
     for (var f = floats.length - 1; f >= 0; f--) {
       var p = floats[f];
@@ -748,6 +752,7 @@
       get state() { return snapshot(); },
       get save() { return JSON.parse(JSON.stringify(save)); },
       get world() { return world; },
+      get view() { return view; },
       point: function (x, y) { var r = canvas.getBoundingClientRect(); return { x: r.left + x * fit.scale, y: r.top + y * fit.scale }; }
     };
     render();

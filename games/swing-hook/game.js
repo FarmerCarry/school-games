@@ -585,7 +585,12 @@
     if (w.st === 'play' || w.st === 'won') pushTrail(w.x, w.y);
     else if (w.st === 'ready') trailN = 0;
     if (w.st === 'play' && Sim.speed(w) < 60) stuckT += dt; else stuckT = 0;
-    if (attract && stuckT > 2) startAttract();
+    if (stuckT > (attract ? 2 : 2.2)) {
+      stuckT = 0;
+      if (attract) startAttract();
+      else if (endless) { commitEndless(); endlessOver(); }
+      else respawn();
+    }
 
     // trail extras
     if (w.st === 'play' && Sim.speed(w) > 500) {

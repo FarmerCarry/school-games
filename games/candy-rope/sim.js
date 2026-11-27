@@ -15,10 +15,10 @@
   var W = 1280, H = 720, DT = 1 / 60, SUB = 4, ITER = 8, TAU = Math.PI * 2;
   var C = {
     W: W, H: H, DT: DT,
-    GRAV: 1500,
+    GRAV: 1150,
     CANDY_R: 22,
     STAR_R: 48,          // candy centre -> star centre distance that collects it
-    EAT_R: 64,           // candy centre -> Munch centre distance that feeds him
+    EAT_R: 88,           // candy centre -> Munch centre distance that feeds him
     BUBBLE_R: 46,        // catch distance for a bubble item
     BUB_RISE: -118,      // px/s rise speed inside a bubble
     PUFF_RANGE: 560,

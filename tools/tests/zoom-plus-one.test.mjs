@@ -212,3 +212,46 @@ test('a save that fails says so and the game keeps going; Retry saves once stora
   await page.locator('.sg-save-status button').click();
   assert.ok((await stored(page)).speed > 0);
 });
+
+test('holding Space from title runs at once, bonks record hitAt, shop badge glows when shoes affordable, and no phantom quit during land/fall', async t => {
+  const page = await game(t, { save: { v: 1, stage: 5, best: 5, wins: 10, speed: 10, shoes: 0, coach: true } });
+  // Title howto mentions mouse hold
+  assert.match(await page.locator('#scrTitle .howto').textContent(), /الفأرة/);
+  // Holding Space on title starts play AND keeps running without releasing
+  await page.keyboard.down('Space');
+  assert.equal((await state(page)).screen, 'play');
+  await page.evaluate(() => zp.step(60));
+  let s = await state(page);
+  assert.ok(s.steps > 0 && s.v > 4, 'holding Space from title runs immediately: ' + JSON.stringify(s));
+  await page.keyboard.up('Space');
+  // Affordable shoes badge glows on #btnShop
+  assert.equal(await page.locator('#btnShop').evaluate(el => el.classList.contains('can')), true, '#btnShop glows when shoes are affordable');
+  assert.equal(await page.locator('#btnShop .dot').isVisible(), true, '#btnShop badge visible');
+  // Bonking an obstacle writes view.hitAt[j] so it flies away instead of vanishing
+  await page.evaluate(() => {
+    const w = __game.world;
+    w.spec.obs = [{ row: 8, lane: 2, kind: 'duck' }];
+    w.z = 7.2; w.x = 2; w.lane = 2; w.v = 10; w.hit = {}; __game.view.hitAt = {};
+  });
+  await page.keyboard.down('ArrowUp');
+  assert.ok(await until(page, 's.bonks > 0', 120));
+  await page.keyboard.up('ArrowUp');
+  const hitAtVal = await page.evaluate(() => __game.view.hitAt[0]);
+  assert.equal(typeof hitAtVal, 'number', 'bonk writes view.hitAt[0]');
+  // Leaving during fall does not open a phantom <1s quit
+  await page.evaluate(() => {
+    window.zpStats = [];
+    const r = Kit.stats.round, e = Kit.stats.end;
+    Kit.stats.round = function (id) { window.zpStats.push('round:' + id); return r.apply(this, arguments); };
+    Kit.stats.end = function (c) { window.zpStats.push('end:' + c); return e.apply(this, arguments); };
+    const w = __game.world;
+    w.phase = 'run'; w.z = w.spec.rows + ZP.RAMP - 0.5; w.v = 12; w.save.speed = 10;
+  });
+  await page.keyboard.down('ArrowUp');
+  assert.ok(await until(page, 's.phase === "fall"', 180));
+  await page.keyboard.up('ArrowUp');
+  assert.deepEqual(await page.evaluate(() => window.zpStats), ['end:lose'], 'fall ends try without opening a new round yet');
+  await page.keyboard.press('Escape');
+  await page.click('#btnHome');
+  assert.deepEqual(await page.evaluate(() => window.zpStats), ['end:lose'], 'leaving during fall logs no phantom quit');
+});

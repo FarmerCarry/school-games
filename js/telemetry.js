@@ -42,10 +42,11 @@
 (function () {
   'use strict';
 
-  var TM = 'sg:site:tm:', Q = TM + 'anon:', RID = 'sg:site:rid';
+  var TM = 'sg:site:tm:', Q = TM + 'anon:', RID = 'sg:site:rid', PLAYS = 'sg:site:plays', MAX_PLAYS = 1e6;
   var cfg = window.SG_TELEMETRY, url = cfg && cfg.url, doc = document, nav = navigator, perf = performance;
   var isArr = Array.isArray, min = Math.min, floor = Math.floor, str = JSON.stringify;
   var ID = /^(?!.*\d{3})[A-Za-z][\w:.-]{0,23}$/, SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/, BACK = [20, 40, 80, 160, 300];
+  var TM_SRC = { featured: 1, catalog: 1, recent: 1, favorites: 1, category: 1, quick: 1, related: 1, starter: 1 };
   // The caps of a round's counters (rx): wall ms, inputs, idle lapses, pauses, the sum and
   // number of reaction times, and the DDA level in thousandths (-1: none).
   var RX = [108e5, 1e5, 1e4, 1e4, 1e9, 1e5, 1000];
@@ -54,10 +55,13 @@
   try {
     var meta = null;
     try { meta = JSON.parse(local('sg:site:statsmeta')); } catch (e) { /* no earlier choice */ }
+    var optOut = nav.globalPrivacyControl === true || !!(meta && (meta.off || meta.tm === false));
+    if (optOut && local(PLAYS) !== null) {
+      try { localStorage.removeItem(PLAYS); } catch (e) { /* blocked storage */ }
+    }
     ready = typeof url == 'string' && url.length <= 200 && /^https:\/\/[\w\-.~:/?#[\]@!$&()*+,;=%]+$/.test(url) &&
-      location.protocol != 'file:' && nav.globalPrivacyControl !== true &&
-      (cfg.allowLocal === true || !/^(?:(?:.+\.)?localhost|127(?:\.\d+){3}|\[::1\])$/i.test(location.hostname)) &&
-      !(meta && (meta.off || meta.tm === false));
+      location.protocol != 'file:' && !optOut &&
+      (cfg.allowLocal === true || !/^(?:(?:.+\.)?localhost|127(?:\.\d+){3}|\[::1\])$/i.test(location.hostname));
     if (ready) {
       // The queue belongs to this address: a copy of the site elsewhere on this origin,
       // built with another address, never sends (or drops) these batches.
@@ -96,6 +100,37 @@
   }
   function sec(s) { return min(floor((perf.now() - s.t0) / 1000), 604800); }
   function faved(slug) { try { var a = JSON.parse(local('sg:site:favs')); return isArr(a) && a.indexOf(slug) >= 0 ? 1 : 0; } catch (e) { return 0; } }
+  var KNOWN = Object.create(null), hasCatalog = false;
+  if (isArr(window.GAMES)) {
+    window.GAMES.forEach(function (g) {
+      if (g && typeof g.slug == 'string' && g.slug.length <= 40 && SLUG.test(g.slug) && !(g.slug in Object.prototype)) {
+        KNOWN[g.slug] = 1;
+        hasCatalog = true;
+      }
+    });
+  }
+  function knownSlug(s) {
+    return hasCatalog ? !!KNOWN[s] : (typeof s == 'string' && s.length <= 40 && SLUG.test(s) && !(s in Object.prototype));
+  }
+  // Per-PC anonymous visit counter (sg:site:plays): returns prior opens of slug on this PC
+  // (0 when unseen or storage is blocked) and increments it, bounded to known catalog slugs.
+  function playsBefore(slug) {
+    var map = Object.create(null), raw = local(PLAYS), parsed = null, n = 0;
+    try { parsed = JSON.parse(raw); } catch (e) { parsed = null; }
+    if (parsed && typeof parsed == 'object' && !isArr(parsed)) {
+      Object.keys(parsed).forEach(function (k) {
+        if (knownSlug(k) && typeof parsed[k] == 'number' && parsed[k] >= 0 && parsed[k] < 1 / 0) {
+          map[k] = min(floor(parsed[k]), MAX_PLAYS);
+        }
+      });
+    }
+    n = map[slug] || 0;
+    if (knownSlug(slug)) {
+      map[slug] = min(n + 1, MAX_PLAYS);
+      try { localStorage.setItem(PLAYS, str(map)); } catch (e) { /* blocked storage falls back silently */ }
+    }
+    return n;
+  }
 
   /* --------------------------------------------------------------- PC code */
   // sg:site:rid = { v: 1, pc: this PC's code, 12 random hex }. Builds with player profiles
@@ -366,10 +401,9 @@
       closing.slice().forEach(function (v) { settle(v); });
       game = { g: slug, s: sess, n: sess.vn = min(sess.vn + 1, 9999), k: 0, e: 0, pe: 0, tu: 0, il: zeros(6), f: zeros(4) };
       sess.o++;
-      // The 0 is where builds with player profiles put a child's earlier visits to the game;
-      // there are no players, so it is always 0 (the value a guest sent), and the event
-      // keeps its wire version 3 shape.
-      rec(sess, ['go', game.n, slug, src, 0, faved(slug)]);
+      // Prior opens of this game on this PC (sg:site:plays, anonymous per-PC counter,
+      // 0 when unseen or storage is blocked). Keeps the wire version 3 shape.
+      rec(sess, ['go', game.n, slug, src, playsBefore(slug), faved(slug)]);
     }),
     mount: hook(function (win) {
       if (!game) return;
@@ -416,13 +450,17 @@
 
   /* --------------------------------------------------------- listeners */
   if (!ready) return;
-  // Launch source of a tile click: the row or page it was clicked on.
+  // Launch source of a tile click: the shelf or page it was clicked on.
   doc.addEventListener('click', safe(function (e) {
-    var a = e.target.closest('.tile[data-slug]'), m;
+    if (e.target.closest && e.target.closest('.tile-fav')) return;
+    var a = e.target.closest('.tile[data-slug]'), m, box, forced;
     if (!a || e.button || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
-    m = /(recent|favorites)-grid|(recommendations)|#\/(quick|search)\/|(#\/c\/)/.exec(a.parentNode.className + location.hash) || [];
+    box = a.closest('[data-tm-src]');
+    forced = box && box.getAttribute('data-tm-src');
+    var grid = a.closest('.grid, .bento-grid') || a.parentNode;
+    m = /(recent|favorites)-grid|(recommendations)|#\/(quick|search)\/|(#\/c\/)/.exec((grid && grid.className || '') + location.hash) || [];
     tag = { g: a.getAttribute('data-slug'), t: now(),
-      s: m[1] || m[3] || (m[2] ? 'related' : m[4] ? 'category' : a.querySelector('.hot') ? 'featured' : 'catalog') };
+      s: (forced && TM_SRC[forced]) ? forced : (m[1] || m[3] || (m[2] ? 'related' : m[4] ? 'category' : a.querySelector('.hot') ? 'featured' : 'catalog')) };
   }), true);
   function pull(quit) {
     try {

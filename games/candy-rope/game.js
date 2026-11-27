@@ -636,7 +636,7 @@
       if (!p || !r.alive) continue;
       for (var j = 0; j < p.length - 1; j++) {
         if (segHit(x0, y0, x1, y1, p[j].x, p[j].y, p[j + 1].x, p[j + 1].y) ||
-            Sim.distToSeg((p[j].x + p[j + 1].x) / 2, (p[j].y + p[j + 1].y) / 2, x0, y0, x1, y1) < 5) {
+            Sim.distToSeg((p[j].x + p[j + 1].x) / 2, (p[j].y + p[j + 1].y) / 2, x0, y0, x1, y1) < 14) {
           if (Sim.cutRope(w, r, j, false) && w === G.world) note('cut', r.key);
           break;
         }
@@ -651,10 +651,25 @@
     for (var i = 0; i < w.blowers.length; i++) {
       if (Sim.dist(x, y, w.blowers[i].x, w.blowers[i].y) < 60) { if (Sim.puff(w, i) && w === G.world) note('puff', i); return; }
     }
+    var bestR = null, bestSeg = -1, bestD = 18;
+    var ropes = w.ropes;
+    for (var ri = 0; ri < ropes.length; ri++) {
+      var r = ropes[ri], p = r.pts;
+      if (!p || !r.alive) continue;
+      for (var j = 0; j < p.length - 1; j++) {
+        var d = Sim.distToSeg(x, y, p[j].x, p[j].y, p[j + 1].x, p[j + 1].y);
+        if (d <= bestD) { bestD = d; bestR = r; bestSeg = j; }
+      }
+    }
+    if (bestR) {
+      if (Sim.cutRope(w, bestR, bestSeg, false) && w === G.world) note('cut', bestR.key);
+    }
   }
   window.addEventListener('pointerdown', function (e) {
-    if (e.button !== 0 || e.target !== canvas) return;
+    if (e.button !== 0) return;
+    if (e.target && e.target.closest && e.target.closest('button, a, input, select, textarea, .panel, #hud')) return;
     var p = view.toLogical(e.clientX, e.clientY);
+    if (e.target !== canvas && (p.x < -160 || p.x > W + 160 || p.y < -160 || p.y > H + 160)) return;
     ptr.down = true; ptr.x = p.x; ptr.y = p.y;
     try { canvas.focus({ preventScroll: true }); } catch (err) { /* ignore */ }
     if (G.state === 'play' && G.replay) return;

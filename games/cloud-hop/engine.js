@@ -225,8 +225,18 @@
     if (kind === 'jelly') wd = M.max(130, M.round(wd * 0.8));
     // How far sideways the next platform may be: what a boing can cover, with room to spare.
     var reach = CH.VX * M.max(0.2, airTime(gap) - 0.16) * (w.level === 1 ? 0.5 : 0.72);
-    var dx = (r() < 0.5 ? -1 : 1) * lerp(M.min(70, reach * 0.3), reach, r());
-    var p = plat(w, kind, fit(w.genX + dx, wd), y, wd);
+    var step = lerp(M.min(70, reach * 0.3), reach, r());
+    var dir = r() < 0.5 ? -1 : 1;
+    var tx;
+    if (w.level >= 1 && w.level <= 4) {
+      // Early levels stay within the screen edges so mouse/new players never face cross-seam jumps.
+      var lo = wd / 2 + 8, hi = CH.W - wd / 2 - 8;
+      if (w.genX + dir * step < lo || w.genX + dir * step > hi) dir = -dir;
+      tx = clamp(w.genX + dir * step, lo, hi);
+    } else {
+      tx = fit(w.genX + dir * step, wd);
+    }
+    var p = plat(w, kind, tx, y, wd);
     if (kind === 'move') {
       p.amp = M.min(lerp(60, 150, r()) * (0.7 + 0.5 * hazard), (CH.W - wd) / 2 - 12);
       p.x0 = clamp(p.x, p.amp + wd / 2 + 6, CH.W - p.amp - wd / 2 - 6);
@@ -281,8 +291,9 @@
     if (next.y - ey > 225) ey = next.y - 225;
     if (w.castleY && ey > w.castleY - 80) return;
     var reach = CH.VX * M.max(0.2, airTime(next.y - ey) - 0.16) * 0.8;
+    var noWrap = w.level >= 1 && w.level <= 4;
     for (var tries = 0; tries < 6; tries++) {
-      var ex = fit(e.px + CH.W / 2 + (r() - 0.5) * 560, ew), dn = M.abs(wrapDx(ex - nx));
+      var ex = fit(e.px + CH.W / 2 + (r() - 0.5) * 560, ew), dn = noWrap ? M.abs(ex - nx) : M.abs(wrapDx(ex - nx));
       if (M.abs(wrapDx(ex - e.px)) < (ew + e.wd) / 2 + 30) continue;
       if (next.kind !== 'castle' && dn - next.w / 2 > reach) continue;
       if (dn < (ew + next.w) / 2 + 20 && next.y - ey < 90) continue;
@@ -310,7 +321,7 @@
       bubbles: level ? CH.bubbles(level, diff) : 1,
       m: { x: CH.W / 2, y: 0, vx: 0, vy: 0, power: null, pt: 0, inv: 0, zap: 0, land: -9, on: null },
       maxY: 0, height: 0, mile: 0, streak: 0, lastLand: 0, mult: 1,
-      candies: 0, picked: 0, total: 0, stars: 0, falls: 0, bonks: 0, stomps: 0, zaps: 0, powers: 0, hops: 0, won: false, lost: false, steered: false
+      candies: 0, picked: 0, total: 0, stars: 0, falls: 0, bonks: 0, stomps: 0, zaps: 0, powers: 0, hops: 0, won: false, lost: false, steered: false, steerDist: 0
     };
     var P = params(w, 0);
     w.trampNext = P.trampAt || 1e9; w.jellyNext = P.jellyAt || 1e9; w.powerNext = P.powerAt || 1e9;
@@ -444,18 +455,33 @@
   function steer(w, dt, input) {
     var m = w.m, tv = 0, on = false;
     if (typeof input.mouseX === 'number' && input.mouseX === input.mouseX) {
-      // Ease towards the pointer: straight across the screen, never the wrapped way round.
-      var dx = clamp(input.mouseX, 0, CH.W) - m.x;
-      tv = clamp(dx * 7, -CH.VX, CH.VX); on = M.abs(dx) > 1.5;
-      m.vx = approach(m.vx, tv, CH.ACC * dt);
-      if (!on && M.abs(m.vx) < 30) m.vx = 0;
+      var mx = input.mouseX;
+      if (mx < 24) {
+        // Near the left edge: smoothly wrap left across the seam.
+        tv = -CH.VX; on = true;
+        m.vx = approach(m.vx, tv, CH.ACC * dt * (m.vx > 0 ? 1.4 : 1));
+      } else if (mx > CH.W - 24) {
+        // Near the right edge: smoothly wrap right across the seam.
+        tv = CH.VX; on = true;
+        m.vx = approach(m.vx, tv, CH.ACC * dt * (m.vx < 0 ? 1.4 : 1));
+      } else {
+        // Ease towards the pointer: straight across the screen, never the wrapped way round.
+        var dx = mx - m.x;
+        tv = clamp(dx * 7, -CH.VX, CH.VX); on = M.abs(dx) > 1.5;
+        m.vx = approach(m.vx, tv, CH.ACC * dt);
+        if (!on && M.abs(m.vx) < 30) m.vx = 0;
+      }
     } else {
       var dir = clamp(num(input.dir, 0), -1, 1);
       if (dir) { on = true; m.vx = approach(m.vx, dir * CH.VX, CH.ACC * dt * (m.vx * dir < 0 ? 1.4 : 1)); }
       else m.vx = approach(m.vx, 0, CH.DRAG * dt);
     }
-    if (on && !w.steered) { w.steered = true; emit(w, 'steer'); }
+    var prevX = m.x;
     if (m.vx) m.x = wrapX(m.x + m.vx * dt);
+    if (w.phase === 'play' && on) {
+      w.steerDist += M.abs(wrapDx(m.x - prevX));
+      if (!w.steered && w.steerDist > 20) { w.steered = true; emit(w, 'steer'); }
+    }
   }
   function land(w, p) {
     var m = w.m, t = w.t;

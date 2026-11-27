@@ -66,7 +66,7 @@ of the open round with the same id, else a new one.
 | Event | Shape | Notes |
 |---|---|---|
 | session start | `['ss', t]` | Always the session's first event. |
-| game open | `['go', t, n, slug, src, 0, fav]` | `src`, how it was opened: `featured` (a 🔥 tile in the full list), `catalog`, `recent` («تابع اللعب»), `favorites`, `category`, `quick` (a quick filter), `search` (builds before the search box was removed in November 2026), `related` («ألعاب أخرى ستحبها», or the «العب بعدها» play-next card between rounds), `surprise` (the 🎲 button), `starter` (the «ابدأ من هنا» card), `reload`, `direct` (a page opened on a game) or `history` (back, forward or a typed address). The `0` keeps the event's shape: builds with player profiles put a child's earlier visits there, and there are no players now. `fav` 1 when the game is hearted (`sg:site:favs`) as it opens. |
+| game open | `['go', t, n, slug, src, playsBefore, fav]` | `src`, how it was opened: `featured` (a 🔥 tile or hero spotlight), `catalog`, `recent` («تابع اللعب»), `favorites`, `category`, `quick` (a quick filter or 2-player shelf), `search` (builds before the search box was removed in November 2026), `related` («ألعاب أخرى ستحبها», or the «العب بعدها» play-next card/rail), `surprise` (the 🎲 button), `starter` (the «ابدأ من هنا» card), `reload`, `direct` (a page opened on a game) or `history` (back, forward or a typed address). `playsBefore` is the anonymous count of earlier opens of `slug` on this PC (whole number 0–1,000,000, stored locally in `sg:site:plays` only while active, bounded to catalog slugs, 0 when unseen or storage is blocked, and cleared on opt-out). `fav` 1 when the game is hearted (`sg:site:favs`) as it opens. |
 | game ready | `['ld', t, n, slug, loadMs]` | Frame created to its first `sg:ready`; only a visit's first frame, and only if the page stayed visible. |
 | game failed | `['er', t, n, slug, kind]` | `x` script error, `t` 20-second load timeout, `l` the page failed to load. Never the error text. |
 | round start | `['rs', t, n, k, slug, id, tier, attempt]` | `id` the game's own round id (a level, mode or arena, e.g. `w3L2`, `endless`, `cpu-easy`, `duo`); `tier` the difficulty tier 0–9 (0: no `Kit.dda`); `attempt` the earlier starts of this game and id in this session. |
@@ -99,7 +99,8 @@ of them exists any more:
 * in the envelope: `u` (a profile's random code) and `a` (the age band 6-7, 8-9, 10-11);
 * in `ss`: whether the profile was new, the profile's age in days, the days since its last
   play, its level (XP), the number of profiles on the PC and classroom mode;
-* in `go`: the profile's earlier visits to the game (always `0` now);
+* in `go`: any per-child or per-profile visit count (the field now holds only the anonymous
+  per-PC counter `sg:site:plays`, never tied to a child);
 * the events `lv` (level up), `ct` (classroom timer), `pr` (profile removed) and `cd` (an
   older code of a child);
 * the session-end reasons `h`, `i` and `p` (hand-over and player change): a session ends only
@@ -187,6 +188,10 @@ cues and tutorials where it has them (the table in [`ARCHITECTURE.md`](ARCHITECT
   only by an active sender). Builds with player profiles also kept a code per profile there:
   an active sender drops them and keeps the PC's code. If storage refuses the write, batches
   carry `p: ''`.
+* **Per-PC play counts** live in `sg:site:plays` as a JSON map `{ slug: count }` (whole numbers
+  0–1,000,000, bounded to known catalog slugs, written only while active, silent fallback to `0`
+  when storage is blocked, and removed on opt-out). They count opens on the PC as a whole and
+  never identify any child.
 * **Older queues:** builds with player profiles queued their batches, which hold children's
   codes and ages, in `sg:site:tm:q:<hash>` and `sg:site:tm:q3:<hash>`, beside a sharing note
   `sg:site:tm:on`. This build never sends them: an active sender removes them at load.

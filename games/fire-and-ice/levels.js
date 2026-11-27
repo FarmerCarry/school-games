@@ -571,7 +571,7 @@
       unlocked: 1,
       best: {},
       hat: 'none',
-      solo: false,
+      solo: true,
       beaten: false
     };
   }
@@ -582,7 +582,7 @@
     var NL = LEVELS.length;
     var unl = typeof raw.unlocked === 'number' && isFinite(raw.unlocked) ? Math.floor(raw.unlocked) : 1;
     d.unlocked = unl < 1 ? 1 : unl > NL ? NL : unl;
-    d.solo = !!raw.solo;
+    d.solo = raw.solo === undefined ? d.solo : !!raw.solo;
     d.beaten = !!raw.beaten;
     if (raw.best && typeof raw.best === 'object') {
       for (var i = 0; i < NL; i++) {

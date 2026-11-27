@@ -399,6 +399,26 @@ test('clicks are generous: near a critter counts, the grass is -1, a tall critte
   }
 });
 
+test('clicking an empty upper hole never bonks a bunny in the row below', () => {
+  for (const level of [4, 5]) {
+    const w = still(level);
+    const r0 = w.holes.findIndex(h => h.row === 0 && h.col === 1);
+    const r1 = w.holes.findIndex(h => h.row === 1 && h.col === 1);
+    const r2 = w.holes.findIndex(h => h.row === 2 && h.col === 1);
+    // Row 0 empty, Row 1 has a bunny
+    put(w, r1, 'bunny');
+    assert.equal(BG.holeAt(w, w.holes[r0].x, w.holes[r0].y), r0, 'level ' + level + ': empty row-0 center never hits row-1 bunny');
+    assert.equal(BG.holeAt(w, w.holes[r0].x, w.holes[r0].y + w.holes[r0].ry * 0.7), r0, 'level ' + level + ': empty row-0 lower rim never hits row-1 bunny');
+    // Clicking the bunny body itself still hits the bunny
+    assert.equal(BG.holeAt(w, w.holes[r1].x, w.holes[r1].y - w.holes[r1].h * 0.5), r1, 'clicking row-1 bunny directly still hits it');
+    // Row 1 empty, Row 2 has a bunny
+    w.holes[r1].c = null;
+    put(w, r2, 'bunny');
+    assert.equal(BG.holeAt(w, w.holes[r1].x, w.holes[r1].y), r1, 'level ' + level + ': empty row-1 center never hits row-2 bunny');
+    assert.equal(BG.holeAt(w, w.holes[r1].x, w.holes[r1].y + w.holes[r1].ry * 0.5), r1, 'level ' + level + ': empty row-1 ellipse never hits row-2 bunny');
+  }
+});
+
 test('saves: a fresh save, and every odd field repaired', () => {
   const fresh = BG.newSave();
   assert.deepEqual(plain(fresh), { v: 1, stars: Array(12).fill(0), best: Array(12).fill(0), endless: 0, hammer: 0, coach: false, keys: false, rounds: 0 });

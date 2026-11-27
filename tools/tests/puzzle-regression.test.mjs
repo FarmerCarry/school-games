@@ -43,7 +43,8 @@ test('2048 preserves a saved victory on a board with no remaining moves', async 
       s: 2048, u: 3, h: [], w: true, k: false, m: 1, sb: 0
     });
   });
-  await page.keyboard.press('Enter');
+  await page.reload();
+  await page.locator('#btnResumeT').click();
   await awaitScreen(page, 'win');
   assert.equal(await page.evaluate(() => window.__game.state().max), 2048);
   await page.locator('#btnKeep').click();

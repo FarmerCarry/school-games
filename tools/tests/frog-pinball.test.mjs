@@ -269,6 +269,11 @@ test('a lost level: three drained balls end it, no Next; R plays again; free pla
   const main = (await ddaSaved(page)).main;
   assert.deepEqual(main, [0.224, 1], 'a lost mission is one result for the missions (0.35 + 0.18 × (0 - 0.7))');
   await page.keyboard.press('KeyR');
+  assert.equal((await state(page)).screen, 'result', 'Result keys are debounced for 0.5s');
+  await page.keyboard.press('Enter');
+  assert.equal((await state(page)).screen, 'result', 'Enter is also debounced for 0.5s');
+  await step(page, 35);
+  await page.keyboard.press('KeyR');
   s = await state(page);
   assert.equal(s.screen, 'play');
   assert.equal(s.level, 4);
@@ -389,4 +394,27 @@ test('a save that fails says so and the game keeps going; Retry saves once stora
   await page.evaluate(() => { fp.failSave = false; });
   await page.locator('.sg-save-status button').click();
   assert.notEqual(await stored(page), null);
+});
+
+test('any left-click on the board pulls the plunger when waiting, and frog eye-tracking uses table coordinates', async t => {
+  const page = await game(t);
+  await page.click('#btnPlay');
+  assert.equal((await state(page)).launched, false);
+  // Left click in the middle of the board (far from plunger lane) pulls and launches waiting ball
+  const mid = await page.evaluate(() => __game.point(FP.X0 + 200, 400));
+  await page.mouse.move(mid.x, mid.y);
+  await page.mouse.down();
+  await step(page, 25);
+  assert.equal((await state(page)).launched, false, 'pulling plunger from board click');
+  await page.mouse.up();
+  await step(page, 20);
+  assert.equal((await state(page)).launched, true, 'launched on release from board click');
+  // Eye tracking uses table-local target.x (not X0 + target.x)
+  const atX = await page.evaluate(() => {
+    const w = __game.world, b = FP.mainBall(w);
+    b.st = 'live'; b.x = 60; b.y = 320; b.vx = 0; b.vy = 0;
+    fp.paint();
+    return __game.view.head.at[0];
+  });
+  assert.equal(atX, 60, 'frog looks at table x=60 without double-adding X0');
 });

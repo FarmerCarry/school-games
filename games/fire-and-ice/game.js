@@ -455,6 +455,9 @@
   /* --------------------------------------------------- input reading */
   function readInputs() {
     var k = Kit.keys;
+    if (save.solo && k.anyDown(['ArrowLeft', 'ArrowRight', 'ArrowUp']) && k.anyDown(['KeyA', 'KeyD', 'KeyW'])) {
+      setSolo(false);
+    }
     if (save.solo) {
       var mv = {
         l: k.anyDown(['ArrowLeft', 'KeyA']),

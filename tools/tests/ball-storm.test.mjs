@@ -409,3 +409,30 @@ test('the canvas: frames read no transform back, and a restored context is redra
   assert.equal(r.bgWidth, 1920);
   assert.equal((await state(page)).screen, 'play');
 });
+
+test('title demo caps balls at <=60, and clicking Pause then Resume clears mouse.on without yanking the paddle', async t => {
+  const page = await game(t, { reduced: false });
+  const demoCap = await page.evaluate(() => {
+    const d = __game.demo;
+    for (let i = 0; i < 6; i++) { d.caps.push({ x: d.px, y: BS.F.PY - 8, kind: 'x3', t: 0 }); bs.step(2); }
+    return { cap: d.cap, n: d.n };
+  });
+  assert.ok(demoCap.cap <= 60 && demoCap.n <= 60, 'demo capped <=60: ' + JSON.stringify(demoCap));
+  await page.click('#btnPlay');
+  await mouseTo(page, 900, 500);
+  await mouseTo(page, 920, 500);
+  await step(page, 10);
+  const before = (await state(page)).paddle;
+  assert.ok(Math.abs(before - 920) < 5, 'paddle at 920: ' + before);
+  // Move onto #btnPause (top-left) and click it, then click #btnResume
+  const pb = await page.locator('#btnPause').boundingBox();
+  await page.mouse.move(pb.x + pb.width / 2, pb.y + pb.height / 2);
+  await page.mouse.click(pb.x + pb.width / 2, pb.y + pb.height / 2);
+  assert.equal((await state(page)).screen, 'pause');
+  await page.click('#btnResume');
+  await step(page, 20);
+  const after = await state(page);
+  assert.equal(after.screen, 'play');
+  assert.equal(after.mouse, false, 'mouse.on cleared on resume');
+  assert.ok(Math.abs(after.paddle - before) < 5, `paddle stays at ${before} after Resume, not yanked left: ${after.paddle}`);
+});

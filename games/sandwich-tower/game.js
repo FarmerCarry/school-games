@@ -28,8 +28,10 @@
     saveStatus.saved();
     return true;
   }
-  // How fast pieces slide and how wide a perfect is follow how the tries go on this PC.
+  // How fast pieces slide and how wide a perfect is follow how the tries go on this PC;
+  // endless keeps its own difficulty curve separate from the campaign.
   var dda = Kit.dda('sandwich-tower', { id: 'main', target: 0.72 });
+  var ddaEndless = Kit.dda('sandwich-tower', { id: 'endless', target: 0.6 });
 
   /* --------------------------------------------------------------- state */
   var screen = 'title', world = null, demo = null, time = 0, saveTimer = 0;
@@ -75,13 +77,14 @@
   function startRound(m, lv) {
     mode = m; level = lv || 1;
     var o = { mode: mode, level: level, seed: (M.random() * 4294967295) >>> 0 };
-    if (mode !== 'duo') { o.speedMul = dda.value(0.85, 1.2); o.tol = dda.value(18, 6); }
+    var ctrl = mode === 'endless' ? ddaEndless : dda;
+    if (mode !== 'duo') { o.speedMul = ctrl.value(0.85, 1.2); o.tol = ctrl.value(18, 6); }
     else { o.speedMul = 1; o.tol = 10; }
     world = ST.create(o);
     floats.length = 0; debris.length = 0; banner = null; fx.clear(); clicks.length = 0;
     sway[0] = sway[1] = swayV[0] = swayV[1] = 0; pop[0] = pop[1] = 1; idle = 0; result = null; flash = 0;
     Kit.stats.round(roundId());
-    if (mode !== 'duo') Kit.track.tier(dda.tier);
+    if (mode !== 'duo') Kit.track.tier(ctrl.tier);
     hint = mode === 'levels' && !save.coach;
     if (hint && !hinted) { hinted = true; Kit.stats.tutorial('start'); }
     setScreen('play');
@@ -128,7 +131,7 @@
       dda.result(w.won ? 0.5 + 0.5 * M.min(1, t.perfects / ST.starNeed(w.spec.goal)[1]) : 0);
     } else if (w.mode === 'endless') {
       Kit.stats.end('end', t.height);
-      dda.result(M.min(1, t.height / 30));
+      ddaEndless.result(M.min(1, t.height / 30));
     } else Kit.stats.end('end');
     persist();
   }
@@ -653,7 +656,7 @@
     fx.draw(ctx);
     if (flash > 0) { ctx.fillStyle = 'rgba(255,255,255,' + (flash * 0.6) + ')'; ctx.fillRect(0, 0, W, H); }
     if (world && screen !== 'title') {
-      if (hint || (idle > 7 && world.phase === 'play' && world.mode !== 'duo')) drawHint();
+      if (screen === 'play' && (hint || (idle > 7 && world.phase === 'play' && world.mode !== 'duo'))) drawHint();
       drawHud();
       drawFloats();
     }

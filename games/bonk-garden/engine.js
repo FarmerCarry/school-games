@@ -310,15 +310,24 @@
   // near a critter counts), then one with a critter squashed near it (the second click of
   // a double click), otherwise the hole under it, otherwise -1 (the grass).
   BG.holeAt = function (w, x, y) {
-    var best = -1, bestD = 1e12, flat = -1, flatD = 1e12, any = -1, anyD = 1e12;
+    var best = -1, bestD = 1e12, flat = -1, flatD = 1e12, any = -1, anyD = 1e12, inHole = -1, inD = 1e12;
     for (var i = 0; i < w.holes.length; i++) {
-      var h = w.holes[i], dx = x - h.x, dy = y - h.y;
-      if (M.abs(dx) > h.rx * 1.22 || dy < -h.h * 1.3 || dy > h.ry * 2.4) continue;
+      var ih = w.holes[i], idx = x - ih.x, idy = y - ih.y;
+      var ex = idx / ih.rx, ey = idy / ih.ry;
+      if (ex * ex + ey * ey <= 1) {
+        var id = idx * idx + idy * idy;
+        if (id < inD) { inD = id; inHole = i; }
+      }
+    }
+    for (var j = 0; j < w.holes.length; j++) {
+      var h = w.holes[j], dx = x - h.x, dy = y - h.y;
+      if (M.abs(dx) > h.rx * 1.22 || dy < -h.h * 0.95 || dy > h.ry * 2.4) continue;
       var cy = y - (h.y - h.h * 0.5), cd = dx * dx + cy * cy;
-      if (bonkable(h.c)) { if (cd < bestD) { bestD = cd; best = i; } }
-      else if (h.c && h.c.st === 'hit' && cd < flatD) { flatD = cd; flat = i; }
+      var steal = inHole >= 0 && j !== inHole && h.row > w.holes[inHole].row && h.c && BG.KINDS[h.c.kind].friend && (dx * dx + dy * dy > inD);
+      if (bonkable(h.c)) { if (!steal && cd < bestD) { bestD = cd; best = j; } }
+      else if (h.c && h.c.st === 'hit' && !steal && cd < flatD) { flatD = cd; flat = j; }
       var hd = dx * dx + dy * dy * 2;
-      if (hd < anyD) { anyD = hd; any = i; }
+      if (hd < anyD) { anyD = hd; any = j; }
     }
     return best >= 0 ? best : flat >= 0 ? flat : any;
   };

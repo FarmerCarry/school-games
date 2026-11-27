@@ -118,6 +118,7 @@ test('a bonk stuns the runner, costs a little speed (twelve steps at most) and k
   const before = save.speed;
   const events = run(w, { until: (w, ev) => ev.some(e => e.type === 'bonk') });
   const bonk = events.find(e => e.type === 'bonk');
+  assert.equal(bonk.idx, 0);
   assert.equal(bonk.lost, ZP.stepGain(save) * 12);
   assert.ok(save.speed > before - ZP.stepGain(save) * 12 - 1);
   assert.equal(w.phase, 'bonk');

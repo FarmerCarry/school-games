@@ -41,19 +41,26 @@ test('category chips replace the search box, and old search links open the home 
   await page.goto(url + '#/search/pool');
   await page.waitForFunction(() => document.body.className === 'route-home');
   assert.equal(await page.locator('#q, #searchForm, .search').count(), 0, 'no search box');
-  assert.ok(await page.locator('#chips a.chip[href^="#/c/"]').count() >= 5, 'category chips are shown');
-  await page.locator('#chips a.chip[href="#/c/sports"]').click();
+  assert.ok(await page.locator('#chips a.chip[href^="#/c/"]').count() >= 4, 'consolidated category chips are shown');
+  assert.equal(await page.locator('#quickFilters').count(), 0, 'single-row nav replaces second quick-filters bar');
+  await page.locator('#chips a.chip[href="#/c/speed"]').click();
   await page.waitForFunction(() => document.body.className === 'route-cat');
-  assert.ok((await slugs(page)).includes('pool-party'), 'a chip lists its games');
+  assert.ok((await slugs(page)).includes('pool-party'), 'grouped speed chip lists sports/speed games');
+  await page.goto(url + '#/c/sports');
+  await page.waitForFunction(() => document.body.className === 'route-cat');
+  assert.ok((await slugs(page)).includes('pool-party'), 'direct catalog category links remain supported');
 });
 
-test('featured games lead the catalog in their stay-time rank', async t => {
+test('featured games lead the catalog in their stay-time rank without duplicating starter or showing hidden duds', async t => {
   const page = await newPage(t);
   await page.goto(url);
   const order = await slugs(page, '.catalog-grid .tile');
-  const ranked = await page.evaluate(() => GAMES.filter(g => typeof g.hot === 'number').sort((a, b) => a.hot - b.hot).map(g => g.slug));
+  const ranked = await page.evaluate(() => GAMES.filter(g => !g.hidden && typeof g.hot === 'number').sort((a, b) => a.hot - b.hot).map(g => g.slug));
+  const hidden = await page.evaluate(() => GAMES.filter(g => g.hidden).map(g => g.slug));
   assert.ok(ranked.length >= 6, 'ranked featured games');
-  assert.deepEqual(order.slice(1, 1 + ranked.length), ranked, 'the starter leads, then featured games by rank');
+  assert.deepEqual(order.slice(0, ranked.length), ranked, 'featured games lead the catalog by rank without duplicating starter at tile #1');
+  assert.notEqual(order[0], 'bubble-bop', 'starter is not duplicated as Tile #1');
+  for (const slug of hidden) assert.equal(order.includes(slug), false, 'hidden game excluded from catalog: ' + slug);
 });
 
 test('a round end offers one play-next game that hides when the next round starts', async t => {
@@ -149,6 +156,9 @@ test('play keeps controls visible, offers keyboard-operable help and limits reco
   assert.equal(await help.evaluate(element => element.open), false, 'Space closes help without sending focus to the game');
   assert.equal(await help.locator('summary').evaluate(element => document.activeElement === element), true);
   assert.equal(await page.locator('.controls .ctl-list').isVisible(), true, 'collapsing help preserves essential controls');
+  const rail = await slugs(page, '.side-next-grid .tile');
+  assert.equal(rail.length, 3, '3-tile play-next rail is visible beside controls');
+  assert.equal(rail.includes('connect-four'), false);
   const recommended = await slugs(page, '.recommendations .tile');
   assert.equal(recommended.length, 6);
   assert.equal(new Set(recommended).size, recommended.length);

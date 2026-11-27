@@ -1,113 +1,38 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
-  <defs>
-    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#07021c"/>
-      <stop offset="0.3" stop-color="#2a0850"/>
-      <stop offset="0.44" stop-color="#b0208f"/>
-      <stop offset="0.46" stop-color="#1c0638"/>
-      <stop offset="1" stop-color="#0c0224"/>
-    </linearGradient>
-    <linearGradient id="sun" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#fff27a"/>
-      <stop offset="0.55" stop-color="#ff9a3c"/>
-      <stop offset="1" stop-color="#ff2bd6"/>
-    </linearGradient>
-    <radialGradient id="ballg" cx="0.38" cy="0.32" r="0.75">
-      <stop offset="0" stop-color="#2a4a9a"/>
-      <stop offset="0.6" stop-color="#0b1236"/>
-      <stop offset="1" stop-color="#050818"/>
-    </radialGradient>
-    <radialGradient id="halo" cx="0.5" cy="0.5" r="0.5">
-      <stop offset="0" stop-color="#3ff0ff" stop-opacity="0.75"/>
-      <stop offset="1" stop-color="#3ff0ff" stop-opacity="0"/>
-    </radialGradient>
-    <linearGradient id="trail" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#3ff0ff" stop-opacity="0.95"/>
-      <stop offset="1" stop-color="#3ff0ff" stop-opacity="0"/>
-    </linearGradient>
-    <linearGradient id="gem" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#fff7c2"/>
-      <stop offset="0.5" stop-color="#ffd93b"/>
-      <stop offset="1" stop-color="#ff9d1a"/>
-    </linearGradient>
-    <pattern id="haz" width="12" height="12" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-      <rect width="12" height="12" fill="#6a0616"/>
-      <rect width="6" height="12" fill="#ff1f4a"/>
-    </pattern>
-    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
-      <feGaussianBlur stdDeviation="3" result="b"/>
-      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
-    <clipPath id="ballclip"><circle cx="200" cy="262" r="50"/></clipPath>
-    <clipPath id="sunclip"><rect x="0" y="0" width="400" height="182"/></clipPath>
-  </defs>
-
-  <rect width="400" height="400" fill="url(#sky)"/>
-  <g fill="#fff">
-    <circle cx="40" cy="30" r="1.6"/><circle cx="96" cy="64" r="1.2"/><circle cx="150" cy="22" r="1.4"/>
-    <circle cx="300" cy="40" r="1.6"/><circle cx="352" cy="80" r="1.2"/><circle cx="260" cy="14" r="1"/>
-    <circle cx="22" cy="104" r="1"/><circle cx="378" cy="24" r="1.3"/><circle cx="330" cy="120" r="1"/>
-  </g>
-
-  <!-- sun -->
-  <g clip-path="url(#sunclip)">
-    <circle cx="200" cy="138" r="84" fill="url(#sun)"/>
-    <g fill="#5a1266">
-      <rect x="110" y="146" width="180" height="4"/><rect x="110" y="158" width="180" height="5"/>
-      <rect x="110" y="170" width="180" height="7"/>
-    </g>
-  </g>
-  <!-- mountains -->
-  <path d="M0 176 L34 150 L62 164 L98 128 L136 160 L162 150 L196 178 L240 150 L268 162 L300 132 L336 158 L370 140 L400 160 L400 186 L0 186 Z" fill="#1a0638"/>
-  <path d="M0 176 L34 150 L62 164 L98 128 L136 160 L162 150 L196 178 L240 150 L268 162 L300 132 L336 158 L370 140 L400 160" fill="none" stroke="#b05bff" stroke-width="2.5" filter="url(#glow)"/>
-  <rect x="0" y="182" width="400" height="6" fill="#ff3fa4" opacity="0.55"/>
-
-  <!-- neon slope -->
-  <path d="M172 186 L228 186 L470 400 L-70 400 Z" fill="#150834"/>
-  <g stroke="#ff2bd6" stroke-width="3" fill="none" filter="url(#glow)" stroke-linecap="round">
-    <path d="M172 186 L-70 400"/><path d="M228 186 L470 400"/>
-    <path d="M186 186 L50 400"/><path d="M214 186 L350 400"/>
-    <path d="M193 186 L110 400"/><path d="M207 186 L290 400"/>
-    <path d="M167 191 L233 191"/><path d="M160 198 L240 198"/><path d="M151 207 L249 207"/>
-    <path d="M138 219 L262 219"/><path d="M121 235 L279 235"/><path d="M98 256 L302 256"/>
-    <path d="M66 284 L334 284"/><path d="M22 323 L378 323"/><path d="M-40 378 L440 378"/>
-  </g>
-
-  <!-- red block -->
-  <g transform="translate(262 204)">
-    <path d="M0 10 L30 10 L30 40 L0 40 Z" fill="url(#haz)" stroke="#ffd0d8" stroke-width="2.5"/>
-    <path d="M0 10 L8 2 L38 2 L30 10 Z" fill="#ff5a78" stroke="#ffd0d8" stroke-width="2"/>
-    <path d="M30 10 L38 2 L38 32 L30 40 Z" fill="#8a0a22" stroke="#ffd0d8" stroke-width="2"/>
-  </g>
-
-  <!-- gems -->
-  <g filter="url(#glow)">
-    <path d="M118 196 L130 210 L118 230 L106 210 Z" fill="url(#gem)"/>
-    <path d="M150 188 L158 197 L150 210 L142 197 Z" fill="url(#gem)"/>
-    <path d="M320 238 L336 256 L320 282 L304 256 Z" fill="url(#gem)"/>
-  </g>
-
-  <!-- ball + trail -->
-  <path d="M176 400 Q190 330 200 300 Q210 330 224 400 Z" fill="url(#trail)" opacity="0.9"/>
-  <circle cx="200" cy="262" r="86" fill="url(#halo)"/>
-  <circle cx="200" cy="262" r="50" fill="url(#ballg)"/>
-  <g clip-path="url(#ballclip)" stroke="#3ff0ff" stroke-width="5" fill="none" filter="url(#glow)">
-    <ellipse cx="200" cy="262" rx="50" ry="16"/>
-    <ellipse cx="200" cy="262" rx="18" ry="50"/>
-    <ellipse cx="200" cy="262" rx="40" ry="50"/>
-    <path d="M150 238 Q200 226 250 238"/>
-    <path d="M150 288 Q200 300 250 288"/>
-  </g>
-  <circle cx="200" cy="262" r="50" fill="none" stroke="#3ff0ff" stroke-width="3" opacity="0.8"/>
-  <ellipse cx="184" cy="242" rx="14" ry="9" fill="#ffffff" opacity="0.55"/>
-
-  <!-- logo -->
-  <g font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-weight="bold" text-anchor="middle" font-size="62" direction="rtl">
-    <text x="200" y="364" fill="#ff2bd6" stroke="#ff2bd6" stroke-width="12" stroke-linejoin="round" opacity="0.55" filter="url(#glow)">منحدر النيون</text>
-    <text x="200" y="364" fill="#ffffff" stroke="#3a0850" stroke-width="8" stroke-linejoin="round" paint-order="stroke"><tspan fill="#ffe3fa">منحدر </tspan><tspan fill="#c8fbff">النيون</tspan></text>
-  </g>
-  <g fill="#ffffff">
-    <path d="M86 250 l3 8 8 3 -8 3 -3 8 -3 -8 -8 -3 8 -3z"/>
-    <path d="M318 196 l2 6 6 2 -6 2 -2 6 -2 -6 -6 -2 6 -2z"/>
-  </g>
+<defs>
+<linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#07021c"/><stop offset=".3" stop-color="#2a0850"/><stop offset=".44" stop-color="#b0208f"/><stop offset=".46" stop-color="#1c0638"/><stop offset="1" stop-color="#0c0224"/></linearGradient>
+<linearGradient id="sun" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff27a"/><stop offset=".55" stop-color="#ff9a3c"/><stop offset="1" stop-color="#ff2bd6"/></linearGradient>
+<radialGradient id="sunH" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ff8a3d" stop-opacity=".45"/><stop offset="1" stop-color="#ff2bd6" stop-opacity="0"/></radialGradient>
+<radialGradient id="ballg" cx=".38" cy=".32" r=".75"><stop offset="0" stop-color="#2a4a9a"/><stop offset=".6" stop-color="#0b1236"/><stop offset="1" stop-color="#050818"/></radialGradient>
+<radialGradient id="halo" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#3ff0ff" stop-opacity=".78"/><stop offset=".55" stop-color="#3ff0ff" stop-opacity=".24"/><stop offset="1" stop-color="#3ff0ff" stop-opacity="0"/></radialGradient>
+<linearGradient id="trail" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3ff0ff" stop-opacity=".95"/><stop offset="1" stop-color="#3ff0ff" stop-opacity="0"/></linearGradient>
+<linearGradient id="gem" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff7c2"/><stop offset=".5" stop-color="#ffd93b"/><stop offset="1" stop-color="#ff9d1a"/></linearGradient>
+<pattern id="haz" width="12" height="12" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="12" height="12" fill="#6a0616"/><rect width="6" height="12" fill="#ff1f4a"/></pattern>
+<clipPath id="bc"><circle cx="200" cy="248" r="54"/></clipPath>
+<clipPath id="sc"><rect width="400" height="182"/></clipPath>
+</defs>
+<rect width="400" height="400" fill="url(#sky)"/>
+<g fill="#fff"><circle cx="40" cy="30" r="1.8"/><circle cx="96" cy="64" r="1.4"/><circle cx="150" cy="22" r="1.5"/><circle cx="300" cy="40" r="1.8"/><circle cx="352" cy="80" r="1.4"/><circle cx="260" cy="14" r="1.2"/><circle cx="22" cy="104" r="1.2"/><circle cx="378" cy="24" r="1.5"/><circle cx="330" cy="120" r="1.2"/></g>
+<circle cx="200" cy="138" r="126" fill="url(#sunH)"/>
+<g clip-path="url(#sc)"><circle cx="200" cy="138" r="84" fill="url(#sun)"/><g fill="#5a1266"><rect x="110" y="146" width="180" height="4"/><rect x="110" y="158" width="180" height="5"/><rect x="110" y="170" width="180" height="7"/></g></g>
+<path d="M0 176L34 150 62 164 98 128 136 160 162 150 196 178 240 150 268 162 300 132 336 158 370 140 400 160V186H0Z" fill="#1a0638"/>
+<path d="M0 176L34 150 62 164 98 128 136 160 162 150 196 178 240 150 268 162 300 132 336 158 370 140 400 160" fill="none" stroke="#b05bff" stroke-width="6.5" stroke-opacity=".32" stroke-linejoin="round"/>
+<path d="M0 176L34 150 62 164 98 128 136 160 162 150 196 178 240 150 268 162 300 132 336 158 370 140 400 160" fill="none" stroke="#d599ff" stroke-width="2.5" stroke-linejoin="round"/>
+<rect y="182" width="400" height="6" fill="#ff3fa4" opacity=".6"/>
+<path d="M172 186H228L470 400H-70Z" fill="#150834"/>
+<path d="M172 186L-70 400M228 186L470 400M186 186L50 400M214 186L350 400M193 186L110 400M207 186L290 400M121 235H279M66 284H334M22 323H378" fill="none" stroke="#ff2bd6" stroke-width="7" stroke-opacity=".24" stroke-linecap="round"/>
+<path d="M172 186L-70 400M228 186L470 400M186 186L50 400M214 186L350 400M193 186L110 400M207 186L290 400M167 191H233M160 198H240M151 207H249M138 219H262M121 235H279M98 256H302M66 284H334M22 323H378M-40 378H440" fill="none" stroke="#ff55e0" stroke-width="2.8" stroke-linecap="round"/>
+<g transform="translate(264 198)" stroke="#ffd0d8"><path d="M0 10H32V42H0Z" fill="url(#haz)" stroke-width="2.5"/><path d="M0 10L9 2H41L32 10Z" fill="#ff5a78" stroke-width="2"/><path d="M32 10L41 2V34L32 42Z" fill="#8a0a22" stroke-width="2"/></g>
+<path d="M114 196L127 211 114 232 101 211ZM148 186L157 196 148 210 139 196ZM322 238L339 258 322 286 305 258Z" fill="none" stroke="#ffe680" stroke-width="5" stroke-opacity=".32" stroke-linejoin="round"/>
+<path d="M114 196L127 211 114 232 101 211ZM148 186L157 196 148 210 139 196ZM322 238L339 258 322 286 305 258Z" fill="url(#gem)" stroke="#fff8d1" stroke-width="1.6" stroke-linejoin="round"/>
+<path d="M170 400Q188 318 200 288 212 318 230 400Z" fill="url(#trail)" opacity=".92"/>
+<circle cx="200" cy="248" r="96" fill="url(#halo)"/>
+<circle cx="200" cy="248" r="54" fill="url(#ballg)"/>
+<g clip-path="url(#bc)" fill="none">
+<g stroke="#3ff0ff" stroke-width="8" stroke-opacity=".28"><ellipse cx="200" cy="248" rx="54" ry="17"/><ellipse cx="200" cy="248" rx="19" ry="54"/><ellipse cx="200" cy="248" rx="43" ry="54"/><path d="M146 222Q200 209 254 222M146 276Q200 289 254 276"/></g>
+<g stroke="#6cf7ff" stroke-width="3.6"><ellipse cx="200" cy="248" rx="54" ry="17"/><ellipse cx="200" cy="248" rx="19" ry="54"/><ellipse cx="200" cy="248" rx="43" ry="54"/><path d="M146 222Q200 209 254 222M146 276Q200 289 254 276"/></g>
+</g>
+<circle cx="200" cy="248" r="54" fill="none" stroke="#7ff9ff" stroke-width="3.2" opacity=".9"/>
+<ellipse cx="182" cy="226" rx="16" ry="10" fill="#fff" opacity=".58"/>
+<path d="M84 246l3 8 8 3-8 3-3 8-3-8-8-3 8-3zM320 192l2.5 6.5 6.5 2.5-6.5 2.5-2.5 6.5-2.5-6.5-6.5-2.5 6.5-2.5zM72 132l2 5.5 5.5 2-5.5 2-2 5.5-2-5.5-5.5-2 5.5-2z" fill="#fff"/>
 </svg>

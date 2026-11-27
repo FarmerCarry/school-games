@@ -238,6 +238,11 @@
     } else if (move === 'alt' && s.wobble && t.rng() < s.wobble) wob = 0.55;
     var side = move === 'slide' ? -1 : (t.sides % 2 ? 1 : -1);
     t.sides++;
+    if (w.mode === 'duo') {
+      var laneLo = t.i * 640 + 16, laneHi = (t.i + 1) * 640 - 16;
+      var maxAmp = M.min(t.tx - (laneLo + t.tw / 2), (laneHi - t.tw / 2) - t.tx);
+      amp = M.max(36, M.min(amp, maxAmp));
+    }
     var speed = s.speed * w.speedMul * f;
     t.cur = {
       kind: kind, w: t.tw, h: ST.KINDS[kind].h, x: t.tx + side * amp, y: t.top + ST.HOVER, cx: t.tx, amp: amp,
@@ -306,6 +311,7 @@
       var cut = c.w - overlap, keep = M.max(overlap, M.min(tw, c.floor != null ? c.floor : s.floor));
       piece.x = keep > overlap ? clamp(c.x, t.tx - tw / 2 + keep / 2, t.tx + tw / 2 - keep / 2)
         : (M.max(c.x - c.w / 2, t.tx - tw / 2) + M.min(c.x + c.w / 2, t.tx + tw / 2)) / 2;
+      if (w.mode === 'duo') piece.x = clamp(piece.x, t.i * 640 + 180, (t.i + 1) * 640 - 180);
       piece.w = keep; piece.puff = keep > overlap ? 1 : 0;
       if (cut > 0.5) emit(w, { type: 'slice', tower: t.i, kind: c.kind, side: side, w: cut, h: c.h, y: t.top, x: t.tx + side * (tw / 2 + cut / 2), face: c.face });
       t.combo = 0; t.run = 0;

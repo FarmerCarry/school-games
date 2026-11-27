@@ -6,7 +6,7 @@
   var VW = D.VIEW_W, VH = D.VIEW_H, TILE = 256;
   var canvas = document.getElementById('game'), uiEl = document.getElementById('ui');
 
-  var view = Kit.fit(canvas, VW, VH, { onResize: syncUi });
+  var view = Kit.fit(canvas, VW, VH, { maxDpr: 1.5, onResize: syncUi });
   var ctx = view.ctx, dirty = true;
 
   function syncUi(v) {
@@ -16,7 +16,7 @@
     uiEl.style.transform = 'scale(' + cur.scale + ')';
     dirty = true;
   }
-  canvas.addEventListener('contextrestored', function () { dirty = true; });
+  canvas.addEventListener('contextrestored', function () { spriteCache = Object.create(null); dirty = true; });
 
   var store = Kit.store('robo-swarm');
   var saveStatus = Kit.saveStatus ? Kit.saveStatus({ retry: persist }) : null;
@@ -40,9 +40,14 @@
   var shake = Kit.shake();
   Kit.muteButton();
 
+  var spriteCache = Object.create(null);
   function bake(key, w, h, fn) {
+    var cached = spriteCache[key];
+    if (cached) return cached;
     var c = document.createElement('canvas'); c.width = w; c.height = h;
-    fn(c.getContext('2d'), w, h); return c;
+    fn(c.getContext('2d'), w, h);
+    spriteCache[key] = c;
+    return c;
   }
   function rr(g, x, y, w, h, r) {
     g.beginPath(); g.moveTo(x + r, y);
@@ -177,20 +182,24 @@
     });
   }
 
-  var boltSpr = bake('bolt_pickup', 28, 28, function (g) {
-    g.translate(14, 14); g.fillStyle = '#ffe14a'; g.strokeStyle = '#1b1200'; g.lineWidth = 2.5;
-    g.beginPath();
-    for (var i = 0; i < 6; i++) { var a = i * 1.047; if (i === 0) g.moveTo(Math.cos(a) * 10, Math.sin(a) * 10); else g.lineTo(Math.cos(a) * 10, Math.sin(a) * 10); }
-    g.closePath(); g.fill(); g.stroke();
-    g.fillStyle = '#fff8b8'; g.beginPath(); g.arc(0, 0, 4, 0, 6.28); g.fill();
-  });
+  function boltSprite() {
+    return bake('bolt_pickup', 28, 28, function (g) {
+      g.translate(14, 14); g.fillStyle = '#ffe14a'; g.strokeStyle = '#1b1200'; g.lineWidth = 2.5;
+      g.beginPath();
+      for (var i = 0; i < 6; i++) { var a = i * 1.047; if (i === 0) g.moveTo(Math.cos(a) * 10, Math.sin(a) * 10); else g.lineTo(Math.cos(a) * 10, Math.sin(a) * 10); }
+      g.closePath(); g.fill(); g.stroke();
+      g.fillStyle = '#fff8b8'; g.beginPath(); g.arc(0, 0, 4, 0, 6.28); g.fill();
+    });
+  }
 
-  var sawSpr = bake('buzzsaw', 44, 44, function (g) {
-    g.translate(22, 22); g.fillStyle = '#ffe14a';
-    for (var i = 0; i < 8; i++) { g.save(); g.rotate(i * 0.785); g.beginPath(); g.moveTo(0, -20); g.lineTo(6, -11); g.lineTo(-6, -11); g.closePath(); g.fill(); g.restore(); }
-    g.fillStyle = '#28e7ff'; g.beginPath(); g.arc(0, 0, 11, 0, 6.28); g.fill();
-    g.fillStyle = '#0d152b'; g.beginPath(); g.arc(0, 0, 4, 0, 6.28); g.fill();
-  });
+  function sawSprite() {
+    return bake('buzzsaw', 44, 44, function (g) {
+      g.translate(22, 22); g.fillStyle = '#ffe14a';
+      for (var i = 0; i < 8; i++) { g.save(); g.rotate(i * 0.785); g.beginPath(); g.moveTo(0, -20); g.lineTo(6, -11); g.lineTo(-6, -11); g.closePath(); g.fill(); g.restore(); }
+      g.fillStyle = '#28e7ff'; g.beginPath(); g.arc(0, 0, 11, 0, 6.28); g.fill();
+      g.fillStyle = '#0d152b'; g.beginPath(); g.arc(0, 0, 4, 0, 6.28); g.fill();
+    });
+  }
 
   var PMAX = 140, POP_MAX = 20, sparks = new Array(PMAX), spIdx = 0, popups = new Array(POP_MAX), popIdx = 0;
   for (var si = 0; si < PMAX; si++) sparks[si] = { on: false, x: 0, y: 0, vx: 0, vy: 0, life: 0, max: 1, r: 4, color: '#fff' };
@@ -218,9 +227,9 @@
   function sfxPop(mag) { var t = performance.now(); if (t - lastPopAt >= 55 && Kit.juice) { lastPopAt = t; Kit.juice.pop(mag); } }
   function sfxCoin(st) { var t = performance.now(); if (t - lastCoinAt >= 75 && Kit.juice) { lastCoinAt = t; Kit.juice.coin(st); } }
 
-  var gameState = 'title', garageReturn = 'title', pick = { players: 1, difficulty: 'normal', arena: 0 };
+  var gameState = 'title', garageReturn = 'title', pick = { players: 1, difficulty: 'easy', arena: 0 };
   var run = null, roundEnded = true, bannerUntil = 0;
-  var mouse = { active: false, screenX: 640, screenY: 360, startX: 640, startY: 360, down: false, clickDash: false };
+  var mouse = { active: false, screenX: 640, screenY: 360, startX: 640, startY: 360, down: false, rightDash: false };
 
   function $(id) { return document.getElementById(id); }
   function showOverlay(id) {
@@ -293,7 +302,7 @@
     var rk = run.arena.id + '_' + run.players + 'p';
     Kit.stats.round(rk);
     roundEnded = false; gameState = 'play';
-    mouse.active = false; mouse.down = false; mouse.clickDash = false;
+    mouse.active = false; mouse.down = false; mouse.rightDash = false;
     mouse.startX = mouse.screenX; mouse.startY = mouse.screenY;
 
     showOverlay(null);
@@ -332,7 +341,7 @@
 
   function pauseGame() {
     if (gameState !== 'play') return;
-    gameState = 'pause'; mouse.down = false; mouse.clickDash = false;
+    gameState = 'pause'; mouse.down = false; mouse.rightDash = false;
     Kit.keys.reset(); showOverlay('scrPause'); dirty = true;
   }
   function resumeGame() {
@@ -357,9 +366,19 @@
     pointerToLogical(ev);
     if (gameState === 'play' && run && run.players === 1 && Math.hypot(mouse.screenX - mouse.startX, mouse.screenY - mouse.startY) > 8) mouse.active = true;
   });
+  canvas.addEventListener('contextmenu', function (ev) {
+    if (gameState === 'play') ev.preventDefault();
+  });
   canvas.addEventListener('pointerdown', function (ev) {
-    if (ev.button !== 0 || gameState !== 'play' || !run || run.players !== 1) return;
-    pointerToLogical(ev); mouse.down = true; mouse.active = true; mouse.clickDash = true;
+    if (gameState !== 'play' || !run || run.players !== 1) return;
+    if (ev.button === 2) {
+      ev.preventDefault();
+      pointerToLogical(ev);
+      mouse.rightDash = true;
+      return;
+    }
+    if (ev.button !== 0) return;
+    pointerToLogical(ev); mouse.down = true; mouse.active = true;
   });
   window.addEventListener('pointerup', function () { mouse.down = false; });
 
@@ -368,31 +387,58 @@
     var one = run.players === 1, x1 = axis('KeyD', 'KeyA'), y1 = axis('KeyS', 'KeyW');
     if (one) { x1 += axis('ArrowRight', 'ArrowLeft'); y1 += axis('ArrowDown', 'ArrowUp'); }
     if (x1 !== 0 || y1 !== 0) { mouse.active = false; mouse.startX = mouse.screenX; mouse.startY = mouse.screenY; }
-    var dash1 = Kit.keys.pressed('Space') || (one && mouse.clickDash) ? 1 : 0;
-    mouse.clickDash = false;
+    var dash1 = (Kit.keys.pressed('Space') || Kit.keys.pressed('ShiftLeft') || Kit.keys.pressed('ShiftRight') || (one && mouse.rightDash)) ? 1 : 0;
+    mouse.rightDash = false;
     var inp1 = { x: x1, y: y1, dash: dash1, mouse: one && mouse.active, tx: run.cam.x - VW * 0.5 + mouse.screenX, ty: run.cam.y - VH * 0.5 + mouse.screenY };
     if (one) return [inp1];
     return [inp1, { x: axis('ArrowRight', 'ArrowLeft'), y: axis('ArrowDown', 'ArrowUp'), dash: (Kit.keys.pressed('Enter') || Kit.keys.pressed('NumpadEnter') || Kit.keys.pressed('Slash')) ? 1 : 0 }];
   }
 
+  var hudEls = null;
+  var hudLast = { wave: '', hearts: '', score: '', combo: '', xpW: '', bossW: '', bossLabel: '' };
+  function getHudEls() {
+    if (!hudEls) {
+      hudEls = {
+        wave: $('hudWave'), hearts: $('hudHearts'), score: $('hudScore'),
+        combo: $('hudCombo'), xpFill: $('xpFill'),
+        bossBar: $('bossBar'), bossFill: $('bossFill'), bossLabel: $('bossLabel'),
+        banner: $('banner')
+      };
+    }
+    return hudEls;
+  }
   function heartMarks(m) { var s = ''; for (var i = 0; i < m.maxHp; i++) s += i < m.hp ? '♥' : '♡'; return s; }
   function updateHud() {
     if (!run) return;
-    $('hudWave').textContent = (run.wave <= 3 ? ('موجة ' + run.wave) : 'الزعيم الآلي') + ' · ' + fmtClock(run.t);
-    $('hudHearts').textContent = run.players === 2 ? ('م1 ' + heartMarks(run.mechs[0]) + ' · م2 ' + heartMarks(run.mechs[1])) : heartMarks(run.mechs[0]);
-    $('hudScore').textContent = '⚙️ ' + run.bolts + ' · مستوى ' + run.level;
-    $('hudCombo').hidden = run.combo < 3;
-    if (run.combo >= 3) $('hudCombo').textContent = 'سلسلة ' + run.combo + '×';
-    $('xpFill').style.width = (run.xpNext > 0 ? Math.min(100, (run.xp / run.xpNext) * 100) : 0) + '%';
+    var el = getHudEls();
+    var waveTxt = (run.wave <= 3 ? ('موجة ' + run.wave) : 'الزعيم الآلي') + ' · ' + fmtClock(run.t);
+    if (hudLast.wave !== waveTxt) { hudLast.wave = waveTxt; el.wave.textContent = waveTxt; }
+    var heartsTxt = run.players === 2 ? ('م1 ' + heartMarks(run.mechs[0]) + ' · م2 ' + heartMarks(run.mechs[1])) : heartMarks(run.mechs[0]);
+    if (hudLast.hearts !== heartsTxt) { hudLast.hearts = heartsTxt; el.hearts.textContent = heartsTxt; }
+    var scoreTxt = '⚙️ ' + run.bolts + ' · مستوى ' + run.level;
+    if (hudLast.score !== scoreTxt) { hudLast.score = scoreTxt; el.score.textContent = scoreTxt; }
+    var comboHidden = run.combo < 3;
+    if (el.combo.hidden !== comboHidden) el.combo.hidden = comboHidden;
+    if (!comboHidden) {
+      var comboTxt = 'سلسلة ' + run.combo + '×';
+      if (hudLast.combo !== comboTxt) { hudLast.combo = comboTxt; el.combo.textContent = comboTxt; }
+    }
+    var xpPct = run.xpNext > 0 ? Math.min(100, (run.xp / run.xpNext) * 100) : 0;
+    var xpW = (Math.round(xpPct * 10) / 10) + '%';
+    if (hudLast.xpW !== xpW) { hudLast.xpW = xpW; el.xpFill.style.width = xpW; }
 
     var boss = null;
     for (var i = 0; i < run.enemies.length; i++) if (run.enemies[i].kind === 5) { boss = run.enemies[i]; break; }
-    $('bossBar').hidden = !boss;
+    var bossHidden = !boss;
+    if (el.bossBar.hidden !== bossHidden) el.bossBar.hidden = bossHidden;
     if (boss) {
-      $('bossFill').style.width = Math.max(0, (boss.hp / boss.maxHp) * 100) + '%';
-      $('bossLabel').textContent = boss.weakOpen ? 'الزعيم الآلي — نقطة ضعف مكشوفة!' : 'الزعيم الآلي العملاق';
+      var bossPct = Math.max(0, (boss.hp / boss.maxHp) * 100);
+      var bossW = (Math.round(bossPct * 10) / 10) + '%';
+      if (hudLast.bossW !== bossW) { hudLast.bossW = bossW; el.bossFill.style.width = bossW; }
+      var bossLbl = boss.weakOpen ? 'الزعيم الآلي — نقطة ضعف مكشوفة!' : 'الزعيم الآلي العملاق';
+      if (hudLast.bossLabel !== bossLbl) { hudLast.bossLabel = bossLbl; el.bossLabel.textContent = bossLbl; }
     }
-    if (run.t >= bannerUntil) $('banner').hidden = true;
+    if (run.t >= bannerUntil && !el.banner.hidden) el.banner.hidden = true;
   }
 
   function processEvents() {
@@ -448,6 +494,10 @@
         shake.update(dt); updateHud();
         if (run.state === 'win' || run.state === 'over') finishRound(run.state);
       }
+    } else if (gameState === 'title') {
+      if ($('scrGarage').hidden && (Kit.keys.pressed('Enter') || Kit.keys.pressed('NumpadEnter') || Kit.keys.pressed('Space'))) {
+        startRun();
+      }
     } else if (gameState === 'pause') {
       if (Kit.keys.pressed('KeyP') || Kit.keys.pressed('Escape')) resumeGame();
       else if (Kit.keys.pressed('KeyR')) startRun();
@@ -470,7 +520,8 @@
     ctx.strokeStyle = ar.border; ctx.lineWidth = 6; ctx.strokeRect(20, 20, VW - 40, VH - 40);
     // Left showcase: Hero mech + orbiting saws + Holo Pod
     ctx.save(); ctx.translate(115, 340); ctx.scale(1.4, 1.4); ctx.drawImage(mechSprite(save.equipped), -48, -48); ctx.restore();
-    ctx.drawImage(sawSpr, 52, 232); ctx.drawImage(sawSpr, 140, 412);
+    var saw = sawSprite();
+    ctx.drawImage(saw, 52, 232); ctx.drawImage(saw, 140, 412);
     ctx.drawImage(podSprite(1), 76, 520);
     // Right showcase: Mega-Boss + Spider & Charger bots
     ctx.save(); ctx.translate(1165, 350); ctx.scale(-1.05, 1.05); ctx.drawImage(enemySprite(5, 0), -84, -84); ctx.restore();
@@ -530,7 +581,8 @@
       ctx.fillStyle = '#3df5ff'; ctx.beginPath(); ctx.arc(bp.x, bp.y, 12, 0, 6.28); ctx.fill();
     }
 
-    for (i = 0; i < run.boltDrops.length; i++) ctx.drawImage(boltSpr, run.boltDrops[i].x - 14, run.boltDrops[i].y - 14);
+    var bolt = boltSprite();
+    for (i = 0; i < run.boltDrops.length; i++) ctx.drawImage(bolt, run.boltDrops[i].x - 14, run.boltDrops[i].y - 14);
     for (i = 0; i < run.pods.length; i++) {
       var pod = run.pods[i], bob = Math.sin(run.t * 5 + i) * 4;
       ctx.strokeStyle = D.pods[pod.kind].color; ctx.lineWidth = 3;
@@ -575,11 +627,11 @@
       }
       if (m.dashT > 0) { ctx.strokeStyle = 'rgba(40,231,255,0.65)'; ctx.lineWidth = 5; ctx.beginPath(); ctx.arc(m.x, m.y, 38, 0, 6.28); ctx.stroke(); }
       if (m.lv[1] > 0) {
-        var sN = D.pods[1].count[m.lv[1] - 1];
+        var sN = D.pods[1].count[m.lv[1] - 1], saw = sawSprite();
         for (var s = 0; s < sN; s++) {
           var sa = m.sawAng + (6.283 * s) / sN;
           ctx.save(); ctx.translate(m.x + Math.cos(sa) * D.pods[1].orbit, m.y + Math.sin(sa) * D.pods[1].orbit);
-          ctx.rotate(run.t * 12); ctx.drawImage(sawSpr, -22, -22); ctx.restore();
+          ctx.rotate(run.t * 12); ctx.drawImage(saw, -22, -22); ctx.restore();
         }
       }
       ctx.save(); ctx.translate(m.x, m.y); ctx.rotate(m.aim); ctx.translate(-m.recoil, 0);

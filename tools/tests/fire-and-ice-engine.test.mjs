@@ -212,6 +212,8 @@ test('Fire & Ice channels, levers, crate-weighted buttons, win stars and save v2
   const resetOld = FI.sanitizeSave({ v: 1, unlocked: 12, best: { 0: { stars: 3, time: 10 } } });
   assert.equal(resetOld.v, 2);
   assert.equal(resetOld.unlocked, 1, 'old v1 saves cleanly reset to fresh v2 save');
+  assert.equal(resetOld.solo, true, 'fresh default save starts in solo 1P mode');
+  assert.equal(FI.sanitizeSave({ v: 2, solo: false }).solo, false, 'explicit duo save stays 2P');
   assert.equal(FI.totalStars(resetOld), 0);
 
   const valid = FI.sanitizeSave({

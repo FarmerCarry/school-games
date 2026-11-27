@@ -33,7 +33,7 @@
   function busy() { return dda.value(0.05, 0.95); }
 
   /* --------------------------------------------------------------- state */
-  var screen = 'title', world = null, demo = null, time = 0, lastT = 0;
+  var screen = 'title', world = null, demo = null, time = 0, lastT = 0, roundOpen = false, spaceHeld = false;
   var floats = [], banner = null, bump = 0, squash = 0, flash = 0, clackAt = 0, combo = 0, idle = 0, shopFrom = 'title';
   var fx = Kit.particles(), shake = Kit.shake();
   var mouse = { down: false, x: 640, moved: false };
@@ -65,12 +65,32 @@
   }
 
   /* ------------------------------------------------------------ the title */
+  function canBuyShoes() {
+    var c = ZP.price(save, 'shoes');
+    return c > 0 && save.wins >= c;
+  }
+  function refreshShopBadge() {
+    var can = canBuyShoes();
+    ['btnShop', 'btnTitleShop', 'btnPauseShop'].forEach(function (id) {
+      var el = $(id);
+      if (!el) return;
+      el.classList.toggle('can', can);
+      var dot = el.querySelector('.dot');
+      if (dot) dot.hidden = !can;
+    });
+  }
   function refreshTitle() {
     $('titleStage').querySelector('b').textContent = String(save.stage);
     $('titleWins').querySelector('b').textContent = big(save.wins);
+    refreshShopBadge();
+  }
+  function endTry(code, val) {
+    if (!roundOpen) return;
+    roundOpen = false;
+    Kit.stats.end(code, val);
   }
   function toTitle() {
-    if (world) { Kit.stats.end('quit'); world = null; }
+    if (world) { endTry('quit'); world = null; }
     persist();
     refreshTitle();
     setScreen('title');
@@ -78,12 +98,15 @@
   function play() {
     J.select();
     world = ZP.create(save, busy());
+    if (view) view.hitAt = {};
     floats.length = 0; banner = null; fx.clear();
     startTry();
+    refreshShopBadge();
     setScreen('play');
     showBanner('المرحلة ' + save.stage, '#fff', 1.4);
   }
   function startTry() {
+    roundOpen = true;
     Kit.stats.round('st' + M.min(99, save.stage));
     Kit.track.tier(dda.tier);
     if (!save.coach) Kit.stats.tutorial('start');
@@ -94,6 +117,7 @@
   function pause() {
     if (screen !== 'play') return;
     persist();
+    refreshShopBadge();
     J.back();
     setScreen('pause');
     say('استراحة');
@@ -101,15 +125,18 @@
   function resume() {
     if (!world) { play(); return; }
     J.select();
+    refreshShopBadge();
     setScreen('play');
   }
   function restart() {
     if (!world) { play(); return; }
     J.select();
-    Kit.stats.end('quit');
+    endTry('quit');
     ZP.retry(world, busy());
+    if (view) view.hitAt = {};
     floats.length = 0; banner = null;
     startTry();
+    refreshShopBadge();
     setScreen('play');
   }
 
@@ -188,10 +215,11 @@
       if (el) { el.classList.remove('wiggle'); void el.offsetWidth; el.classList.add('wiggle'); }
     }
     refreshShop();
+    refreshShopBadge();
   }
   function rebirth() {
     if (!ZP.canRebirth(save)) { J.error(); var r = $('btnRebirth'); r.classList.remove('wiggle'); void r.offsetWidth; r.classList.add('wiggle'); return; }
-    if (world) Kit.stats.end('quit');
+    if (world) endTry('quit');
     ZP.rebirth(save);
     persist();
     J.levelUp(); J.chime(3);
@@ -213,8 +241,10 @@
   on($('btnRestart'), restart);
   on($('shopBack'), closeShop);
   window.addEventListener('keydown', function (e) {
-    if (!Kit.isGameKeyEvent(e) || e.repeat) return;
+    if (!Kit.isGameKeyEvent(e)) return;
     var c = e.code;
+    if (c === 'Space') spaceHeld = true;
+    if (e.repeat) return;
     if (screen === 'play' && (c === 'KeyP' || c === 'Escape')) { e.preventDefault(); pause(); return; }
     if (screen === 'pause') {
       if (c === 'KeyP' || c === 'Escape' || c === 'Enter' || c === 'Space') { e.preventDefault(); resume(); }
@@ -224,6 +254,8 @@
     if (screen === 'shop' && (c === 'Escape' || c === 'Enter')) { e.preventDefault(); closeShop(); return; }
     if (screen === 'title' && (c === 'Enter' || c === 'Space')) { e.preventDefault(); play(); }
   });
+  window.addEventListener('keyup', function (e) { if (e.code === 'Space') spaceHeld = false; });
+  window.addEventListener('blur', function () { spaceHeld = false; });
   canvas.addEventListener('pointerdown', function (e) {
     if (screen !== 'play' || e.button !== 0) return;
     mouse.down = true; mouse.x = fit.toLogical(e.clientX, e.clientY).x; mouse.moved = true;
@@ -235,7 +267,7 @@
   window.addEventListener('pointerup', function () { mouse.down = false; });
   function readInput() {
     var k = Kit.keys;
-    var inp = { run: k.anyDown(['ArrowUp', 'KeyW', 'Space']) || mouse.down, dir: 0, lane: null };
+    var inp = { run: k.anyDown(['ArrowUp', 'KeyW', 'Space']) || spaceHeld || mouse.down, dir: 0, lane: null };
     if (k.anyPressed(['ArrowLeft', 'KeyA'])) inp.dir -= 1;
     if (k.anyPressed(['ArrowRight', 'KeyD'])) inp.dir += 1;
     if (mouse.down && mouse.moved && view && world) {
@@ -286,8 +318,10 @@
         J.star(3); Kit.track.hit();
         float('+' + big(ev.wins) + ' 🏆', r.x, r.y - 40, '#ffc928', 56, -110);
         fx.burst(r.x, r.y + r.s * 0.4, { count: 30, colors: ['#ffc928', '#fff'], speed: 340 });
+        refreshShopBadge();
         break;
       case 'bonk':
+        if (view && ev.idx != null) view.hitAt[ev.idx] = time;
         J.impact(0.6); Kit.track.miss();
         AU.tone({ freq: 300, to: 170, type: 'sawtooth', dur: 0.2, vol: 0.12 }); // a rubber-duck honk
         shake.add(12); squash = -0.35;
@@ -303,28 +337,40 @@
       case 'clear': {
         J.levelUp(); J.star(3);
         shake.add(8); flash = 1;
-        Kit.stats.end('win', ev.stage);
+        endTry('win', ev.stage);
         dda.result(tryScore());
         if (!save.coach) { save.coach = true; Kit.stats.tutorial('done'); }
         world.busy = busy();
         showBanner('فوز!', '#ffe14f', 1.6, '+' + big(ev.wins) + ' 🏆');
         fx.burst(640, 260, { count: 70, colors: ['#ff5fa2', '#ffe14f', '#4fd8ff', '#7dffb0', '#b44dff'], speed: 520, life: 1.2 });
         persist();
+        refreshShopBadge();
         say('فزت بالمرحلة ' + ev.stage);
-        startTry(); // the next stage's try starts now (its road comes after the landing)
         break;
       }
-      case 'fall':
+      case 'fall': {
         J.pop(1); J.fail();
         AU.tone({ freq: 620, to: 110, type: 'sine', dur: 0.4, vol: 0.18 }); // bloop
-        Kit.stats.end('lose', ev.stage);
+        endTry('lose', ev.stage);
         dda.result(tryScore());
         world.busy = busy();
-        showBanner('بلوب!', '#ff9fd0', 1.6, 'تحتاج ⚡ ' + big(ev.short) + ' أكثر — اجرِ مرة أخرى!');
+        var sub = ev.stage >= 5 && canBuyShoes()
+          ? 'اشترِ أحذية نطّاطة من المتجر! 👟'
+          : ev.stage >= 5 && save.shoes < 2
+            ? 'تحتاج ⚡ ' + big(ev.short) + ' أكثر — جرّب الأحذية في المتجر! 👟'
+            : 'تحتاج ⚡ ' + big(ev.short) + ' أكثر — اجرِ مرة أخرى!';
+        showBanner('بلوب!', '#ff9fd0', 1.8, sub);
         persist();
+        refreshShopBadge();
+        break;
+      }
+      case 'respawn':
+        if (view) view.hitAt = {};
         startTry();
         break;
       case 'next':
+        if (view) view.hitAt = {};
+        startTry();
         showBanner('المرحلة ' + ev.stage, '#fff', 1.2);
         break;
     }
@@ -426,8 +472,8 @@
     if ((!save.coach && w.steps < 8) || (idle > 4 && w.phase === 'run')) {
       var pulse = calm() ? 1 : 1 + M.sin(time * 6) * 0.05;
       ctx.save(); ctx.translate(640, 300); ctx.scale(pulse, pulse);
-      panel(-300, -42, 600, 84, 'rgba(255,95,162,0.95)');
-      text('اضغط مطولًا  ↑  أو  مسافة  لتجري!', 0, 2, 32, '#fff', 'center', true);
+      panel(-340, -42, 680, 84, 'rgba(255,95,162,0.95)');
+      text('اضغط مطولًا  ↑  أو  مسافة  أو الفأرة لتجري!', 0, 2, 30, '#fff', 'center', true);
       ctx.restore();
     }
     // banner
@@ -477,13 +523,13 @@
 
   /* ----------------------------------------------------------------- init */
   Kit.muteButton();
-  Kit.lifecycle({ pause: pause, reset: function () { mouse.down = false; } });
+  Kit.lifecycle({ pause: pause, reset: function () { mouse.down = false; spaceHeld = false; } });
   Kit.motion.onChange(function (r) { if (view) view.calm = r; dirty = true; });
   window.addEventListener('pageshow', function () { dirty = true; });
   window.addEventListener('pagehide', function () { persist(); });
-  canvas.addEventListener('contextrestored', function () { dirty = true; render(); });
+  canvas.addEventListener('contextrestored', function () { if (view && view.rebuildGlyphs) view.rebuildGlyphs(); dirty = true; render(); });
   if (document.fonts && document.fonts.load) {
-    document.fonts.load('700 40px Fredoka', 'ب').then(function () { dirty = true; paintRunners(); render(); }, function () { /* fallback fonts */ });
+    document.fonts.load('700 40px Fredoka', 'ب').then(function () { if (view && view.rebuildGlyphs) view.rebuildGlyphs(); dirty = true; paintRunners(); render(); }, function () { /* fallback fonts */ });
   }
   var loop = null;
   try {
@@ -498,6 +544,7 @@
       get state() { return snapshot(); },
       get save() { return JSON.parse(JSON.stringify(save)); },
       get world() { return world; },
+      get view() { return view; },
       point: function (x, y) { var r = canvas.getBoundingClientRect(); return { x: r.left + x * fit.scale, y: r.top + y * fit.scale }; }
     };
     render();

@@ -256,3 +256,40 @@ test('a negative saved candy or hat falls back to the first one, and level 1 sti
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('sg:candy-rope:prog')));
   assert.deepEqual([saved.candy, saved.hat, saved.stars[0]], [0, 0, 3]);
 });
+
+test('single click slices a rope within 18px, and swipes starting slightly outside canvas cut ropes too', async t => {
+  const page = await game(t);
+  // Single click directly on Level 1 rope (12px offset from rope line) slices it immediately
+  await page.evaluate(() => { __game.start(0); step(40); });
+  const ropePos = await page.evaluate(() => {
+    const r = __game.world().ropes[0], p = r.pts[Math.floor(r.pts.length / 2)];
+    const rect = document.getElementById('cv').getBoundingClientRect();
+    return {
+      x: rect.left + (p.x + 12) * rect.width / 1280,
+      y: rect.top + p.y * rect.height / 720
+    };
+  });
+  await page.mouse.click(ropePos.x, ropePos.y);
+  await page.evaluate(() => step(300, () => __game.info().state === 'won'));
+  assert.equal(await page.evaluate(() => __game.info().state), 'won', 'single click within 18px slices the rope');
+
+  // Drag starting slightly outside canvas (letterbox border) still slices ropes on entry
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.evaluate(() => { __game.start(0); step(40); });
+  const dragCoords = await page.evaluate(() => {
+    const r = __game.world().ropes[0], p = r.pts[Math.floor(r.pts.length / 2)];
+    const rect = document.getElementById('cv').getBoundingClientRect();
+    return {
+      startX: rect.left + p.x * rect.width / 1280 - 40,
+      startY: Math.max(2, rect.top - 20),
+      endX: rect.left + p.x * rect.width / 1280 + 40,
+      endY: rect.top + p.y * rect.height / 720
+    };
+  });
+  await page.mouse.move(dragCoords.startX, dragCoords.startY);
+  await page.mouse.down();
+  await page.mouse.move(dragCoords.endX, dragCoords.endY, { steps: 6 });
+  await page.mouse.up();
+  await page.evaluate(() => step(2));
+  assert.equal(await page.evaluate(() => __game.world().ropes.length), 0, 'drag starting outside canvas still cuts rope');
+});

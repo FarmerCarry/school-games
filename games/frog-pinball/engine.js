@@ -141,14 +141,14 @@
   // lane: lit springs in the side lanes' mouths (a ball going roughly into one goes up it).
   // slope: gravity factor. stars: the scores for 2 and 3 stars once the mission is done.
   FP.LEVELS = [
-    { m: 'bump', goal: 10, save: -1, kick: 2, post: true, pit: true, slope: 0.85, mouth: 36, stars: [15000, 28000] },
+    { m: 'bump', goal: 10, save: -1, kick: 2, post: true, pit: true, slope: 0.85, mouth: 36, stars: [6500, 9500] },
     { m: 'duck', goal: 3, save: 20, kick: 1, post: true, slope: 0.9, mouth: 34, stars: [7500, 15000] },
     { m: 'feed', goal: 1, save: 20, kick: 1, post: true, slope: 0.93, mouth: 34, stars: [7000, 11000] },
     { m: 'score', goal: 5000, save: 0, kick: 0, post: false, slope: 1, mouth: 30, stars: [7500, 10000] },
     { m: 'orbit', goal: 1, save: 0, kick: 0, post: false, lane: true, slope: 1, mouth: 30, stars: [9000, 18000] },
     { m: 'feed', goal: 3, save: 0, kick: 0, post: false, slope: 1, mouth: 30, stars: [12000, 25000] },
     { m: 'mult', goal: 3, save: 0, kick: 0, post: false, slope: 1, mouth: 30, stars: [15000, 30000] },
-    { m: 'score', goal: 20000, save: 0, kick: 0, post: false, slope: 1, mouth: 30, stars: [25000, 29000] },
+    { m: 'score', goal: 20000, save: 0, kick: 0, post: false, slope: 1, mouth: 30, stars: [22500, 25000] },
     { m: 'multi', goal: 2, save: 0, kick: 0, post: false, slope: 1, mouth: 30, stars: [70000, 130000] },
     { m: 'free', goal: 0, save: 0, kick: 0, post: false, slope: 1, mouth: 30, stars: [0, 0] }
   ];

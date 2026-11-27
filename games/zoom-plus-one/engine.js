@@ -283,7 +283,7 @@
         s.speed -= lost;
         w.bonks++; w.tryBonks++;
         w.phase = 'bonk'; w.pt = 0; w.v = 0; w.z = M.max(ZP.SPAWN, o.row - 0.2);
-        emit(w, { type: 'bonk', lost: lost, kind: o.kind, lane: M.round(w.x) });
+        emit(w, { type: 'bonk', idx: j, lost: lost, kind: o.kind, lane: M.round(w.x) });
         return w;
       }
       // The ramp: launch.

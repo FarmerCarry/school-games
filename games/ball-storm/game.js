@@ -117,6 +117,7 @@
   /* --------------------------------------------------------------- pause */
   function pause() {
     if (screen !== 'play') return;
+    mouse.on = false;
     persist();
     J.back();
     setScreen('pause');
@@ -124,6 +125,7 @@
   }
   function resume() {
     if (!world) { play(); return; }
+    mouse.on = false;
     J.select();
     setScreen('play');
   }
@@ -401,7 +403,8 @@
     var p = fit.toLogical(e.clientX, e.clientY);
     var moved = M.abs(p.x - mouse.lx) + M.abs(p.y - mouse.ly) > 0.5;
     mouse.lx = p.x; mouse.ly = p.y;
-    if (screen === 'play' && moved) { mouse.on = true; mouse.x = p.x; }
+    var overBtn = e.target && e.target.closest && e.target.closest('button');
+    if (screen === 'play' && moved && !overBtn && (e.target === canvas || mouse.on)) { mouse.on = true; mouse.x = p.x; }
   });
   function readInput() {
     var k = Kit.keys, dir = 0;
@@ -501,7 +504,7 @@
         burst(e.x, e.y, { count: 3, colors: ['#ffe14f', '#ff4fb8'], speed: 140, life: 0.3, size: 5, gravity: 0 });
         bump = M.max(bump, 0.5);
         break;
-      case 'ringOn': J.chime(2); float('×2!', e.x, 200, '#ffe14f', 44, -60); break;
+      case 'ringOn': J.chime(2); float('×2!', e.x, (e.y || 230) - 30, '#ffe14f', 44, -60); break;
       case 'ringGone': J.pop(0.8); break;
       case 'floor': if (sfx('floor', 0.12)) AU.tone({ freq: 250, to: 470, type: 'sine', dur: 0.09, vol: 0.11 }); break;
       case 'floorPop':
@@ -568,7 +571,7 @@
   /* --------------------------------------------------------------- demo */
   function newDemo() {
     var n = 1 + M.floor(M.random() * 5);
-    demo = BS.create({ level: n, speed: 420, paddle: 220, drop: 0.12, magnet: 1, seed: seed() });
+    demo = BS.create({ level: n, speed: 420, paddle: 220, drop: 0.12, magnet: 1, cap: 60, seed: seed() });
     demo.floorPerm = true;
     demo.serveT = 0.6;
   }
@@ -756,7 +759,7 @@
 
   /* ----------------------------------------------------------------- init */
   Kit.muteButton();
-  Kit.lifecycle({ pause: pause, reset: function () { launchReq = false; } });
+  Kit.lifecycle({ pause: pause, reset: function () { launchReq = false; mouse.on = false; } });
   Kit.motion.onChange(function (r) { if (view) view.calm = r; dirty = true; });
   window.addEventListener('pageshow', function () { dirty = true; });
   window.addEventListener('pagehide', function () { persist(); });
@@ -779,6 +782,7 @@
       get state() { return snapshot(); },
       get save() { return JSON.parse(JSON.stringify(save)); },
       get world() { return world; },
+      get demo() { return demo; },
       get view() { return view; },
       point: function (x, y) { var r = canvas.getBoundingClientRect(); return { x: r.left + x * fit.scale, y: r.top + y * fit.scale }; }
     };

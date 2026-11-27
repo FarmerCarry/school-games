@@ -61,10 +61,12 @@ test('A failed write shows the save warning until Retry stores the board', async
     window.__game.move(3);
   });
   const panel = page.locator('.sg-save-status');
+  await page.waitForFunction(() => document.querySelector('.sg-save-status')?.getAttribute('data-state') === 'failed', null, { timeout: 5000 });
   assert.equal(await panel.getAttribute('data-state'), 'failed');
   assert.equal(await panel.isVisible(), true);
   // Later moves keep warning while storage is still failing.
   await page.evaluate(() => window.__game.move(1));
+  await page.waitForTimeout(320);
   assert.equal(await panel.getAttribute('data-state'), 'failed');
 
   await page.evaluate(() => { Storage.prototype.setItem = Storage.prototype.realSetItem; });
@@ -74,7 +76,7 @@ test('A failed write shows the save warning until Retry stores the board', async
   assert.equal(saved.screen, 'play', 'Retry must not start a drag move or leave the game');
 
   await page.reload();
-  await page.keyboard.press('Enter');
+  await page.locator('#btnResumeT').click();
   const restored = await state(page);
   assert.deepEqual(restored.values, saved.values);
   assert.equal(restored.score, saved.score);
@@ -95,15 +97,17 @@ for (const storage of ['failing', 'denied']) {
     });
     const played = await state(page);
     await page.evaluate(() => window.__game.menu());
-    assert.equal(await page.locator('#playLbl').textContent(), '▶ تابع');
-    await page.keyboard.press('Enter');
+    assert.equal(await page.locator('#playLbl').textContent(), '▶ العب');
+    assert.equal(await page.locator('#btnResumeT').isVisible(), true);
+    assert.match(await page.locator('#resumeLbl').textContent(), /متابعة اللوحة/);
+    await page.locator('#btnResumeT').click();
     const resumed = await state(page);
     assert.deepEqual([resumed.values, resumed.score], [played.values, played.score]);
     if (storage === 'denied') return;
     await page.evaluate(() => { Storage.prototype.setItem = Storage.prototype.realSetItem; });
     await page.locator('.sg-save-status button').click();
     await page.reload();
-    await page.keyboard.press('Enter');
+    await page.locator('#btnResumeT').click();
     assert.deepEqual((await state(page)).values, played.values, 'Retry stored the board that was played');
   });
 }
@@ -144,7 +148,7 @@ test('A 3x3 save from before the 256 goal that already holds 256 resumes into th
   }));
   await page.reload();
   await page.keyboard.press('Digit3');
-  await page.keyboard.press('Enter');
+  await page.locator('#btnResumeT').click();
   await awaitScreen(page, 'win');
   assert.equal(await page.locator('#winNum').textContent(), '256');
   await page.locator('#btnKeep').click();
@@ -251,6 +255,62 @@ test('Best scores saved as a number or a string load as empty records and the ga
     window.__game.set([2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
     window.__game.move(3);
   });
+  await page.waitForFunction(() => localStorage.getItem('sg:merge-2048:best')?.startsWith('{'), null, { timeout: 5000 });
   assert.equal(JSON.parse(await page.evaluate(() => localStorage.getItem('sg:merge-2048:best')))[4], 4, 'the first score is a record');
   assert.equal(JSON.parse(await page.evaluate(() => localStorage.getItem('sg:merge-2048:bt')))[4], 4);
+});
+
+test('Primary Play starts a fresh board on shared PCs, showWin logs Kit.stats.end(win), and rapid moves debounce localStorage', async t => {
+  const page = await gamePage(t, () => {
+    let kit;
+    window.mStats = [];
+    Object.defineProperty(window, 'Kit', {
+      configurable: true,
+      get: () => kit,
+      set(v) {
+        kit = v;
+        for (const fn of ['round', 'end']) {
+          const orig = kit.stats[fn];
+          kit.stats[fn] = function (...args) { window.mStats.push([fn, ...args]); return orig.apply(this, args); };
+        }
+      }
+    });
+  });
+
+  // Reach 2048 -> showWin() logs Kit.stats.end('win', score)
+  await page.locator('#btnPlay').click({ force: true });
+  await page.evaluate(() => {
+    window.__game.nearWin();
+    window.__game.move(3);
+  });
+  await awaitScreen(page, 'win');
+  const winEvents = await page.evaluate(() => window.mStats.filter(e => e[0] === 'end'));
+  assert.ok(winEvents.some(e => e[1] === 'win' && e[2] >= 2048), `expected Kit.stats.end('win', score), got ${JSON.stringify(winEvents)}`);
+
+  // Return to title: saved board exists -> #btnResumeT shown, but #btnPlay starts fresh (score 0)!
+  await page.locator('#btnKeep').click();
+  await page.evaluate(() => window.__game.menu());
+  assert.equal(await page.locator('#btnResumeT').isVisible(), true);
+  await page.locator('#btnPlay').click({ force: true });
+  const fresh = await state(page);
+  assert.equal(fresh.score, 0, 'primary #btnPlay always starts a fresh clean board');
+
+  // Rapid moves debounce localStorage writes instead of syncing on every keypress
+  const syncWrites = await page.evaluate(() => {
+    let writes = 0;
+    const orig = Storage.prototype.setItem;
+    Storage.prototype.setItem = function () { writes++; return orig.apply(this, arguments); };
+    try {
+      window.__game.set([2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+      writes = 0;
+      window.__game.move(3);
+      window.__game.move(2);
+      window.__game.move(1);
+      window.__game.move(0);
+      return writes;
+    } finally {
+      Storage.prototype.setItem = orig;
+    }
+  });
+  assert.equal(syncWrites, 0, 'rapid moves must debounce localStorage writes instead of writing synchronously on every keypress');
 });

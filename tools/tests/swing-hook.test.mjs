@@ -235,3 +235,54 @@ test('an endless run left alive with R or through the pause menu keeps its dista
   assert.equal(await saved(), run.m, 'Menu from pause keeps the longer distance');
   assert.equal(await page.evaluate(() => __game.mode), 'title', 'and leaves the run');
 });
+
+test('stationary hook grab kicks forward and stuck real players auto-respawn after 2.2s', async t => {
+  const page = await gamePage(t);
+  // Test stationary hook grab forward momentum kick via SHSim directly
+  const kickResult = await page.evaluate(() => {
+    const L = window.SHSim.build({
+      name: 'stall-test', start: [150, 400], finish: 2000,
+      hooks: [[400, 260]],
+      walls: [[300, 440, 200, 100]]
+    });
+    const w = window.SHSim.create(L);
+    w.st = 'play'; w.x = 400; w.y = 423; w.vx = 0; w.vy = 0; w.grounded = 0.1;
+    let maxSp = 0;
+    for (let i = 0; i < 30; i++) {
+      window.SHSim.step(w, 1 / 60, true);
+      maxSp = Math.max(maxSp, window.SHSim.speed(w));
+    }
+    return { x: w.x, vx: w.vx, maxSp };
+  });
+  assert.ok(kickResult.x > 460 && kickResult.maxSp > 150, `stationary hook grab should swing forward (${JSON.stringify(kickResult)})`);
+
+  // Test real-player stuck auto-respawn after > 2.2s at speed < 60
+  await page.evaluate(() => {
+    __game.start(0);
+    stepGame(1);
+  });
+  await page.keyboard.down('Space');
+  await page.evaluate(() => stepGame(2));
+  await page.keyboard.up('Space');
+  const respawned = await page.evaluate(() => {
+    // Freeze player in place with zero speed to simulate a soft-lock
+    const s0 = __game.state();
+    // Simulate being stuck on a solid block by clamping velocity via SHSim.step wrapper
+    const origStep = window.SHSim.step;
+    window.SHSim.step = function (w, dt, hold) {
+      origStep(w, dt, hold);
+      if (w.st === 'play') { w.vx = 0; w.vy = 0; }
+    };
+    try {
+      for (let i = 0; i < 160; i++) {
+        stepGame(1);
+        if (__game.state().st === 'ready') return { st: __game.state().st, frame: i, timerBefore: s0.timer };
+      }
+      return { st: __game.state().st, frame: 160 };
+    } finally {
+      window.SHSim.step = origStep;
+    }
+  });
+  assert.equal(respawned.st, 'ready', `stuck real player auto-respawns cleanly (${JSON.stringify(respawned)})`);
+  assert.ok(respawned.frame >= 120 && respawned.frame <= 155, `respawned around 2.2s (frame ${respawned.frame})`);
+});

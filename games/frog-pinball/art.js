@@ -575,7 +575,7 @@
       }
       var fo = o.frog || {};
       var hd = v.head;
-      if (target) { hd.at[0] = X0 + target.x; hd.at[1] = target.y; }
+      if (target) { hd.at[0] = target.x; hd.at[1] = target.y; }
       hd.look = target ? hd.at : null; hd.open = open; hd.puff = fr.ball ? 1 : fo.puff || 0; hd.burp = fo.burp || 0; hd.multi = fo.multi; hd.t = t;
       FP.drawFrogHead(c, T.head.x, T.head.y, 1, hd);
       if (o.tongue && o.tongue.k > 0) {
