@@ -120,8 +120,11 @@ test('both mouse click in water and Space key cast hook and haul non-blocking ca
   await step(page, 3);
   assert.equal((await getState(page)).p1.casts, 1);
 
-  // Step until hook returns and lands catch
-  await step(page, 90);
+  // Step until hook returns and lands catch (deep/heavy catches can take >90 frames)
+  for (let i = 0; i < 12; i++) {
+    await step(page, 30);
+    if ((await getState(page)).p1.state === 'ready') break;
+  }
   const afterMouse = await getState(page);
   assert.equal(afterMouse.screen, 'play', 'catch never opens a blocking modal');
   assert.equal(afterMouse.p1.state, 'ready');

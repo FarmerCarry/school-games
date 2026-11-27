@@ -106,10 +106,11 @@ async function installed(inspector, scope, build) {
     return s.active && s.counts[name] === build.count;
   }, 'install ' + scope);
 }
-async function update(page) {
-  // Observe the worker's terminal install state instead of relying on a fixed delay.
-  return page.evaluate(async () => {
-    const registration = await navigator.serviceWorker.getRegistration();
+async function update(inspector, scope) {
+  // Observe the worker's terminal install state from the stable inspector so an
+  // idle application tab auto-reloading into the new version never destroys this context.
+  return inspector.evaluate(async scope => {
+    const registration = await navigator.serviceWorker.getRegistration(scope);
     let worker = registration.installing;
     const found = () => { worker = registration.installing; };
     registration.addEventListener('updatefound', found);
@@ -123,7 +124,7 @@ async function update(page) {
       worker.addEventListener('statechange', changed);
       changed();
     });
-  });
+  }, scope);
 }
 async function offlineReload(context, pages) {
   await context.setOffline(true);
@@ -313,7 +314,7 @@ try {
     await page.evaluate(() => { window.updateTabSentinel = 'playing-tab'; });
     mounts.set(BASE, v2.dir);
     hits.length = 0;
-    await update(page);
+    await update(inspector, origin + BASE);
     await installed(inspector, origin + BASE, v2);
     const downloads = hits.filter(url => url.includes('?sg='));
     check(downloads.length === 2 && downloads.some(url => url.startsWith(BASE + 'games/merge-2048/index.html?')) && downloads.some(url => url.startsWith(BASE + 'index.html?')), 'update downloads only the changed game and portal build identity');
@@ -334,7 +335,7 @@ try {
 
     mounts.set(BASE, v3.dir);
     stalePath = BASE + 'games/merge-2048/index.html';
-    check(await update(page) === 'redundant', 'stale server bytes cause the new worker to fail installation');
+    check(await update(inspector, origin + BASE) === 'redundant', 'stale server bytes cause the new worker to fail installation');
     const afterStale = await state(inspector, origin + BASE, [cacheName(origin + BASE, v2)]);
     check(!afterStale.caches.includes(cacheName(origin + BASE, v3)) && afterStale.counts[cacheName(origin + BASE, v2)] === v2.count, 'failed update removes its partial cache and retains the previous complete version');
     await page.evaluate(() => { window.failedUpgradeSentinel = 'same-doc'; window.dispatchEvent(new Event('focus')); });
@@ -429,11 +430,13 @@ try {
   const both = await state(inspector, scopeA, [cacheName(scopeA, v1), cacheName(scopeB, v1)]);
   check(both.counts[cacheName(scopeA, v1)] === v1.count && both.counts[cacheName(scopeB, v1)] === v1.count, 'same-version mounts have independent complete offline caches');
   mounts.set('/a/-child/', v2.dir);
-  await update(b); await installed(inspector, scopeB, v2);
+  await update(inspector, scopeB); await installed(inspector, scopeB, v2);
+  await b.waitForFunction(version => window.SG_OFFLINE_VERSION === version && document.getElementById('offlineStatus')?.dataset.state === 'ready', v2.version);
   await offlineReload(context, [a, b]);
   check((await state(inspector, scopeA, [cacheName(scopeA, v1)])).counts[cacheName(scopeA, v1)] === v1.count, 'updating one mount preserves the other mount offline');
   mounts.set('/a/', v2.dir);
-  await update(a); await installed(inspector, scopeA, v2);
+  await update(inspector, scopeA); await installed(inspector, scopeA, v2);
+  await a.waitForFunction(version => window.SG_OFFLINE_VERSION === version && document.getElementById('offlineStatus')?.dataset.state === 'ready', v2.version);
   await offlineReload(context, [a, b]);
   check((await state(inspector, scopeB, [cacheName(scopeB, v2)])).counts[cacheName(scopeB, v2)] === v2.count, 'updating a parent mount preserves its hyphen-prefixed child offline');
   await kill(inspector, a, scopeA, killBuild);
