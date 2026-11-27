@@ -7,7 +7,8 @@
  * sends a ball that gets there over the frog), a plunger lane on the right, and a giant frog
  * head at the top: a ball in its mouth is gulped, held, and burped back out; three feeds
  * start a multiball (ball rain). On the first levels a lily bud between the flippers springs
- * balls back up. Each level is a game of three balls with one mission.
+ * balls back up, and on level 1 a gate drops balls coming over the top into the bumpers.
+ * Each level is a game of three balls with one mission.
  *
  * Physics: a fixed 60 Hz step split into 8 substeps (480 Hz). Walls are line segments
  * (curves are short segments) with closest-point contacts; bumpers, posts and eyes are
@@ -47,7 +48,10 @@
     laneY: 262, spinY: 232, lanes: [[20, 64], [458, 540]],
     kick: [[20, 58], [464, 502]], kickY: 648,
     slings: [[[98, 456], [98, 530], [146, 551]], [[424, 456], [424, 530], [376, 551]]],
-    arch: { x: 280, y: 215, rx: 260, ry: 192 }
+    arch: { x: 280, y: 215, rx: 260, ry: 192 },
+    // level 1's one-way gate across the top of the left lane: a ball coming over the top
+    // drops into the bumpers (a ball going up the lane passes it)
+    pit: [[64, 205], [64, 108]]
   };
   // The walls, as data for both the physics and the art. k: 0 wall, 1 rubber, 2 slingshot
   // kicker, 3 one-way gate (its front, the left of a->b, faces the playfield). th: half the
@@ -114,24 +118,26 @@
     return pts;
   };
   FP.wallPoints = function (wall) { return wall.arch ? FP.archPoints(wall.arch) : wall.pts; };
-  // The static colliders. post: the little lily bud between the flippers (easy levels).
-  FP.build = function (post) {
+  // The static colliders. post: the little lily bud between the flippers (easy levels);
+  // pit: the gate that drops balls from the orbit into the bumpers.
+  FP.build = function (post, pit) {
     var s = [], c = [];
     T.walls.forEach(function (wl) { path(s, FP.wallPoints(wl), wl.k, wl.e, wl.th); });
     T.slings.forEach(function (tri, i) { solid(s, tri, [1, 1, 2], 0.6, 3, i); });
     solid(s, FP.headHull(), [0], 0.5, 0, 9);
     T.bumpers.forEach(function (b, i) { c.push({ x: b[0], y: b[1], r: T.bumperR, k: 1, i: i, e: 0.55 }); });
     if (post) c.push({ x: T.post[0], y: T.post[1], r: T.post[2], k: 2, i: 0, e: 0.6 });
+    if (pit) path(s, T.pit, 3, 0.5, 2);
     return { segs: s, circles: c };
   };
 
   /* ------------------------------------------------------------- levels */
   // m: the mission; goal: how many. save: ball-save seconds per ball (-1: the whole level,
   // 0: from the UI's difficulty). kick: 2 kickbacks always lit, 1 lit at every new ball,
-  // 0 lit only by the ducks. post: the centre lily bud. slope: gravity factor.
-  // stars: the scores for 2 and 3 stars once the mission is done.
+  // 0 lit only by the ducks. post: the centre lily bud. pit: the gate into the bumpers.
+  // slope: gravity factor. stars: the scores for 2 and 3 stars once the mission is done.
   FP.LEVELS = [
-    { m: 'bump', goal: 10, save: -1, kick: 2, post: true, slope: 0.85, mouth: 36, stars: [15000, 28000] },
+    { m: 'bump', goal: 10, save: -1, kick: 2, post: true, pit: true, slope: 0.85, mouth: 36, stars: [15000, 28000] },
     { m: 'duck', goal: 3, save: 20, kick: 1, post: true, slope: 0.9, mouth: 34, stars: [7500, 15000] },
     { m: 'feed', goal: 1, save: 20, kick: 1, post: true, slope: 0.93, mouth: 34, stars: [7000, 11000] },
     { m: 'score', goal: 5000, save: 0, kick: 0, post: false, slope: 1, mouth: 30, stars: [7500, 10000] },
@@ -222,10 +228,10 @@
     var lv = int(o.level, 1, FP.FREE, 1), L = FP.LEVELS[lv - 1];
     var g = typeof o.gravity === 'number' && o.gravity > 0 ? o.gravity : 1100;
     var w = {
-      lv: lv, L: L, ev: [], t: 0, rnd: rng(o.seed == null ? 1 : o.seed), geo: FP.build(L.post),
+      lv: lv, L: L, ev: [], t: 0, rnd: rng(o.seed == null ? 1 : o.seed), geo: FP.build(L.post, L.pit),
       g: g * L.slope, kickV: typeof o.kick === 'number' ? o.kick : 400,
       saveFor: L.save === -1 ? 1 / 0 : L.save || (typeof o.save === 'number' ? o.save : 10), saveT: 0,
-      score: 0, mult: 1, ballsLeft: FP.BALLS, prog: 0, over: '', overT: 0, nextT: 0,
+      score: 0, mult: 1, ballsLeft: FP.BALLS, prog: L.m === 'mult' ? 1 : 0, over: '', overT: 0, nextT: 0,
       balls: [], ids: 0, launches: 0,
       flippers: T.flippers.map(function (f) { return { side: f.side, x: f.x, y: f.y, ang: T.rest, w: 0, held: false, press: false, minT: 0 }; }),
       bumpers: T.bumpers.map(function () { return { lit: 0, cd: 0 }; }),
@@ -253,7 +259,8 @@
   FP.serveExtra = function (w) { return serve(w, 0.5); };
   function onPlunger(w) { for (var i = 0; i < w.balls.length; i++) if (w.balls[i].st === 'plunger') return w.balls[i]; return null; }
   function launch(w, b, power) {
-    b.st = 'live'; b.vx = 0; b.vy = -M.min(FP.MAXV, power); b.fresh = true; b.age = 0;
+    // a spring is never quite the same twice, so no two balls take the very same path
+    b.st = 'live'; b.vx = 0; b.vy = -M.min(FP.MAXV, power + (w.rnd() - 0.5) * 40); b.fresh = true; b.age = 0;
     w.launches++;
     if (!b.saved) w.saveT = M.max(w.saveT, w.saveFor);
     emit(w, { type: 'launch', power: power, x: b.x, y: b.y });
@@ -509,7 +516,9 @@
       var k = T.kick[s];
       if (b.x < k[0] || b.x > k[1] || b.y < T.kickY || b.vy < 0) continue;
       if (!w.kick[s] || w.over) return;
-      b.vy = -1020; b.vx = s ? -30 : 30; b.x = (k[0] + k[1]) / 2;
+      // hard enough (and a little different every time) that the gate over the lane lobs
+      // the ball into the bumpers at any slope, never across into the other outlane
+      b.vy = -1150 - w.rnd() * 100; b.vx = s ? -30 : 30; b.x = (k[0] + k[1]) / 2;
       if (w.L.kick < 2) w.kick[s] = false;
       w.kickLit[s] = 0.6; w.kicks++;
       var p = add(w, FP.SCORE.kick);

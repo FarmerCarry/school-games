@@ -1,8 +1,9 @@
 // Frog Pinball's pure engine in Node: the table geometry, the physics (cradles, flips,
 // bumpers, slingshots, no ball ever escaping or tunnelling in thousands of random shots),
 // the plunger, the frog's gulp and burp and the ball rain, ducks and the multiplier,
-// kickbacks, the orbit, ball save and lost balls, every mission, saves, and players: a good
-// scripted player wins every level and a sloppy one wins the first level in nearly every seed.
+// kickbacks (never a loop between the outlanes), the orbit, level 1's gate into the bumpers,
+// ball save and lost balls, every mission, saves, and players: a good scripted player wins
+// every level and a sloppy one wins the first level quickly at every difficulty.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -43,6 +44,9 @@ function ball(w, x, y, vx = 0, vy = 0) {
   return b;
 }
 const speed = b => Math.hypot(b.vx, b.vy);
+// What game.js passes in at a difficulty level d (0..1): Kit.dda's value(easy, hard).
+const tune = d => ({ gravity: 960 + 340 * d, save: 13 - 6 * d, kick: 360 + 80 * d });
+const DDA = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1];
 // Values made in the engine's own realm, as plain data to compare.
 const plain = v => JSON.parse(JSON.stringify(v));
 // The sloppy player: mashes each flipper now and then, for a random while.
@@ -115,6 +119,14 @@ test('table geometry: unit normals, a convex frog head with no crevice, the wall
   for (const b of T.bumpers) assert.ok(!inConvex(HULL, b[0], b[1] - T.bumperR));
   assert.equal(geo.circles.filter(c => c.k === 1).length, 3);
   assert.equal(FP.build(false).circles.length, 3, 'no lily bud post on the harder levels');
+  // level 1's gate over the left lane: one segment from the lane guide's top up to the arch,
+  // leaving no gap a ball could slip through
+  const pit = FP.build(true, true).segs;
+  assert.equal(pit.length, geo.segs.length + 1);
+  assert.equal(pit[pit.length - 1].k, 3, 'a one-way gate');
+  assert.deepEqual(plain(T.pit[0]), plain(T.walls[5].pts[0]), 'it starts at the lane guide');
+  assert.ok(!underArch(T.pit[1][0], T.pit[1][1] - 1, 0), 'and reaches the arch');
+  assert.ok(FP.LEVELS[0].pit && FP.LEVELS.slice(1).every(L => !L.pit), 'on level 1 only');
   // the inlane floor ends on the flipper's base circle, so no ball can wedge in between
   for (const [i, wall] of [[0, T.walls[9]], [1, T.walls[10]]]) {
     const end = wall.pts[wall.pts.length - 1], f = T.flippers[i];
@@ -193,7 +205,7 @@ test('bumpers kick the ball away harder than it came in; slingshots kick too', (
 
 test('no ball ever escapes, tunnels or sinks into a solid in thousands of random shots', () => {
   const rnd = FP.rng(2024);
-  const geo = FP.build(true);
+  const geo = FP.build(true, true);
   const clear = (x, y) => geo.segs.every(s => segDist(s, x, y) > R + s.th + 1) &&
     geo.circles.every(c => Math.hypot(x - c.x, y - c.y) > c.r + R + 1) &&
     !inConvex(HULL, x, y) && underArch(x, y, R + 2) &&
@@ -267,8 +279,8 @@ test('no ball stays stuck: with nobody playing, every ball rolls down to the dra
 });
 
 test('the plunger: a tap always reaches the table, a longer pull launches harder, it launches by itself', () => {
-  const reach = (level, gravity, input) => {
-    const w = FP.create({ level, gravity, seed: 2 });
+  const reach = (level, gravity, input, seed = 2) => {
+    const w = FP.create({ level, gravity, seed });
     let out = false;
     const events = run(w, { seconds: 4, input, each: w => {
       const b = w.balls[0];
@@ -278,9 +290,12 @@ test('the plunger: a tap always reaches the table, a longer pull launches harder
     return { out, power: launch ? launch.power : 0 };
   };
   for (const [level, g] of [[1, 960], [1, 1300], [4, 960], [4, 1300]]) {
-    const tap = reach(level, g, (w, i) => ({ pull: i === 10 }));
-    assert.ok(tap.out, `a tap reaches the table (L${level}, g ${g})`);
-    assert.equal(tap.power, FP.TAP);
+    // the spring varies a little from ball to ball, and every tap still gets there
+    for (let seed = 1; seed <= 6; seed++) {
+      const tap = reach(level, g, (w, i) => ({ pull: i === 10 }), seed);
+      assert.ok(tap.out, `a tap reaches the table (L${level}, g ${g}, seed ${seed})`);
+      assert.equal(tap.power, FP.TAP);
+    }
     let last = 0;
     for (const hold of [0.25, 0.4, 0.55, 1.5]) {
       const r = reach(level, g, (w, i) => ({ pull: i >= 10 && i < 10 + hold * 60 }));
@@ -376,9 +391,14 @@ test('kickbacks fire a ball in the outlane back up; lit for good on level 1, onc
   const easy = table(1);
   for (let i = 0; i < 3; i++) {
     for (const side of [0, 1]) {
-      const { ev, b } = kickOnce(easy, side);
+      const k = T.kick[side];
+      easy.balls.length = 0;
+      const b = ball(easy, (k[0] + k[1]) / 2, T.kickY - 20, 0, 500);
+      let top = b.y;
+      const ev = run(easy, { seconds: 0.8, until: (w, ev) => ev.some(e => e.type === 'kick'), each: () => { top = Math.min(top, b.y); } });
+      run(easy, { seconds: 0.3, each: () => { top = Math.min(top, b.y); } });
       assert.equal(count(ev, 'kick'), 1, 'L1 kickback ' + side);
-      assert.ok(b.y < T.kickY - 200, 'back up the table');
+      assert.ok(top < T.kickY - 200, 'back up the table: ' + top);
     }
   }
   assert.deepEqual(plain(easy.kick), [true, true]);
@@ -392,6 +412,44 @@ test('kickbacks fire a ball in the outlane back up; lit for good on level 1, onc
   // levels 2 and 3 light them again with every new ball
   const mid = FP.create({ level: 2, seed: 1 });
   assert.deepEqual(plain(mid.kick), [true, true]);
+});
+
+test('a kickback lobs the ball into the bumpers at every slope: no endless left-right loop between the outlanes', () => {
+  // level 1 keeps both kickbacks lit for good, so a kick that sent the ball straight across into
+  // the other outlane would repeat for ever; here nobody plays and every kick must find a bumper
+  for (const lv of [1, 2, 4]) for (const d of DDA) for (const side of [0, 1]) for (const [dx, vy, seed] of [[-3, 300, 1], [0, 0, 2], [3, 700, 3]]) {
+    const w = table(lv, Object.assign(tune(d), { seed }));
+    w.kick = [true, true];
+    const k = T.kick[side];
+    ball(w, (k[0] + k[1]) / 2 + dx, 560, 0, vy);
+    let kicks = 0, bumpedAfter = -1;
+    for (const e of run(w, { seconds: 20 })) { if (e.type === 'kick') kicks++; if (e.type === 'bumper' && bumpedAfter < 0) bumpedAfter = kicks; }
+    const where = `L${lv} d ${d} side ${side} dx ${dx}`;
+    assert.equal(bumpedAfter, 1, 'the first kick reaches the bumpers, ' + where);
+    if (lv === 1) assert.ok(kicks <= 6, `${kicks} kicks in 20 s, ` + where);
+  }
+});
+
+test('level 1: the gate over the left lane drops the plunger shot into the bumpers at every slope; a ball going up the lane still loops', () => {
+  for (const d of DDA) for (let seed = 1; seed <= 3; seed++) {
+    const w = FP.create(Object.assign({ level: 1, seed }, tune(d)));
+    let up = false;
+    run(w, {
+      seconds: 6, input: (w, i) => ({ pull: i === 2 }),
+      until: w => { const b = w.balls[0]; if (b && b.y < 200) up = true; return w.bumps > 0 || (up && b && b.y > 470); }
+    });
+    assert.ok(w.bumps > 0, `the tap's ball hits a bumper on its way down, d ${d} seed ${seed}`);
+  }
+  // the gate is one-way: a ball sprung up the left lane passes it and loops round the top
+  const o = table(1);
+  ball(o, 42, T.laneY + 30, 0, -300);
+  const ev = run(o, { seconds: 4, until: (w, ev) => ev.some(e => e.type === 'orbit') });
+  assert.equal(count(ev, 'boost'), 1);
+  assert.equal(count(ev, 'orbit'), 1, 'over the top and down the right lane');
+  // and the later levels keep the open lane: the plunger shot comes down the left lane
+  const l2 = FP.create({ level: 2, seed: 1 });
+  run(l2, { seconds: 4, input: (w, i) => ({ pull: i === 2 }), until: w => w.balls[0].x < 64 && w.balls[0].y > T.laneY });
+  assert.ok(l2.balls[0].x < 64 && l2.balls[0].y > T.laneY, 'down the left lane on level 2');
 });
 
 test('the orbit: up one side lane, over the frog and down the other is a loop; the launch is not', () => {
@@ -488,6 +546,7 @@ test('every mission is won when its count reaches the goal, with a bonus for eac
     const w = FP.create({ level: lv, seed: 1 });
     FP.check(w);
     assert.equal(w.over, '', 'not won at the start: L' + lv);
+    assert.equal(w.prog, w.L.m === 'mult' ? 1 : 0, 'the count starts where it really is (the multiplier at ×1): L' + lv);
     set[w.L.m](w);
     w.ballsLeft = 2;
     const before = w.score;
@@ -580,15 +639,19 @@ test('a good scripted player wins every level within a few minutes', () => {
   }
 });
 
-test('level 1 is won by a sloppy masher in nearly every seed, within a few minutes, and never lost', () => {
-  let wins = 0, slowest = 0;
-  for (let seed = 1; seed <= 24; seed++) {
-    const w = FP.create({ level: 1, gravity: 1300, save: 7, kick: 360, seed });
-    run(w, { seconds: 5 * 60, input: sloppy(FP.rng(seed * 31)), until: w => !!w.over });
-    assert.notEqual(w.over, 'lose');
-    assert.equal(w.ballsLeft, 3);
-    if (w.over === 'win') { wins++; slowest = Math.max(slowest, w.t); }
+test('level 1 is won quickly by a sloppy masher at every difficulty, and never lost', () => {
+  for (const d of DDA) {
+    const times = [];
+    for (let seed = 1; seed <= 24; seed++) {
+      const w = FP.create(Object.assign({ level: 1, seed: seed * 7919 }, tune(d)));
+      run(w, { seconds: 5 * 60, input: sloppy(FP.rng(seed * 31)), until: w => !!w.over });
+      assert.notEqual(w.over, 'lose');
+      assert.equal(w.ballsLeft, 3);
+      assert.equal(w.over, 'win', `d ${d} seed ${seed}: won within 5 minutes`);
+      times.push(w.t);
+    }
+    times.sort((a, b) => a - b);
+    assert.ok(times[12] < 30, `d ${d}: the median win takes ${times[12].toFixed(1)} s`);
+    assert.ok(times[23] < 90, `d ${d}: the slowest win takes ${times[23].toFixed(1)} s`);
   }
-  assert.ok(wins >= 22, `sloppy wins ${wins} of 24`);
-  assert.ok(slowest < 300);
 });

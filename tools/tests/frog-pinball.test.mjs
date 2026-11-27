@@ -215,6 +215,7 @@ test('a won level: the celebration, the result with stars and a new best, Enter 
   assert.equal(await page.locator('#resTitle').textContent(), 'أحسنت!');
   const on = await page.locator('#resStars svg.on').count();
   assert.ok(on >= 1 && on <= 3, 'stars ' + on);
+  assert.equal(await page.locator('#live').textContent(), 'أحسنت! ' + ['نجمة واحدة', 'نجمتان', '3 نجوم'][on - 1], 'the stars counted the Arabic way');
   assert.equal(await page.locator('#resNew').isVisible(), true, 'a new best');
   assert.equal(await page.locator('#btnNext').isVisible(), true);
   assert.equal(await page.locator('#btnAgain').isVisible(), true);
@@ -272,6 +273,7 @@ test('a lost level: three drained balls end it, no Next; R plays again; free pla
   await page.click('#levelGrid button:nth-child(10)');
   s = await state(page);
   assert.equal(s.level, 10);
+  assert.equal(await page.locator('#live').textContent(), 'لعب حر: أعلى نتيجة!', 'the label once, not twice');
   for (let i = 0; i < 3; i++) {
     assert.ok(await until(page, 's.launched && s.live > 0', 60 * 6));
     await page.evaluate(() => { __game.world.score += 1234; });
@@ -303,6 +305,8 @@ test('the level map and the shop: locked levels stay shut, skins and pond colour
   await page.click('#btnShop');
   assert.equal((await state(page)).screen, 'shop');
   assert.equal(await page.locator('#shopDot').isVisible(), false);
+  assert.equal(await page.locator('#skinGrid button:nth-child(4)').getAttribute('aria-label'), 'دعسوقة، 9 نجوم');
+  assert.equal(await page.locator('#skinGrid button:nth-child(5)').getAttribute('aria-label'), 'كوكب صغير، 13 نجمة');
   await page.click('#skinGrid button:nth-child(4)');
   assert.equal((await stored(page)).skin, 0, 'the ladybug needs 9 stars');
   await page.click('#skinGrid button:nth-child(3)');

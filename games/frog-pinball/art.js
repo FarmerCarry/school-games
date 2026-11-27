@@ -529,6 +529,7 @@
       if (pull > 0.01) { var fh = mh * pull; rrect(c, mx, my + mh - fh, 9, fh, 4); c.fillStyle = pull > 0.8 ? '#ff4f6d' : pull > 0.45 ? '#ffe14f' : '#3ddc84'; c.fill(); }
     }
     function post(c, w, t) {
+      if (w.L.pit) rail(c, T.pit, 2, '#ffe14f');
       if (!w.L.post) return;
       var p = T.post, bob = v.calm ? 0 : M.sin(t * 3) * 0.6;
       circle(c, p[0], p[1], p[2] + 1); inked(c, '#ff8cc6', 3);

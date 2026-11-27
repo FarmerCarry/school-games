@@ -41,8 +41,8 @@
   var hint = 0, noFlip = 0, scorePop = 0, shownScore = 0, wallAt = 0, spinAt = 0, flipAt = 0;
   var MISSION = {
     bump: 'اضرب المصدّات 10 مرات', duck: 'أسقط البطات الثلاث', feed1: 'أطعم الضفدع', score5: 'اجمع 5,000 نقطة',
-    orbit: 'لفّتان في المدار', feed3: 'أطعم الضفدع 3 مرات', mult: 'اصنع مضاعف ×3', score20: 'اجمع 20,000 نقطة',
-    multi: 'مطر الكرات مرتين', free: 'لعب حر: أعلى نقاط!'
+    orbit: 'لفّتان في المدار', feed3: 'أطعم الضفدع 3 مرات', mult: 'اصنع مضاعفًا ' + ltr('×3'), score20: 'اجمع 20,000 نقطة',
+    multi: 'مطر الكرات مرتين', free: 'أعلى نتيجة!'
   };
   var MKEY = ['bump', 'duck', 'feed1', 'score5', 'orbit', 'feed3', 'mult', 'score20', 'multi', 'free'];
   var MSHORT = ['المصدّات', 'البط', 'الضفدع', '5,000', 'المدار', '3 وجبات', 'مضاعف', '20,000', 'مطر الكرات', 'لعب حر'];
@@ -66,6 +66,8 @@
   function fmt(n) { return Kit.fmt(n); }
   // A number kept left-to-right inside Arabic text.
   function ltr(t) { return '⁦' + t + '⁩'; }
+  // "n stars" as Arabic counts it: نجمة واحدة, نجمتان, 3-10 نجوم, 11 and up نجمة.
+  function starsText(n) { return n === 1 ? 'نجمة واحدة' : n === 2 ? 'نجمتان' : n + (n > 10 ? ' نجمة' : ' نجوم'); }
   function missionText(lv) { return MISSION[MKEY[lv - 1]]; }
 
   /* ------------------------------------------------------------ the title */
@@ -152,7 +154,7 @@
     if (o.won) { J.levelUp(); for (var s = 1; s <= o.stars; s++) (function (n) { setTimeout(function () { if (screen === 'result') J.star(n); }, 200 + n * 200); })(s); }
     else J.fail();
     if (o.newBest) setTimeout(function () { if (screen === 'result') J.chime(3); }, 900);
-    say(o.won ? 'أحسنت! ' + o.stars + ' نجوم' : 'انتهت الكرات');
+    say(o.won ? 'أحسنت! ' + starsText(o.stars) : 'انتهت الكرات');
     refreshTitle();
   }
   function next() {
@@ -242,7 +244,7 @@
         b.classList.toggle('locked', !own);
         b.querySelector('span').innerHTML = own ? (chosen === i ? '✔' : '') : cost + ' <svg aria-hidden="true"><use href="#i-star"/></svg>';
         b.setAttribute('aria-pressed', String(chosen === i));
-        b.setAttribute('aria-label', (kind === 'skin' ? SKIN_NAMES[i] : THEME_NAMES[i]) + (own ? '' : '، ' + cost + ' نجوم'));
+        b.setAttribute('aria-label', (kind === 'skin' ? SKIN_NAMES[i] : THEME_NAMES[i]) + (own ? '' : '، ' + starsText(cost)));
       });
     }
     mark(skinBtns, 'skin', save.skin);
@@ -573,7 +575,7 @@
     text(level === FP.FREE ? 'لعب حر' : 'المرحلة ' + level, 221, 48, 32, '#ffffff', 'center', true);
     card(16, 92, 330, 196, '#fffdf2', 26);
     missionIcon(L.m, 288, 146, 0.95);
-    var ml = lines(missionText(level), 29, 196), top = ml.length > 1 ? 128 : 146;
+    var ml = lines(missionText(level), 29, 204), top = ml.length > 1 ? 128 : 146;
     for (var i = 0; i < ml.length && i < 3; i++) text(ml[i], 240, top + i * 38, 29, FP.INK, 'right', true, false);
     if (L.m !== 'free') {
       var goal = L.goal, prog = w.prog, f = M.min(1, (L.m === 'mult' ? prog - 1 : prog) / (L.m === 'mult' ? goal - 1 : goal));
@@ -587,13 +589,13 @@
       text('الأفضل', 300, 244, 28, FP.INK, 'right', true, false);
       text(fmt(save.best[FP.FREE - 1]), 120, 244, 34, '#ff5fa2', 'center', false);
     }
-    // balls left
+    // balls left (small and spaced enough that the tiny planet's rings stay apart)
     card(16, 304, 330, 92, 'rgba(18,53,54,0.85)', 26);
     text('الكرات', 314, 350, 30, '#ffffff', 'right', true);
     for (var k = 0; k < FP.BALLS; k++) {
-      var cx = 62 + k * 54, has = k < w.ballsLeft;
-      if (has) FP.drawBall(ctx, FP.SKINS[save.skin].id, cx, 350, 20, 0, time);
-      else { ctx.beginPath(); ctx.arc(cx, 350, 18, 0, 7); ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.stroke(); }
+      var cx = 58 + k * 62, has = k < w.ballsLeft;
+      if (has) FP.drawBall(ctx, FP.SKINS[save.skin].id, cx, 350, 16, 0, time);
+      else { ctx.beginPath(); ctx.arc(cx, 350, 15, 0, 7); ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.stroke(); }
     }
     // the star targets: one star for the mission, two and three for more points
     if (L.m !== 'free') {
