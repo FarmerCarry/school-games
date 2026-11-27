@@ -31,9 +31,17 @@ async function game(t, { save, failSave = false } = {}) {
       if (save !== undefined) localStorage.setItem(KEY, JSON.stringify(save));
     }
     let kit;
-    const zp = window.zp = { failSave };
+    const zp = window.zp = { failSave, log: [], plus: [] };
+    // what the HUD writes with a +3 in it (the perfect popup)
+    const fill = CanvasRenderingContext2D.prototype.fillText;
+    CanvasRenderingContext2D.prototype.fillText = function (s) { if (String(s).includes('+3')) zp.plus.push(String(s)); return fill.apply(this, arguments); };
     Object.defineProperty(window, 'Kit', { configurable: true, get: () => kit, set(value) {
       kit = value;
+      // the outcomes Kit records: an end (or a new round) closes the open round, if one is open
+      const { round, end } = kit.stats;
+      let open = false;
+      kit.stats.round = function () { if (open) zp.log.push('quit'); open = true; return round.apply(this, arguments); };
+      kit.stats.end = function (r) { if (open) zp.log.push(r); open = false; return end.apply(this, arguments); };
       kit.loop = (update, render) => {
         zp.step = (n = 1) => { for (let i = 0; i < n; i++) update(1 / 60); render(0); };
         zp.run = (n = 1) => { for (let i = 0; i < n; i++) update(1 / 60); };
@@ -108,6 +116,11 @@ test('Enter starts level 1; nothing drops alone; Space drops; P pauses and freez
   assert.equal(s.score, 3);
   assert.equal(s.hint, false, 'the first landing ends the hint');
   assert.equal((await stored(page)).coach, true);
+  assert.deepEqual(await page.evaluate(() => [...new Set(zp.plus)]), ['مثالي! \u2066+3\u2069'], 'the +3 is an LTR isolate in the Arabic popup');
+  // 1 of 6: the yellow fill starts at the bar's right end and heads left to the bun.
+  const px = await page.evaluate(() => [800, 480].map(x => { const c = document.getElementById('game'), k = c.width / 1280; return [...c.getContext('2d').getImageData(x * k, 35 * k, 1, 1).data]; }));
+  assert.ok(px[0][0] > 200 && px[0][1] > 190 && px[0][2] < 140, 'filled at the right: ' + px[0]);
+  assert.ok(!(px[1][0] > 200 && px[1][1] > 190 && px[1][2] < 140), 'empty at the left: ' + px[1]);
   await page.evaluate(() => zp.step(30));
   await page.keyboard.press('KeyP');
   s = await state(page);
@@ -166,6 +179,70 @@ test('a won level: the bun, the chomp, three stars, the next level, and progress
   await page.waitForFunction(() => window.__game && window.zp.step);
   assert.equal(await page.locator('#titleLevel b').textContent(), '2');
   assert.equal(await page.locator('#titleStars b').textContent(), '3');
+});
+
+test('leaving during the bun, the chomp or the lost pause keeps the outcome: stars, the endless best, statistics, DDA', async t => {
+  const page = await game(t, { save: { ...beaten(1), stars: [3, ...Array(11).fill(0)] } });
+  const tries = () => page.evaluate(() => (JSON.parse(localStorage.getItem('sg:sandwich-tower:dda')) || { main: [0, 0] }).main[1]);
+  const log = () => page.evaluate(() => zp.log);
+  await page.click('#btnPlay');
+  let s = await state(page);
+  assert.equal(s.level, 2);
+  for (let k = 0; k < s.goal; k++) await dropWith(page, 'Space', 0);
+  assert.ok(await until(page, 's.phase === "eat"', 600));
+  await page.keyboard.press('Escape');
+  await page.click('#btnHome');
+  s = await state(page);
+  assert.equal(s.screen, 'title');
+  assert.equal((await stored(page)).stars[1], 3, 'Home during the chomp keeps the stars');
+  assert.equal(s.next, 3);
+  assert.equal(await page.locator('#titleStars b').textContent(), '6');
+  assert.equal(await page.locator('#eatersNew').isVisible(), true, 'the eater it unlocked is waiting');
+  assert.deepEqual(await log(), ['win']);
+  assert.equal(await tries(), 1);
+
+  // إلى القمر out of hearts at 2: the window loses focus during the bun, then Restart.
+  await page.click('#btnEndless');
+  for (let k = 0; k < 2; k++) await dropWith(page, 'Space', 0);
+  for (let k = 0; k < 3; k++) await dropWith(page, 'Space', -700);
+  assert.ok(['bun', 'bunwait'].includes((await state(page)).phase));
+  await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+  assert.equal((await state(page)).screen, 'pause', 'auto-paused');
+  await page.click('#btnRestart');
+  s = await state(page);
+  assert.deepEqual([s.screen, s.mode, s.drops], ['play', 'endless', 0]);
+  assert.equal((await stored(page)).endless, 2, 'Restart during the bun keeps the best height');
+  assert.deepEqual(await log(), ['win', 'end']);
+  assert.equal(await tries(), 2);
+  await page.keyboard.press('Escape');
+  await page.click('#btnHome');
+  assert.deepEqual(await log(), ['win', 'end', 'quit'], 'a round with no outcome yet is still a quit');
+
+  // A lost level, left during its 1.1 s pause.
+  await page.click('#btnPlay');
+  for (let k = 0; k < 3; k++) await dropWith(page, 'Space', 700);
+  assert.equal((await state(page)).phase, 'lost');
+  await page.keyboard.press('Escape');
+  await page.click('#btnHome');
+  assert.deepEqual(await log(), ['win', 'end', 'quit', 'lose']);
+  assert.equal(await tries(), 3);
+});
+
+test('a new eater fits on the result card with three stars and a new best', async t => {
+  const page = await game(t, { save: { ...beaten(1), stars: [3, ...Array(11).fill(0)] } });
+  await page.click('#btnPlay');
+  const goal = (await state(page)).goal;
+  for (let k = 0; k < goal; k++) await dropWith(page, 'Space', 0);
+  assert.ok(await until(page, 's.screen === "result"', 60 * 8));
+  await page.evaluate(() => zp.step(150));
+  assert.equal(await page.locator('#resStars .on').count(), 3);
+  assert.equal(await page.locator('#resBest').isVisible(), true);
+  assert.equal(await page.locator('#resUnlock').isVisible(), true);
+  assert.equal(await page.locator('#resUnlock b').textContent(), 'ريكسو');
+  assert.equal(await page.locator('#resEater').isVisible(), false, 'the corner eater would repeat the new one');
+  const box = await page.locator('.result-card').boundingBox();
+  assert.ok(box.y >= 8 && box.y + box.height + 12 <= 712, 'the card and its shadow fit: ' + JSON.stringify(box));
+  assert.equal((await state(page)).eater, 1, 'the new eater is worn');
 });
 
 test('mouse clicks drop too; a lost level shows أوبس! and R tries it again', async t => {

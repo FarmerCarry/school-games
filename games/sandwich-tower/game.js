@@ -116,10 +116,13 @@
   }
 
   /* --------------------------------------------------------------- result */
-  function finishRound() {
+  // The outcome is saved, ended and reported the moment it is decided (the 'goal' or 'lose'
+  // event), not when the chomp is over: Home, Restart or a pause during the celebration keep it.
+  function decide() {
     var w = world, t = w.towers[0];
-    var rec = ST.record(save, w);
-    result = { won: w.won, stars: rec.stars, best: rec.newBest, eaters: rec.eaters, mode: w.mode };
+    if (result) return;
+    result = ST.record(save, w);
+    result.won = w.won; result.mode = w.mode;
     if (w.mode === 'levels') {
       Kit.stats.end(w.won ? 'win' : 'lose', t.score);
       dda.result(w.won ? 0.5 + 0.5 * M.min(1, t.perfects / ST.starNeed(w.spec.goal)[1]) : 0);
@@ -127,9 +130,14 @@
       Kit.stats.end('end', t.height);
       dda.result(M.min(1, t.height / 30));
     } else Kit.stats.end('end');
-    if (rec.eaters.length) save.eater = rec.eaters[rec.eaters.length - 1];
     persist();
-    showResult(w, t, rec);
+  }
+  function finishRound() {
+    decide();
+    var e = result.eaters;
+    if (e.length) save.eater = e[e.length - 1]; // the new eater is worn from its reveal on
+    persist();
+    showResult(world, world.towers[0], result);
   }
   function showResult(w, t, rec) {
     var title = $('resTitle'), sub = $('resSub');
@@ -172,6 +180,7 @@
     ST.drawEater(face, eaterId(), 120, 124, 80, { open: fed ? 0 : 0.7, t: 0.4, happy: fed, look: { x: 0.3, y: 0.3 } });
     var un = $('resUnlock');
     un.hidden = !rec.eaters.length;
+    $('resEater').hidden = !un.hidden; // the unlock box shows this same (new) eater
     if (rec.eaters.length) {
       var e = rec.eaters[rec.eaters.length - 1];
       un.querySelector('b').textContent = ST.EATERS[e].name;
@@ -197,7 +206,7 @@
       Kit.stats.busy();
     }
     var at = 0.4 + (result.mode === 'levels' ? result.stars * 0.32 : 0);
-    if (result.best && resultT > at && $('resBest').hidden) { $('resBest').hidden = false; J.chime(3); }
+    if (result.newBest && resultT > at && $('resBest').hidden) { $('resBest').hidden = false; J.chime(3); }
     if (result.eaters.length && resultT > at + 0.3 && !result.unlockCue) { result.unlockCue = true; J.levelUp(); }
   }
   function next() {
@@ -407,7 +416,8 @@
         if (ev.perfect) {
           J.streak(ev.combo);
           Kit.track.hit();
-          float(PERFECT_WORDS[M.min(PERFECT_WORDS.length - 1, (ev.combo - 1) >> 1)] + ' +3', ev.x, ly - 24, '#ffe14f', 36 + M.min(18, ev.combo * 3), -140);
+          // an LTR isolate keeps the plus before the 3 inside the Arabic (RTL) line, like the plain +1
+          float(PERFECT_WORDS[M.min(PERFECT_WORDS.length - 1, (ev.combo - 1) >> 1)] + ' \u2066+3\u2069', ev.x, ly - 24, '#ffe14f', 36 + M.min(18, ev.combo * 3), -140);
           fx.burst(ev.x - ev.w / 2, ly + 6, { count: 8, colors: ['#ffe14f', '#fff'], speed: 260, life: 0.5, size: 7, gravity: 200 });
           fx.burst(ev.x + ev.w / 2, ly + 6, { count: 8, colors: ['#ffe14f', '#fff'], speed: 260, life: 0.5, size: 7, gravity: 200 });
           if (ev.combo >= 3) shake.add(3);
@@ -441,6 +451,7 @@
         fx.burst(640, 260, { count: 50, colors: ['#ff5fa2', '#ffe14f', '#4fd8ff', '#7dffb0'], speed: 480, life: 1.1 });
         break;
       case 'goal':
+        decide();
         if (ev.won) { J.chime(3); if (!duo) showBanner('اكتمل!', '#7dffb0', 1.0); }
         else { J.fail(); showBanner('نفدت القلوب!', '#ff9aa8', 1.2); }
         if (duo) { showBanner('فاز اللاعب ' + (w.winner + 1) + '!', w.winner ? '#4f9bff' : '#ff8a3d', 2.4); J.levelUp(); }
@@ -468,6 +479,7 @@
         float('بُرررب!', tw.tx + (tw.tx > 640 ? -390 : 390), sy(tw, 0) - 290, '#b6f28a', 62, -60); // beside the face, not over its eyes
         break;
       case 'lose':
+        decide();
         J.fail();
         showBanner('أوبس!', '#ff9aa8', 1.2, 'نفدت القلوب');
         break;
@@ -557,10 +569,11 @@
       ST.heart(ctx, x + k * (size * 1.25), y, s, k < n ? '#ff4f6d' : 'rgba(255,255,255,0.35)');
     }
   }
+  // The bar fills right to left, like the Arabic reading order (a level's bun goal sits at its left end).
   function progress(cx, y, w, cur, goal, color) {
-    var h = 34, x = cx - w / 2, f = M.min(1, cur / goal);
+    var h = 34, x = cx - w / 2, f = M.min(1, cur / goal), fw = M.max(h - 10, (w - 10) * f);
     ST.rrect(ctx, x, y, w, h, h / 2); ctx.fillStyle = 'rgba(58,34,22,0.82)'; ctx.fill();
-    if (f > 0.02) { ST.rrect(ctx, x + 5, y + 5, M.max(h - 10, (w - 10) * f), h - 10, (h - 10) / 2); ctx.fillStyle = color; ctx.fill(); }
+    if (f > 0.02) { ST.rrect(ctx, x + w - 5 - fw, y + 5, fw, h - 10, (h - 10) / 2); ctx.fillStyle = color; ctx.fill(); }
     ST.rrect(ctx, x, y, w, h, h / 2); ctx.lineWidth = 4; ctx.strokeStyle = '#fff'; ctx.stroke();
     text(cur + ' / ' + goal, cx, y + h / 2 + 1, 24, '#fff');
   }
