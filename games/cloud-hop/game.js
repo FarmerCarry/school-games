@@ -509,6 +509,8 @@
 
   /* --------------------------------------------------------------- update */
   function update(dt) {
+    // Paused, the whole picture waits: the sky, popups, the level banner, sparkles and shake.
+    if (screen === 'pause') { Kit.keys.endFrame(); return; }
     time += dt;
     if (screen === 'play' && world) {
       var inp = readInput();
@@ -650,8 +652,8 @@
     return { a: a, b: M.min(3, a + 1), mix: mix };
   }
   function render() {
-    var live = screen === 'play' || (screen === 'title' && !calm()) || fx.list.length > 0 || floats.length > 0;
-    if (!live && !dirty) return; // a still menu keeps its last frame
+    var live = screen === 'play' || (screen === 'title' && !calm()) || (screen !== 'pause' && (fx.list.length > 0 || floats.length > 0));
+    if (!live && !dirty) return; // a still menu (or the pause card) keeps its last frame
     var dt = M.min(0.1, M.max(0, time - lastT)); lastT = time;
     ctx.save();
     if (shake.power) ctx.translate(shake.x, shake.y);

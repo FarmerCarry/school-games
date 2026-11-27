@@ -1,5 +1,6 @@
 // Cloud Hop in real Chromium: Enter or Play starts level 1 at once, real keys and the
-// mouse steer Marshy, pause freezes the sky, restart puts Marshy back on the start cloud,
+// mouse steer Marshy, pause freezes the whole picture (popups and banner too), thunder
+// clouds that never flash fast, restart puts Marshy back on the start cloud,
 // a won level (stars, the next level, a save that survives a reload), a lost one, the
 // level map, the characters, the endless sky, saves that fail, and no errors or network
 // requests at any point.
@@ -131,6 +132,73 @@ test('Enter starts level 1 at once; ← → steer Marshy; nothing moves it other
   await page.click('#btnHome');
   assert.equal((await state(page)).screen, 'title');
   assert.deepEqual((await stats(page)).ends, ['quit', 'quit']);
+});
+
+test('pause holds the whole picture still: the sky, the popups, the level banner and the sparkles', async t => {
+  const page = await game(t, { save: SAVE(), reduced: false });
+  const shot = () => page.evaluate(() => document.getElementById('game').toDataURL());
+  await page.keyboard.press('Enter');
+  assert.ok(await until(page, "s.phase === 'play'"));
+  await lift(page, 10.2); // the 10 m popup floats up
+  await page.evaluate(() => ch.step(2));
+  let s = await state(page);
+  assert.ok(s.height >= 10 && s.banner === 'المرحلة 1', JSON.stringify(s));
+  await page.keyboard.press('KeyP');
+  await page.evaluate(() => ch.step(1));
+  const still = await shot();
+  for (const n of [10, 30, 110]) { // 2.5 s in all, longer than the banner lasts
+    await page.evaluate(n => ch.step(n), n);
+    assert.equal(await shot(), still, 'nothing moves behind the pause card');
+  }
+  s = await state(page);
+  assert.equal(s.screen, 'pause');
+  assert.equal(s.banner, 'المرحلة 1', 'the banner waits for play to go on');
+  await page.keyboard.press('KeyP');
+  await page.evaluate(() => ch.step(150));
+  assert.equal((await state(page)).banner, '', 'then it runs out');
+});
+
+test('a thunder cloud never flashes fast: a gentle glow, stars that blink at 3 Hz at most, all still when motion is reduced', async t => {
+  const page = await game(t, { reduced: false });
+  // One thunder cloud drawn on its own, a frame every 1/60 s from just before its warning to the end of its charge.
+  const frames = calm => page.evaluate(calm => {
+    const c = document.createElement('canvas'); c.width = 1280; c.height = 720;
+    const ctx = c.getContext('2d', { willReadFrequently: true }), v = CH.createView(ctx);
+    v.setScale(1); v.calm = calm;
+    const w = CH.create({ level: 7, diff: 0.5, seed: 3 }), p = w.plats.find(q => q.kind === 'cloud' && q.y > 0);
+    Object.assign(p, { kind: 'thunder', face: 1, off: 0, x: 400, y: w.cam + 360, hitT: -9 });
+    w.plats = [p]; w.items = []; w.foes = []; w.m.x = 1100; w.m.y = w.cam + 100;
+    const sum = (x, y, wd, h) => { let n = 0; const d = ctx.getImageData(x, y, wd, h).data; for (let i = 0; i < d.length; i += 4) n += d[i] + d[i + 1] + d[i + 2]; return n; };
+    const out = [];
+    for (let f = 0; f <= 102; f++) {
+      w.t = 1.405 + f / 60; // the warning starts at 1.45 s, the charge at 1.9 s and ends at 3 s
+      v.render(w, { t: w.t, dt: 0, char: 'marshy', theme: 2, theme2: 2, mix: 0 });
+      out.push({ on: CH.charged(p, w.t), warn: w.t > 1.45 && w.t < 1.9, stars: sum(330, 300, 140, 46), glow: sum(330, 340, 140, 36) });
+    }
+    return out;
+  }, calm);
+  const runs = list => { const r = [1]; for (let i = 1; i < list.length; i++) list[i] === list[i - 1] ? r[r.length - 1]++ : r.push(1); return r; };
+  for (const calm of [false, true]) {
+    const f = await frames(calm), quiet = f[0].stars, warn = f.filter(x => x.warn), charged = f.filter(x => x.on);
+    assert.ok(warn.length === 27 && charged.length === 66 && !warn.some(x => x.on));
+    const shown = warn.map(x => x.stars !== quiet);
+    assert.equal(shown[0], true, 'the warning starts with the stars showing');
+    if (calm) {
+      assert.ok(shown.every(Boolean), 'calm: the stars stay on through the warning');
+      assert.equal(new Set(charged.map(x => x.glow)).size, 1, 'calm: a steady glow');
+    } else {
+      // each on or off spell lasts 1/6 s (3 Hz), but the last one, cut short by the charge
+      assert.ok(runs(shown).slice(0, -1).every(n => n >= 9), 'stars: ' + runs(shown));
+      // the glow rises and falls smoothly, at most 3 times a second
+      let turns = 0, last = 0;
+      for (let i = 1; i < charged.length; i++) {
+        const d = Math.sign(charged[i].glow - charged[i - 1].glow);
+        if (d && last && d !== last) turns++;
+        if (d) last = d;
+      }
+      assert.ok(turns >= 2 && turns <= 7, 'glow turns: ' + turns);
+    }
+  }
 });
 
 test('level 1 won: stars, candies, the next level, and a save that survives a reload', async t => {

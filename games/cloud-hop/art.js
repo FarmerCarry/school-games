@@ -580,18 +580,20 @@
       ctx.beginPath(); ctx.arc(x, y + 2, 7, 0.1 * M.PI, 0.9 * M.PI); ctx.lineWidth = 3; ctx.stroke();
     }
     function thunder(p, x, y, t) {
-      var ph = CH.thunderPhase(p, t), on = CH.charged(p, t), warn = !on && ph > CH.THUNDER - 1.55;
+      // No fast flashing: the glow pulses gently from the moment the cloud charges and the
+      // warning stars blink at 3 Hz from the moment the warning starts; both hold still when calm.
+      var ph = CH.thunderPhase(p, t), on = CH.charged(p, t), wp = ph - CH.THUNDER + 1.55;
       if (on) {
         ctx.lineWidth = 4; ctx.strokeStyle = INK; ctx.fillStyle = '#ffe14f';
         for (var k = -1; k <= 1; k++) {
-          var bx = x + k * p.w * 0.28, f = M.floor(t * 12 + k) % 2;
+          var bx = x + k * p.w * 0.28, f = v.calm ? 0 : M.floor(t * 12 + k) % 2;
           ctx.beginPath(); ctx.moveTo(bx, y + 24); ctx.lineTo(bx - 12 + f * 4, y + 50); ctx.lineTo(bx - 2, y + 50); ctx.lineTo(bx - 10, y + 78); ctx.lineTo(bx + 12, y + 44); ctx.lineTo(bx + 1, y + 44); ctx.lineTo(bx + 9, y + 24); ctx.closePath();
           ctx.fill(); ctx.stroke();
         }
-        if (M.floor(t * 14) % 2) { ctx.globalAlpha = 0.35; ctx.fillStyle = '#fff38a'; blob(ctx, x, y + 2, p.w * 0.6, 34); ctx.fill(); ctx.globalAlpha = 1; }
-      } else if (warn && M.floor(t * 10) % 2) {
+        ctx.globalAlpha = v.calm ? 0.3 : 0.18 + 0.17 * M.cos((wp - 0.45) * 15); ctx.fillStyle = '#fff38a'; blob(ctx, x, y + 2, p.w * 0.6, 34); ctx.fill(); ctx.globalAlpha = 1;
+      } else if (wp > 0 && (v.calm || M.floor(wp * 6) % 2 === 0)) {
         ctx.fillStyle = '#ffe14f';
-        for (var s = 0; s < 3; s++) { star(ctx, x - p.w * 0.3 + s * p.w * 0.3, y - 26 - (s % 2) * 8, 7, t * 4); ctx.fill(); }
+        for (var s = 0; s < 3; s++) { star(ctx, x - p.w * 0.3 + s * p.w * 0.3, y - 26 - (s % 2) * 8, 7, v.calm ? 0 : t * 4); ctx.fill(); }
       }
     }
     function castleAt(p, x, y, t, w) {
