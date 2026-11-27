@@ -1,8 +1,9 @@
 // Bonk Garden in real Chromium: real keys and clicks bonk critters, pause freezes the
 // garden, restart starts over, a won and a lost round reach the result screen, the levels
 // and hammers screens, the endless garden, double clicks, the hammer starting at the
-// pointer, saves that survive a reload or fail, and no errors or network requests at any
-// point.
+// pointer, saves that survive a reload or fail, a round kept (and reported once) from the
+// moment it is decided even when the outro is cut short, R that never throws a round away
+// where it is a hole key, and no errors or network requests at any point.
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import path from 'node:path';
@@ -104,12 +105,14 @@ test('Enter starts; a hole key swings; a click bonks a critter; Esc pauses and f
   assert.equal((await state(page)).swings, 1, 'the S key swings at the middle hole');
   assert.ok(await until(page, 's.up > 0', 60 * 5));
   const at = await page.evaluate(() => { const w = __game.world; const i = w.holes.findIndex(h => h.c && (h.c.st === 'up' || h.c.st === 'rise')); return __game.hole(i); });
+  // The S swing may have bonked a critter that was already up in the middle hole (random seed).
+  const before = await state(page);
   await page.mouse.click(at.x, at.y);
   await step(page, 1);
   s = await state(page);
   assert.equal(s.swings, 2);
-  assert.equal(s.bonks, 1, 'the click bonked the critter');
-  assert.equal(s.score, 1);
+  assert.equal(s.bonks - before.bonks, 1, 'the click bonked the critter');
+  assert.equal(s.score - before.score, 1);
   await page.keyboard.press('Escape');
   s = await state(page);
   assert.equal(s.screen, 'pause');
@@ -290,4 +293,99 @@ test('a save that fails says so and the game keeps going; Retry saves once stora
   await page.evaluate(() => { bg.failSave = false; });
   await page.locator('.sg-save-status button').click();
   assert.equal((await stored(page)).rounds, 1);
+});
+
+// Records Kit.stats.round/end calls as 'round:L1', 'end:win'...; dda() is how many results
+// this PC's difficulty has had.
+async function watchStats(page) {
+  await page.evaluate(() => {
+    const log = window.statsLog = [];
+    for (const k of ['round', 'end']) { const f = Kit.stats[k]; Kit.stats[k] = function (id) { log.push(k + ':' + id); return f.apply(this, arguments); }; }
+  });
+}
+const statsLog = page => page.evaluate(() => window.statsLog.slice());
+const ddaResults = page => page.evaluate(() => { const d = JSON.parse(localStorage.getItem('sg:bonk-garden:dda') || '{}'); return d.main ? d.main[1] : 0; });
+// Ends the round with this score: time runs out a few frames later and the outro starts.
+async function decideRound(page, goal) {
+  await page.evaluate(goal => { const w = __game.world; w.score = w.spec.goals[goal]; w.t = w.spec.dur - 0.05; }, goal);
+  assert.ok(await until(page, 's.phase === "over"', 30));
+  assert.equal((await state(page)).screen, 'play', 'the outro is still playing');
+}
+
+test('a round is kept from the moment it is decided: a pause, Home or Restart during the outro still save it and report it once', async t => {
+  const page = await game(t, { save: blank() });
+  await watchStats(page);
+  await page.click('#btnPlay');
+  await decideRound(page, 2);
+  const score = (await state(page)).score;
+  // a blur (another window) pauses during «انتهى الوقت!», and the child goes Home
+  await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+  assert.equal((await state(page)).screen, 'pause');
+  await page.click('#btnHome');
+  assert.equal((await state(page)).screen, 'title');
+  assert.deepEqual(await statsLog(page), ['round:L1', 'end:win'], 'a win, not a quit');
+  assert.equal(await ddaResults(page), 1);
+  let saved = await stored(page);
+  assert.deepEqual([saved.stars[0], saved.best[0]], [3, score]);
+  assert.equal(await page.evaluate(() => BG.hammerOpen(__game.save, 1)), true, 'the rubber chicken is unlocked');
+  // a pause in the outro, then Resume: the result shows, still reported once
+  await page.click('#btnPlay');
+  assert.equal((await state(page)).level, 2);
+  await decideRound(page, 0);
+  await page.keyboard.press('Escape');
+  assert.equal((await state(page)).screen, 'pause');
+  await page.keyboard.press('Space');
+  assert.ok(await until(page, 's.screen === "result"', 60 * 3));
+  assert.equal(await page.locator('#resStars .on').count(), 1);
+  assert.deepEqual(await statsLog(page), ['round:L1', 'end:win', 'round:L2', 'end:win']);
+  assert.equal(await ddaResults(page), 2);
+  // Restart during the outro starts a new try without a quit
+  await page.keyboard.press('Enter');
+  assert.equal((await state(page)).level, 3);
+  await decideRound(page, 1);
+  await page.keyboard.press('Escape');
+  await page.click('#btnRestart');
+  assert.deepEqual([(await state(page)).screen, (await state(page)).level], ['play', 3]);
+  saved = await stored(page);
+  assert.deepEqual(saved.stars.slice(0, 3), [3, 1, 2]);
+  // leaving a round that is still going is a quit
+  await step(page, 10);
+  await page.keyboard.press('Escape');
+  await page.click('#btnHome');
+  assert.deepEqual(await statsLog(page), ['round:L1', 'end:win', 'round:L2', 'end:win', 'round:L3', 'end:win', 'round:L3', 'end:quit']);
+  assert.equal(await ddaResults(page), 3, 'one result per decided round, none for the quit');
+});
+
+test('R, the top right hole of the 4 by 3 gardens, never throws a round away; in the 3 by 3 garden it still restarts', async t => {
+  const save = blank(); save.stars.fill(1, 0, 4);
+  const page = await game(t, { save });
+  await page.click('#btnLevels');
+  await page.locator('.lvl').nth(4).click();
+  let s = await state(page);
+  assert.deepEqual([s.screen, s.level, s.holes], ['play', 5, 12]);
+  await step(page, 30);
+  await page.keyboard.press('Escape');
+  const t0 = (await state(page)).t;
+  await page.keyboard.press('KeyR');
+  s = await state(page);
+  assert.deepEqual([s.screen, s.t], ['pause', t0], 'R on the pause screen is only a hole key here');
+  await page.keyboard.press('Space');
+  await decideRound(page, 0);
+  assert.ok(await until(page, 's.screen === "result"', 60 * 3));
+  await page.keyboard.press('KeyR');
+  assert.equal((await state(page)).screen, 'result', 'a child still hammering R sees the result first');
+  assert.equal(await page.locator('#btnNext').isVisible(), true);
+  await step(page, 40);
+  await page.keyboard.press('KeyR');
+  s = await state(page);
+  assert.deepEqual([s.screen, s.level, s.t], ['play', 5, 0], 'then R plays again');
+  await page.keyboard.press('Escape');
+  await page.click('#btnHome');
+  await page.click('#btnLevels');
+  await page.locator('.lvl').nth(0).click();
+  await step(page, 30);
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('KeyR');
+  s = await state(page);
+  assert.deepEqual([s.screen, s.level, s.holes, s.t], ['play', 1, 9, 0]);
 });

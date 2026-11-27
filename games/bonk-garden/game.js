@@ -33,7 +33,7 @@
   var dda = Kit.dda('bonk-garden', { id: 'main', target: 0.72 });
 
   /* --------------------------------------------------------------- state */
-  var screen = 'title', world = null, demo = null, level = 1, roundOpen = false, time = 0;
+  var screen = 'title', world = null, demo = null, level = 1, roundOpen = false, outcome = null, time = 0;
   var floats = [], banner = null, flash = 0, frenzyFlash = 0, fx = Kit.particles(), shake = Kit.shake();
   var swings = [], ham = { x: 640, y: 420, sw: 9, giant: 0 }, lit = -1, litT = 0;
   var hint = -1, hintShown = false, intro = null, starPop = [0, 0, 0], starsHad = 0, heartPop = 0, lastTick = -1, comboPop = 0;
@@ -81,7 +81,7 @@
     var d = dda.level; // read at every round start
     world = BG.create({ level: n, d: d, seed: (M.random() * 4294967295) >>> 0 });
     Kit.stats.round(n ? 'L' + n : 'endless');
-    roundOpen = true;
+    roundOpen = true; outcome = null;
     floats.length = 0; banner = null; fx.clear(); view.clearFx();
     starPop = [0, 0, 0]; starsHad = 0; heartPop = 0; lastTick = -1; comboPop = 0; frenzyFlash = 0;
     hint = -1; intro = null; ham.giant = 0; ham.sw = 9;
@@ -113,15 +113,24 @@
   }
 
   /* ---------------------------------------------------------- the result */
-  function finish() {
+  // The outcome is saved, ended and reported the moment the round is decided (time is up or
+  // the hearts are gone), not when the outro is over: a pause, Home or Restart during
+  // 'انتهى الوقت!' keep it.
+  function decide() {
+    if (outcome) return;
     var score = world.score;
-    var res = level ? BG.record(save, level, score) : BG.recordEndless(save, score);
-    Kit.stats.end(level ? (res.stars > 0 ? 'win' : 'lose') : 'end', score);
+    outcome = level ? BG.record(save, level, score) : BG.recordEndless(save, score);
+    Kit.stats.end(level ? (outcome.stars > 0 ? 'win' : 'lose') : 'end', score);
     roundOpen = false;
     dda.result(M.max(0, M.min(1, score / world.spec.goals[2])));
+    persist();
+  }
+  function finish() {
+    decide();
+    var res = outcome;
     if (res.hammers.length) save.hammer = res.hammers[res.hammers.length - 1]; // wear the new toy at once
     persist();
-    showResult(res, score);
+    showResult(res, world.score);
   }
   function showResult(res, score) {
     var s = res.stars;
@@ -262,18 +271,21 @@
   on($('btnMenu'), function () { J.back(); toTitle(); });
   on($('levelsBack'), function () { J.back(); toTitle(); });
   on($('hammersBack'), function () { J.back(); toTitle(); });
+  // R is also the top right hole of the 4 by 3 gardens: there a pause screen leaves it alone
+  // (its Restart button stays), and every result screen waits 0.6 s before R plays again,
+  // so a child still hammering the hole keys sees the result first.
   window.addEventListener('keydown', function (e) {
     if (!Kit.isGameKeyEvent(e) || e.repeat) return;
     var c = e.code;
     if (screen === 'play') { if (c === 'KeyP' || c === 'Escape') { e.preventDefault(); pause(); } return; }
     if (screen === 'pause') {
       if (c === 'KeyP' || c === 'Escape' || c === 'Enter' || c === 'Space') { e.preventDefault(); resume(); }
-      else if (c === 'KeyR') restart();
+      else if (c === 'KeyR' && !(world && world.spec.cols > 3)) restart();
       return;
     }
     if (screen === 'result') {
       if (c === 'Enter' || c === 'Space') { e.preventDefault(); if ($('btnNext').hidden) again(); else next(); }
-      else if (c === 'KeyR') again();
+      else if (c === 'KeyR' && resultT > 0.6) again();
       else if (c === 'Escape') { J.back(); toTitle(); }
       return;
     }
@@ -435,11 +447,13 @@
         J.chime(1);
         break;
       case 'time':
+        decide();
         AU.tone({ freq: 1900, to: 2050, type: 'sine', dur: 0.32, vol: 0.14 }); AU.tone({ freq: 1500, type: 'sine', dur: 0.12, vol: 0.12, delay: 0.34 });
         showBanner('انتهى الوقت!', '#ffffff', 1.4);
         Kit.stats.busy();
         break;
       case 'out':
+        decide();
         J.fail();
         showBanner('انتهت القلوب!', '#ffb3d1', 1.4);
         Kit.stats.busy();
@@ -601,13 +615,14 @@
     drawCombo(w);
   }
   // The combo jar on the left: ten bonks in a row fill it and start the frenzy.
+  var JAR = ['#ff5f7e', '#ffa53d', '#ffe14f', '#7dffb0', '#4fd8ff', '#b46bff'], RIM = ['#ff5f7e', '#ffe14f', '#4fd8ff', '#7dffb0', '#b46bff'];
   function drawCombo(w) {
     var x = 26, top = 196, hgt = 380, fr = w.frenzy > 0;
     panel(x, top, 56, hgt + 16, 'rgba(42,29,78,0.78)');
     var n = fr ? BG.COMBO : M.min(BG.COMBO, w.combo), seg = hgt / BG.COMBO;
     for (var i = 0; i < BG.COMBO; i++) {
       var y = top + 8 + hgt - (i + 1) * seg;
-      var col = fr ? ['#ff5f7e', '#ffa53d', '#ffe14f', '#7dffb0', '#4fd8ff', '#b46bff'][(i + M.floor(time * 12)) % 6] : i < n ? (i >= 7 ? '#ff9fd0' : '#ffd23f') : 'rgba(255,255,255,0.16)';
+      var col = fr ? JAR[(i + M.floor(time * 12)) % 6] : i < n ? (i >= 7 ? '#ff9fd0' : '#ffd23f') : 'rgba(255,255,255,0.16)';
       if (fr && i >= BG.COMBO * w.frenzy / BG.FRENZY) col = 'rgba(255,255,255,0.16)';
       BG.rrect(ctx, x + 9, y + 3, 38, seg - 6, 8); ctx.fillStyle = col; ctx.fill();
     }
@@ -642,23 +657,24 @@
   }
 
   /* --------------------------------------------------------------- render */
+  var ro = { t: 0, look: null, keys: 0, lit: -1 }; // the view's options, reused every frame
   function render() {
     if (!dirty) return; // a still screen keeps its last frame
     var w = screen === 'title' || !world ? demo : world;
     var playing = screen !== 'title' && world;
     ctx.save();
     if (shake.power) ctx.translate(shake.x, shake.y);
-    var look = playing ? ham : demoHam;
-    view.render(w, { t: time, look: look, keys: playing ? (save.keys ? 0.95 : 0.4) : 0, lit: litT > 0 ? lit : -1 });
+    ro.t = time; ro.look = playing ? ham : demoHam; ro.keys = playing ? (save.keys ? 0.95 : 0.4) : 0; ro.lit = litT > 0 ? lit : -1;
+    view.render(w, ro);
     view.drawFx();
     fx.draw(ctx);
     ctx.restore();
     if (playing && world.frenzy > 0) {
       // the frenzy: a rainbow frame
-      ctx.lineWidth = 16; ctx.strokeStyle = ['#ff5f7e', '#ffe14f', '#4fd8ff', '#7dffb0', '#b46bff'][M.floor(time * 10) % 5];
+      ctx.lineWidth = 16; ctx.strokeStyle = RIM[M.floor(time * 10) % 5];
       ctx.globalAlpha = calm() ? 0.6 : 0.5 + 0.3 * M.sin(time * 20); ctx.strokeRect(8, 8, W - 16, H - 16); ctx.globalAlpha = 1;
     }
-    if (flash > 0) { ctx.fillStyle = 'rgba(255,255,255,' + (flash * 0.45) + ')'; ctx.fillRect(0, 0, W, H); }
+    if (flash > 0) { ctx.globalAlpha = flash * 0.45; ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1; }
     if (playing) {
       if (hint >= 0 && !save.coach) {
         var hh = world.holes[hint];
