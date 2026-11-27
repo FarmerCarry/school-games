@@ -701,6 +701,7 @@ h1, h2, h3 { font-weight: 700; margin: 0; }
 .stage-wrap.compact .pb-info { flex: 1 1 auto; }
 .stage-wrap.compact .pb-btns { flex: 0 0 auto; flex-wrap: nowrap; gap: 6px; }
 .stage-wrap.compact .pb-lbl { display: none; }
+.stage-wrap.compact .update-note { flex: 0 1 auto; min-width: 0; padding: 6px 14px; font-size: 15px; }
 .stage-wrap.compact .pb-btns .pbtn, .stage-wrap.compact .pbtn.back { width: 42px; padding: 0; justify-content: center; }
 
 .play-side { flex: 0 0 270px; width: 270px; display: flex; flex-direction: column; gap: 16px; }
@@ -796,6 +797,35 @@ h1, h2, h3 { font-weight: 700; margin: 0; }
 }
 .toast.show { transform: translate(-50%, 0); opacity: 1; }
 .toast.gold { padding: 14px 30px; background: #ffcc00; color: #3a2a00; font-size: 23px; box-shadow: 0 6px 0 #d69a00, 0 10px 28px rgba(28, 34, 80, 0.3); }
+
+/* The «new version» button (js/offline.js): in the game's bar, only between rounds. */
+.update-note {
+  display: flex;
+  align-items: center;
+  flex: 0 1 auto;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px 18px;
+  white-space: nowrap;
+  border: 0;
+  border-radius: 999px;
+  background: var(--yellow);
+  color: #3a2a00;
+  font: 700 17px/1.25 var(--font);
+  box-shadow: 0 4px 0 #d69a00, 0 8px 18px rgba(28, 34, 80, 0.22);
+  cursor: pointer;
+  animation: update-in 0.45s cubic-bezier(.3, 1.6, .5, 1);
+}
+.update-note[hidden] { display: none; }
+/* Room for it in one row: the game's buttons keep their icons and spoken names. */
+.play-bar.has-update .pb-btns .pb-lbl { display: none; }
+.update-note b { color: #1c2250; text-decoration: underline; text-underline-offset: 3px; }
+.update-note .un-star, .update-note .un-icon { font-size: 22px; }
+.update-note .un-icon { display: inline-block; animation: update-spin 2.4s ease-in-out infinite; }
+.update-note:hover { background: #ffd83a; }
+.update-note:active { transform: translateY(3px); box-shadow: 0 1px 0 #d69a00, 0 4px 12px rgba(28, 34, 80, 0.22); }
+@keyframes update-in { from { transform: translateY(16px) scale(0.85); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes update-spin { 0%, 70% { transform: rotate(0); } 100% { transform: rotate(360deg); } }
 
 .burst {
   position: fixed;

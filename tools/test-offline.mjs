@@ -26,6 +26,8 @@ const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css
 const mounts = new Map();
 const hits = [];
 let stalePath = null;
+// A cache between the PCs and the site that still hands out an old sw.js at its plain address.
+let staleWorker = null;
 let browser;
 const server = http.createServer((req, res) => {
   const u = new URL(req.url, 'http://localhost');
@@ -44,6 +46,11 @@ const server = http.createServer((req, res) => {
   const root = mounts.get(base);
   const fp = path.resolve(root, rel);
   if (!fp.startsWith(root + path.sep)) { res.writeHead(403); res.end(); return; }
+  if (staleWorker && u.pathname === base + 'sw.js' && !u.search) {
+    res.writeHead(200, { 'content-type': 'text/javascript', 'cache-control': 'no-store' });
+    res.end(staleWorker);
+    return;
+  }
   if (u.pathname === stalePath) {
     res.writeHead(200, { 'content-type': MIME[path.extname(fp)] || 'text/plain' });
     res.end('old content from a stale server');
@@ -333,8 +340,45 @@ try {
     await page.evaluate(() => { window.failedUpgradeSentinel = 'same-doc'; window.dispatchEvent(new Event('focus')); });
     await page.waitForFunction(() => document.getElementById('offlineStatus').dataset.state === 'ready');
     check(await page.evaluate(version => window.SG_OFFLINE_VERSION === version && window.failedUpgradeSentinel === 'same-doc', v2.version), 'failed upgrade never reloads into the incomplete version');
-    await offlineReload(context, [page]);
     stalePath = null;
+
+    // A cache on the way keeps serving the old sw.js. The portal asks the site's own
+    // version.json (through its worker), finds v3, and fetches the worker at a new address.
+    // An open game is never reloaded: the «new version» button waits for the round to end.
+    // The old sw.js is in place before the page comes back online: coming online looks at
+    // the site at once, and must not find the new worker at the plain address.
+    staleWorker = fs.readFileSync(path.join(v2.dir, 'sw.js'));
+    await offlineReload(context, [page]);
+    await page.goto(origin + BASE + '#/play/connect-four', { waitUntil: 'load' });
+    await page.waitForFunction(() => document.querySelector('#stage iframe') && !document.querySelector('#stage iframe').hasAttribute('inert'));
+    const roundFrame = page.frames().find(frame => frame.url().includes('/games/connect-four/'));
+    const round = open => roundFrame.evaluate(open => parent.postMessage({ type: 'sg:round', version: 1, phase: open ? 'start' : 'end', result: '' }, location.origin), open);
+    await round(true);
+    await page.evaluate(() => { window.promptSentinel = 'same-doc'; });
+    await waitFor(() => inspector.evaluate(async ({ scope, url }) => {
+      const reg = await navigator.serviceWorker.getRegistration(scope);
+      return reg?.active?.scriptURL === url;
+    }, { scope: origin + BASE, url: origin + BASE + 'sw.js?v=' + v3.version }), 'install from the versioned worker address');
+    await installed(inspector, origin + BASE, v3);
+    check(hits.some(hit => hit.startsWith(BASE + 'version.json?r=')), 'the worker asks the site for version.json past every cache');
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+    await page.waitForTimeout(500);
+    check(await page.evaluate(version => window.SG_OFFLINE_VERSION === version && window.promptSentinel === 'same-doc' &&
+      document.getElementById('updateNote').hidden, v2.version), 'a stale sw.js is bypassed and the new version waits while a round is played');
+    await round(false);
+    await page.waitForFunction(() => !document.getElementById('updateNote').hidden && document.getElementById('updateNote').closest('#playBar'));
+    check(true, 'between rounds the game bar offers the new version');
+    await round(true);
+    await page.waitForFunction(() => document.getElementById('updateNote').hidden);
+    await round(false);
+    await page.waitForFunction(() => !document.getElementById('updateNote').hidden);
+    await Promise.all([page.waitForEvent('load'), page.locator('#updateNote').click()]);
+    await page.waitForFunction(() => document.querySelector('#stage iframe') && document.getElementById('offlineStatus')?.dataset.state === 'ready');
+    check(await page.evaluate(version => window.SG_OFFLINE_VERSION === version && !window.promptSentinel && location.hash === '#/play/connect-four' &&
+      document.getElementById('updateNote').hidden, v3.version), 'a tap reloads into the new version and reopens the same game');
+    staleWorker = null;
+    await page.evaluate(() => { location.hash = '#/'; });
+
     await kill(inspector, page, origin + BASE, killBuild);
     check(true, 'kill switch unregisters its worker and removes its scoped cache');
     check(errors.length === 0, 'offline game initialization and updates have no page errors: ' + errors.join(' | '));

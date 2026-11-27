@@ -19,8 +19,14 @@ function events() {
 
 function worker(state = 'installing') {
   return {
-    ...events(), state, requests: [], ready: true, version: 'page-v1', pending: [], hold: false,
+    ...events(), state, requests: [], ready: true, version: 'page-v1', pending: [], hold: false, latest: null, latestAsks: 0,
     postMessage(message, ports) {
+      // version.json as the worker fetched it: what the site has now, or null when unreachable.
+      if (message.type === 'sg:offline-latest') {
+        this.latestAsks++;
+        queueMicrotask(() => ports[0].postMessage({ type: 'sg:offline-latest', id: message.id, v: this.latest, version: this.version }));
+        return;
+      }
       this.requests.push(message);
       const reply = () => ports[0].postMessage({ type: 'sg:offline-status', id: message.id,
         ready: this.ready, count: this.ready ? 3 : 1, total: 3, version: this.version });
@@ -40,13 +46,23 @@ function controller(registrations, options = {}) {
   const status = { hidden: true, textContent: '', setAttribute(name, value) { this[name] = value; } };
   const retry = events(), timers = new Map(), timerHistory = [], session = new Map(Object.entries(options.session || {}));
   let calls = 0, nextTimer = 0, reloads = 0;
+  const registered = [], intervals = [];
   const serviceWorker = {
     ...events(), controller: options.controlled === false ? null : {},
-    async register() {
-      const result = registrations[calls++];
+    async register(url) {
+      registered.push(url);
+      const result = registrations[calls++] || (options.reRegister && registrations[calls - 2]);
       if (!result) throw new Error('unexpected registration');
       return result;
-    }
+    },
+    async getRegistration() { return options.existing || undefined; }
+  };
+  const note = { hidden: true, ...events(), nextSibling: null };
+  const buttons = {}, bar = {
+    classes: new Set(),
+    classList: { toggle(name, on) { on ? bar.classes.add(name) : bar.classes.delete(name); } },
+    querySelector: selector => selector === '.pb-btns' ? buttons : null,
+    insertBefore(node, before) { node.nextSibling = before; }
   };
   const sessionStorage = options.sessionStorage === null ? null : {
     getItem: key => session.has(key) ? session.get(key) : null,
@@ -62,12 +78,17 @@ function controller(registrations, options = {}) {
     }
   }
   const window = { ...events(), SG_OFFLINE_BUILD: options.build !== false, SG_OFFLINE_VERSION: 'page-v1',
-    gameOpen: !!options.gameOpen, sessionStorage,
-    SGUpdateSafe() { return !this.gameOpen; } };
+    gameOpen: !!options.gameOpen, roundOpen: !!options.roundOpen, sessionStorage,
+    SGUpdateSafe() { return !this.gameOpen; },
+    SGUpdateOffer() { return this.gameOpen && !this.roundOpen; } };
   const document = { ...events(), readyState: 'complete', hidden: false,
-    getElementById: id => ({ offlineStatus: status, offlineRetry: retry })[id] || null };
+    getElementById: id => ({ offlineStatus: status, offlineRetry: retry, updateNote: note, playBar: options.gameOpen ? bar : null })[id] || null };
+  let now = 1e12;
+  const clock = { now: () => now };
   vm.runInNewContext(source, {
-    window, location: { protocol: options.protocol || 'https:', reload() { reloads++; } }, navigator: { serviceWorker }, MessageChannel: Channel,
+    window, location: { protocol: options.protocol || 'https:', href: 'https://school.example/sg/', reload() { reloads++; } },
+    navigator: { serviceWorker }, MessageChannel: Channel, URL, Date: { now: () => clock.now() },
+    setInterval(callback, delay) { intervals.push({ callback, delay }); return intervals.length; },
     document,
     setTimeout(callback, delay) {
       const id = ++nextTimer;
@@ -76,7 +97,9 @@ function controller(registrations, options = {}) {
     },
     clearTimeout: id => timers.delete(id)
   });
-  return { status, retry, window, document, serviceWorker, timers, timerHistory, session,
+  return { status, retry, window, document, serviceWorker, timers, timerHistory, session, note, bar, registered, intervals,
+    // Moves the page's clock and runs its once-a-minute timer.
+    async later(ms) { now += ms; for (const { callback } of intervals) callback(); await flush(); await flush(); },
     get calls() { return calls; }, get reloads() { return reloads; } };
 }
 
@@ -392,4 +415,137 @@ test('Retry upgrades a pending quick check once; focus events do not repeat the 
   active.pending.shift()(); await flush();
   assert.equal(active.requests.length, before + 2);
   assert.equal(page.status['data-state'], 'ready');
+});
+
+test('a game between rounds gets the new-version button instead of a reload; a round hides it', async () => {
+  const active = worker('activated'); active.version = 'page-v2';
+  const page = controller([registration({ active })], { gameOpen: true, roundOpen: true });
+  await flush();
+  assert.equal(page.reloads, 0, 'an open game is never reloaded by itself');
+  assert.equal(page.note.hidden, true, 'mid-round: no button');
+  const verified = active.requests.length;
+  page.window.roundOpen = false; page.window.emit('sg:sessionchange');
+  await flush();
+  assert.equal(page.note.hidden, false, 'between rounds the button shows');
+  assert.equal(page.note.nextSibling, page.bar.querySelector('.pb-btns'), 'in the game bar, before its buttons');
+  assert.ok(page.bar.classes.has('has-update'));
+  assert.equal(active.requests.length, verified + 1, 'the new version is verified before it is offered');
+  page.window.roundOpen = true; page.window.emit('sg:sessionchange');
+  assert.equal(page.note.hidden, true, 'a new round hides it again');
+  assert.equal(page.bar.classes.has('has-update'), false);
+  page.note.emit('click');
+  assert.equal(page.reloads, 0, 'a stray tap during a round does nothing');
+  page.window.roundOpen = false; page.window.emit('sg:sessionchange');
+  await flush();
+  assert.equal(active.requests.length, verified + 1, 'an offered version is not verified again for every round');
+  page.note.emit('click');
+  assert.equal(page.reloads, 1, 'a tap reloads into the new version');
+  assert.equal(page.session.get('sg:offline:reloaded'), 'page-v2');
+  page.window.emit('sg:sessionchange');
+  assert.equal(page.note.hidden, true, 'never offered twice for one version');
+});
+
+test('the button waits for a verified complete copy and is never shown for the running version', async () => {
+  const same = controller([registration({ active: worker('activated') })], { gameOpen: true });
+  await flush();
+  assert.equal(same.note.hidden, true, 'nothing newer: no button');
+  const active = worker('activated'); active.version = 'page-v2'; active.ready = false;
+  const page = controller([registration({ active })], { gameOpen: true });
+  await flush();
+  assert.equal(page.note.hidden, true, 'an incomplete copy is not offered');
+  active.ready = true; page.window.emit('focus');
+  await flush();
+  assert.equal(page.note.hidden, false);
+  assert.equal(page.reloads, 0);
+});
+
+test('an open portal asks for the site\'s version and installs a newer deploy', async () => {
+  const active = worker('activated'); active.latest = 'abcdef0123456789';
+  const owner = registration({ active, update(o) { o.installing = worker(); } });
+  const page = controller([owner]);
+  await flush(); await flush();
+  assert.equal(active.latestAsks, 1, 'checked once the portal is ready, through the worker');
+  assert.equal(owner.updates, 1, 'a different version asks the browser for the new worker');
+  assert.deepEqual(page.registered, ['sw.js'], 'a fresh worker needs no new address');
+  await page.later(60 * 1000);
+  assert.equal(active.latestAsks, 1, 'not every minute');
+  owner.installing = null;
+  await page.later(10 * 60 * 1000);
+  assert.equal(active.latestAsks, 2, 'again after ten minutes');
+  page.document.hidden = true;
+  await page.later(11 * 60 * 1000);
+  assert.equal(active.latestAsks, 2, 'a hidden tab does not ask');
+});
+
+test('the same version changes nothing; no answer only checks sw.js', async () => {
+  const same = registration({ active: worker('activated') });
+  same.active.version = same.active.latest = '0123456789abcdef';
+  controller([same], { gameOpen: true });
+  await flush(); await flush();
+  assert.equal(same.active.latestAsks, 1);
+  assert.equal(same.updates, 0, 'the site has what this PC has');
+  const offline = registration({ active: worker('activated') });
+  const away = controller([offline]);
+  await flush(); await flush();
+  assert.equal(offline.active.latestAsks, 1);
+  assert.equal(offline.updates, 1, 'without an answer the browser still checks sw.js');
+  assert.deepEqual(away.registered, ['sw.js'], 'and nothing is registered under a new address');
+  assert.equal(away.status['data-state'], 'ready', 'the working version stays ready');
+  assert.equal(away.reloads, 0);
+});
+
+test('an old sw.js from a cache on the way is bypassed with a new worker address', async () => {
+  const owner = registration({ active: worker('activated') });
+  owner.active.scriptURL = 'https://school.example/sg/sw.js';
+  owner.active.latest = 'abcdef0123456789';
+  const page = controller([owner], { reRegister: true });
+  await flush(); await flush(); await flush();
+  assert.equal(owner.updates, 1, 'the browser was asked first');
+  assert.deepEqual(page.registered, ['sw.js', 'sw.js?v=abcdef0123456789'], 'then the worker is fetched where no cache has it');
+});
+
+test('a PC that moved to a versioned worker address keeps it on every visit', async () => {
+  const owner = registration({ active: worker('activated') });
+  owner.active.scriptURL = 'https://school.example/sg/sw.js?v=abcdef0123456789';
+  const page = controller([owner], { existing: owner });
+  await flush();
+  assert.deepEqual(page.registered, ['sw.js?v=abcdef0123456789'], 'registering plain sw.js again would reinstall the same worker');
+  const other = registration({ active: worker('activated') });
+  other.active.scriptURL = 'https://elsewhere.example/sw.js?v=abcdef0123456789';
+  const foreign = controller([other], { existing: other });
+  await flush();
+  assert.deepEqual(foreign.registered, ['sw.js'], 'only this site\'s own worker address is reused');
+});
+
+test('a look at the site made while offline does not delay the next one once back online', async () => {
+  const active = worker('activated');
+  const owner = registration({ active });
+  const page = controller([owner]);
+  await flush(); await flush();
+  assert.equal(active.latestAsks, 1, 'the first look found nothing (offline)');
+  active.latest = 'abcdef0123456789';
+  page.window.emit('online');
+  await flush(); await flush(); await flush();
+  assert.equal(active.latestAsks, 2, 'coming online looks again at once, not after two minutes');
+  // Coming online while a look is still on its way looks again when it returns.
+  const slow = worker('activated'), slowOwner = registration({ active: slow });
+  let answer;
+  slow.postMessage = function (message, ports) {
+    if (message.type === 'sg:offline-latest') {
+      this.latestAsks++;
+      const reply = v => ports[0].postMessage({ type: 'sg:offline-latest', id: message.id, v, version: this.version });
+      if (this.latestAsks === 1) answer = reply; else queueMicrotask(() => reply(null));
+      return;
+    }
+    worker().postMessage.call(this, message, ports);
+  };
+  const second = controller([slowOwner]);
+  await flush(); await flush();
+  assert.equal(slow.latestAsks, 1);
+  second.window.emit('online');
+  await flush();
+  assert.equal(slow.latestAsks, 1, 'one look at a time');
+  answer(null);
+  await flush(); await flush(); await flush();
+  assert.equal(slow.latestAsks, 2, 'the look made offline is followed by one made online');
 });

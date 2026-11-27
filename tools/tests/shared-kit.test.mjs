@@ -682,7 +682,7 @@ test('telemetry: round events made before readiness or before the portal says wa
   for (let i = 0; i < 50; i++) h.Kit.stats.round('L1');
   h.Kit.stats.end('win', 9);
   h.Kit.ready();
-  assert.deepEqual(h.sent, [{type: 'sg:ready', version: 1}], 'nothing until the portal says');
+  assert.deepEqual(h.sent.filter(m => m.type !== 'sg:round'), [{type: 'sg:ready', version: 1}], 'nothing until the portal says');
   preferences(h, {telemetry: true});
   runTimers(h);
   const expected = [['rs', 'L1', 1]], rx = ['rx', 0, 0, 0, 0, 0, 0, -1];
@@ -740,4 +740,22 @@ test('telemetry: every call is safe with any argument, and every payload survive
     assert.ok(m.ev.length <= 64);
     assert.ok(m.ev.every(e => ['rs', 'rx', 're', 'tu'].includes(e[0]) && e.slice(1).every(v => typeof v === 'string' ? v.length <= 24 : Array.isArray(v) || Number.isFinite(v))));
   }
+});
+
+test('the portal hears when a round starts and ends, whatever the statistics setting', () => {
+  for (const telemetry of [true, false, undefined]) {
+    const h = harness();
+    h.Kit.ready();
+    if (telemetry !== undefined) preferences(h, {telemetry});
+    const said = () => h.sent.filter(m => m.type === 'sg:round').map(m => m.phase + ':' + m.result);
+    h.Kit.stats.end('win');
+    assert.deepEqual(said(), [], 'no round, nothing to end');
+    h.Kit.stats.round('L1'); h.Kit.stats.round('L2');
+    h.Kit.stats.end('lose'); h.Kit.stats.end('lose');
+    h.Kit.stats.round('L2'); h.Kit.stats.end('quit');
+    assert.deepEqual(said(), ['start:', 'start:', 'end:l', 'start:', 'end:q']);
+  }
+  const alone = harness({embedded: false});
+  alone.Kit.stats.round('L1');
+  assert.deepEqual(alone.sent, [], 'a game opened on its own tells nobody');
 });

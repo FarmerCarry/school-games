@@ -1413,3 +1413,9 @@ and 233 to 50 ms (Road Hopper); Moto Madness's 90th percentile from 33 to 17 ms.
 four games load `gfx.js` (Kit gains one hook), so their built HTML grows by about 2.3 KB:
 limits `rail-rush` 142,000 → 144,500, `neon-slope` 122,000 → 124,500, `road-hopper`
 116,500 → 119,000, `moto-madness` 132,000 → 134,500.
+
+## Tank Splat budget after the 26 November merges, 26 November 2026
+
+Tank Splat's tutorial match (#110) and Kit's frame hook (#107) and round messages (#108) each
+fit on their own, but together bring the built Tank Splat page to **117,096 bytes**, 96 over its
+limit: `tank-splat` 117,000 → 117,500.

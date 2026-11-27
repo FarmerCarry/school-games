@@ -258,7 +258,7 @@
   listen('pointermove', engage);
   listen('wheel', engage);
   // The portal hears when a round starts and ends (sg:round), whether or not statistics
-  // are on, so it can offer the next game between rounds. Only the phase and the result's
+  // are on, so it can offer the next game, and its «new version» button, between rounds. Only the phase and the result's
   // letter: no score, no id.
   function roundNews(phase, code) {
     if (ready && !failed) tellPortal({ type: 'sg:round', version: 1, phase: phase, result: code || '' });

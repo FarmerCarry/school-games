@@ -569,6 +569,13 @@
   window.SGUpdateSafe = function () {
     return renderedHash !== null && !current && !frameEl() && parseRoute().name !== 'play';
   };
+  // An open game may offer the «new version» button (js/offline.js) only while no round is
+  // being played: Kit says when a round starts and ends (sg:round). Tapping reloads the page,
+  // which opens the same game again.
+  var roundOpen = false;
+  window.SGUpdateOffer = function () {
+    return renderedHash !== null && !!current && parseRoute().name === 'play' && !roundOpen;
+  };
   // The anonymous play statistics sender (js/telemetry.js, docs/TELEMETRY.md). It does
   // nothing unless the fast build gave it the school's statistics server; tm() skips a
   // hook the loaded sender does not have and never lets it break the portal.
@@ -678,7 +685,9 @@
     card.classList.add('show');
   }
   function onRound(data) {
-    if (data.phase === 'start') hideNext();
+    var open = data.phase === 'start';
+    if (open !== roundOpen) { roundOpen = open; window.dispatchEvent(new Event('sg:sessionchange')); }
+    if (open) hideNext();
     else if (data.phase === 'end' && !nextShut) {
       clearTimeout(nextTimer);
       nextTimer = setTimeout(showNext, NEXT_DELAY);
@@ -717,6 +726,7 @@
     tm('fail', kind);
     clearTimeout(readyTimer);
     frameReady = false;
+    roundOpen = false;
     $('#stage').classList.remove('loading');
     $('#stage').setAttribute('aria-busy', 'false');
     $('#stageMsg').hidden = false;
@@ -730,6 +740,7 @@
   }
   function mountFrame(slug) {
     clearTimeout(readyTimer);
+    roundOpen = false;
     portalFocus = false;
     frameReady = false;
     var stage = $('#stage');
