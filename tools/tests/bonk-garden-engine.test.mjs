@@ -1,7 +1,8 @@
 // Bonk Garden's pure engine in Node: bonks, the helmet, the golden broccoli, the bunny
 // friend, combos and the FRENZY, the hopping sock, the pie, the endless garden's hearts,
-// generous clicks, save repair, records and unlocks, and scripted players through every
-// level (a good player wins them all; a sloppy one still wins level 1).
+// generous clicks, double clicks, save repair, records and unlocks, and scripted players
+// through every level (a good player wins them all; a sloppy or a slow one still wins
+// level 1).
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -77,21 +78,34 @@ test('the twelve levels: three worlds, goals that grow, critters that get quicke
   assert.ok(BG.level(4).kinds.some(k => k[0] === 'bunny'));
 });
 
-test('difficulty: d=0 is slower and calmer than d=1, and level 1 stays gentle at any d', () => {
+test('difficulty: d=0 is slower and calmer than d=1, and level 1 is the same gentle garden at any d', () => {
   for (let n = 1; n <= 12; n++) {
     const e = BG.level(n, 0), h = BG.level(n, 1);
     assert.ok(e.stay > h.stay || n === 1, 'stay ' + n);
-    assert.ok(e.gap > h.gap, 'gap ' + n);
+    assert.ok(e.gap > h.gap || n === 1, 'gap ' + n);
     assert.ok(e.up <= h.up, 'up ' + n);
     const bunny = s => (s.kinds.find(k => k[0] === 'bunny') || [0, 0])[1];
     assert.ok(bunny(e) <= bunny(h), 'bunny ' + n);
     assert.deepEqual(plain(e.goals), plain(h.goals), 'the goals do not move with the difficulty');
   }
-  for (const d of [0, 0.5, 1]) {
+  // Level 1 ignores the DDA (one PC is shared by older and younger children).
+  for (const d of [0, 0.5, 1, undefined]) {
     const s = BG.level(1, d);
-    assert.ok(s.stay >= 2.3, 'level 1 critters stay up long');
+    assert.deepEqual(plain(s), plain(BG.level(1, 0)), 'level 1 at d=' + d);
+    assert.ok(s.stay >= 5, 'level 1 critters stay up long');
     assert.ok(s.up <= 2, 'level 1 shows at most two at once');
   }
+  // Its carrots stay up as long as its potatoes; later the carrot is the quick one.
+  const stays = (level, d) => {
+    const w = BG.create({ level, d, seed: 4 }), out = {};
+    run(w, 25, v => v.holes.forEach(h => { if (h.c && !out[h.c.id]) out[h.c.id] = [h.c.kind, h.c.stay]; }));
+    const by = k => Object.values(out).filter(c => c[0] === k).map(c => c[1]);
+    return { potato: Math.min(...by('potato')), carrot: Math.min(...by('carrot')) };
+  };
+  const one = stays(1, 1);
+  assert.ok(one.carrot >= 4.5 && one.potato >= 4.5, 'level 1 at d=1: ' + JSON.stringify(one));
+  const two = stays(2, 0.35);
+  assert.ok(two.carrot < two.potato * 0.8, 'level 2 carrots are quick: ' + JSON.stringify(two));
   assert.equal(BG.level(99, 0.35).n, 12, 'out-of-range levels are clamped');
   assert.equal(BG.level(-4, 0.35).n, 1);
 });
@@ -131,11 +145,11 @@ test('a bonk scores, grows the combo and squashes the critter; a whiff only coun
   assert.equal(w.holes[4].c.st, 'hit');
   r = swing(w, 4);
   assert.equal(r.ok, false, 'a squashed critter cannot be bonked twice');
-  assert.equal(w.score, 1); assert.equal(w.swings, 2); assert.equal(w.whiffs, 1);
+  assert.equal(w.score, 1); assert.equal(w.swings, 2); assert.equal(w.whiffs, 0, 'nor is it a whiff');
   run(w, BG.HIT + 0.05);
   assert.equal(w.holes[4].c, null, 'the squashed critter is gone after a moment');
   r = swing(w, -1);
-  assert.equal(r.ev[0].type, 'whiff'); assert.equal(w.swings, 3); assert.equal(w.whiffs, 2);
+  assert.equal(r.ev[0].type, 'whiff'); assert.equal(w.swings, 3); assert.equal(w.whiffs, 1);
   assert.equal(w.combo, 1, 'level 1 forgives misses');
   // The carrot, the crab and the alien are worth 1; the golden broccoli 5; the sock 2.
   for (const [kind, pts] of [['carrot', 1], ['crab', 1], ['alien', 1], ['disco', 5], ['sock', 2], ['pie', 2]]) {
@@ -196,6 +210,38 @@ test('from level 3 a whiff breaks the combo; levels 1 and 2 forgive it', () => {
     assert.equal(w.combo, breaks ? 0 : 2, 'level ' + n);
     assert.equal(r.ev[0].broke, breaks);
   }
+});
+
+test('a double click on a critter just bonked is harmless: no whiff, the combo and the jar stay', () => {
+  for (const level of [3, 5, 12]) {
+    const w = still(level), base = BG.WORLDS[w.spec.world].base;
+    // A front-row critter: its body is nearer the middle-row hole behind it than its own.
+    const front = w.holes.findIndex(h => h.row === 2 && h.col === 1), h = w.holes[front];
+    const x = h.x, y = h.y - h.h * 0.5;
+    w.combo = 4;
+    put(w, front, base);
+    assert.equal(BG.holeAt(w, x, y), front);
+    assert.equal(swing(w, BG.holeAt(w, x, y)).ok, true);
+    run(w, 0.1);
+    assert.equal(BG.holeAt(w, x, y), front, 'the second click still means the squashed critter');
+    for (let k = 0; k < 2; k++) {
+      const r = swing(w, BG.holeAt(w, x, y));
+      assert.equal(r.ok, false);
+      assert.deepEqual(plain(r.ev.map(e => e.type)), ['again'], 'level ' + level);
+    }
+    assert.deepEqual([w.combo, w.bonks, w.whiffs, w.swings, w.score], [5, 1, 0, 3, 1], 'level ' + level);
+    run(w, BG.HIT);
+    assert.equal(swing(w, front).ev[0].type, 'whiff', 'once it is gone, the empty hole is a whiff again');
+    assert.equal(w.combo, 0);
+  }
+  // A squashed critter never wins over a live one near the click.
+  const w = still(5), mid = w.holes.findIndex(h => h.row === 1 && h.col === 1), back = w.holes.findIndex(h => h.row === 0 && h.col === 1);
+  put(w, mid, 'crab', { st: 'hit' }); put(w, back, 'crab');
+  assert.equal(BG.holeAt(w, w.holes[back].x, w.holes[back].y - 20), back);
+  // A squashed bunny bonked again costs nothing more.
+  const v = still(4); v.score = 9; put(v, 0, 'bunny');
+  swing(v, 0); swing(v, 0);
+  assert.deepEqual([v.score, v.ouches, v.whiffs], [6, 1, 0]);
 });
 
 test('ten bonks in a row start the FRENZY: every hole pops, points x2, the giant hammer bonks the neighbours', () => {
@@ -467,6 +513,18 @@ test('every level is won by a scripted good player at any difficulty, and three 
       if (d === 0.35 && w.stars === 3) three++;
     }
     assert.ok(three >= 3, `level ${n}: three stars in ${three}/5`);
+  }
+});
+
+// A slow five-year-old: a second and more to notice a critter, a second per 230 px to
+// get the hammer there, a rest between swings, and a third of the swings miss.
+const SLOW = { react: 1.2, travel: 1.0, cadence: 0.6, bunny: 0, whiff: 0.3 };
+const SLOWER = { react: 1.5, travel: 1.2, cadence: 0.6, bunny: 0, whiff: 0.2 };
+test('level 1 is won by a slow player in nearly every seed, whatever the DDA says', () => {
+  for (const P of [SLOW, SLOWER]) for (const d of [0.35, 1]) {
+    let won = 0;
+    for (let seed = 1; seed <= 200; seed++) if (aimed(1, d, seed, P).stars >= 1) won++;
+    assert.ok(won >= 190, `react ${P.react} s, d=${d}: ${won}/200`);
   }
 });
 

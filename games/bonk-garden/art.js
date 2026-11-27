@@ -660,8 +660,9 @@
         if (o.keys > 0) keycap(h, o.keys, o.lit === i);
       }
     };
-    // Effects over the field: flying helmets, dust, comic bursts and cream.
-    v.drawFx = function (t) {
+    // Effects over the field: dust and flying helmets (the comic bursts and the cream are
+    // drawn on their own, over the hammer).
+    v.drawFx = function () {
       var i;
       for (i = 0; i < v.puffs.length; i++) {
         var p = v.puffs[i], k = p.t / 0.36;
@@ -684,7 +685,9 @@
         }
         ctx.restore();
       }
-      for (i = 0; i < v.bursts.length; i++) {
+    };
+    v.drawBursts = function () {
+      for (var i = 0; i < v.bursts.length; i++) {
         var b = v.bursts[i], q = b.t / 0.5, s = (v.calm ? 1 : q < 0.25 ? 0.5 + q * 2.6 : 1.15 - (q - 0.25) * 0.2) * b.s;
         ctx.globalAlpha = q > 0.7 ? M.max(0, (1 - q) / 0.3) : 1;
         ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.rot); ctx.scale(s, s);

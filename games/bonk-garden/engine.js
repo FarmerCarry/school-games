@@ -51,7 +51,7 @@
   // stay: seconds up for a weight-1 critter; gap: seconds between pops; up: most at once;
   // goals: the scores for 1, 2 and 3 stars; intro: the critter this level brings in.
   var L = [
-    { w: 0, dur: 30, kinds: [['base', 3], ['carrot', 1]], stay: 2.6, gap: 1.05, up: 2, goals: [5, 14, 24] },
+    { w: 0, dur: 30, kinds: [['base', 3], ['carrot', 1]], stay: 5, gap: 1.05, up: 2, goals: [5, 14, 24] },
     { w: 0, dur: 40, kinds: [['base', 3], ['carrot', 1.5], ['helmet', 1.3]], stay: 2.25, gap: 0.95, up: 2, goals: [8, 26, 46], intro: 'helmet' },
     { w: 0, dur: 40, kinds: [['base', 3], ['carrot', 1.5], ['helmet', 1], ['disco', 0.45]], stay: 1.95, gap: 0.9, up: 3, goals: [10, 30, 56], intro: 'disco' },
     { w: 0, dur: 40, kinds: [['base', 3], ['carrot', 1.5], ['helmet', 1], ['disco', 0.4], ['bunny', 1]], stay: 1.85, gap: 0.86, up: 3, goals: [10, 30, 56], intro: 'bunny' },
@@ -79,9 +79,11 @@
   BG.ENDLESS_AT = 4; // winning level 4 opens the endless garden
 
   // A level's numbers with the difficulty d (0 easy .. 1 hard) applied. n: 1..12.
+  // Level 1 ignores d (the DDA is shared by the whole PC): it is the same gentle garden for
+  // every child, and its critters, carrots too, stay up long enough for a slow five-year-old.
   BG.level = function (n, d) {
     n = clamp(M.floor(num(n, 1)), 1, BG.LEVELS_N);
-    d = clamp(num(d, 0.35), 0, 1);
+    d = n === 1 ? 0 : clamp(num(d, 0.35), 0, 1);
     var b = L[n - 1], world = BG.WORLDS[b.w];
     var stayF = 1.22 - 0.44 * d, gapF = 1.08 - 0.16 * d;
     var kinds = b.kinds.map(function (k) {
@@ -92,7 +94,7 @@
       stay: b.stay * stayF, gap: b.gap * gapF, up: b.up + (d > 0.66 && n > 1 ? 1 : 0),
       goals: b.goals.slice(), intro: b.intro || '', whiffBreaks: n >= 3, d: d
     };
-    if (n === 1) { spec.stay = M.max(2.3, spec.stay); spec.up = M.min(2, spec.up); }
+    if (n === 1) { spec.stay = b.stay; spec.even = true; }
     return spec;
   };
   // The endless garden at a stage (one stage every 12 s): faster and busier as it goes.
@@ -194,7 +196,7 @@
     var k = BG.KINDS[kind], h = w.holes[i];
     var c = {
       id: opts.id || w.nextId++, kind: kind, st: 'rise', t: 0,
-      stay: opts.stay || w.spec.stay * k.stay * (0.9 + w.rnd() * 0.2),
+      stay: opts.stay || w.spec.stay * (w.spec.even ? 1 : k.stay) * (0.9 + w.rnd() * 0.2),
       hp: k.hp, helmet: kind === 'helmet', hops: opts.hops != null ? opts.hops : (k.hops || 0), free: !!opts.free,
       wind: 0, mood: M.floor(w.rnd() * 4), born: w.t
     };
@@ -305,18 +307,20 @@
   };
 
   // The hole a click at (x, y) means: one with a critter near the click if any (a click
-  // near a critter counts), otherwise the hole under it, otherwise -1 (the grass).
+  // near a critter counts), then one with a critter squashed near it (the second click of
+  // a double click), otherwise the hole under it, otherwise -1 (the grass).
   BG.holeAt = function (w, x, y) {
-    var best = -1, bestD = 1e12, any = -1, anyD = 1e12;
+    var best = -1, bestD = 1e12, flat = -1, flatD = 1e12, any = -1, anyD = 1e12;
     for (var i = 0; i < w.holes.length; i++) {
       var h = w.holes[i], dx = x - h.x, dy = y - h.y;
       if (M.abs(dx) > h.rx * 1.22 || dy < -h.h * 1.3 || dy > h.ry * 2.4) continue;
       var cy = y - (h.y - h.h * 0.5), cd = dx * dx + cy * cy;
-      if (bonkable(h.c) && cd < bestD) { bestD = cd; best = i; }
+      if (bonkable(h.c)) { if (cd < bestD) { bestD = cd; best = i; } }
+      else if (h.c && h.c.st === 'hit' && cd < flatD) { flatD = cd; flat = i; }
       var hd = dx * dx + dy * dy * 2;
       if (hd < anyD) { anyD = hd; any = i; }
     }
-    return best >= 0 ? best : any;
+    return best >= 0 ? best : flat >= 0 ? flat : any;
   };
   // Neighbours above, below, left and right (the giant frenzy hammer bonks them too).
   BG.neighbours = function (w, i) {
@@ -373,6 +377,9 @@
       }
       return ok;
     }
+    // Bonking a critter that is already squashed (young children double-click) is no
+    // whiff: it never breaks the combo or empties the frenzy jar.
+    if (h && h.c && h.c.st === 'hit') { emit(w, { type: 'again', hole: i }); return false; }
     w.whiffs++;
     var broke = w.spec.whiffBreaks && w.frenzy <= 0 && w.combo > 0;
     if (broke) w.combo = 0;

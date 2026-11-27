@@ -1,7 +1,8 @@
 // Bonk Garden in real Chromium: real keys and clicks bonk critters, pause freezes the
 // garden, restart starts over, a won and a lost round reach the result screen, the levels
-// and hammers screens, the endless garden, saves that survive a reload or fail, and no
-// errors or network requests at any point.
+// and hammers screens, the endless garden, double clicks, the hammer starting at the
+// pointer, saves that survive a reload or fail, and no errors or network requests at any
+// point.
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import path from 'node:path';
@@ -94,6 +95,8 @@ test('Enter starts; a hole key swings; a click bonks a critter; Esc pauses and f
   s = await state(page);
   assert.equal(s.screen, 'play');
   assert.deepEqual([s.level, s.holes, s.score, s.swings], [1, 9, 0, 0]);
+  const ham = await page.evaluate(() => { const h = __game.ham; return __game.point(h.x, h.y); });
+  assert.deepEqual([Math.round(ham.x), Math.round(ham.y)], [1000, 520], 'the hammer starts where the pointer is');
   await step(page, 60);
   assert.equal((await state(page)).swings, 0, 'nothing swings without input');
   await page.keyboard.press('KeyS');
@@ -131,9 +134,12 @@ test('Enter starts; a hole key swings; a click bonks a critter; Esc pauses and f
 
 test('a first round from #btnPlay is won by clicking critters: stars, Next, the coach ends, and a reload keeps it all', async t => {
   const page = await game(t, { save: undefined, reduced: false });
+  const play = await page.locator('#btnPlay').boundingBox();
   await page.click('#btnPlay');
   let s = await state(page);
   assert.equal(s.screen, 'play');
+  const ham = await page.evaluate(() => { const h = __game.ham; return __game.point(h.x, h.y); });
+  assert.ok(Math.abs(ham.x - (play.x + play.width / 2)) < 2 && Math.abs(ham.y - (play.y + play.height / 2)) < 2, 'the hammer starts on Play, under the hidden pointer');
   assert.equal(s.coach, false);
   await until(page, 's.hint >= 0', 60 * 4);
   assert.ok((await state(page)).hint >= 0, 'the first round shows the hand over a critter');
@@ -164,7 +170,7 @@ test('a round with no input is lost: try again, no Next, and Enter plays the sam
   const s = await state(page);
   assert.deepEqual([s.score, s.stars, s.swings], [0, 0, 0]);
   assert.equal(await page.locator('#resTitle').textContent(), 'حاول مرة أخرى!');
-  assert.match(await page.locator('#resSub').textContent(), /تحتاج 5 نقاط/);
+  assert.equal(await page.locator('#resSub').textContent(), 'تحتاج 5 نقاط لنجمة');
   assert.equal(await page.locator('#btnNext').isVisible(), false);
   assert.equal((await stored(page)).stars[0], 0);
   await page.keyboard.press('Enter');
@@ -196,8 +202,44 @@ test('the levels screen: locked levels stay shut, level 4 opens from it and the 
   await page.click('#btnHome');
   assert.equal((await state(page)).screen, 'title');
   await page.click('#btnLevels');
+  assert.equal(await page.locator('.lvl').nth(0).getAttribute('aria-label'), 'المرحلة 1، نجمتان');
+  assert.equal(await page.locator('.lvl').nth(1).getAttribute('aria-label'), 'المرحلة 2، نجمة واحدة');
   await page.keyboard.press('Escape');
   assert.equal((await state(page)).screen, 'title');
+});
+
+test('a double click on a critter is one bonk, never a miss: the combo and the frenzy jar stay', async t => {
+  const save = blank(); save.stars[0] = 1; save.stars[1] = 1;
+  const page = await game(t, { save });
+  await page.click('#btnLevels');
+  await page.locator('.lvl').nth(2).click();
+  assert.deepEqual(await page.evaluate(() => [__game.state.level, __game.world.spec.whiffBreaks]), [3, true]);
+  await page.evaluate(() => {
+    const miss = Kit.track.miss; window.misses = 0;
+    Kit.track.miss = function () { window.misses++; return miss.apply(this, arguments); };
+    const w = __game.world; w.spec.gap = 1e6; w.combo = 4;
+    w.holes.forEach(h => { h.c = null; });
+    w.holes[7].c = { id: 998, kind: 'potato', st: 'up', t: 0, stay: 99, hp: 1, helmet: false, hops: 0, free: false, wind: 0, mood: 0, born: 0 };
+  });
+  const at = await page.evaluate(() => __game.hole(7));
+  await page.mouse.dblclick(at.x, at.y);
+  await step(page, 1);
+  await step(page, 6);
+  await page.mouse.click(at.x, at.y);
+  await step(page, 1);
+  const s = await state(page);
+  assert.deepEqual([s.combo, s.bonks, s.whiffs, s.swings, s.score], [5, 1, 0, 3, 1]);
+  assert.equal(await page.evaluate(() => window.misses), 0, 'no miss for the statistics');
+});
+
+test('a lost later level asks for its goal in good Arabic', async t => {
+  const save = blank(); save.stars.fill(1, 0, 5);
+  const page = await game(t, { save });
+  await page.click('#btnLevels');
+  await page.locator('.lvl').nth(5).click();
+  await page.evaluate(() => { __game.world.t = __game.world.spec.dur - 0.1; });
+  assert.ok(await until(page, 's.screen === "result"', 60 * 3));
+  assert.equal(await page.locator('#resSub').textContent(), 'تحتاج 11 نقطة لنجمة');
 });
 
 test('the hammers: an unlocked one is worn and saved, a locked one is not', async t => {
@@ -211,6 +253,8 @@ test('the hammers: an unlocked one is worn and saved, a locked one is not', asyn
   assert.equal((await state(page)).hammer, 'chicken');
   await page.locator('.ham').nth(7).click();
   assert.equal((await stored(page)).hammer, 1, 'the golden hammer needs 31 stars');
+  assert.equal(await page.locator('.ham').nth(2).getAttribute('aria-label'), 'الخبز الطويل، تحتاج 7 نجوم');
+  assert.equal(await page.locator('.ham').nth(7).getAttribute('aria-label'), 'المطرقة الذهبية، تحتاج 31 نجمة');
   await page.keyboard.press('Escape');
   assert.equal((await state(page)).screen, 'title');
 });

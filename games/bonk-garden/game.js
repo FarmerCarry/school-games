@@ -28,18 +28,19 @@
     return true;
   }
   // How long critters stay up, how often they pop and how many at once follow how the
-  // rounds go on this PC (passed into the engine as one number, 0 easy .. 1 hard).
+  // rounds go on this PC (passed into the engine as one number, 0 easy .. 1 hard; level 1
+  // ignores it and stays gentle for every child).
   var dda = Kit.dda('bonk-garden', { id: 'main', target: 0.72 });
 
   /* --------------------------------------------------------------- state */
   var screen = 'title', world = null, demo = null, level = 1, roundOpen = false, time = 0;
   var floats = [], banner = null, flash = 0, frenzyFlash = 0, fx = Kit.particles(), shake = Kit.shake();
-  var swings = [], ham = { x: 1170, y: 640, sw: 9, giant: 0 }, lit = -1, litT = 0;
+  var swings = [], ham = { x: 640, y: 420, sw: 9, giant: 0 }, lit = -1, litT = 0;
   var hint = -1, hintShown = false, intro = null, starPop = [0, 0, 0], starsHad = 0, heartPop = 0, lastTick = -1, comboPop = 0;
   var resultT = 0, resultStars = 0, resultSounds = 0, demoHam = { x: 900, y: 420, sw: 9, target: -1, wait: 0 };
   var CHEERS = ['بونك!', 'بونك!', 'بونك!', 'طاخ!', 'بوينغ!', 'بونك!'];
   var INTROS = {
-    helmet: 'خوذة! اضربه مرتين!', disco: 'بروكلي ذهبي: +5!', bunny: 'لا تضرب الأرنب!', crab: 'سلطعون الشاطئ!',
+    helmet: 'خوذة! اضربه مرتين!', disco: 'بروكلي ذهبي: \u2066+5\u2069!', bunny: 'لا تضرب الأرنب!', crab: 'سلطعون الشاطئ!',
     sock: 'الجورب يقفز! اتبعه!', pie: 'أسرع قبل الكريمة!', alien: 'فضائي نطّاط!'
   };
   var SCREENS = { title: 'scrTitle', pause: 'scrPause', result: 'scrResult', levels: 'scrLevels', hammers: 'scrHammers' };
@@ -51,11 +52,13 @@
     Kit.keys.reset();
     swings.length = 0;
     dirty = true;
-    if (name === 'play') focusGame();
+    if (name === 'play') { focusGame(); if (follow) aim(); }
   }
   function focusGame() { try { canvas.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }
   function say(text) { $('live').textContent = text; }
   function hammerId() { return BG.HAMMERS[save.hammer].id; }
+  // Arabic counted nouns: 3..10 take the plural, 11 and up the singular.
+  function count(n, few, many) { return n + ' ' + (n > 2 && n < 11 ? few : many); }
 
   /* ------------------------------------------------------------ the title */
   function refreshTitle() {
@@ -129,7 +132,7 @@
     $('resScore').textContent = Kit.fmt(score);
     $('resBest').hidden = !res.newBest;
     var best = level ? save.best[level - 1] : save.endless;
-    $('resSub').textContent = level && s === 0 ? 'تحتاج ' + world.spec.goals[0] + ' نقاط لنجمة' : 'أفضل نتيجة: ' + Kit.fmt(best);
+    $('resSub').textContent = level && s === 0 ? 'تحتاج ' + count(world.spec.goals[0], 'نقاط', 'نقطة') + ' لنجمة' : 'أفضل نتيجة: ' + Kit.fmt(best);
     var note = $('resNote'), text = '';
     note.classList.add('plain');
     if (res.hammers.length) {
@@ -192,7 +195,7 @@
       b.querySelector('b').classList.toggle('off', !open); b.querySelector('.ss').classList.toggle('off', !open); b.querySelector('.lk').classList.toggle('off', open);
       var ss = b.querySelectorAll('.ss svg');
       for (var k = 0; k < 3; k++) ss[k].classList.toggle('on', k < st);
-      b.setAttribute('aria-label', open ? 'المرحلة ' + n + '، ' + st + ' نجوم' : 'المرحلة ' + n + ' مقفلة');
+      b.setAttribute('aria-label', open ? 'المرحلة ' + n + '، ' + ['بلا نجوم', 'نجمة واحدة', 'نجمتان', '3 نجوم'][st] : 'المرحلة ' + n + ' مقفلة');
     });
     var e = $('btnEndless'), eo = BG.endlessOpen(save);
     e.classList.toggle('locked', !eo);
@@ -235,7 +238,7 @@
       b.classList.toggle('locked', !open);
       b.querySelector('span').innerHTML = open ? (save.hammer === i ? '✔' : '') : hm.stars + ' <svg aria-hidden="true"><use href="#i-star"/></svg>';
       b.setAttribute('aria-pressed', String(save.hammer === i));
-      b.setAttribute('aria-label', hm.name + (open ? '' : '، تحتاج ' + hm.stars + ' نجمة'));
+      b.setAttribute('aria-label', hm.name + (open ? '' : '، تحتاج ' + count(hm.stars, 'نجوم', 'نجمة')));
     });
   }
   function openHammers() { J.select(); refreshHammers(); setScreen('hammers'); }
@@ -283,14 +286,20 @@
     ham.x = p.x; ham.y = p.y;
     if (swings.length < 8) swings.push({ x: p.x, y: p.y, hole: -2 });
   });
-  var lastMove = { x: -1, y: -1 };
-  window.addEventListener('pointermove', function (e) {
-    // The hammer follows the pointer only during play, and only when it really moved
-    // (a browser can repeat a move event when nothing moved).
-    if (screen !== 'play' || (e.clientX === lastMove.x && e.clientY === lastMove.y)) return;
-    lastMove.x = e.clientX; lastMove.y = e.clientY;
-    var p = fit.toLogical(e.clientX, e.clientY);
+  // The hammer follows the pointer only during play, and only when it really moved (a
+  // browser can repeat a move event when nothing moved). Play starts with the hammer where
+  // the pointer moved to meanwhile (on Play or Resume, say), or mid-field before the mouse
+  // has moved at all; a keyboard player's hammer stays at its last hole.
+  var ptr = null, follow = true;
+  function aim() {
+    var p = ptr ? fit.toLogical(ptr.x, ptr.y) : { x: 640, y: 420 };
     ham.x = M.max(0, M.min(W, p.x)); ham.y = M.max(0, M.min(H, p.y));
+    follow = false;
+  }
+  window.addEventListener('pointermove', function (e) {
+    if (ptr && e.clientX === ptr.x && e.clientY === ptr.y) return;
+    ptr = { x: e.clientX, y: e.clientY }; follow = true;
+    if (screen === 'play') aim();
   });
 
   /* -------------------------------------------------------- sounds and fx */
@@ -391,7 +400,7 @@
         break;
       case 'frenzy':
         J.levelUp(); siren();
-        showBanner('جنون!', '#ff9fd0', 1.6, 'كل الحفر! النقاط ×2');
+        showBanner('جنون!', '#ff9fd0', 1.6, 'كل الحفر! النقاط \u2066×2\u2069');
         flash = 1; frenzyFlash = 1; shake.add(14);
         fx.burst(640, 360, { count: 80, colors: ['#ff5f7e', '#ffe14f', '#4fd8ff', '#7dffb0', '#b46bff'], speed: 620, life: 1.1, size: 10 });
         Kit.stats.busy();
@@ -399,6 +408,9 @@
         break;
       case 'calm':
         J.whoosh(0.3);
+        break;
+      case 'again': // another bonk on a squashed critter: a squeak, never a miss
+        J.pop(0.25);
         break;
       case 'escape':
         if (ev.heart) {
@@ -610,11 +622,16 @@
     BG.rrect(ctx, -26, -6, 52, 54, 20); ctx.fill(); ctx.stroke();
     ctx.restore();
   }
-  function bubble(str, x, y, color) {
+  // Speech bubbles sit in a strip under the HUD, above every critter, with a tail down to
+  // the critter they mean: they never hide the critter in the hole behind.
+  function bubble(str, x, color) {
+    var y = 162;
     ctx.font = '700 32px Fredoka'; ctx.direction = 'rtl';
     var tw = ctx.measureText(str).width + 44;
-    var bx = M.max(10, M.min(W - tw - 10, x - tw / 2));
-    panel(bx, y - 30, tw, 60, color || 'rgba(255,95,126,0.95)');
+    var bx = M.max(96, M.min(W - tw - 10, x - tw / 2)), tx = M.max(bx + 30, M.min(bx + tw - 30, x));
+    panel(bx, y - 30, tw, 60, color);
+    ctx.beginPath(); ctx.moveTo(tx - 15, y + 26); ctx.lineTo(tx, y + 46); ctx.lineTo(tx + 15, y + 26);
+    ctx.fill(); ctx.stroke();
     text(str, bx + tw / 2, y + 1, 32, '#ffffff', 'center', true);
   }
   function drawHammerAt(hs, id, scale) {
@@ -633,7 +650,7 @@
     if (shake.power) ctx.translate(shake.x, shake.y);
     var look = playing ? ham : demoHam;
     view.render(w, { t: time, look: look, keys: playing ? (save.keys ? 0.95 : 0.4) : 0, lit: litT > 0 ? lit : -1 });
-    view.drawFx(time);
+    view.drawFx();
     fx.draw(ctx);
     ctx.restore();
     if (playing && world.frenzy > 0) {
@@ -646,15 +663,16 @@
       if (hint >= 0 && !save.coach) {
         var hh = world.holes[hint];
         drawHand(hh.x + 10, hh.y - hh.h * 0.3, time);
-        if (!bannerUp()) bubble('انقر عليه!', hh.x, hh.y - hh.h - 50);
-      }
-      if (intro && !bannerUp()) { var ih = world.holes[intro.hole]; bubble(intro.text, ih.x, ih.y - ih.h - 48, intro.text === INTROS.bunny ? 'rgba(255,79,109,0.96)' : 'rgba(42,29,78,0.9)'); }
+        if (!bannerUp()) bubble('انقر عليه!', hh.x, 'rgba(255,95,126,0.95)');
+      } else if (intro && !bannerUp()) bubble(intro.text, world.holes[intro.hole].x, intro.text === INTROS.bunny ? 'rgba(255,79,109,0.96)' : 'rgba(42,29,78,0.9)');
       drawHammerAt(ham, hammerId(), 1 + 0.45 * ham.giant);
-      view.drawSplats();
-      drawHud();
-    } else if (screen === 'title') {
-      drawHammerAt(demoHam, hammerId(), 1);
-    }
+    } else if (screen === 'title') drawHammerAt(demoHam, hammerId(), 1);
+    // the comic bursts over the hammer, so its head never hides the word
+    ctx.save();
+    if (shake.power) ctx.translate(shake.x, shake.y);
+    view.drawBursts();
+    ctx.restore();
+    if (playing) { view.drawSplats(); drawHud(); }
     for (var i = 0; i < floats.length; i++) {
       var p = floats[i];
       ctx.globalAlpha = M.max(0, M.min(1, p.life * 1.6));
@@ -712,6 +730,7 @@
       get state() { return snapshot(); },
       get save() { return JSON.parse(JSON.stringify(save)); },
       get world() { return world; },
+      get ham() { return { x: ham.x, y: ham.y }; },
       point: function (x, y) { var r = canvas.getBoundingClientRect(); return { x: r.left + x * fit.scale, y: r.top + y * fit.scale }; },
       // where the critter of hole i stands, in page pixels (for tests)
       hole: function (i) { var h = world.holes[i]; return this.point(h.x, h.y - h.h * 0.5); }
