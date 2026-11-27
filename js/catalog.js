@@ -174,7 +174,7 @@ window.GAMES = [
   { slug: 'bonk-garden', roundMinutes: [1, 2], inputStyle: 'pointer', title: 'حديقة البونك', en: 'Bonk Garden whack a mole bonk hammer silly veggies potato reaction squeaky rubber chicken', tags: 'بونك اضرب الخلد خلد مطرقة بطاطس جزر خضار حديقة ضرب سريع ردة فعل دجاجة مطاطية whack mole', cats: ['arcade', 'challenge'], players: '1', color: '#7cd651',
     blurb: 'بطاطس وجزر بعيون مضحكة تقفز من الحفر! اضربها بمطرقتك المصفّرة: بونك! واصنع كومبو جنونيًا!',
     tip: 'عشر ضربات متتالية بلا خطأ تشعل <b>الجنون</b>: كل الحفر تفتح والمطرقة تصير عملاقة!',
-    controls: [{ keys: ['انقر'], action: 'اضرب المشاغب' }, { keys: ['Q', 'W', 'E', 'A', 'S', 'D', 'Z', 'X', 'C'], action: 'اضرب الحفرة بلوحة المفاتيح' }, { keys: ['P', 'Esc'], action: 'استراحة' }] },
+    controls: [{ keys: ['انقر'], action: 'اضرب المشاغب' }, { keys: ['Q', 'W', 'E', 'R', 'A', 'S', 'D', 'F', 'Z', 'X', 'C', 'V'], action: 'اضرب الحفرة بلوحة المفاتيح' }, { keys: ['P', 'Esc'], action: 'استراحة' }] },
   { slug: 'cloud-hop', roundMinutes: [1, 3], inputStyle: 'mixed', title: 'نطّة السحاب', en: 'Cloud Hop bouncy marshmallow jumper vertical jump clouds sky climb endless', tags: 'نط قفز سحاب غيوم مارشميلو مارشي سماء فضاء ترامبولين صعود jump clouds', cats: ['arcade', 'challenge'], players: '1', color: '#6ec8ff',
     blurb: 'مارشي النطّاط يقفز وحده! وجّهه من غيمة إلى غيمة، ارتدّ على الترامبولين، وطِر بقبعة المروحة إلى الفضاء!',
     tip: 'اخرج من طرف الشاشة لتظهر من الطرف الآخر! واقفز على رؤوس الحمام الغاضب لتطير أعلى.',
