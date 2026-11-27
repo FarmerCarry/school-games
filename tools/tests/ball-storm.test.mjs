@@ -2,8 +2,9 @@
 // and #btnPlay start; a canvas click or a stray key does not), real keys and the mouse move
 // the paddle and launch, pause freezes and resume goes on, restart resets, a won and a lost
 // level both reach the result card, progress survives a reload, the level map, the shop,
-// the endless lock, a new endless best, a failing save shows its retry badge, and no errors
-// or network requests.
+// the endless lock, a new endless best, a failing save shows its retry badge, keys mashed
+// as the result card comes up skip nothing, reduced motion drops the flash and the TNT rings,
+// a restored canvas context is redrawn at its real scale, and no errors or network requests.
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import path from 'node:path';
@@ -20,8 +21,8 @@ after(async () => { await browser?.close(); await server?.close(); });
 const KEY = 'sg:ball-storm:save';
 const won = n => ({ v: 1, stars: Array.from({ length: 15 }, (_, i) => (i < n ? 2 : 0)), best: Array.from({ length: 15 }, (_, i) => (i < n ? 1000 : 0)), endless: 0, ball: 0, paddle: 0, coach: true, storm: 9, seen: 0 });
 // The game with its frame loop stepped by hand, and storage that can be made to fail.
-async function game(t, { save, failSave = false, reduced = true } = {}) {
-  const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, reducedMotion: reduced ? 'reduce' : 'no-preference' });
+async function game(t, { save, failSave = false, reduced = true, viewport = { width: 1280, height: 720 } } = {}) {
+  const context = await browser.newContext({ viewport, reducedMotion: reduced ? 'reduce' : 'no-preference' });
   const page = await context.newPage(), errors = [], requests = [];
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
@@ -191,7 +192,12 @@ test('winning level 1: the result card with stars, the next level, and progress 
   await page.keyboard.up('ArrowLeft');
   await page.keyboard.press('Space');
   assert.ok(await until(page, 's.screen === "result"', 60 * 240), 'level 1 is won (its bubble floor never pops)');
+  // Space mashed through the clear: the card stays up, with its stars and any unlock.
+  for (const k of ['Space', 'Enter', 'KeyR']) await page.keyboard.press(k);
+  await step(page, 20);
+  await page.keyboard.press('Space');
   let s = await state(page);
+  assert.equal(s.screen, 'result', 'keys in the first moment of the card skip nothing');
   assert.equal(s.result.won, true);
   assert.ok(s.result.stars >= 1);
   assert.equal(await page.locator('#scrResult').isVisible(), true);
@@ -247,6 +253,9 @@ test('losing the last life: the result card says how close it was, and R plays t
   assert.equal(await page.evaluate(() => Kit.keys.isNativeTarget(document.activeElement)), false, 'no button takes the game keys');
   assert.equal(await page.locator('#btnAgain').evaluate(b => b.classList.contains('ring')), true, 'Again glows as the default');
   assert.equal((await stored(page)).stars[5], 0, 'a loss gives no stars');
+  await page.keyboard.press('KeyR');
+  assert.equal((await state(page)).screen, 'result', 'R waits until the card has been seen');
+  await step(page, 40);
   await page.keyboard.press('KeyR');
   s = await state(page);
   assert.equal(s.screen, 'play');
@@ -315,6 +324,7 @@ test('a new endless best is celebrated: no fail sound, a fanfare and a happy car
   assert.equal(sounds.includes('fail'), false, 'no fail sound: ' + sounds);
   assert.ok(sounds.includes('levelUp'), 'a fanfare: ' + sounds);
   assert.equal(await page.locator('#scrResult .card').evaluate(c => c.classList.contains('lose')), false);
+  await step(page, 40);
   await page.keyboard.press('KeyR');
   assert.equal((await state(page)).mode, 'endless', 'R plays endless again');
 });
@@ -333,4 +343,69 @@ test('a save that fails says so and the game keeps going; Retry saves once stora
   await page.evaluate(() => { bs.failSave = false; });
   await page.locator('.sg-save-status button').click();
   assert.ok(await stored(page), 'saved after Retry');
+});
+
+// Pops the last brick, a TNT, so one frame has a boom and the level's clear; counts the
+// white full-field flashes painted and the boom rings.
+async function lastTnt(page) {
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Space');
+  await step(page, 2);
+  return page.evaluate(() => {
+    const ctx = document.getElementById('game').getContext('2d'), fill = ctx.fillRect;
+    let flashes = 0, rings = 0;
+    ctx.fillRect = function (x, y, w, h) {
+      if (w >= 1280 && h >= 720 && /^rgba\(255, 255, 255/.test(String(this.fillStyle))) flashes++;
+      return fill.apply(this, arguments);
+    };
+    const w = __game.world, { F, T } = BS, k = 5 * F.COLS + 10;
+    w.type.fill(0); w.hp.fill(0); w.rings.length = 0; w.caps.length = 0;
+    w.type[k] = T.TNT; w.hp[k] = 1; w.max[k] = 1; w.left = 1;
+    w.n = 1; w.x[0] = F.GX + 10 * F.CW + F.CW / 2; w.y[0] = w.oy + 6 * F.CH + F.RAD + 3; w.dx[0] = 0; w.dy[0] = -1;
+    for (let i = 0; i < 20; i++) { bs.step(1); rings = Math.max(rings, __game.view.booms.length); }
+    return { flashes, rings, phase: w.phase };
+  });
+}
+test('reduced motion: a TNT and a cleared level flash nothing and draw no boom rings', async t => {
+  const page = await game(t);
+  const calm = await lastTnt(page);
+  assert.equal((await state(page)).calm, true);
+  assert.equal(calm.phase, 'clear', 'the TNT was the last brick');
+  assert.equal(calm.flashes, 0, 'no white flash');
+  assert.equal(calm.rings, 0, 'no boom ring');
+  // With motion on, the same frame flashes and rings.
+  const lively = await lastTnt(await game(t, { reduced: false }));
+  assert.equal(lively.phase, 'clear');
+  assert.ok(lively.flashes > 5, 'the clear flashes: ' + lively.flashes);
+  assert.equal(lively.rings, 1, 'the boom ring');
+});
+
+test('the canvas: frames read no transform back, and a restored context is redrawn at its real scale', async t => {
+  const page = await game(t, { viewport: { width: 1920, height: 1080 } });
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Space');
+  const r = await page.evaluate(() => {
+    const cv = document.getElementById('game'), ctx = cv.getContext('2d'), v = __game.view, w = __game.world;
+    let reads = 0;
+    const get = ctx.getTransform;
+    ctx.getTransform = function () { reads++; return get.apply(this, arguments); };
+    // every brick wobbles (a fresh hit) while the frames are drawn
+    for (let i = 0; i < 30; i++) { for (let k = 0; k < w.hitAt.length; k++) if (w.type[k]) w.hitAt[k] = w.t - 0.05; bs.step(1); }
+    const keys = Object.keys(v.sprites);
+    const before = { pr: v.pr, bg: v.bg, a: get.call(ctx).a };
+    // A lost GPU context comes back blank, in its default state.
+    ctx.resetTransform();
+    cv.dispatchEvent(new Event('contextrestored'));
+    return { reads, bricks: keys.filter(k => /^\d+$/.test(k)).length, other: keys.filter(k => !/^\d+$/.test(k) && !BS.KINDS.includes(k)), before, pr: v.pr, a: get.call(ctx).a, rebuilt: v.bg !== before.bg, bgWidth: v.bg.width };
+  });
+  assert.equal(r.reads, 0, 'no ctx.getTransform() in a frame');
+  assert.ok(r.bricks >= 2, 'brick pictures are cached under a number: ' + r.bricks);
+  assert.deepEqual(r.other, [], 'and nothing under a string built per brick');
+  assert.equal(r.before.pr, 1.5, 'the pictures are drawn at the canvas scale');
+  assert.equal(r.before.a, 1.5);
+  assert.equal(r.pr, 1.5, 'after a restore: still the real scale, not 1');
+  assert.equal(r.a, 1.5, 'the context is scaled again');
+  assert.equal(r.rebuilt, true, 'the backdrop is drawn again');
+  assert.equal(r.bgWidth, 1920);
+  assert.equal((await state(page)).screen, 'play');
 });

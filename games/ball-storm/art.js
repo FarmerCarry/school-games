@@ -111,10 +111,11 @@
     pea: { fill: '#6bd34a', trail: '#b9f59a' },
     fire: { fill: '#ff6a2e', trail: '#ffd93d' }
   };
-  // Draws n balls given by the arrays (x, y, dx, dy) with skin id. o: { t, r }.
+  // Draws n balls given by the arrays (x, y, dx, dy) with skin id. o: { r, still }.
+  var NOOPT = {};
   function drawBalls(c, id, n, X, Y, DX, DY, o) {
     if (!n) return;
-    o = o || {};
+    o = o || NOOPT;
     var sk = BALL[id] || BALL.candy, r = o.r || RAD, i, x, y;
     // motion streaks
     var len = n > 120 ? 10 : n > 30 ? 16 : 24;
@@ -268,7 +269,8 @@
       if (M.abs(pr - v.pr) < 0.01 && v.bg) return;
       v.pr = pr; v.sprites = {}; v.bg = null; v.world = -1;
     };
-    v.flush = function () { v.sprites = {}; };
+    // Drops every cached picture (new fonts, a restored GPU context): redrawn when next used.
+    v.flush = function () { v.sprites = {}; v.bg = null; };
 
     /* ----- backdrops ----- */
     function backdrop(world) {
@@ -368,7 +370,8 @@
 
     /* ----- brick sprites ----- */
     function brickSprite(t, col, hp, max, gem, face) {
-      var key = t + ':' + col + ':' + hp + ':' + max + ':' + gem + ':' + face, s = v.sprites[key];
+      // a number, not a string per brick per frame (col < 16, hp and max < 8, gem < 3)
+      var key = ((((t * 16 + col) * 8 + hp) * 8 + max) * 3 + gem) * 2 + face, s = v.sprites[key];
       if (s) return s;
       var pr = v.pr, cv = canvas((CW + PAD * 2) * pr, (CH + PAD * 2) * pr), c = cv.getContext('2d');
       c.scale(pr, pr); c.translate(PAD, PAD);
@@ -428,7 +431,7 @@
     }
     BS.drawBrick = function (c, t, col, hp, max, gem) { drawBrick(c, t, col, hp, max, gem, 0); };
     function capSprite(kind) {
-      var key = 'cap:' + kind, s = v.sprites[key];
+      var key = kind, s = v.sprites[key];
       if (s) return s;
       var pr = v.pr, cv = canvas(76 * pr, 44 * pr), c = cv.getContext('2d');
       c.scale(pr, pr);
@@ -449,6 +452,7 @@
       v.ghosts.push({ x: e.x, y: e.y, s: brickSprite(e.t, e.col, 1, 1, 0, 1), t: 0 });
     };
     v.addBoom = function (x, y) {
+      if (v.calm) return;
       if (v.booms.length > 8) v.booms.shift();
       v.booms.push({ x: x, y: y, t: 0 });
     };
@@ -467,10 +471,9 @@
         var age = t - w.hitAt[k], hit = age >= 0 && age < 0.35 ? 1 : 0;
         var s = brickSprite(ty, w.col[k], w.hp[k], w.max[k], w.gem[k], hit);
         if (hit && !calm) {
-          var wob = M.sin(age * 34) * M.exp(-age * 9) * 0.2;
-          ctx.setTransform(v.base[0] * (1 + wob), 0, 0, v.base[3] * (1 - wob), v.base[4] + (x + CW / 2) * v.base[0], v.base[5] + (y + CH / 2) * v.base[3]);
-          ctx.drawImage(s, -CW / 2 - PAD, -CH / 2 - PAD, pr, ph);
-          ctx.setTransform(v.base[0], 0, 0, v.base[3], v.base[4], v.base[5]);
+          // the wobble squashes the picture about the brick's centre (no transform to read back)
+          var wob = M.sin(age * 34) * M.exp(-age * 9) * 0.2, sx = pr * (1 + wob), sy = ph * (1 - wob);
+          ctx.drawImage(s, x + CW / 2 - sx / 2, y + CH / 2 - sy / 2, sx, sy);
         } else ctx.drawImage(s, x - PAD, y - PAD, pr, ph);
       }
       // gem sparkles
@@ -549,10 +552,9 @@
       }
       ctx.globalAlpha = 1;
     }
-    // o: { ball, paddle (skin ids), sq, t, hud(): draws the HUD texts }
+    var padO = { t: 0, sq: 0, lx: null, ly: null, sticky: false };
+    // o: { ball, paddle (skin ids), sq, endlessWorld }
     v.render = function (w, o) {
-      var m = ctx.getTransform();
-      v.base = [m.a, m.b, m.c, m.d, m.e, m.f];
       useWorld(w.spec ? w.spec.world : (w.level === 0 ? (o.endlessWorld || 0) : 0));
       ctx.drawImage(v.bg, 0, 0, W, H);
       dangerLine(w);
@@ -564,8 +566,9 @@
       // the paddle watches the lowest falling ball
       var look = -1, ly = -1;
       for (var i = 0; i < w.n; i++) if (w.y[i] > ly && (w.dy[i] > 0 || !w.launched)) { ly = w.y[i]; look = i; }
-      BS.drawPaddle(ctx, o.paddle, w.px, F.PY, w.pw, { t: w.t, sq: o.sq, lx: look >= 0 ? w.x[look] : null, ly: look >= 0 ? w.y[look] : null, sticky: w.pow.sticky > 0 });
-      drawBalls(ctx, w.pow.fire > 0 ? 'fire' : o.ball, w.n, w.x, w.y, w.dx, w.dy, { t: w.t });
+      padO.t = w.t; padO.sq = o.sq; padO.lx = look >= 0 ? w.x[look] : null; padO.ly = look >= 0 ? w.y[look] : null; padO.sticky = w.pow.sticky > 0;
+      BS.drawPaddle(ctx, o.paddle, w.px, F.PY, w.pw, padO);
+      drawBalls(ctx, w.pow.fire > 0 ? 'fire' : o.ball, w.n, w.x, w.y, w.dx, w.dy);
       booms();
       ctx.drawImage(v.strip, 0, 0, W, F.TOP);
     };

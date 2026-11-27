@@ -237,6 +237,24 @@ test('bricks: jelly pops, tough takes more hits, steel never breaks, TNT pops it
   assert.equal(w.type[steel], T.STEEL);
 });
 
+test('a step reports at most 40 pops however many bricks go, and the count starts again every step', () => {
+  const w = bare(), fc = w.fc;
+  brick(w, 0, 10); // a jelly far away keeps the level going
+  const per = [];
+  for (let round = 0; round < 2; round++) {
+    // a wall of TNT: one hit sets off all 140 in a single step
+    for (let c = 0; c < F.COLS; c++) for (let r = 1; r < 8; r++) brick(w, c, r, T.TNT);
+    const c = cellCenter(w, 10, 7);
+    placeBall(w, c.x, c.y + F.CH / 2 + F.RAD + 2, 0, -1);
+    BS.step(w, DT, idle());
+    per.push([count(w.ev, 'pop'), count(w.ev, 'boom'), w.left]);
+    assert.equal(w.fc, fc, 'the per-type counts live in one object, reset in place');
+  }
+  assert.deepEqual(per, [[40, 140, 1], [40, 140, 1]]);
+  BS.step(w, DT, idle());
+  assert.ok(Object.values(w.fc).every(n => n <= 1), 'a quiet step starts from zero: ' + JSON.stringify(w.fc));
+});
+
 test('a fireball pops tough bricks at once and flies straight through them', () => {
   const w = bare();
   const ks = [5, 4, 3].map(r => brick(w, 10, r, T.TOUGH, 3));

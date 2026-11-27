@@ -45,7 +45,7 @@
   var mouse = { on: false, x: 640, lx: -1, ly: -1 };
   var inp = { dir: 0, target: null, launch: false }, launchReq = false;
   var sq = 0, bump = 0, flash = 0, hitAt = -9, sfxAt = {}, chain = 0, chainAt = -9, storm = 0, coach = 0, coachT = 0;
-  var result = null, resT = 0, resShown = 0, shopFrom = 'title', partBudget = 0;
+  var result = null, resT = 0, resShown = 0, shopFrom = 'title', partBudget = 0, RES_KEYS = 0.6;
   var WORLD_COLORS = [['#ff6fc4', '#ffe14f', '#4fd8ff', '#b36bff', '#3ddc84'], ['#4fd8ff', '#ffe14f', '#ffffff', '#b36bff', '#ff6fc4'], ['#4fd8ff', '#3ddc84', '#ffe14f', '#ff9a2e', '#ffffff']];
   // A number with its sign kept left-to-right inside Arabic text (canvas and DOM).
   function ltr(t) { return '\u2066' + t + '\u2069'; }
@@ -373,6 +373,8 @@
       return;
     }
     if (screen === 'result') {
+      // Space is mashed through the clear: in the card's first moment it skips nothing
+      if ((resT < RES_KEYS || (result && result.won && world && !world.endless && resShown < result.stars)) && (c === 'Enter' || c === 'Space' || c === 'KeyR')) { e.preventDefault(); return; }
       if (c === 'Enter' || c === 'Space') { e.preventDefault(); if (!$('btnNext').hidden) nextLevel(); else again(); }
       else if (c === 'KeyR') again();
       else if (c === 'Escape') { J.back(); toTitle(); }
@@ -719,6 +721,7 @@
   }
 
   /* --------------------------------------------------------------- render */
+  var vo = { ball: '', paddle: '', sq: 0, endlessWorld: 0 };
   function render() {
     var live = screen === 'play' || (screen === 'title' && !calm());
     if (!live && !dirty) return; // a still menu keeps its last frame
@@ -726,11 +729,12 @@
     ctx.save();
     if (shake.power && screen === 'play') ctx.translate(shake.x, shake.y);
     if (w) {
-      view.render(w, { ball: BS.BALLS[save.ball].id, paddle: BS.PADDLES[save.paddle].id, sq: w === world ? sq : 0, endlessWorld: w.endless ? M.floor(w.rowsMade / 14) % 3 : 0 });
+      vo.ball = BS.BALLS[save.ball].id; vo.paddle = BS.PADDLES[save.paddle].id; vo.sq = w === world ? sq : 0; vo.endlessWorld = w.endless ? M.floor(w.rowsMade / 14) % 3 : 0;
+      view.render(w, vo);
     } else { ctx.fillStyle = '#2b0f5e'; ctx.fillRect(0, 0, W, H); }
     ctx.restore();
     fx.draw(ctx);
-    if (flash > 0 && screen === 'play') { ctx.fillStyle = 'rgba(255,255,255,' + (flash * 0.45) + ')'; ctx.fillRect(0, 0, W, H); }
+    if (flash > 0 && screen === 'play' && !calm()) { ctx.fillStyle = 'rgba(255,255,255,' + (flash * 0.45) + ')'; ctx.fillRect(0, 0, W, H); }
     if (world && w === world && screen !== 'title') drawHud(world);
     dirty = false;
   }
@@ -756,7 +760,9 @@
   Kit.motion.onChange(function (r) { if (view) view.calm = r; dirty = true; });
   window.addEventListener('pageshow', function () { dirty = true; });
   window.addEventListener('pagehide', function () { persist(); });
-  canvas.addEventListener('contextrestored', function () { if (view) view.setRatio(0); dirty = true; render(); });
+  // A restored context comes back blank with no transform: set the scale again and redraw
+  // every cached picture at it.
+  canvas.addEventListener('contextrestored', function () { if (view) view.flush(); fit.resize(); dirty = true; render(); });
   if (document.fonts && document.fonts.load) {
     document.fonts.load('700 40px Fredoka', 'ب').then(function () { if (view) view.flush(); paintItems(); dirty = true; render(); }, function () { /* fallback fonts */ });
   }
@@ -773,6 +779,7 @@
       get state() { return snapshot(); },
       get save() { return JSON.parse(JSON.stringify(save)); },
       get world() { return world; },
+      get view() { return view; },
       point: function (x, y) { var r = canvas.getBoundingClientRect(); return { x: r.left + x * fit.scale, y: r.top + y * fit.scale }; }
     };
     render();

@@ -415,7 +415,8 @@
   // inp: { dir: -1|0|1 (keys), target: x or null (the mouse), launch: true on the frame of a click or Space }
   BS.step = function (w, dt, inp) {
     inp = inp || NOINPUT;
-    w.ev.length = 0; w.fc = {};
+    w.ev.length = 0;
+    for (var f in w.fc) w.fc[f] = 0; // the per-type counts, reset in place (no new object a step)
     w.t += dt; w.pt += dt;
     if (w.phase === 'won' || w.phase === 'lost') return w;
     var p = w.pow;
