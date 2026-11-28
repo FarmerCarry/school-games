@@ -94,32 +94,20 @@
       }
     }
 
-    // 2. Entry shaft & cozy starter cavern right underground (hero spawns standing cleanly on row 10!)
     var sx = Math.floor(W / 2); // x = 32
-    carveRect(sx - 1, 3, sx + 1, 9, T.AIR);
-    carveRect(sx - 4, 7, sx + 4, 9, T.AIR);
-    // Solid rich floor on row 10 with tempting Gold + TNT Barrel right beside hero for instant joy!
-    for (var fx = sx - 4; fx <= sx + 4; fx++) tiles[idx(fx, 10)] = T.DIRT;
-    tiles[idx(sx + 2, 10)] = T.TNT_BARREL;
-    tiles[idx(sx + 3, 10)] = T.GOLD;
-    tiles[idx(sx + 4, 10)] = T.GOLD;
-    tiles[idx(sx - 3, 10)] = T.GOLD;
-    tiles[idx(sx - 4, 10)] = T.TNT_BARREL;
-    // Rich walls right beside starter room so Auto-Drill immediately scores gold!
-    tiles[idx(sx + 5, 9)] = T.GOLD;
-    tiles[idx(sx + 5, 8)] = T.DIRT;
 
-    // 3. Natural winding caverns & juicy TNT-barrel chains across the mine!
+    // 2. Natural winding caverns & juicy TNT-barrel chains across the mine (keeping starter zone intact)!
     for (var c = 0; c < 14; c++) {
       var cx = 6 + Math.floor(rng() * (W - 12));
-      var cy = 10 + Math.floor(rng() * (H - 16));
+      var cy = 11 + Math.floor(rng() * (H - 17));
       var cw = 2 + Math.floor(rng() * 3);
       var ch = 1 + Math.floor(rng() * 2);
+      if (Math.abs(cx - sx) <= 7 && cy - ch <= 11) cy = 14 + ch;
       carveRect(cx - cw, cy - ch, cx + cw, cy + ch, T.AIR);
       if (cy + ch + 1 < H - 1) tiles[idx(cx, cy + ch + 1)] = T.TNT_BARREL;
     }
 
-    // 4. Place the 3 Glowing Relics in rich treasure vaults (spread cleanly across depth & sides)!
+    // 3. Place the 3 Glowing Relics in rich treasure vaults (spread cleanly across depth & sides)!
     var sideA = rng() < 0.5 ? -1 : 1;
     var relicCoords = [
       { x: clamp(sx + sideA * (11 + Math.floor(rng() * 6)), 7, W - 8),  y: 12 + Math.floor(rng() * 3) },
@@ -149,7 +137,7 @@
       });
     }
 
-    // 5. Bouncy Crystal Slimes in deeper caverns (never in starter room!).
+    // 4. Bouncy Crystal Slimes in deeper caverns (never in starter room!).
     var slimes = [];
     var slimeCount = freeMode ? 4 : Math.round(5 + ddaLevel * 4);
     for (var si = 0; si < slimeCount; si++) {
@@ -167,6 +155,20 @@
         alive: true
       });
     }
+
+    // 5. Entry shaft & cozy starter cavern stamped LAST so spawn & row-10 floor are 100% protected across all seeds!
+    carveRect(sx - 1, 3, sx + 1, 9, T.AIR);
+    carveRect(sx - 4, 7, sx + 4, 9, T.AIR);
+    // Solid rich floor on row 10 with tempting Gold + TNT Barrel right beside hero for instant joy!
+    for (var fx = sx - 4; fx <= sx + 4; fx++) tiles[idx(fx, 10)] = T.DIRT;
+    tiles[idx(sx + 2, 10)] = T.TNT_BARREL;
+    tiles[idx(sx + 3, 10)] = T.GOLD;
+    tiles[idx(sx + 4, 10)] = T.GOLD;
+    tiles[idx(sx - 3, 10)] = T.GOLD;
+    tiles[idx(sx - 4, 10)] = T.TNT_BARREL;
+    // Rich walls right beside starter room so Auto-Drill immediately scores gold!
+    tiles[idx(sx + 5, 9)] = T.GOLD;
+    tiles[idx(sx + 5, 8)] = T.DIRT;
 
     var duration = freeMode ? Infinity : Math.round(92 - ddaLevel * 10); // 92s gentle -> 82s crisp
     var world = {

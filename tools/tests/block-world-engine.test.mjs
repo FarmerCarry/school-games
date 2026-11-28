@@ -28,6 +28,22 @@ test('world layout uses chunky 44px tiles, spawns hero underground, and places 3
   assert.ok(w.relics[0].y < w.relics[1].y && w.relics[1].y < w.relics[2].y);
 });
 
+test('starter cavern and solid row-10 floor stay intact across 200 seeds', () => {
+  const sx = Math.floor(BW.W / 2);
+  for (let seed = 1; seed <= 200; seed++) {
+    const w = BW.createWorld({ seed: seed * 9973 });
+    for (let fx = sx - 4; fx <= sx + 4; fx++) {
+      assert.ok(BW.BLOCKS[w.get(fx, 10)].solid, `seed ${seed}: row-10 floor at x=${fx} must be solid`);
+      for (let fy = 7; fy <= 9; fy++) {
+        assert.equal(w.get(fx, fy), BW.T.AIR, `seed ${seed}: starter cavern at (${fx},${fy}) must be clear`);
+      }
+    }
+    for (let i = 0; i < 25; i++) BW.step(w, DT, {});
+    assert.equal(Math.floor(w.p.y), 9, `seed ${seed}: hero settles on row 10 (p.y=${w.p.y})`);
+    assert.equal(w.p.ground, true, `seed ${seed}: hero grounded on starter floor`);
+  }
+});
+
 test('Auto-Drill breaks blocks while moving and Jetpack lifts hero smoothly', () => {
   const w = BW.createWorld({ seed: 2026 });
   const tx = Math.floor(w.p.x) + 1;
