@@ -33,6 +33,13 @@
       // Later adventure boards can supply extra rescue bombs without changing
       // piece difficulty or goals. Existing levels and classic keep one.
       if (level.bombs != null) run.bombs = Math.max(0, Math.min(MAX_POWER, level.bombs | 0));
+    } else if (mode === 'classic') {
+      // Pre-seed 6 colorful starter blocks (5 along row 3 with a 3-cell gap + 1 anchor)
+      // so kids can trigger an immediate line clear on move #1!
+      var seedCells = [[3, 0, 2], [3, 1, 4], [3, 2, 6], [3, 6, 3], [3, 7, 5], [1, 7, 1]];
+      for (var si = 0; si < seedCells.length; si++) {
+        run.cells[seedCells[si][0] * 8 + seedCells[si][1]] = seedCells[si][2];
+      }
     }
     deal(run);
     return run;
@@ -48,7 +55,7 @@
   function deal(run) {
     var rng = run.rng, mask = Core.maskFromBoard(run.cells), d, help;
     if (run.level) { d = run.level.diff || 0; help = run.level.help == null ? 0.45 : run.level.help; }
-    else { d = classicDifficulty(run.score); help = 0.7 - 0.4 * d; if (run.sets === 0) { d = 0; help = 0; } }
+    else { d = classicDifficulty(run.score); help = 0.7 - 0.4 * d; if (run.sets === 0) { d = 0; help = 1; } }
     var hot = null;
     if (run.goalGems) {
       hot = { rows: 0, cols: 0 };

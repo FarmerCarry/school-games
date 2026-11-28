@@ -467,7 +467,7 @@
   // sometimes play a casual move. 'hard' is the full deterministic search.
   // Simulated typical kids win about half of easy games and a quarter of medium ones.
   var levels = {
-    easy: { win: 0.65, block: 0.4, slip: 0.7, depth: 1 },
+    easy: { win: 0.35, block: 0.2, slip: 0.85, depth: 1, easy: true },
     medium: { win: 0.9, block: 0.75, slip: 0.4, depth: 2 }
   };
 
@@ -479,21 +479,24 @@
     if (win !== -1 && random() < skill.win) return win;
     if (threat !== -1 && random() < skill.block) return threat;
     if (win === -1 && threat === -1 && random() >= skill.slip) return null;
-    // A missed win or block, or a slip: any other move that does not hand
-    // over a win at once. Connect 4 prefers the middle columns.
+    // A missed win or block, or a slip: on Easy drop the unsafe-move lookahead filter
+    // so young players can build winning threats; on Medium avoid handing over an
+    // immediate win and prefer center columns in Connect 4.
     var safe = [], other = [];
     for (var i = 0; i < spec.order.length; i++) {
       var move = spec.order[i];
       var last = landing(board, spec, move);
       if (last === -1 || move === win || move === threat) continue;
       other.push(move);
-      board[last] = me;
-      if (immediateWin(board, spec, 3 - me) === -1) {
-        for (var w = spec.rows === 3 ? 1 : 4 - Math.abs(move - 3); w > 0; w--) safe.push(move);
+      if (!skill.easy) {
+        board[last] = me;
+        if (immediateWin(board, spec, 3 - me) === -1) {
+          for (var w = spec.rows === 3 ? 1 : 4 - Math.abs(move - 3); w > 0; w--) safe.push(move);
+        }
+        board[last] = 0;
       }
-      board[last] = 0;
     }
-    var pool = safe.length ? safe : other;
+    var pool = (!skill.easy && safe.length) ? safe : other;
     return pool.length ? pool[Math.floor(random() * pool.length)] : win !== -1 ? win : threat;
   }
 

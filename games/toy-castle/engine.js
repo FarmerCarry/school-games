@@ -591,8 +591,8 @@
         }
       }
 
-      // Rival castle occasionally fires its own cork cannon in higher stages (or demo)
-      if (st.stageIndex >= 1 || st.demo) {
+      // Rival castle occasionally fires its own cork cannon starting in World 2 (2-1) or attract demo
+      if (st.stageIndex >= 3 || st.demo) {
         st.cpuCannonTimer -= dt;
         if (st.cpuCannonTimer <= 0 && s.cannonCd <= 0) {
           // Aim at the furthest P1 unit or a parachute crate

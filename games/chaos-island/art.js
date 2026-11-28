@@ -20,10 +20,10 @@
     scene.background = skyCur;
     scene.fog = new T.Fog(0x7ad6ff, 34, 92);
 
-    // Angled elevated 3D camera framing the entire floating tropical island cleanly.
+    // Slightly lower angled 3D camera so 2D platform hitboxes align cleanly with visual landings.
     var camera = new T.PerspectiveCamera(38, 16 / 9, 0.5, 160);
-    var camBase = new T.Vector3(0, 10.6, 23.8);
-    var camLook = new T.Vector3(0, 2.35, -0.3);
+    var camBase = new T.Vector3(0, 6.5, 24.4);
+    var camLook = new T.Vector3(0, 2.5, 0);
     camera.position.copy(camBase);
     camera.lookAt(camLook);
 
@@ -524,6 +524,26 @@
     }
     scene.add(tornadoGroup);
 
+    // Bright pulsing directional arrow & safe-zone pad over the stone shelter during Tornado/Lightning
+    var shelterBeacon = new T.Group();
+    shelterBeacon.visible = false;
+    var shelterArrow = new T.Group();
+    var shelterArrowMat = new T.MeshBasicMaterial({ color: 0x38f6ff });
+    var shelterRimMat = new T.MeshBasicMaterial({ color: 0xffe135 });
+    var arrowHead = new T.Mesh(new T.ConeGeometry(0.56, 0.88, 6), shelterRimMat);
+    arrowHead.rotation.x = Math.PI;
+    arrowHead.position.y = 0;
+    var arrowStem = new T.Mesh(new T.BoxGeometry(0.32, 0.72, 0.32), shelterArrowMat);
+    arrowStem.position.y = 0.72;
+    shelterArrow.add(arrowHead, arrowStem);
+    shelterArrow.position.set(0, 3.65, 1.42);
+    var shelterPadMat = new T.MeshBasicMaterial({ color: 0x38f6ff, transparent: true, opacity: 0.42, side: T.DoubleSide, depthWrite: false });
+    var shelterPad = new T.Mesh(new T.PlaneGeometry(2.75, 1.85), shelterPadMat);
+    shelterPad.rotation.x = -Math.PI / 2;
+    shelterPad.position.set(0, E.GROUND_Y + 0.05, 0);
+    shelterBeacon.add(shelterArrow, shelterPad);
+    scene.add(shelterBeacon);
+
     // Pooled 3D Particles (1 draw call, zero per-frame allocations!)
     var MAX_PART = 140;
     var partGeo = new T.BoxGeometry(1, 1, 1);
@@ -643,6 +663,18 @@
         lavaMesh.visible = false;
       }
 
+      // Bright shelter beacon arrow during Tornado / Lightning card & active phases
+      var showShelterHint = !!(world && !world.demo && (world.phase === 'card' || world.phase === 'active') &&
+        (world.disaster === 'tornado' || world.disaster === 'lightning'));
+      shelterBeacon.visible = showShelterHint;
+      if (showShelterHint) {
+        var sPulse = view.calm ? 0 : Math.sin(t * 7.5);
+        shelterArrow.position.y = 3.65 + sPulse * 0.28;
+        var aSc = 1 + (view.calm ? 0 : Math.sin(t * 9.0) * 0.12);
+        shelterArrow.scale.set(aSc, aSc, aSc);
+        shelterPadMat.opacity = view.calm ? 0.42 : (0.32 + Math.abs(Math.sin(t * 6.0)) * 0.32);
+      }
+
       // Sync Actors + blob shadows
       var shIdx = 0;
       var list = world ? world.actors : [];
@@ -656,7 +688,8 @@
         var hatId = E.HATS[a.hatIndex] ? E.HATS[a.hatIndex].id : 'none';
         setActorLook(m, colHex, hatId, a.isHuman ? a.humanIndex : -1);
 
-        m.root.position.set(a.x, a.y, a.zOff);
+        var az = camMode === 'shop' ? a.zOff : 0;
+        m.root.position.set(a.x, a.y, az);
         // Smooth facing toward run direction (slightly angled toward camera for cute readability!)
         var targetYaw = a.facing >= 0 ? 0.52 : -0.52;
         if (camMode === 'shop' && i === 0) targetYaw = Math.sin(t * 1.1) * 0.55;
@@ -700,7 +733,7 @@
           }
           var distH = Math.max(0, a.y - syGround);
           var sScale = Math.max(0.35, 1 - distH * 0.14);
-          setInst(shadows, shIdx++, a.x, syGround + 0.03, a.zOff, sScale, 1, sScale);
+          setInst(shadows, shIdx++, a.x, syGround + 0.03, az, sScale, 1, sScale);
         }
       }
 

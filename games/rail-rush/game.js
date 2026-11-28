@@ -125,18 +125,80 @@
   // Light graphics (Kit.gfx) for PCs that can't keep it smooth: no antialiasing from the
   // next start, and from the moment it turns on fewer pixels (the HUD stays sharp).
   var gfx = Kit.gfx('rail-rush', { apply: applyGfx });
-  var wgl = Kit.webgl.createRenderer(canvas, { software: false, gfx: gfx, low: LQ, alpha: true, noGL: true });
+  var ui = $('ui');
+  ui.style.fontSize = (16 * Math.min(window.innerWidth / 1280, window.innerHeight / 720)).toFixed(2) + 'px';
+  Kit.muteButton().setAttribute('aria-label', 'الصوت: تشغيل / إيقاف');
+  var screens = ['title', 'shop', 'missions', 'pause', 'over'];
+  function show(id) {
+    screens.forEach(function (s) { $(s).hidden = s !== id; });
+    $('hud').hidden = !(id === null || id === 'pause');
+    $('pauseBtn').hidden = id !== null;
+    document.body.classList.toggle('rr-title', id === 'title'); // places the save warning (index.html)
+  }
+  function missionRow(m, compact) {
+    var pct = Math.min(1, m.p / m.n);
+    return '<div class="mission' + (m.done ? ' done' : '') + (compact ? ' compact' : '') + '">' +
+      '<div class="m-check">' + (m.done ? '✔' : '') + '</div>' +
+      '<div class="m-body"><div class="m-text">' + missionText(m) + '</div>' +
+      '<div class="m-bar"><i style="width:' + (pct * 100).toFixed(1) + '%"></i></div></div>' +
+      '<div class="m-num">' + Kit.fmt(Math.min(m.p, m.n)) + '/' + Kit.fmt(m.n) + '</div></div>';
+  }
+  function refreshTitle() {
+    $('tBest').textContent = Kit.fmt(save.best);
+    $('tCoins').textContent = Kit.fmt(save.coins);
+    $('tMult').textContent = 'x' + multBase();
+    var left = save.missions.filter(function (m) { return !m.done; }).length;
+    $('tMissions').textContent = left ? 'باقي ' + left : 'تمّت!';
+    $('tMissionPeek').innerHTML = save.missions.map(function (m) { return missionRow(m, true); }).join('');
+  }
+  var POW_ORDER = ['magnet', 'sneakers', 'doubler', 'board'];
+  var powEls = {}, ICONS = {}, portraits = null;
+  function makeIcons() {
+    ['magnet', 'sneakers', 'doubler', 'board', 'mystery', 'coin'].forEach(function (k) { ICONS[k] = RR.canvasTex(96, function (g, sz) { RR.drawIcon(g, k, sz, false); }); });
+    POW_ORDER.forEach(function (k) {
+      if (!powEls[k]) {
+        var d = document.createElement('div');
+        d.className = 'pw';
+        d.innerHTML = '<canvas data-icon="' + k + '" width="64" height="64"></canvas><div class="pw-bar"><i></i></div>';
+        $('powers').appendChild(d);
+        powEls[k] = { el: d, bar: d.querySelector('i'), lastT: '' };
+      }
+    });
+    paintIcons(document);
+  }
+  function paintIcons(root) {
+    root.querySelectorAll('canvas[data-icon]').forEach(function (c) {
+      var g = c.getContext('2d');
+      g.clearRect(0, 0, c.width, c.height);
+      g.drawImage(ICONS[c.getAttribute('data-icon')], 0, 0, c.width, c.height);
+    });
+    root.querySelectorAll('canvas[data-portrait]').forEach(function (c) {
+      var k = c.getAttribute('data-portrait').split(':');
+      var src = portraits && portraits[k[0]][k[1]];
+      if (src) c.getContext('2d').drawImage(src, 0, 0, c.width, c.height);
+    });
+  }
+  // Paint the title UI immediately so frame 0 is live before WebGL boots.
+  makeIcons();
+  refreshTitle();
+  show('title');
+
+  var applyGfxFn = null;
+  function applyGfx() { if (applyGfxFn) applyGfxFn(); }
+
+  Kit.webgl.boot(function boot3D() {
+  var wgl = Kit.webgl.createRenderer(canvas, { gfx: gfx, low: LQ, alpha: false, noGL: true });
   if (!wgl) return;
   var renderer = wgl.renderer;
-  var UI_PR = Kit.webgl.pixelRatio({ software: false, low: LQ });
-  function glRatio() { return Kit.webgl.pixelRatio({ software: false, gfx: gfx, low: LQ }); }
+  var UI_PR = Kit.webgl.pixelRatio({ low: LQ });
+  function glRatio() { return Kit.webgl.pixelRatio({ gfx: gfx, low: LQ }); }
   var PR = wgl.ratio;
-  function applyGfx() {
+  applyGfxFn = function () {
     PR = glRatio();
     dres.ratio = PR; dres.min = PR * 0.6; dres.n = 0; dres.bad = 0;
     renderer.setPixelRatio(PR);
     layout();
-  }
+  };
   var scene = new T.Scene();
   var camera = new T.PerspectiveCamera(60, 16 / 9, 0.1, 900);
   scene.fog = new T.Fog(0xd6ecff, 70, 200);
@@ -170,11 +232,19 @@
   sky.renderOrder = -10;
   var skyGroup = new T.Group();
   skyGroup.add(sky);
+  // Placeholder vertex-coloured geometry keeps cloudMat/skylineMat compiled at boot while
+  // deferring the heavy procedural cloud/skyline meshes until right after Kit.ready().
+  function tinyColorGeo() {
+    var g = new T.BufferGeometry();
+    g.setAttribute('position', new T.BufferAttribute(new Float32Array(9), 3));
+    g.setAttribute('color', new T.BufferAttribute(new Float32Array(9), 3));
+    return g;
+  }
   var cloudMat = new T.MeshBasicMaterial({ vertexColors: true, fog: false });
-  var clouds = new T.Mesh(RR.buildClouds(), cloudMat);
+  var clouds = new T.Mesh(tinyColorGeo(), cloudMat);
   skyGroup.add(clouds);
   var skylineMat = new T.MeshBasicMaterial({ vertexColors: true, fog: false, color: 0xb9c6ea });
-  var skyline = new T.Mesh(RR.buildSkyline(), skylineMat);
+  var skyline = new T.Mesh(tinyColorGeo(), skylineMat);
   skyGroup.add(skyline);
   scene.add(skyGroup);
 
@@ -188,14 +258,18 @@
   ];
   var TOD_LEN = 1250;
   var todCur = pal({ top: '#000', mid: '#000', hor: '#000', fog: '#000', hs: '#000', hg: '#000', hi: 0, sc: '#000', si: 0, sunCol: '#000', win: '#000', cloud: '#000', skyline: '#000', sy: 0 });
-  var tunnelDim = 0;
+  var TOD_KEYS = Object.keys(todCur);
+  var tunnelDim = 0, lastTodDist = -1, lastTodDim = -1;
   function applyTOD(dist) {
+    if (Math.abs(dist - lastTodDist) < 0.05 && Math.abs(tunnelDim - lastTodDim) < 0.001) return;
+    lastTodDist = dist; lastTodDim = tunnelDim;
     var i = Math.floor(dist / TOD_LEN), f = (dist - i * TOD_LEN) / TOD_LEN;
     var a = TOD[i % 4], b = TOD[(i + 1) % 4], t = smooth01(0.8, 1, f);
-    Object.keys(todCur).forEach(function (k) {
+    for (var ki = 0; ki < TOD_KEYS.length; ki++) {
+      var k = TOD_KEYS[ki];
       if (typeof a[k] === 'number') todCur[k] = lerp(a[k], b[k], t);
       else todCur[k].copy(a[k]).lerp(b[k], t);
-    });
+    }
     skyU.top.value.copy(todCur.top); skyU.mid.value.copy(todCur.mid); skyU.hor.value.copy(todCur.hor); skyU.sunCol.value.copy(todCur.sunCol);
     skyU.sunDir.value.set(0.35, todCur.sy, -1).normalize();
     scene.fog.color.copy(todCur.fog);
@@ -210,29 +284,33 @@
   /* ---------------------------------------------------------- chunks */
   var CH = RR.CHUNK, NCH = 8, ZONE_LEN = 1000;
   var chunkGeos = [];
-  // zone 0 is built now; the other zones are built in idle ticks after the first frame
-  var idleJobs = [];
+  // Build only 1 chunk of zone 0 synchronously so frame 1 is instant; clouds, skyline,
+  // tunnel, extra zone-0 chunk variants, train cars and later zones build in idle ticks.
+  var idleJobs = [
+    function () { var old = clouds.geometry; clouds.geometry = RR.buildClouds(); old.dispose(); renderDirty = true; },
+    function () { var old = skyline.geometry; skyline.geometry = RR.buildSkyline(); old.dispose(); renderDirty = true; }
+  ];
   for (var zn = 0; zn < RR.ZONES.length; zn++) {
     chunkGeos.push([]);
     for (var cv = 0; cv < 5; cv++) {
-      if (zn === 0) chunkGeos[zn].push(RR.buildChunk(cv + 1, zn));
+      if (zn === 0 && cv === 0) chunkGeos[zn].push(RR.buildChunk(1, 0));
       else idleJobs.push((function (z, v) { return function () { chunkGeos[z].push(RR.buildChunk(v + 1, z)); }; })(zn, cv));
     }
   }
   function runIdleJobs() {
     var t0 = performance.now();
-    while (idleJobs.length && performance.now() - t0 < 12) idleJobs.shift()();
+    while (idleJobs.length && performance.now() - t0 < 10) idleJobs.shift()();
     if (idleJobs.length) setTimeout(runIdleJobs, 16);
   }
   function zoneAt(d) { return d < 0 ? 0 : Math.floor(d / ZONE_LEN) % RR.ZONES.length; }
   function chunkGeo(d0) {
-    var list = chunkGeos[zoneAt(d0 + CH / 2)];
-    if (list.length < 5) { while (idleJobs.length && list.length < 5) idleJobs.shift()(); }
+    var z = zoneAt(d0 + CH / 2), list = chunkGeos[z];
+    if (!list.length) list.push(RR.buildChunk(1, z));
     return list[randInt(0, list.length - 1)];
   }
   var chunks = [];
   for (var ci = 0; ci < NCH; ci++) {
-    var g0 = chunkGeos[0][ci % 5];
+    var g0 = chunkGeos[0][0];
     var cm = new T.Mesh(g0.main, matWorld), cw = new T.Mesh(g0.win, matWin);
     scene.add(cm, cw);
     chunks.push({ m: cm, w: cw, d0: 0 });
@@ -257,16 +335,27 @@
   }
 
   /* ----------------------------------------------------- tunnels */
-  var tunnelGeo = RR.buildTunnel();
+  var tunnelGeo = null;
   var tunnelPool = [];
   for (var tp = 0; tp < 2; tp++) {
-    var tm = new T.Mesh(tunnelGeo.main, matWorld), tw = new T.Mesh(tunnelGeo.win, matWin);
+    var tm = new T.Mesh(chunkGeos[0][0].main, matWorld), tw = new T.Mesh(chunkGeos[0][0].win, matWin);
     tm.visible = tw.visible = false;
     scene.add(tm, tw);
     tunnelPool.push({ m: tm, w: tw, d0: 0, on: false });
   }
+  function ensureTunnelGeo() {
+    if (tunnelGeo) return tunnelGeo;
+    tunnelGeo = RR.buildTunnel();
+    for (var i = 0; i < tunnelPool.length; i++) {
+      tunnelPool[i].m.geometry = tunnelGeo.main;
+      tunnelPool[i].w.geometry = tunnelGeo.win;
+    }
+    return tunnelGeo;
+  }
+  idleJobs.push(ensureTunnelGeo);
   var TUNNEL_LEN = 60;
   function addTunnel(d) {
+    ensureTunnelGeo();
     for (var i = 0; i < tunnelPool.length; i++) {
       var t = tunnelPool[i];
       if (!t.on) { t.on = true; t.d0 = d; t.m.visible = t.w.visible = true; return; }
@@ -670,7 +759,7 @@
     for (var t = 0; t < tunnelPool.length; t++) { tunnelPool[t].on = false; tunnelPool[t].m.visible = tunnelPool[t].w.visible = false; }
     parts.clear();
   }
-  function resetWorld() {
+  function resetWorld(forTitle) {
     clearWorld();
     S.pD = S.prevPD = 0;
     resetChunks();
@@ -684,7 +773,8 @@
     gen.nextZone = ZONE_LEN;
     S.zoneShown = 0; S.milestone = 500;
     S.hintsShown = {};
-    generate();
+    gen.pending = !!forTitle;
+    if (!forTitle) generate();
   }
 
   /* =========================================================== runner */
@@ -746,8 +836,7 @@
   }
 
   function flashWarn() {
-    var f = $('flash');
-    f.classList.remove('on'); void f.offsetWidth; f.classList.add('on');
+    Kit.retrigger($('flash'), 'on');
   }
   function stumble() {
     if (POW.board > 0) { breakBoard(); return; }
@@ -1185,8 +1274,7 @@
       dummy.updateMatrix();
       coinMesh.setMatrixAt(n++, dummy.matrix);
     }
-    coinMesh.count = n;
-    coinMesh.instanceMatrix.needsUpdate = true;
+    Kit.webgl.shrinkCount(coinMesh, n);
     // pickups
     for (var p = 0; p < pickups.length; p++) {
       var pk = pickups[p];
@@ -1387,7 +1475,6 @@
   }
 
   /* ================================================================ UI */
-  var ui = $('ui');
   function layout() {
     renderDirty = true;
     var w = window.innerWidth, h = window.innerHeight;
@@ -1403,45 +1490,9 @@
   }
   window.addEventListener('resize', layout);
 
-  var screens = ['title', 'shop', 'missions', 'pause', 'over'];
-  function show(id) {
-    screens.forEach(function (s) { $(s).hidden = s !== id; });
-    $('hud').hidden = !(id === null || id === 'pause');
-    $('pauseBtn').hidden = id !== null;
-    document.body.classList.toggle('rr-title', id === 'title'); // places the save warning (index.html)
-  }
-
   // HUD
   var hudCache = {};
   function setText(id, v) { if (hudCache[id] !== v) { hudCache[id] = v; $(id).textContent = v; } }
-  var POW_ORDER = ['magnet', 'sneakers', 'doubler', 'board'];
-  var powEls = {};
-  var ICONS = {};
-  function makeIcons() {
-    ['magnet', 'sneakers', 'doubler', 'board', 'mystery', 'coin'].forEach(function (k) { ICONS[k] = RR.canvasTex(96, function (g, sz) { RR.drawIcon(g, k, sz, false); }); });
-    POW_ORDER.forEach(function (k) {
-      if (!powEls[k]) {
-        var d = document.createElement('div');
-        d.className = 'pw';
-        d.innerHTML = '<canvas data-icon="' + k + '" width="64" height="64"></canvas><div class="pw-bar"><i></i></div>';
-        $('powers').appendChild(d);
-        powEls[k] = { el: d, bar: d.querySelector('i') };
-      }
-    });
-    paintIcons(document);
-  }
-  function paintIcons(root) {
-    root.querySelectorAll('canvas[data-icon]').forEach(function (c) {
-      var g = c.getContext('2d');
-      g.clearRect(0, 0, c.width, c.height);
-      g.drawImage(ICONS[c.getAttribute('data-icon')], 0, 0, c.width, c.height);
-    });
-    root.querySelectorAll('canvas[data-portrait]').forEach(function (c) {
-      var k = c.getAttribute('data-portrait').split(':');
-      var src = portraits && portraits[k[0]][k[1]];
-      if (src) c.getContext('2d').drawImage(src, 0, 0, c.width, c.height);
-    });
-  }
   function renderHUD() {
     if ($('hud').hidden) return;
     setText('score', Kit.fmt(run.score || 0));
@@ -1451,30 +1502,28 @@
     setText('mult', 'x' + m);
     var mc = POW.doubler > 0 ? 'pill hot' : 'pill';
     if (hudCache.multCls !== mc) { hudCache.multCls = mc; $('mult').className = mc; }
-    POW_ORDER.forEach(function (k) {
-      var on = POW[k] > 0, pe = powEls[k];
-      if (!pe) return;
+    for (var pi = 0; pi < POW_ORDER.length; pi++) {
+      var k = POW_ORDER[pi], on = POW[k] > 0, pe = powEls[k];
+      if (!pe) continue;
       if (pe.on !== on) { pe.on = on; pe.el.classList.toggle('on', on); }
       if (on) {
-        var f = POW[k] / powerDur(k);
-        pe.bar.style.transform = 'scaleX(' + f.toFixed(3) + ')';
-        pe.el.classList.toggle('low', POW[k] < 2.5);
+        var f = 'scaleX(' + (POW[k] / powerDur(k)).toFixed(3) + ')';
+        if (pe.lastT !== f) { pe.lastT = f; pe.bar.style.transform = f; }
+        var low = POW[k] < 2.5;
+        if (pe.low !== low) { pe.low = low; pe.el.classList.toggle('low', low); }
       }
-    });
+    }
     var warn = P.stumbleT > 0 && S.mode === 'play';
     if (hudCache.warn !== warn) { hudCache.warn = warn; $('danger').classList.toggle('on', warn); }
   }
   function bumpCoins() {
-    var el = $('coinBox');
-    el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump');
+    Kit.retrigger($('coinBox'), 'bump');
   }
   var popTimer = 0;
   function pop(text, cls) {
     var el = $('pop');
     el.textContent = text;
-    el.className = 'pop ' + (cls || '');
-    void el.offsetWidth;
-    el.classList.add('show');
+    el.className = 'pop ' + (cls || '') + ' show';
     popTimer = 1.3; // the popText length; also hides the still pop-up of reduced motion
   }
   function toast(html, cls) {
@@ -1497,7 +1546,7 @@
     var el = $('hint');
     el.innerHTML = HINTS[type];
     el.hidden = false;
-    el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
+    el.classList.add('show');
     hintTimer = 1.9;
   }
 
@@ -1521,7 +1570,7 @@
     cfEl.style.visibility = 'hidden';
   }
   function uiTick(dt) {
-    if (hintTimer > 0) { hintTimer -= dt; if (hintTimer <= 0) $('hint').hidden = true; }
+    if (hintTimer > 0) { hintTimer -= dt; if (hintTimer <= 0) { $('hint').hidden = true; $('hint').classList.remove('show'); } }
     if (popTimer > 0) { popTimer -= dt; if (popTimer <= 0) $('pop').classList.remove('show'); }
     if (overAnim.on) tickOver(dt);
     if (cfxIdle) return;
@@ -1545,14 +1594,6 @@
   }
 
   /* ----------------------------------------------------- missions UI */
-  function missionRow(m, compact) {
-    var pct = Math.min(1, m.p / m.n);
-    return '<div class="mission' + (m.done ? ' done' : '') + (compact ? ' compact' : '') + '">' +
-      '<div class="m-check">' + (m.done ? '✔' : '') + '</div>' +
-      '<div class="m-body"><div class="m-text">' + missionText(m) + '</div>' +
-      '<div class="m-bar"><i style="width:' + (pct * 100).toFixed(1) + '%"></i></div></div>' +
-      '<div class="m-num">' + Kit.fmt(Math.min(m.p, m.n)) + '/' + Kit.fmt(m.n) + '</div></div>';
-  }
   var cumBase = {};
   function startMissions() {
     cumBase = { coins: save.totals.coins, boards: save.totals.boards, runs: save.totals.runs };
@@ -1584,14 +1625,6 @@
   function missionReward() { return 100 + 50 * save.mlevel; }
 
   /* ----------------------------------------------------- title */
-  function refreshTitle() {
-    $('tBest').textContent = Kit.fmt(save.best);
-    $('tCoins').textContent = Kit.fmt(save.coins);
-    $('tMult').textContent = 'x' + multBase();
-    var left = save.missions.filter(function (m) { return !m.done; }).length;
-    $('tMissions').textContent = left ? 'باقي ' + left : 'تمّت!';
-    $('tMissionPeek').innerHTML = save.missions.map(function (m) { return missionRow(m, true); }).join('');
-  }
   // Leaving a run from the pause menu (Restart, R or Menu) still keeps what was earned.
   function bankRun() {
     if (S.mode !== 'paused') return;
@@ -1610,7 +1643,7 @@
     resetPlayer(); resetRun();
     runner.board.visible = false;
     runner.setOutfit(outfitById(save.outfit));
-    resetWorld();
+    resetWorld(true);
     S.runStart = 0; S.score = 0; S.groundY = 0; S.speed = 0;
     refreshTitle();
     show('title');
@@ -1626,7 +1659,8 @@
     resetPlayer(); resetRun();
     runner.board.visible = false;
     runner.setOutfit(outfitById(save.outfit));
-    if (S.mode !== 'title') { resetWorld(); P.face = 0; }
+    if (S.mode !== 'title') { resetWorld(false); P.face = 0; }
+    else if (gen.pending) { gen.pending = false; generate(); }
     S.runStart = 0; S.score = 0; S.bestAnnounced = false; S.slow = 1; S.shake = 0; S.groundY = 0;
     S.mode = 'intro'; S.menu = 'play'; S.introT = 0; S.crashInfo = null; S.stumbles = 0;
     startMissions();
@@ -1755,7 +1789,7 @@
   }
 
   /* ----------------------------------------------------- shop */
-  var shopTab = 'outfits', preview = null, portraits = null;
+  var shopTab = 'outfits', preview = null;
   function makePortraits() {
     if (portraits) return;
     var dpr = renderer.getPixelRatio(), W = renderer.domElement.width, H = renderer.domElement.height;
@@ -1780,7 +1814,7 @@
     var oldAlpha = renderer.getClearAlpha();
     // a failure part way must not leave the main view clipped to one tile
     try {
-      renderer.setClearColor(0x000000, 0);
+      renderer.setClearColor(0x000000, 1);
       renderer.setScissorTest(true);
       jobs.forEach(function (j, i) {
         var tx = (i % cols) * SZ, ty = Math.floor(i / cols) * SZ;
@@ -1800,10 +1834,16 @@
         }
         renderer.render(pScene, pCam);
       });
-      // one readback of the whole atlas area, then cut it into tiles
+      // one readback of the whole atlas area, key pure clear-black out (main canvas is opaque), then cut into tiles
       var atlas = document.createElement('canvas');
       atlas.width = cols * SZ; atlas.height = rows * SZ;
-      atlas.getContext('2d').drawImage(renderer.domElement, 0, H - rows * SZ, cols * SZ, rows * SZ, 0, 0, cols * SZ, rows * SZ);
+      var ag = atlas.getContext('2d', { willReadFrequently: true });
+      ag.drawImage(renderer.domElement, 0, H - rows * SZ, cols * SZ, rows * SZ, 0, 0, cols * SZ, rows * SZ);
+      var img = ag.getImageData(0, 0, atlas.width, atlas.height), d = img.data;
+      for (var p = 0; p < d.length; p += 4) {
+        if (d[p] === 0 && d[p + 1] === 0 && d[p + 2] === 0) d[p + 3] = 0;
+      }
+      ag.putImageData(img, 0, 0);
       jobs.forEach(function (j, i) {
         var tx = (i % cols) * SZ, row = Math.floor(i / cols);
         var out = document.createElement('canvas'); out.width = out.height = SZ;
@@ -1875,7 +1915,7 @@
       var act = b.getAttribute('data-act'), id = b.getAttribute('data-id');
       if (act === 'buy') {
         var item = shopTab === 'outfits' ? outfitById(id) : boardById(id);
-        if (save.coins < item.price) { sfx.deny(); b.classList.remove('shake'); void b.offsetWidth; b.classList.add('shake'); return; }
+        if (save.coins < item.price) { sfx.deny(); Kit.retrigger(b, 'shake'); return; }
         save.coins -= item.price;
         if (shopTab === 'outfits') { save.owned.push(id); save.outfit = id; } else { save.boards.push(id); save.board = id; }
         persist(); sfx.buy(); confetti(50); S.cheer = 1.6;
@@ -1887,7 +1927,7 @@
       } else if (act === 'up') {
         var lv = save.up[id], cost = UP_COST[lv];
         if (lv >= 5) return;
-        if (save.coins < cost) { sfx.deny(); b.classList.remove('shake'); void b.offsetWidth; b.classList.add('shake'); return; }
+        if (save.coins < cost) { sfx.deny(); Kit.retrigger(b, 'shake'); return; }
         save.coins -= cost; save.up[id] = lv + 1;
         persist(); sfx.buy(); confetti(40);
       }
@@ -1991,8 +2031,6 @@
   function closeMissions() { S.menu = 'title'; refreshTitle(); show('title'); }
 
   /* ----------------------------------------------------- boot */
-  Kit.muteButton().setAttribute('aria-label', 'الصوت: تشغيل / إيقاف');
-  makeIcons();
   if (document.fonts && document.fonts.ready) {
     document.fonts.ready.then(function () { makeIcons(); makePickMats(); for (var i = 0; i < pickups.length; i++) pickups[i].s.material = pickMats[pickups[i].type]; });
   }
@@ -2004,8 +2042,6 @@
   // so none compiles and stalls the frame in the middle of a run.
   renderer.compile(scene, camera);
   Kit.loop(update, render);
-  setTimeout(runIdleJobs, 50);
-  setTimeout(function () { if (!portraits) makePortraits(); }, 1200);
   var bootMs = Math.round(performance.now() - BOOT_T0);
 
   // Debug / test hook
@@ -2022,7 +2058,7 @@
     set god(v) { S.god = !!v; }, get god() { return S.god; },
     set auto(v) { S.auto = !!v; }, get auto() { return S.auto; },
     set autoDelay(v) { S.autoDelay = +v || 0; delayed.length = 0; },
-    skip: function (m) { S.pD += m; S.prevPD = S.pD; gen.d = Math.max(gen.d, S.pD + 20); for (var i = obstacles.length - 1; i >= 0; i--) { if (obstacles[i].d0 < S.pD + 15) { freeOb(obstacles[i]); obstacles.splice(i, 1); } } generate(); },
+    skip: function (m) { S.pD += m; S.prevPD = S.pD; gen.pending = false; gen.d = Math.max(gen.d, S.pD + 20); for (var i = obstacles.length - 1; i >= 0; i--) { if (obstacles[i].d0 < S.pD + 15) { freeOb(obstacles[i]); obstacles.splice(i, 1); } } generate(); },
     power: function (k) { if (k === 'mystery') return; POW[k] = powerDur(k); if (k === 'board') runner.board.visible = true; },
     give: function (n) { save.coins += n; persist(); refreshTitle(); },
     crash: function () { crash('bonk'); },
@@ -2042,9 +2078,12 @@
     force: function (id) { gen.force = id; },
     near: function (kind) { for (var i = 0; i < obstacles.length; i++) { var o = obstacles[i]; if (o.kind === kind || (kind === 'moving' && o.moving)) return { d: +(o.d0 - S.pD).toFixed(1), lane: o.lane, active: o.active }; } return null; },
     last: function () { return { pattern: gen.last, count: gen.count }; },
-    tod: function (d) { S.runStart = -d; }
+    tod: function (d) { S.runStart = -d; lastTodDist = -1; }
   };
   Kit.lifecycle({ pause: pause, reset: function () { swipe.on = false; } });
   Kit.ready();
+  setTimeout(runIdleJobs, 50);
+  setTimeout(function () { if (!portraits && S.mode !== 'play' && S.mode !== 'intro') makePortraits(); }, 1200);
+  });
 })();
 

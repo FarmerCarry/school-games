@@ -43,7 +43,7 @@ button { font-family: var(--sg-font); }
 .mode-name { position: absolute; right: 24px; top: 18px; font-size: 50px; font-weight: 700; -webkit-text-stroke: 9px var(--ink); paint-order: stroke fill; text-shadow: 0 5px 0 var(--ink); }
 .mode-sub { position: absolute; right: 26px; top: 90px; font-size: 21px; font-weight: 700; background: rgba(27,15,58,0.45); padding: 2px 14px; border-radius: 999px; direction: rtl; }
 .mode-go { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); font-size: 27px; font-weight: 700; color: var(--ink); background: var(--yel); border: 4px solid var(--ink); border-radius: 999px; padding: 0 26px 3px; box-shadow: 0 5px 0 var(--ink); white-space: nowrap; animation: goPulse 1.1s ease-in-out infinite; }
-.mode.adv .mode-go { background: #fff; }
+.mode.classic .mode-go { background: #fff; animation: none; }
 .mode-key { position: absolute; left: 12px; bottom: 16px; }
 .mode-key .sg-key { font-size: 13px; min-width: 0; padding: 1px 6px; }
 @keyframes goPulse { 0%, 100% { transform: translateX(-50%) scale(1); } 50% { transform: translateX(-50%) scale(1.07); } }

@@ -18,34 +18,25 @@
     <div class="logo"><span class="w1">معركة</span> <span class="w2">الهلام</span></div>
     <div class="tag">كُل الحبوب، اكبَر، والتهم الجميع!</div>
 
-    <div class="card side" id="howto">
-      <h3>طريقة اللعب</h3>
-      <div class="krow"><span class="sg-key">الفأرة</span><span>حرّك كرتك</span></div>
-      <div class="krow"><span class="sg-key">مسافة</span><span>انقسم وانقضّ!</span></div>
-      <div class="krow"><span class="sg-key">W</span><span>اقذف قطعة صغيرة</span></div>
-      <div class="krow"><span class="sg-key">P</span><span>إيقاف مؤقت</span></div>
-      <div class="tipline">التهم الكرات الأصغر منك، واهرب من الأكبر!</div>
-      <div class="tipline green">اختبئ خلف الشجيرة الشائكة وأنت صغير 🌵</div>
-    </div>
+    <button id="btnPlay" class="play" type="button">▶ العب!</button>
+    <div class="enter-hint">تحرّك بالفأرة أو <span dir="ltr"><span class="sg-key">WASD</span></span> · انقسم <span dir="ltr"><span class="sg-key">Space</span></span> · اقذف <span dir="ltr"><span class="sg-key">E</span></span></div>
 
-    <div class="card" id="skinBox">
+    <div class="card dock" id="skinBox">
       <div class="skrow">
         <button class="arr" id="skPrev" type="button" aria-label="السابق">▶</button>
         <canvas id="skinPrev" width="200" height="200"></canvas>
         <button class="arr" id="skNext" type="button" aria-label="التالي">◀</button>
       </div>
-      <div id="skName">نعناع</div>
-      <div id="skLock"></div>
-      <button id="btnSkins" class="mini" type="button">🎨 كل الأشكال <b id="skCount" dir="ltr">0/0</b></button>
+      <div class="skmeta">
+        <div id="skName">نعناع</div>
+        <div id="skLock"></div>
+        <button id="btnSkins" class="mini" type="button">🎨 الأشكال <b id="skCount" dir="ltr">0/0</b></button>
+      </div>
     </div>
 
-    <div class="card side" id="arenaBox">
-      <h3>الساحات</h3>
+    <div class="card dock" id="arenaBox">
       <div id="arenaList"></div>
     </div>
-
-    <button id="btnPlay" class="play" type="button">العب!</button>
-    <div class="enter-hint">أو اضغط <span dir="ltr"><span class="sg-key">Enter</span></span></div>
   </section>
 
   <!-- ============ SKINS ============ -->

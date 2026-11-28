@@ -611,7 +611,7 @@
   function isOnLift() {
     for (var i = 0; i < world.movers.length; i++) {
       var m = world.movers[i];
-      if (m.on === 3 || (m.on && (m.st === 1 || m.st === 3))) return true;
+      if (m.type === 'platform' && (m.on === 3 || m.onT > 0 || (m.on && (m.st === 1 || m.st === 3)))) return true;
     }
     return false;
   }

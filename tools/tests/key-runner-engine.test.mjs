@@ -372,7 +372,7 @@ test('saves: a fresh save, a round trip, and junk or the old 3D save load as a p
   assert.equal(fresh.v, 2);
   assert.equal(fresh.stars.length, KR.WORLD_COUNT);
   assert.ok(fresh.stars.every(row => row.length === KR.LEVELS));
-  assert.equal(fresh.label, 'both');
+  assert.equal(fresh.label, 'ar');
   const old3d = { v: 1, speed: 80, wins: 5, rebirths: 1, unlocked: 3, best: 80, shoe: 2, trail: 0, aura: 0, hat: 0, charm: 0,
     owned: { shoes: [1, 2] }, medals: {}, tower: {}, quality: 'low' };
   for (const junk of [null, undefined, 0, 'save', [], [1, 2], { v: 9 }, { v: 2, stars: 'lots' }, old3d, { v: 2, stars: [[9, -1, 2.5, '3']] }]) {
@@ -388,7 +388,7 @@ test('saves: a fresh save, a round trip, and junk or the old 3D save load as a p
   assert.deepEqual(plain(back), plain(good));
   // Each field on its own: wrong types, out of range, locked items, best times without stars.
   const odd = KR.loadSave({ ...good, label: 'fr', color: 7, hat: 99, seen: 999, coach: 'yes', endless: -5, best: [[0, 'x', 1e9, 10]], stars: [[0, 2, 2, 2]] });
-  assert.equal(odd.label, 'both');
+  assert.equal(odd.label, 'ar');
   assert.equal(odd.color, 0, 'a colour the stars do not unlock yet');
   assert.equal(odd.hat, 0);
   assert.equal(odd.seen, 0);

@@ -158,8 +158,11 @@
           '<span class="power-emo" aria-hidden="true">💥</span><span class="power-name">مطرقة</span><b id="anvilCount" class="power-count">1</b></button>' +
         '<button type="button" id="powerZap" class="power-btn zap" data-power="zap" aria-pressed="false">' +
           '<span class="power-emo" aria-hidden="true">⚡</span><span class="power-name">برق</span><b id="zapCount" class="power-count">1</b></button></div>' : '') +
-      '<div id="modeChoices" class="mode-choices"><button id="localButton" class="button" type="button">لاعبان على نفس الجهاز</button>' +
-        '<button id="pcButton" class="button secondary" type="button">العب ضد الكمبيوتر</button></div>' +
+      '<div id="modeChoices" class="mode-choices">' +
+        (isConnect
+          ? '<button id="pcButton" class="button" type="button">العب ضد الكمبيوتر</button><button id="localButton" class="button secondary" type="button">لاعبان على نفس الجهاز</button>'
+          : '<button id="localButton" class="button" type="button">لاعبان على نفس الجهاز</button><button id="pcButton" class="button secondary" type="button">العب ضد الكمبيوتر</button>') +
+      '</div>' +
       '<div class="player-guide"><p><span class="guide-token one" aria-hidden="true">' + (isConnect ? '★' : 'X') + '</span><span id="guide1">اللاعب الأول</span><span>' + (isConnect ? 'الأصفر' : 'إكس') + '</span></p>' +
         '<p><span class="guide-token two" aria-hidden="true">' + (isConnect ? '⚡' : 'O') + '</span><span id="guide2">اللاعب الثاني</span><span>' + (isConnect ? 'الأحمر' : 'دائرة') + '</span></p></div>' +
       '<p class="keyboard-hint">الأسهم للتنقل · Enter للعب<br>P للاستراحة · M للصوت</p></aside>' +
@@ -605,7 +608,7 @@
     if (juice) juice.back();
     stopTimers(); pendingBoardFocus = null; mode = 'menu'; roundVariant = variant; selectedPower = null;
     state = createState(variant); startingSeat = 1; score = { 1: 0, 2: 0 };
-    paused = false; renderBoard(); el('localButton').focus();
+    paused = false; renderBoard(); el(isConnect ? 'pcButton' : 'localButton').focus();
   }
   function pause(value, moveFocus) {
     if (mode === 'menu' || finished()) return;

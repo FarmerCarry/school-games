@@ -15,7 +15,7 @@
     t: 0, matchT: 0, state: 'boot', mode: 'ffa', mapIdx: -1, diff: 0, demo: false,
     ents: [], player: null, W: null, nav: null, map: null, pickups: [], hotNodes: [], spawns: [],
     frozen: true, over: false, countdown: 0, headless: false, teamScore: [0, 0, 0],
-    ui: {}, timeScale: 1, cfg: { ffa: { bots: 6, target: [20, 20, 20], time: 240 }, team: { bots: 9, target: [40, 40, 50], time: 300 } },
+    ui: {}, timeScale: 1, cfg: { ffa: { bots: 6, target: [12, 12, 12], time: 120 }, team: { bots: 9, target: [20, 20, 20], time: 150 } },
     stats: null
   };
   function noop() {}
@@ -78,11 +78,28 @@
   var pickGeos = { hp: SS.pickupGeo('hp'), ammo: SS.pickupGeo('ammo'), power: SS.pickupGeo('power') };
 
   /* ============================================================ maps */
-  var beltMesh = null;
+  var beltMesh = null, groundMesh = null, groundTex = null;
+  function updateGround(gd) {
+    if (!gd) return;
+    if (!groundMesh) {
+      groundTex = new T.DataTexture(gd.data, gd.n, gd.n);
+      groundTex.colorSpace = T.SRGBColorSpace;
+      groundTex.flipY = true;
+      groundTex.magFilter = groundTex.minFilter = T.NearestFilter;
+      groundTex.needsUpdate = true;
+      groundMesh = new T.Mesh(new T.PlaneGeometry(gd.half * 2, gd.half * 2).rotateX(-Math.PI / 2), new T.MeshLambertMaterial({ map: groundTex }));
+      groundMesh.matrixAutoUpdate = false;
+      scene.add(groundMesh);
+    } else {
+      groundTex.image = { data: gd.data, width: gd.n, height: gd.n };
+      groundTex.needsUpdate = true;
+    }
+  }
   G.loadMap = function (idx) {
     if (G.mapIdx === idx && G.map) return G.map;
     var def = SS.MAPS[idx];
     var m = def.build();
+    updateGround(m.groundData);
     // pickup pads baked into the map geometry
     for (var i = 0; i < m.pickups.length; i++) {
       var pk = m.pickups[i];
@@ -335,7 +352,6 @@
       e.prefW = r < D.sniperOdds ? 2 : r < D.sniperOdds + 0.27 ? 1 : 0;
       e.wpn = e.prefW;
       e.bot = new SS.Bot(e, G.diff);
-      if (team === 1 && !G.demo && k === 0) e.bot.follow = true;
       G.ents.push(e);
     }
     // the match clock starts before anyone spawns: respawn() stamps spawnT with it (bots go easy on a
@@ -793,7 +809,7 @@
       if (c < 0) place++; else if (c === 0) tie.push(o);
     }
     if (G.mode === 'team') win = G.teamScore[1] > G.teamScore[2] ? 1 : G.teamScore[2] > G.teamScore[1] ? 2 : 0;
-    else win = place === 1 && !tie.length ? 1 : 0;
+    else win = place <= 3 ? 1 : 0;
     return { list: list, place: place, tie: tie, win: win, team: G.mode === 'team', scores: G.teamScore.slice(), time: G.matchT };
   };
 

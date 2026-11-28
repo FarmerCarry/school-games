@@ -648,7 +648,7 @@
     $('bPause').hidden = true;
     world.allowRespawn = reason === 'death';
     if (reason !== 'death') {
-      if (rank === 1) { S.win(); banner(reason === 'domination' ? 'سيطرة كاملة!' : 'فزت!', '#ffcf33', 96, 2.2, 'المركز الأول!', true); for (var k = 0; k < 5; k++) burst(Kit.rand(100, 1180), -20, 18, ['#ff6fae', '#ffcf33', '#45c1ff', '#34d994', '#a77bff'], 200, { g: 300, life: 2, screen: true }); }
+      if (rank <= 3) { S.win(); banner(reason === 'domination' ? 'سيطرة كاملة!' : (rank === 1 ? 'فزت!' : 'أحسنت!'), '#ffcf33', 96, 2.2, rank === 1 ? 'المركز الأول!' : 'ضمن أفضل 3! (المركز ' + rank + ')', true); for (var k = 0; k < 5; k++) burst(Kit.rand(100, 1180), -20, 18, ['#ff6fae', '#ffcf33', '#45c1ff', '#34d994', '#a77bff'], 200, { g: 300, life: 2, screen: true }); }
       else { banner('انتهى الوقت!', '#45c1ff', 80, 2, 'المركز ' + rank, true); S.milestone(); }
     }
   }
@@ -656,23 +656,25 @@
   function finishRound() {
     var en = ending, peak = Math.min(100, en.peak);
     var beforeKeys = roundBefore.keys, beforeArenaNext = roundBefore.arenaNext;
-    var st = save.stars[arenaIdx], got = [peak >= arena.goals[0], peak >= arena.goals[1], en.reason !== 'death' && en.rank === 1];
+    var st = save.stars[arenaIdx], got = [peak >= arena.goals[0], peak >= arena.goals[1], en.rank <= 3];
+    var starCount = (got[0] ? 1 : 0) + (got[1] ? 1 : 0) + (got[2] ? 1 : 0);
+    var won = en.rank <= 3 || starCount >= 2;
     var newStars = roundStars.slice();
     got.forEach(function (g, i) { if (g && !st[i]) { st[i] = 1; newStars.push(i); } });
     newStars.sort();
     var prevBest = save.best;
     var newBest = peak > save.best + 0.001 && peak >= 0.5;
     bank(peak, en.kills); save.rounds++;
-    if (got[2]) save.wins++;
-    // play stats: the coach line stops after 3 rounds (sent with the result); first place when time is up
-    // (or full domination) wins, anything else loses; score = peak territory %
+    if (won) save.wins++;
+    // play stats: the coach line stops after 3 rounds (sent with the result); finishing Top-3
+    // or earning 2+ stars counts as a win (even if eliminated late); score = peak territory %
     if (save.rounds == 3) Kit.stats.tutorial('done');
-    Kit.stats.end(got[2] ? 'win' : 'lose', peak | 0);
+    Kit.stats.end(won ? 'win' : 'lose', peak | 0);
     var afterKeys = unlockedKeys(), newUnl = afterKeys.filter(function (k) { return beforeKeys.indexOf(k) < 0; });
     var arenaUnl = !beforeArenaNext && arenaIdx + 1 < PG.ARENAS.length && arenaUnlocked(arenaIdx + 1);
     if (arenaUnl) save.arena = arenaIdx + 1;
     persist();
-    result = { en: en, peak: peak, got: got, newStars: newStars, newBest: newBest, prevBest: prevBest, newUnl: newUnl, arenaUnl: arenaUnl };
+    result = { en: en, peak: peak, got: got, won: won, newStars: newStars, newBest: newBest, prevBest: prevBest, newUnl: newUnl, arenaUnl: arenaUnl };
     showOver();
   }
 
@@ -742,11 +744,10 @@
     var kx = (K.anyDown(['ArrowRight', 'KeyD']) ? 1 : 0) - (K.anyDown(['ArrowLeft', 'KeyA']) ? 1 : 0);
     var ky = (K.anyDown(['ArrowDown', 'KeyS']) ? 1 : 0) - (K.anyDown(['ArrowUp', 'KeyW']) ? 1 : 0);
     if (kx || ky) { inputMode = 'keys'; keysUsed = true; player.target = Math.atan2(ky, kx); syncPtr(); return; }
-    // Once arrows/WASD have steered, a small bump of the mouse on a shared desk must not take over
-    // (the blob would swerve into its own trail): switching needs a deliberate 40 px move within
-    // 0.3 s. Players who only use the mouse still switch after 4 px.
-    if (Math.abs(ptr.x - lastPtr.x) + Math.abs(ptr.y - lastPtr.y) > (keysUsed ? 40 : 4)) { inputMode = 'mouse'; syncPtr(); }
-    else if (keysUsed && clock - lastPtr.t > 0.3) syncPtr();   // slow drift never adds up
+    // Switching to mouse steering requires deliberate travel (>=28 px, or >=40 px after keyboard use)
+    // within 0.3 s so desk bumps never hijack steering into your own trail.
+    if (Math.abs(ptr.x - lastPtr.x) + Math.abs(ptr.y - lastPtr.y) >= (keysUsed ? 40 : 28)) { inputMode = 'mouse'; syncPtr(); }
+    else if (clock - lastPtr.t > 0.3) syncPtr();   // slow drift never adds up
     if (inputMode === 'mouse') {
       var sx = (player.x * CS - cam.x) * cam.z + W / 2, sy = (player.y * CS - cam.y) * cam.z + H / 2;
       var dx = ptr.x - sx, dy = ptr.y - sy;
@@ -1293,13 +1294,16 @@
     var r = result, en = r.en;
     var head = $('oHead'), why = $('oWhy');
     if (en.reason === 'death') {
-      head.textContent = 'أوه لا!'; head.style.color = '#ff6fae';
+      head.textContent = r.won ? 'أحسنت!' : 'أوه لا!'; head.style.color = r.won ? '#ffcf33' : '#ff6fae';
       if (en.deathReason === 'self') why.textContent = 'اصطدمتَ بخطّك!';
       else if (en.deathReason === 'swallow') why.textContent = (en.killer ? en.killer.name : 'روبوت') + ' ابتلع أرضك!';
       else why.textContent = (en.killer ? en.killer.name : 'روبوت') + ' قطع خطّك!';
     } else if (en.rank === 1) {
       head.textContent = en.reason === 'domination' ? 'سيطرة كاملة!' : 'فزت!'; head.style.color = '#ffcf33';
       why.textContent = 'أكبر أرض على الخريطة!';
+    } else if (en.rank <= 3) {
+      head.textContent = 'فزت!'; head.style.color = '#ffcf33';
+      why.textContent = 'أنهيت الجولة ضمن أفضل 3!';
     } else {
       head.textContent = 'انتهى الوقت!'; head.style.color = '#45c1ff';
       why.textContent = 'نجوت حتى النهاية!';
@@ -1311,7 +1315,7 @@
     if (r.newBest) { ob.className = 'nb'; ob.textContent = 'رقم قياسي جديد!'; }
     else { ob.className = ''; ob.innerHTML = 'أفضل مساحة: ' + ltrHtml(save.best.toFixed(1) + '%'); }
     // stars
-    var st = save.stars[arenaIdx], labels = ['لوّن ' + ltrHtml(arena.goals[0] + '%'), 'لوّن ' + ltrHtml(arena.goals[1] + '%'), 'المركز الأول عند نهاية الوقت'];
+    var st = save.stars[arenaIdx], labels = ['لوّن ' + ltrHtml(arena.goals[0] + '%'), 'لوّن ' + ltrHtml(arena.goals[1] + '%'), 'ضمن أفضل 3 مراكز'];
     var box = $('oStars'); box.innerHTML = '';
     for (var i = 0; i < 3; i++) {
       var d = document.createElement('div');
@@ -1326,7 +1330,7 @@
     var close = '';
     if (!st[0]) close = 'ينقصك ' + Math.max(0.1, arena.goals[0] - r.peak).toFixed(1) + '% فقط للنجمة الأولى!';
     else if (!st[1]) close = 'ينقصك ' + Math.max(0.1, arena.goals[1] - r.peak).toFixed(1) + '% للنجمة الثانية!';
-    else if (!st[2]) close = 'ابقَ الأكبر حتى نهاية الوقت لتربح النجمة الثالثة!';
+    else if (!st[2]) close = 'ادخل ضمن أفضل 3 مراكز لتربح النجمة الثالثة!';
     else if (arenaIdx + 1 < PG.ARENAS.length) close = 'جرّب الساحة التالية: ' + PG.ARENAS[arenaIdx + 1].name + '!';
     else close = 'أنت بطل لوّن الأرض!';
     $('oClose').innerHTML = isoHtml(close);

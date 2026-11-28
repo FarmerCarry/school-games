@@ -715,7 +715,7 @@
   function calcStars(w) { if (!w || w.phase !== 'win') return 0; return w.shots <= w.par ? 3 : w.shots <= w.par + 1 ? 2 : 1; }
   function freshSave() {
     var lv = []; for (var i = 0; i < STAGES.length; i++) lv.push({ s: 0, best: 0 });
-    return { v: 2, diff: 'mid', coins: 0, launcher: 0, launchers: [1, 0, 0, 0, 0], palette: 0, palettes: [1, 0, 0, 0], lv: lv };
+    return { v: 2, diff: 'easy', coins: 0, launcher: 0, launchers: [1, 0, 0, 0, 0], palette: 0, palettes: [1, 0, 0, 0], lv: lv };
   }
   function loadSave(raw) {
     var base = freshSave();

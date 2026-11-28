@@ -11,9 +11,9 @@
   var R = P.R;
 
   var LEVELS = {
-    easy:   { noise: 0.028, speedNoise: 0.14, simTop: 3, spins: [0], powers: [1], place: 10, mistake: 0.25, safety: false, think: 1.0 },
-    medium: { noise: 0.011, speedNoise: 0.07, simTop: 6, spins: [0, 0.6], powers: [0.85, 1.2], place: 24, mistake: 0.06, safety: true, think: 0.9 },
-    hard:   { noise: 0.0035, speedNoise: 0.03, simTop: 9, spins: [0, 0.7, -0.7], powers: [0.75, 1, 1.4], place: 44, mistake: 0, safety: true, think: 0.8 }
+    easy:   { noise: 0.11, speedNoise: 0.22, simTop: 1, spins: [0], powers: [1], place: 5, mistake: 0.55, safety: false, think: 0.45 },
+    medium: { noise: 0.011, speedNoise: 0.07, simTop: 6, spins: [0, 0.6], powers: [0.85, 1.2], place: 24, mistake: 0.06, safety: true, think: 0.45 },
+    hard:   { noise: 0.0035, speedNoise: 0.03, simTop: 9, spins: [0, 0.7, -0.7], powers: [0.75, 1, 1.4], place: 44, mistake: 0, safety: true, think: 0.4 }
   };
   var AI = { LEVELS: LEVELS };
 
@@ -185,7 +185,7 @@
         cue.x = ox; cue.y = oy; cue.on = wasOn;
         if (lv.mistake && cands.length > 1 && rand() < lv.mistake) {
           // an easy CPU sometimes goes for a harder shot
-          var pickI = Math.floor(rand() * Math.min(cands.length, 4));
+          var pickI = 1 + Math.floor(rand() * Math.min(cands.length - 1, 4));
           var c = cands.splice(pickI, 1)[0]; cands.unshift(c);
         }
         cands = cands.slice(0, lv.simTop);

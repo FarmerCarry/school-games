@@ -321,7 +321,7 @@
       plan: plan, tier: plan.tier, party: plan.party, rand: BB.rng(seed == null ? 1 : seed),
       t: 0, seg: -1, mode: '', tune: null, segT: 0, segHits: 0, goal: 0, made: 0,
       hits: 0, escapes: 0, missClicks: 0, spawned: 0, score: 0, combo: 0, bestCombo: 0, mult: 1, lastHit: -9,
-      wave: 1, over: false, targets: [], next: 1, spawnT: 0, ev: [], activity: 0,
+      wave: 1, over: false, targets: [], next: 1, spawnT: 0, ev: [], activity: 0, fastTrack: false,
       bop: { x: W / 2, y: H / 2 + 40, vx: 0, vy: 0 },
       frog: { x: BB.FROG.x, y: BB.FROG.ground, vy: 0, air: false, buffer: 0, tongue: 0, tx: 0, ty: 0, jumps: 0 },
       basket: { x: W / 2, vx: 0, hw: 100, squash: 0 },
@@ -341,10 +341,18 @@
     w.basket.hw = w.mode === 'catch' ? knob(w, 'hw') : w.basket.hw;
     if (MODE[w.mode].enter) MODE[w.mode].enter(w);
   }
-  // A knob for the current mode and tier, with the party's faster waves on top.
+  // A knob for the current mode and tier, with the party's faster waves (or fast-track boost) on top.
   function knob(w, key) {
     var v = w.tune[key][w.tier - 1];
-    if (!w.party) return v;
+    if (!w.party) {
+      if (w.fastTrack) {
+        if (key === 'gap') return v * 0.72;
+        if (key === 'live') return v + 1;
+        if (key === 'speed') return v * 1.15;
+        if (key === 'gold') return 0.22;
+      }
+      return v;
+    }
     var k = Math.pow(1.12, w.wave - 1);
     if (key === 'gap') return v * 0.62 / k;
     if (key === 'speed' || key === 'fall') return v * 1.1 * k;
@@ -359,7 +367,7 @@
 
   function make(w, kind, x, y, r) {
     var t = { id: w.next++, kind: kind, x: x, y: y, r: r, age: 0, phase: w.rand() * 6.283, color: Math.floor(w.rand() * 6),
-      gold: w.party && w.rand() < knob(w, 'gold'), dead: false };
+      gold: (w.party || w.fastTrack) && w.rand() < knob(w, 'gold'), dead: false };
     w.targets.push(t); w.spawned++; w.made++;
     w.ev.push({ t: 'spawn', kind: kind, id: t.id, x: x, y: y });
     return t;

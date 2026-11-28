@@ -20,7 +20,7 @@
   }
 
   var dirty = true;
-  var view = Kit.fit(canvas, 1280, 720, { onResize: function (v) { syncUi(v); dirty = true; } });
+  var view = Kit.fit(canvas, 1280, 720, { maxDpr: 1.5, onResize: function (v) { syncUi(v); dirty = true; } });
   syncUi(view);
 
   var fx = A.fx(280), badgeSpring = A.spring(260, 13), heroBlink = {};
@@ -246,8 +246,9 @@
   function toTitle() { run = null; syncTopChips(); setMode('title'); }
 
   /* ----------------------------------------------------- Worlds & Map UI */
-  var stageButtons = [];
+  var stageButtons = [], mapBuilt = false;
   function buildMap() {
+    mapBuilt = true;
     var box = $('worlds'); box.innerHTML = ''; stageButtons = [];
     MG.WORLDS.forEach(function (w, wIdx) {
       var card = document.createElement('div');
@@ -278,11 +279,12 @@
     syncTopChips();
   }
 
-  function toMap() { run = null; refreshMap(); setMode('map'); J.whoosh(0.35); }
+  function toMap() { if (!mapBuilt) buildMap(); run = null; refreshMap(); setMode('map'); J.whoosh(0.35); }
 
   /* --------------------------------------------------- Mech Hangar Shop */
-  var skinCards = [];
+  var skinCards = [], hangarBuilt = false;
   function buildHangar() {
+    hangarBuilt = true;
     var grid = $('skins-grid'); grid.innerHTML = ''; skinCards = [];
     MG.SKINS.forEach(function (sk, idx) {
       var b = document.createElement('button');
@@ -306,14 +308,15 @@
     syncTopChips();
   }
 
-  function openHangar(from) { hangarFrom = from || 'title'; run = null; refreshHangar(); setMode('hangar'); J.select(); }
+  function openHangar(from) { if (!hangarBuilt) buildHangar(); hangarFrom = from || 'title'; run = null; refreshHangar(); setMode('hangar'); J.select(); }
   function closeHangar() { J.back(); if (hangarFrom === 'map') toMap(); else toTitle(); }
 
   function pickSkin(idx, el) {
     var out = MG.buyOrEquipSkin(save, idx);
     if (!out.ok) {
       J.error();
-      el.classList.remove('wiggle'); void el.offsetWidth; el.classList.add('wiggle');
+      if (Kit.retrigger) Kit.retrigger(el, 'wiggle');
+      else { el.classList.remove('wiggle'); requestAnimationFrame(function () { el.classList.add('wiggle'); }); }
       return;
     }
     persist();
@@ -346,8 +349,7 @@
     $('hud-world').textContent = stObj.endless ? 'طور الفضاء' : MG.WORLDS[stObj.world].name;
     $('hud-level').textContent = stObj.tag;
     $('hud-coins').textContent = '0';
-    $('hud-squad').textContent = '×' + run.count;
-    $('hud-boss').textContent = String(run.bossMax);
+    resetHudCache();
     updateHudProgress();
 
     Kit.stats.round(stObj.roundKey);
@@ -470,13 +472,26 @@
     ev.length = 0;
   }
 
+  var elTripFill = $('trip-fill'), elTripMe = $('trip-me'), elHudSquad = $('hud-squad'), elHudBoss = $('hud-boss');
+  var hudPrev = { pct: '', squad: -1, boss: -1 };
+  function resetHudCache() { hudPrev.pct = ''; hudPrev.squad = -1; hudPrev.boss = -1; }
   function updateHudProgress() {
     if (!run) return;
-    var p = MG.progress(run);
-    $('trip-fill').style.width = (p * 100).toFixed(1) + '%';
-    $('trip-me').style.left = 'calc(' + (p * 100).toFixed(1) + '% - 20px)';
-    $('hud-squad').textContent = '×' + run.count;
-    $('hud-boss').textContent = String(run.phase === 'clash' ? run.bossHp : run.bossMax);
+    var pct = (Math.round(MG.progress(run) * 200) / 2).toFixed(1) + '%';
+    if (pct !== hudPrev.pct) {
+      hudPrev.pct = pct;
+      elTripFill.style.width = pct;
+      elTripMe.style.left = 'calc(' + pct + ' - 20px)';
+    }
+    if (run.count !== hudPrev.squad) {
+      hudPrev.squad = run.count;
+      elHudSquad.textContent = '×' + run.count;
+    }
+    var bossVal = run.phase === 'clash' ? run.bossHp : run.bossMax;
+    if (bossVal !== hudPrev.boss) {
+      hudPrev.boss = bossVal;
+      elHudBoss.textContent = String(bossVal);
+    }
   }
 
   /* --------------------------------------------------- Input Handling */
@@ -587,15 +602,37 @@
   }
 
   /* --------------------------------------------------- 2D Pseudo-3D Render */
-  function drawOutlinedText(ctx, text, x, y, size, fill, dir, lineW) {
-    ctx.save();
-    ctx.direction = dir || 'ltr';
-    ctx.font = '700 ' + Math.max(11, Math.round(size)) + 'px Fredoka';
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
-    ctx.lineWidth = lineW || Math.max(3, size * 0.14);
-    ctx.strokeStyle = '#0b0e26'; ctx.strokeText(text, x, y);
-    ctx.fillStyle = fill || '#ffffff'; ctx.fillText(text, x, y);
-    ctx.restore();
+  var TEXT_BASE = 48, textCache = new Map(), gradCache = {};
+  function clearRenderCaches() { textCache.clear(); gradCache = {}; }
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { clearRenderCaches(); dirty = true; });
+  canvas.addEventListener('contextrestored', function () { clearRenderCaches(); dirty = true; });
+
+  function getTextSprite(text, fill, dir) {
+    var key = text + '|' + (fill || '#ffffff') + '|' + (dir || 'ltr');
+    var hit = textCache.get(key);
+    if (hit) return hit;
+    if (textCache.size >= 96) textCache.clear();
+    var c = document.createElement('canvas'), g = c.getContext('2d');
+    var lw = Math.round(TEXT_BASE * 0.14);
+    g.font = '700 ' + TEXT_BASE + 'px Fredoka';
+    var tw = Math.ceil(g.measureText(text).width) + lw * 2 + 12;
+    var th = Math.ceil(TEXT_BASE * 1.4) + lw * 2;
+    c.width = Math.max(16, tw); c.height = Math.max(16, th);
+    g.direction = dir || 'ltr';
+    g.font = '700 ' + TEXT_BASE + 'px Fredoka';
+    g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineJoin = 'round';
+    g.lineWidth = lw; g.strokeStyle = '#0b0e26'; g.strokeText(text, c.width / 2, c.height / 2);
+    g.fillStyle = fill || '#ffffff'; g.fillText(text, c.width / 2, c.height / 2);
+    var spr = { c: c, w: c.width, h: c.height };
+    textCache.set(key, spr);
+    return spr;
+  }
+
+  function drawOutlinedText(ctx, text, x, y, size, fill, dir) {
+    var s = Math.max(11, Math.round(size * 0.5) * 2);
+    var spr = getTextSprite(text, fill, dir), sc = s / TEXT_BASE;
+    var dw = spr.w * sc, dh = spr.h * sc;
+    ctx.drawImage(spr.c, x - dw / 2, y - dh / 2, dw, dh);
   }
 
   function drawScene(ctx, r, isDemo) {
@@ -618,9 +655,15 @@
     var px = 980, py = 112;
     ctx.strokeStyle = 'rgba(56, 189, 248, 0.35)'; ctx.lineWidth = 8;
     ctx.beginPath(); ctx.ellipse(px, py, 92, 22, -0.22, 0, 6.283); ctx.stroke();
-    var pg = ctx.createRadialGradient(px - 18, py - 18, 8, px, py, 52);
-    pg.addColorStop(0, w.accent); pg.addColorStop(1, w.sky[0]);
-    ctx.fillStyle = pg; ctx.beginPath(); ctx.arc(px, py, 50, 0, 6.283); ctx.fill();
+    var gKey = 'w' + (wIdx % MG.WORLDS.length), cg = gradCache[gKey];
+    if (!cg) {
+      var pg = ctx.createRadialGradient(px - 18, py - 18, 8, px, py, 52);
+      pg.addColorStop(0, w.accent); pg.addColorStop(1, w.sky[0]);
+      var bgGrad = ctx.createLinearGradient(0, HORIZON_Y, 0, 720);
+      bgGrad.addColorStop(0, w.sky[1]); bgGrad.addColorStop(1, '#040717');
+      cg = gradCache[gKey] = { pg: pg, bg: bgGrad };
+    }
+    ctx.fillStyle = cg.pg; ctx.beginPath(); ctx.arc(px, py, 50, 0, 6.283); ctx.fill();
     ctx.restore();
 
     var cruiser = getCruiserSprite(), cDrift = reduced ? 0 : ((t * 22) % 1480);
@@ -638,9 +681,7 @@
       ctx.fillStyle = '#08112b'; ctx.globalAlpha = 1;
     }
 
-    var bgGrad = ctx.createLinearGradient(0, HORIZON_Y, 0, 720);
-    bgGrad.addColorStop(0, w.sky[1]); bgGrad.addColorStop(1, '#040717');
-    ctx.fillStyle = bgGrad; ctx.fillRect(0, HORIZON_Y, 1280, 720 - HORIZON_Y);
+    ctx.fillStyle = cg.bg; ctx.fillRect(0, HORIZON_Y, 1280, 720 - HORIZON_Y);
 
     // Pseudo-3D Star-Cruiser Highway
     var topL = project(-1.5, 0, 76), topR = project(1.5, 0, 76);
@@ -973,7 +1014,7 @@
 
   var loop = null;
   try {
-    buildMap(); buildHangar(); toTitle(); render();
+    toTitle();
     window.__game = {
       get state() { return snapshot(); },
       get save() { return JSON.parse(JSON.stringify(save)); },

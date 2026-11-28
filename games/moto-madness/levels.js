@@ -232,15 +232,15 @@
         .ramp(240, 70).drop(200).flat(600);
     } },
     { name: 'مصعد الجليد', theme: 'winter', seed: 13, stars: [27.3, 47], build: function (b) {
-      b.flat(600).sign('قف على المصعد! ↓ للفرامل').flat(500)
-        .lift(300, 300).flat(700)
+      b.flat(600).sign('توقف فوق المصعد!').flat(500)
+        .lift(360, 300).flat(700)
         .landing(700, 200).flat(300)
         .checkpoint().flat(100)
         .sign('قف على المنصة لتعبر!').flat(300)
         .ferry(760, 300).flat(600)
         .checkpoint().flat(200)
         .hill(700, 140).flat(500)
-        .lift(300, 340).flat(600)
+        .lift(360, 340).flat(600)
         .kicker(240, 100).pit(320, 240).flat(500)
         .landing(800, 300).flat(500)
         .checkpoint().flat(200)
@@ -287,7 +287,7 @@
     /* -------------------------------------------------------- NIGHT FACTORY */
     { name: 'جولة الليل', theme: 'factory', seed: 16, stars: [19.2, 34], build: function (b) {
       b.flat(600).sign('منصات التيربو = سرعة خارقة!').flat(300)
-        .boost(220).kicker(240, 100).pit(560, 240).flat(600)
+        .boost(220).kicker(240, 100).pit(420, 240).flat(600)
         .crates([3, 2, 1]).flat(300)
         .hill(700, 140).flat(500)
         .checkpoint().flat(200)
@@ -297,8 +297,9 @@
         .checkpoint().flat(200)
         .boost(220).loop(180).flat(300)
         .crates([2, 2, 2]).flat(300)
-        .landing(900, 260).flat(500)
-        .boost(220).kicker(260, 110).pit(640, 260).flat(600)
+        .landing(900, 260).flat(200)
+        .checkpoint().flat(300)
+        .boost(220).kicker(260, 110).pit(480, 260).flat(600)
         .hill(800, 160).flat(500);
     } },
     { name: 'ساحة المكابس', theme: 'factory', seed: 17, stars: [24.8, 43], build: function (b) {
@@ -320,17 +321,19 @@
     { name: 'حُفر الشرر', theme: 'factory', seed: 18, stars: [20, 35], build: function (b) {
       b.flat(600)
         .kicker(220, 90).pit(280, 220).flat(500)
-        .kicker(220, 90).pit(280, 220).flat(500)
+        .kicker(220, 90).hill(320, -45).crates([2, 1]).flat(360)
         .seesaw(400).flat(500)
+        .checkpoint().flat(450)
+        .mushroom(1150).flat(60).hill(340, -50).crates([3, 2]).flat(450)
+        .boost(220).kicker(260, 100).pit(480, 240).flat(600)
+        .hill(420, -55).crates([3, 2, 1]).flat(350)
         .checkpoint().flat(200)
-        .mushroom(1150).flat(60).pit(320, 220).flat(600)
-        .boost(220).kicker(260, 100).pit(560, 240).flat(600)
-        .seesaw(420).flat(400)
-        .checkpoint().flat(200)
-        .to(600, 200).flat(300).boost(220).ramp(260, 90).pit(500, 300, -200).flat(1400)
-        .kicker(240, 100).pit(320, 220).flat(500)
+        .to(600, 200).flat(300).boost(220).ramp(260, 90).pit(500, 300, -200).flat(800)
+        .checkpoint().flat(500)
+        .kicker(240, 100).hill(360, -50).crates([2, 2]).flat(400)
         .mushroom(1200).flat(150).slope(40, 300).flat(900)
-        .landing(900, 300).flat(500)
+        .landing(900, 300).flat(250)
+        .checkpoint().flat(250)
         .seesaw(400).flat(600);
     } },
     { name: 'محطّم الصناديق', theme: 'factory', seed: 19, stars: [14.5, 28], build: function (b) {

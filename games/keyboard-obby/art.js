@@ -71,11 +71,13 @@
   }
   KO.legends = legends;
 
-  KO.createView = function (canvas) {
+  KO.createView = function (canvas, opts) {
+    opts = opts || {};
     var T = window.THREE;
     if (!T) throw new Error('three.js is unavailable');
-    var wgl = Kit.webgl.createRenderer(canvas);
+    var wgl = Kit.webgl.createRenderer(canvas, { light: !!opts.light });
     var renderer = wgl.renderer, ratio = wgl.ratio;
+    var isSoft = wgl.software || !!opts.light || !!(window.Kit && Kit.gfx && Kit.gfx.light);
     var scene = new T.Scene(), camera = new T.PerspectiveCamera(44, 16 / 9, 0.1, 160);
     scene.fog = new T.Fog(0xffffff, 26, 62);
     var hemi = new T.HemisphereLight(0xffffff, 0xb59bd6, 1.9), sun = new T.DirectionalLight(0xffffff, 1.9);
@@ -144,9 +146,25 @@
     /* -------------------------------------------------------- jelly */
     function rgb3(hex) { var n = parseInt(hex.slice(1), 16); return new T.Vector3((n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255); }
     var jellyU = { uTime: { value: 0 }, uCalm: { value: 1 }, uA: { value: rgb3('#ff3d8e') }, uB: { value: rgb3('#ff7cb8') }, uC: { value: rgb3('#ffd0e6') }, uFog: { value: rgb3('#ffd6ea') } };
-    var jellyGeo = new T.PlaneGeometry(90, 70, 60, 44);
+    var jellyGeo = new T.PlaneGeometry(90, 70, isSoft ? 16 : 32, isSoft ? 12 : 24);
     jellyGeo.rotateX(-Math.PI / 2);
     jellyGeo.translate(0, 0, -12);
+    var jellyFrag = isSoft ? [
+      'uniform vec3 uA; uniform vec3 uB; uniform vec3 uC; uniform vec3 uFog;',
+      'varying float vH; varying float vD;',
+      'void main() {',
+      '  vec3 col = mix(uA, uB, clamp(vH * 4.0 + 0.5, 0.0, 1.0));',
+      '  col = mix(col, uC, smoothstep(0.05, 0.13, vH) * 0.5);',
+      '  gl_FragColor = vec4(mix(col, uFog, clamp((vD - 16.0) / 34.0, 0.0, 1.0)), 1.0);',
+      '}'].join('\n') : [
+      'uniform vec3 uA; uniform vec3 uB; uniform vec3 uC; uniform vec3 uFog; uniform float uTime;',
+      'varying float vH; varying vec2 vP; varying float vD;',
+      'void main() {',
+      '  vec3 col = mix(uA, uB, clamp(vH * 4.0 + 0.5, 0.0, 1.0));',
+      '  float s = sin(vP.x * 1.15 + vP.y * 0.85 + uTime * 0.45) * sin(vP.y * 1.05 - uTime * 0.25);',
+      '  col = mix(col, uC, smoothstep(0.55, 0.92, s) * 0.55 + smoothstep(0.06, 0.12, vH) * 0.35);',
+      '  gl_FragColor = vec4(mix(col, uFog, clamp((vD - 16.0) / 34.0, 0.0, 1.0)), 1.0);',
+      '}'].join('\n');
     var jelly = new T.Mesh(jellyGeo, new T.ShaderMaterial({
       uniforms: jellyU,
       vertexShader: [
@@ -158,16 +176,7 @@
         '  vec4 mv = modelViewMatrix * vec4(p, 1.0); vD = -mv.z;',
         '  gl_Position = projectionMatrix * mv;',
         '}'].join('\n'),
-      fragmentShader: [
-        'uniform vec3 uA; uniform vec3 uB; uniform vec3 uC; uniform vec3 uFog; uniform float uTime;',
-        'varying float vH; varying vec2 vP; varying float vD;',
-        'void main() {',
-        '  vec3 col = mix(uA, uB, clamp(vH * 4.0 + 0.5, 0.0, 1.0));',
-        '  float s = sin(vP.x * 1.3 + sin(vP.y * 0.9 + uTime * 0.5) * 1.8 + uTime * 0.3) * sin(vP.y * 1.1 - uTime * 0.25);',
-        '  col = mix(col, uC, smoothstep(0.55, 0.92, s) * 0.6);',
-        '  col = mix(col, uC, smoothstep(0.06, 0.12, vH) * 0.35);',
-        '  gl_FragColor = vec4(mix(col, uFog, clamp((vD - 16.0) / 34.0, 0.0, 1.0)), 1.0);',
-        '}'].join('\n')
+      fragmentShader: jellyFrag
     }));
     jelly.position.y = KO.JELLY_LOW;
     scene.add(jelly);
@@ -178,14 +187,18 @@
     var ringT = 9;
 
     /* ------------------------------------------------------- decor */
-    // Far puffy clouds and candy pillars standing in the jelly: one mesh each.
-    (function decor() {
+    // Far puffy clouds and candy pillars standing in the jelly: built after first paint so boot stays instant.
+    var decorBuilt = false;
+    view.buildDecor = function () {
+      if (decorBuilt) return;
+      decorBuilt = true;
       var parts = [], rand = KO.rng(77);
       for (var i = 0; i < 9; i++) {
         var a = -2.2 + i * 0.55 + rand() * 0.2, r = 30 + rand() * 10, cx = Math.sin(a) * r, cz = -Math.cos(a) * r * 0.8 - 6, cy = 6 + rand() * 6;
-        for (var j = 0; j < 5; j++) {
-          var s = 1.4 + rand() * 1.6, g = new T.IcosahedronGeometry(1, 1);
-          parts.push({ g: g, m: at(cx + (j - 2) * 1.8 + rand(), cy + rand() * 0.8 - (Math.abs(j - 2) * 0.4), cz + rand(), 0, rand() * 3, 0, s), c: function (x, y) { return y < cy - 0.6 ? '#dfe6ff' : '#ffffff'; } });
+        var puffs = isSoft ? 3 : 5;
+        for (var j = 0; j < puffs; j++) {
+          var s = 1.4 + rand() * 1.6, g = new T.IcosahedronGeometry(1, 0);
+          parts.push({ g: g, m: at(cx + (j - (puffs - 1) / 2) * 1.8 + rand(), cy + rand() * 0.8 - (Math.abs(j - 2) * 0.4), cz + rand(), 0, rand() * 3, 0, s), c: function (x, y) { return y < cy - 0.6 ? '#dfe6ff' : '#ffffff'; } });
         }
       }
       var clouds = new T.Mesh(merge(parts), new T.MeshLambertMaterial({ vertexColors: true, emissive: 0x9aa6d8, emissiveIntensity: 0.35 }));
@@ -194,18 +207,16 @@
       for (i = 0; i < 12; i++) {
         var side = i % 2 ? 1 : -1, x = side * (11 + rand() * 9), z = -14 + rand() * 18, h = 1.5 + rand() * 3.5, col = pal[i % pal.length];
         if (i % 3 === 0) {
-          // A lollipop: a stick and a round sweet.
-          candy.push({ g: new T.CylinderGeometry(0.12, 0.12, h + 2, 8), m: at(x, KO.JELLY_LOW + (h + 2) / 2 - 1, z), c: '#ffffff' });
-          candy.push({ g: new T.CylinderGeometry(1, 1, 0.35, 18), m: at(x, KO.JELLY_LOW + h + 1.6, z, Math.PI / 2, 0, 0), c: col });
-          candy.push({ g: new T.CylinderGeometry(0.55, 0.55, 0.4, 18), m: at(x, KO.JELLY_LOW + h + 1.6, z, Math.PI / 2, 0, 0), c: '#ffffff' });
+          candy.push({ g: new T.CylinderGeometry(0.12, 0.12, h + 2, 6), m: at(x, KO.JELLY_LOW + (h + 2) / 2 - 1, z), c: '#ffffff' });
+          candy.push({ g: new T.CylinderGeometry(1, 1, 0.35, 12), m: at(x, KO.JELLY_LOW + h + 1.6, z, Math.PI / 2, 0, 0), c: col });
+          candy.push({ g: new T.CylinderGeometry(0.55, 0.55, 0.4, 12), m: at(x, KO.JELLY_LOW + h + 1.6, z, Math.PI / 2, 0, 0), c: '#ffffff' });
         } else {
-          // A gumdrop island.
-          var gd = new T.SphereGeometry(1.4 + rand(), 12, 8, 0, Math.PI * 2, 0, Math.PI / 2);
+          var gd = new T.SphereGeometry(1.4 + rand(), 10, 6, 0, Math.PI * 2, 0, Math.PI / 2);
           candy.push({ g: gd, m: at(x, KO.JELLY_LOW - 0.1, z, 0, 0, 0, 1), c: col });
         }
       }
       var sweets = new T.Mesh(merge(candy), LIT); scene.add(sweets);
-    })();
+    };
 
     /* --------------------------------------------------- the keyboard */
     var NK = KO.KEYS.length, BODY_V = 48, TOP_V = 6, GAP = 0.05, H = 0.55;
@@ -282,7 +293,7 @@
     }
     view.setLang = function (lang) { if (lang !== atlasLang) bakeAtlas(lang); };
     view.rebake = function () { bakeAtlas(atlasLang || 'ar'); };
-    bakeAtlas('ar');
+    bakeAtlas(opts.lang || 'ar');
 
     // Key colours: the finger zone on the sides (a crumbly key is a biscuit, a sinking key
     // is ice blue), the top tinted when it glows, flashes or is the next key.
@@ -356,7 +367,7 @@
       heroMesh.geometry.dispose(); heroMesh.geometry = boxes(heroBoxes(c));
       hatMesh.geometry.dispose(); hatMesh.geometry = boxes(hatBoxes(h));
     };
-    view.setOutfit(0, 0);
+    view.setOutfit(opts.color || 0, opts.hat || 0);
 
     /* ------------------------------------------------- markers & items */
     function glowTexture() {
@@ -369,6 +380,9 @@
     var haloGeo = new T.PlaneGeometry(1, 1); haloGeo.rotateX(-Math.PI / 2);
     var halo = new T.Mesh(haloGeo, new T.MeshBasicMaterial({ map: glowTexture(), color: 0xffe14d, transparent: true, depthWrite: false, blending: T.AdditiveBlending, opacity: 0.9 }));
     halo.renderOrder = 3; scene.add(halo);
+    // Lightweight additive highlight plane pulsing over the target keycap (avoids 35 KB VBO re-uploads!)
+    var keyPulseMat = new T.MeshBasicMaterial({ color: 0xffe55c, transparent: true, opacity: 0.35, depthWrite: false, blending: T.AdditiveBlending });
+    var keyPulse = new T.Mesh(haloGeo, keyPulseMat); keyPulse.renderOrder = 2; keyPulse.visible = false; scene.add(keyPulse);
     var arrowGeo = merge([
       { g: new T.ConeGeometry(0.26, 0.36, 4), m: at(0, 0.18, 0, Math.PI, Math.PI / 4, 0), c: '#ffd23f' },
       { g: new T.BoxGeometry(0.15, 0.3, 0.15), m: at(0, 0.5, 0), c: '#ffd23f' }
@@ -459,8 +473,10 @@
         k++;
       }
       partMesh.count = k; pCount = k;
-      partMesh.instanceMatrix.needsUpdate = true;
-      if (partMesh.instanceColor) partMesh.instanceColor.needsUpdate = true;
+      if (k > 0) {
+        partMesh.instanceMatrix.needsUpdate = true;
+        if (partMesh.instanceColor) partMesh.instanceColor.needsUpdate = true;
+      }
     }
     view.particleCount = function () { return pCount; };
 
@@ -519,7 +535,7 @@
 
     /* ------------------------------------------------------- update */
     var camPos = new T.Vector3(0, 9, 14), camLook = new T.Vector3(0, 0, 0), wantPos = new T.Vector3(), wantLook = new T.Vector3(), first = true;
-    var face = 0, shakeT = 0, W = {}, W2 = {};
+    var face = 0, shakeT = 0, menuTick = 0, W = {}, W2 = {};
     view.shake = function (p) { if (!view.calm) shakeT = Math.max(shakeT, p); };
     // o: { mode: 'play' | 'menu' | 'shop' | 'result', dt, t, w (an engine world or null), next (code), queued: [codes], ahead: code, snap }
     view.update = function (o) {
@@ -528,8 +544,9 @@
       jelly.position.y = KO.jellyY(w ? w.jelly : 0);
       if (view.clouds && !calm) view.clouds.rotation.y = Math.sin(t * 0.02) * 0.08;
       // Keys: the engine's heights, plus a springy dip under every press and landing.
-      var dirtyP = false, dirtyC = false, target = o.next ? KO.KEY[o.next] : null, ahead = o.ahead ? KO.KEY[o.ahead] : null;
+      var minP = NK, maxP = -1, minC = NK, maxC = -1, target = o.next ? KO.KEY[o.next] : null, ahead = o.ahead ? KO.KEY[o.ahead] : null;
       var pulse = calm ? 0.7 : 0.5 + 0.5 * Math.sin(t * 7), subs = Math.ceil(dt / (1 / 120)), hs = dt / Math.max(1, subs), n;
+      var doMenuWave = o.mode === 'menu' && !calm && !isSoft && ((++menuTick % 3) === 0);
       for (i = 0; i < NK; i++) {
         k = KO.KEYS[i];
         // A springy dip (semi-implicit steps of at most 1/120 s stay stable on slow frames).
@@ -542,16 +559,26 @@
           if (st.kind === 'crumble' && st.state === 'shake' && !calm) { var a = Math.min(1, st.t / w.tune.crumble); x = Math.sin(t * 60 + i) * 0.035 * a; y += Math.sin(t * 47 + i) * 0.015 * a; }
           var warn = KO.sinkWarn(w, k.code);
           if (warn > 0 && !calm) x = Math.sin(t * 50 + i) * 0.03 * warn;
-        } else if (o.mode === 'menu' && !calm) y += Math.max(0, Math.sin(t * 2.2 - k.cx * 0.45 + k.row * 0.6)) * 0.07;
+        } else if (doMenuWave) y += Math.max(0, Math.sin(t * 2.2 - k.cx * 0.45 + k.row * 0.6)) * 0.07;
+        else if (o.mode === 'menu' && !calm && !isSoft) y = drawnY[i] === drawnY[i] ? drawnY[i] : 0;
         keyY[i] = y; keyX[i] = x;
-        if (moveKey(i, Math.round(x * 1000) / 1000, Math.round(y * 1000) / 1000)) dirtyP = true;
+        if (moveKey(i, Math.round(x * 1000) / 1000, Math.round(y * 1000) / 1000)) { if (i < minP) minP = i; if (i > maxP) maxP = i; }
         if (flashT[i] > 0) flashT[i] -= dt;
-        var glow = target && target.i === i ? pulse : 0;
+        // Static highlight color on target key; pulse is driven by keyPulse + halo (zero per-frame VBO color uploads!)
+        var glow = target && target.i === i ? 1 : 0;
         var mark = ahead && ahead.i === i ? 0.35 : o.queued && o.queued.indexOf(k.code) >= 0 ? 0.6 : 0;
-        if (paintKey(i, glow, flashT[i] > 0 ? flashK[i] : '', mark)) dirtyC = true;
+        if (paintKey(i, glow, flashT[i] > 0 ? flashK[i] : '', mark)) { if (i < minC) minC = i; if (i > maxC) maxC = i; }
       }
-      if (dirtyP) { bodyGeo.attributes.position.needsUpdate = true; topGeo.attributes.position.needsUpdate = true; }
-      if (dirtyC) { bodyGeo.attributes.color.needsUpdate = true; topGeo.attributes.color.needsUpdate = true; }
+      if (maxP >= minP) {
+        var bp = bodyGeo.attributes.position, tp = topGeo.attributes.position;
+        bp.updateRange.offset = minP * BODY_V * 3; bp.updateRange.count = (maxP - minP + 1) * BODY_V * 3; bp.needsUpdate = true;
+        tp.updateRange.offset = minP * TOP_V * 3; tp.updateRange.count = (maxP - minP + 1) * TOP_V * 3; tp.needsUpdate = true;
+      }
+      if (maxC >= minC) {
+        var bc = bodyGeo.attributes.color, tc = topGeo.attributes.color;
+        bc.updateRange.offset = minC * BODY_V * 3; bc.updateRange.count = (maxC - minC + 1) * BODY_V * 3; bc.needsUpdate = true;
+        tc.updateRange.offset = minC * TOP_V * 3; tc.updateRange.count = (maxC - minC + 1) * TOP_V * 3; tc.needsUpdate = true;
+      }
 
       // The hero: where the engine says, turned to where it hops, squashed and stretched.
       var h = w ? w.hero : null, hx, hy, hz;
@@ -602,10 +629,12 @@
         var ty = keyY[target.i];
         halo.visible = true; halo.position.set(W2.x + keyX[target.i], ty + 0.012, W2.z);
         halo.scale.set(target.w + 1.1, 1, 2.1); halo.material.opacity = 0.3 + pulse * 0.3;
+        keyPulse.visible = true; keyPulse.position.set(W2.x + keyX[target.i], ty + 0.008, W2.z);
+        keyPulse.scale.set(target.w - 0.14, 1, 0.86); keyPulseMat.opacity = 0.08 + pulse * 0.28;
         var onHero = h && Math.abs(h.x - target.cx) < 0.3 && Math.abs(h.z - target.cz) < 0.3;
         arrow.visible = true; arrow.position.set(W2.x, ty + (onHero ? 1.35 : 0.75) + (calm ? 0.1 : Math.abs(Math.sin(t * 4.5)) * 0.22), W2.z);
         arrow.rotation.y = calm ? 0 : t * 1.5;
-      } else { halo.visible = false; arrow.visible = false; }
+      } else { halo.visible = false; keyPulse.visible = false; arrow.visible = false; }
 
       // Coins and gems wait on their keys; flags mark the checkpoints and the goal.
       var nc = 0, ng = 0, nf = 0, spin = calm ? 0.5 : t * 2.4;
@@ -645,7 +674,7 @@
           E.set(0, 0, calm ? 0 : t * 6); Q.setFromEuler(E); P.set(W2.x, 0.36, W2.z); S.set(1, 1, 1);
           M.compose(P, Q, S); bars.setMatrixAt(nb++, M);
         });
-        bars.count = nb; bars.instanceMatrix.needsUpdate = true;
+        bars.count = nb; if (nb > 0) bars.instanceMatrix.needsUpdate = true;
         var nd = { crumble: 0, sink: 0 };
         for (code in kindOf) {
           var kd = kindOf[code], dm = decals[kd];
@@ -655,11 +684,12 @@
           M.compose(P, Q, S); dm.setMatrixAt(nd[kd]++, M);
         }
         decals.crumble.count = nd.crumble; decals.sink.count = nd.sink;
-        decals.crumble.instanceMatrix.needsUpdate = true; decals.sink.instanceMatrix.needsUpdate = true;
+        if (nd.crumble > 0) decals.crumble.instanceMatrix.needsUpdate = true;
+        if (nd.sink > 0) decals.sink.instanceMatrix.needsUpdate = true;
       } else { bars.count = 0; decals.crumble.count = 0; decals.sink.count = 0; }
-      coins.count = nc; coins.instanceMatrix.needsUpdate = true;
-      gems.count = ng; gems.instanceMatrix.needsUpdate = true;
-      flags.count = nf; flags.instanceMatrix.needsUpdate = true; if (flags.instanceColor) flags.instanceColor.needsUpdate = true;
+      coins.count = nc; if (nc > 0) coins.instanceMatrix.needsUpdate = true;
+      gems.count = ng; if (ng > 0) gems.instanceMatrix.needsUpdate = true;
+      flags.count = nf; if (nf > 0) { flags.instanceMatrix.needsUpdate = true; if (flags.instanceColor) flags.instanceColor.needsUpdate = true; }
 
       if (ringT < 0.9) { ringT += dt; var rk = ringT / 0.9; ring.scale.setScalar(0.6 + rk * 1.8); ringMat.opacity = 0.9 * (1 - rk); ring.position.y = jelly.position.y + 0.05; } else ring.visible = false;
       stepParticles(dt);

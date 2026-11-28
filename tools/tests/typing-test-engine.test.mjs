@@ -111,9 +111,15 @@ test('every tuning knob moves one way from tier 1 to tier 5, in the direction th
   }
   // The youngest tiers: clouds wait at the edge and a dotted line shows the key.
   assert.deepEqual(plain(TT.TUNE.wait), [1, 1, 0, 0, 0]);
-  const p1 = TT.plan('ar', 1, 0, 1), p5 = TT.plan('ar', 1, 0, 5);
+  const p1 = TT.plan('ar', 1, 1, 1), p5 = TT.plan('ar', 1, 1, 5);
   assert.ok(p1.fall < p5.fall && p1.live < p5.live && p1.gap > p5.gap && p1.target < p5.target && p1.mix < p5.mix && p1.count < p5.count);
   assert.ok(p1.wait && !p5.wait && p1.guide && !p5.guide);
+  // Every world's first stage (l === 0) keeps guide on and one cloud live even at high DDA tiers.
+  for (let w = 0; w < TT.WORLDS; w++) {
+    const intro = TT.plan('ar', w, 0, 5);
+    assert.equal(intro.live, 1, `world ${w + 1} intro stays 1 cloud live`);
+    assert.equal(intro.guide, true, `world ${w + 1} intro keeps key guide on`);
+  }
 });
 
 test('the first letter of a word in the sky locks onto that cloud (the one nearest the town first)', () => {
@@ -362,7 +368,7 @@ test('saves: old, damaged or hand-edited saves load as fresh playable ones; test
   assert.equal(TT.addTest(s, 'fr', 30, { wpm: 99, acc: 1 }, false), false);
 });
 
-test('levels unlock in order; a world opens when the one before is done, or at once after three stars on its first level', () => {
+test('levels unlock in order; World 2 requires finishing w1-4, while later worlds can skip ahead on three stars', () => {
   const s = TT.freshSave();
   assert.deepEqual(plain(TT.nextLevel(s, 'ar')), { w: 0, l: 0 });
   assert.equal(TT.isOpen(s, 'ar', 0, 1), false);
@@ -371,11 +377,15 @@ test('levels unlock in order; a world opens when the one before is done, or at o
   assert.equal(TT.isOpen(s, 'ar', 0, 1), true);
   assert.equal(TT.worldOpen(s, 'ar', 1), false, 'two stars on the first level open the next level only');
   s.stars.ar[0][0] = 3;
-  assert.equal(TT.worldOpen(s, 'ar', 1), true, 'three stars let an expert skip ahead');
+  assert.equal(TT.worldOpen(s, 'ar', 1), false, 'three stars on 1-letter w1-1 must not skip straight to World 2');
+  s.stars.ar[0][3] = 1;
+  assert.equal(TT.worldOpen(s, 'ar', 1), true, 'completing w1-4 opens World 2');
+  s.stars.ar[1][0] = 3;
+  assert.equal(TT.worldOpen(s, 'ar', 2), true, 'three stars on w2-1 still let an expert skip to World 3');
   assert.equal(TT.worldOpen(s, 'en', 1), false, 'each language has its own path');
   s.stars.en[0] = [1, 1, 1, 1];
   assert.equal(TT.worldOpen(s, 'en', 1), true);
   assert.deepEqual(plain(TT.nextLevel(s, 'en')), { w: 1, l: 0 });
   assert.equal(TT.total(s, 'en'), 4);
-  assert.equal(TT.total(s), 7);
+  assert.equal(TT.total(s), 11);
 });

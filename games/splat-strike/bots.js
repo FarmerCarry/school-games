@@ -178,11 +178,6 @@
   };
   B.pickRoam = function (G) {
     var nav = G.nav, e = this.e, hot = G.hotNodes, n = -1;
-    // team wingman: stay near the player
-    if (this.follow && G.player && G.player.alive && Math.random() < 0.7) {
-      var P = G.player;
-      if (this.dist(P) > 7) n = nav.nearest(P.x + rnd(-3, 3), P.y, P.z + rnd(-3, 3));
-    }
     if (n < 0 && hot.length && Math.random() < 0.75) {
       // a hot spot we haven't visited lately, not too close
       for (var tries = 0; tries < 8; tries++) {

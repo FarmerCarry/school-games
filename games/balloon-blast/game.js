@@ -22,7 +22,7 @@
   function clampInt(n, lo, hi) { n = n | 0; return n < lo ? lo : n > hi ? hi : n; }
   function loadSave() {
     var raw = store.get('save', null);
-    var s = { v: 2, coins: 0, stars: 0, wins: 0, diff: 'normal', skin: 'ninja', owned: { ninja: 1 }, best: {} };
+    var s = { v: 2, coins: 0, stars: 0, wins: 0, diff: 'easy', skin: 'ninja', owned: { ninja: 1 }, best: {} };
     if (raw && typeof raw === 'object') {
       s.coins = clampInt(raw.coins, 0, 999999); s.stars = clampInt(raw.stars, 0, 9999); s.wins = clampInt(raw.wins, 0, 9999);
       if (D.DIFFICULTIES[raw.diff]) s.diff = raw.diff;
@@ -55,7 +55,8 @@
   };
 
   /* ---- Procedural Cartoon Sprites (Bounded Static Keys) ---- */
-  var SPR = {}, localSprites = {}, bakedArena = null;
+  var SPR = {}, localSprites = {}, skyCache = {};
+  var arenaCv = null, arenaCtx = null, bakedArenaId = '', bakedGrid = new Uint8Array(D.COLS * D.ROWS);
   function makeSprite(key, w, h, drawFn) {
     if (!localSprites[key]) {
       var cv = document.createElement('canvas'); cv.width = w; cv.height = h;
@@ -80,7 +81,7 @@
   }
 
   function bootSprites() {
-    bakedArena = null;
+    bakedArenaId = ''; skyCache = {};
     ['sand', 'soda', 'soap'].forEach(function (aid) {
       var a = D.ARENAS[aid];
       SPR['fl_' + aid] = makeSprite('fl_' + aid, TILE, TILE, function (c) {
@@ -386,6 +387,20 @@
     return E.inside(c, r) ? { c: c, r: r } : null;
   }
 
+  function hasEnemyAt(w, c, r) {
+    for (var i = 1; i < w.players.length; i++) {
+      var p = w.players[i];
+      if (p.state !== 'play') continue;
+      var pc = E.cellOf(p);
+      if (pc.c === c && pc.r === r) return true;
+    }
+    if (w.boss && w.boss.hp > 0) {
+      var bc = E.cellOf(w.boss);
+      if (Math.abs(bc.c - c) <= 1 && Math.abs(bc.r - r) <= 1) return true;
+    }
+    return false;
+  }
+
   canvas.addEventListener('pointerdown', function (ev) {
     if (screenState !== 'play' || paused || !world || (cfg && cfg.duo)) return;
     if (ev.button === 2) { mouseDrop = true; return; }
@@ -394,12 +409,24 @@
     var p1 = world.players[0];
     if (p1 && p1.state === 'play') {
       var hc = E.cellOf(p1);
-      if (hc.c === cell.c && hc.r === cell.r) { mouseDrop = true; pointerGoal = null; } else pointerGoal = { c: cell.c, r: cell.r };
+      var dist = Math.abs(hc.c - cell.c) + Math.abs(hc.r - cell.r);
+      var tile = world.grid[cell.r * D.COLS + cell.c];
+      if (dist === 0 || (dist === 1 && (tile === D.CRATE || tile === D.JELLY || hasEnemyAt(world, cell.c, cell.r)))) {
+        mouseDrop = true; pointerGoal = null;
+      } else if (tile === D.CRATE || tile === D.JELLY) {
+        pointerGoal = { c: cell.c, r: cell.r, dropAdj: true };
+      } else {
+        pointerGoal = { c: cell.c, r: cell.r };
+      }
     }
   });
   canvas.addEventListener('pointermove', function (ev) {
     if (!pointerHeld || screenState !== 'play' || paused || !world || (cfg && cfg.duo)) return;
-    var cell = pointerToArena(ev); if (cell) pointerGoal = { c: cell.c, r: cell.r };
+    var cell = pointerToArena(ev);
+    if (cell) {
+      var tile = world.grid[cell.r * D.COLS + cell.c];
+      pointerGoal = { c: cell.c, r: cell.r, dropAdj: tile === D.CRATE || tile === D.JELLY };
+    }
   });
   window.addEventListener('pointerup', function () { pointerHeld = false; });
   canvas.addEventListener('contextmenu', function (ev) { ev.preventDefault(); if (screenState === 'play' && !paused && cfg && !cfg.duo) mouseDrop = true; });
@@ -412,8 +439,32 @@
       if (kx || ky) pointerGoal = null;
       else if (pointerGoal && world && world.players[0]) {
         var p = world.players[0], here = E.cellOf(p);
-        if (here.c === pointerGoal.c && here.r === pointerGoal.r && Math.abs(p.x - E.center(here.c)) < 6 && Math.abs(p.y - E.center(here.r)) < 6) pointerGoal = null;
-        else { var st = AI.pathStep(world, here.c, here.r, pointerGoal.c, pointerGoal.r, null) || pointerGoal, dir = AI.steerTo(p, st.c, st.r); kx = dir.x; ky = dir.y; }
+        if (pointerGoal.dropAdj) {
+          var gt = world.grid[pointerGoal.r * D.COLS + pointerGoal.c];
+          if (gt !== D.CRATE && gt !== D.JELLY) {
+            pointerGoal.dropAdj = false;
+          } else if (Math.abs(here.c - pointerGoal.c) + Math.abs(here.r - pointerGoal.r) <= 1) {
+            mouseDrop = true; pointerGoal = null;
+          } else {
+            var bestN = null, bestD = 999, dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+            for (var di = 0; di < 4; di++) {
+              var nc = pointerGoal.c + dirs[di][0], nr = pointerGoal.r + dirs[di][1];
+              if (!E.inside(nc, nr)) continue;
+              var nt = world.grid[nr * D.COLS + nc];
+              if (nt === D.PILLAR || nt === D.CRATE || nt === D.JELLY) continue;
+              var nd = Math.abs(here.c - nc) + Math.abs(here.r - nr);
+              if (nd < bestD) { bestD = nd; bestN = { c: nc, r: nr }; }
+            }
+            if (bestN) {
+              var stA = AI.pathStep(world, here.c, here.r, bestN.c, bestN.r, null) || bestN, dirA = AI.steerTo(p, stA.c, stA.r);
+              kx = dirA.x; ky = dirA.y;
+            } else pointerGoal = null;
+          }
+        }
+        if (pointerGoal && !pointerGoal.dropAdj) {
+          if (here.c === pointerGoal.c && here.r === pointerGoal.r && Math.abs(p.x - E.center(here.c)) < 6 && Math.abs(p.y - E.center(here.r)) < 6) pointerGoal = null;
+          else { var st = AI.pathStep(world, here.c, here.r, pointerGoal.c, pointerGoal.r, null) || pointerGoal, dir = AI.steerTo(p, st.c, st.r); kx = dir.x; ky = dir.y; }
+        }
       }
       var drop = K.pressed('Space') || K.pressed('Enter') || K.pressed('NumpadEnter') || K.pressed('Slash') || mouseDrop;
       mouseDrop = false;
@@ -495,11 +546,24 @@
     drawText(ctx, p.state === 'out' ? 'خرج من الساحة!' : ('النقاط: ' + String(scoreVal || 0)), x + 180, y + 74, 14, 'right', p.state === 'out' ? '#e11d48' : '#059669', true);
   }
 
+  function drawArenaCell(mc, aid, c, r, t) {
+    var x = c * TILE, y = r * TILE;
+    mc.drawImage(SPR['fl_' + aid], x, y);
+    if (t === D.PILLAR) mc.drawImage(SPR['pl_' + aid], x, y);
+    else if (t === D.CRATE) mc.drawImage(SPR['cr_' + aid], x, y);
+    else if (t === D.PIPE) mc.drawImage(SPR['pp_' + aid], x, y);
+    else if (t === D.JELLY) mc.drawImage(SPR.jelly, x, y);
+  }
+
   function render() {
     if (paused && pausePainted) return;
     var w = screenState === 'title' ? demo : world; if (!w) return;
     var ctx = view.ctx, arena = D.arenaById(w.arena);
-    var sky = ctx.createLinearGradient(0, 0, 0, H); sky.addColorStop(0, arena.sky[0]); sky.addColorStop(1, arena.sky[1]);
+    var sky = skyCache[w.arena];
+    if (!sky) {
+      sky = ctx.createLinearGradient(0, 0, 0, H); sky.addColorStop(0, arena.sky[0]); sky.addColorStop(1, arena.sky[1]);
+      skyCache[w.arena] = sky;
+    }
     ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
 
     ctx.save();
@@ -508,21 +572,27 @@
     rr(ctx, OX - 14, OY - 14, D.COLS * TILE + 28, D.ROWS * TILE + 26, 24); ctx.fillStyle = arena.rim; ctx.fill();
     ctx.lineWidth = 4; ctx.strokeStyle = '#0f2942'; ctx.stroke();
 
-    var sig = w.arena + ':' + Array.prototype.join.call(w.grid, ',');
-    if (!bakedArena || bakedArena.sig !== sig) {
-      var cv = document.createElement('canvas'); cv.width = D.COLS * TILE; cv.height = D.ROWS * TILE;
-      var mc = cv.getContext('2d');
-      for (var r = 0; r < D.ROWS; r++) for (var c = 0; c < D.COLS; c++) {
-        var t = w.grid[r * D.COLS + c];
-        mc.drawImage(SPR['fl_' + w.arena], c * TILE, r * TILE);
-        if (t === D.PILLAR) mc.drawImage(SPR['pl_' + w.arena], c * TILE, r * TILE);
-        else if (t === D.CRATE) mc.drawImage(SPR['cr_' + w.arena], c * TILE, r * TILE);
-        else if (t === D.PIPE) mc.drawImage(SPR['pp_' + w.arena], c * TILE, r * TILE);
-        else if (t === D.JELLY) mc.drawImage(SPR.jelly, c * TILE, r * TILE);
-      }
-      bakedArena = { sig: sig, cv: cv };
+    if (!arenaCv) {
+      arenaCv = document.createElement('canvas'); arenaCv.width = D.COLS * TILE; arenaCv.height = D.ROWS * TILE;
+      arenaCtx = arenaCv.getContext('2d');
     }
-    ctx.drawImage(bakedArena.cv, OX, OY);
+    var g = w.grid, len = D.COLS * D.ROWS;
+    if (bakedArenaId !== w.arena) {
+      for (var r = 0; r < D.ROWS; r++) for (var c = 0; c < D.COLS; c++) {
+        var idx0 = r * D.COLS + c, t0 = g[idx0];
+        bakedGrid[idx0] = t0;
+        drawArenaCell(arenaCtx, w.arena, c, r, t0);
+      }
+      bakedArenaId = w.arena;
+    } else {
+      for (var gi = 0; gi < len; gi++) {
+        if (bakedGrid[gi] !== g[gi]) {
+          bakedGrid[gi] = g[gi];
+          drawArenaCell(arenaCtx, w.arena, gi % D.COLS, (gi / D.COLS) | 0, g[gi]);
+        }
+      }
+    }
+    ctx.drawImage(arenaCv, OX, OY);
 
     if (screenState === 'play' && pointerGoal && cfg && !cfg.duo) {
       ctx.strokeStyle = '#fff'; ctx.lineWidth = 3;

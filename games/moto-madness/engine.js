@@ -343,7 +343,7 @@
     this.placeBike(x, gy - 44, a);
     this.crashed = false; this.crashT = 0; this.rider = null;
     this.airT = 0; this.takeoffA = 0; this.pendingFlip = null; this.wheelieT = 0; this.wheelieShown = false;
-    this.boostCd = 0; this.bounceCd = 0; this.grounded = true; this.chassisHit = 0;
+    this.boostCd = 0; this.bounceCd = 0; this.grounded = true; this.chassisHit = 0; this.landGrace = 0;
     this.maxAirH = 0; this.hungT = 0;
     // dynamic stuff back to the start
     this.movers = [];
@@ -606,6 +606,17 @@
     this.boostCd = 0.5;
   };
 
+  function onPlatform(mv, b) {
+    if (!mv.on) return false;
+    if (mv.on === 3) return true;
+    // Require bike center inside the platform safe core (center 80% and both wheels horizontally over the deck)
+    var lim = Math.min(mv.len * 0.4, Math.max(40, mv.len * 0.5 - 46));
+    if (Math.abs(b.x - mv.x) > lim) return false;
+    var wlim = mv.len * 0.4;
+    return ((mv.on & 1) && Math.abs(b.wheels[0].x - mv.x) <= wlim) ||
+           ((mv.on & 2) && Math.abs(b.wheels[1].x - mv.x) <= wlim);
+  }
+
   W.substep = function (inp) {
     var h = H, b = this.bike, i, wh, c, n;
     this.simT += h;
@@ -614,9 +625,12 @@
     var gas = ctl && inp.gas, brake = ctl && inp.brake, lean = ctl ? (inp.lean || 0) : 0;
     if (this.finished) brake = true;
     if (!this.started && !this.crashed) { gas = false; brake = true; lean = 0; }
-    // standing on a lift / ferry that hasn't arrived yet: it holds the wheels so you can't ride off by accident
+    // standing on a lift / ferry that hasn't arrived yet: hold whenever either wheel is inside center 80%
     var hold = null;
-    if (ctl) for (i = 0; i < this.movers.length; i++) { var mv = this.movers[i]; if (mv.type === 'platform' && mv.onT > 0 && mv.st !== 2) hold = mv; }
+    if (ctl) for (i = 0; i < this.movers.length; i++) {
+      var mv = this.movers[i];
+      if (mv.type === 'platform' && mv.st !== 2 && (mv.onT > 0 || onPlatform(mv, b))) hold = mv;
+    }
     if (hold) {
       gas = false; brake = false;
       // "magnet" deck: quickly match the platform's speed so even a fast arrival stops on it
@@ -712,9 +726,24 @@
     }
     // crash points (rider head/back, handlebars)
     if (!this.crashed) {
+      var airGrace = !this.grounded || this.airT > 0.1 || this.landGrace > 0;
       for (i = 0; i < CRASH.length; i++) {
         var cp = CRASH[i], clx = cp.x * ca - cp.y * sa, cly = cp.x * sa + cp.y * ca;
-        if (this.collide(b.x + clx, b.y + cly, cp.r) > 0) { this.crash('bonk'); break; }
+        n = this.collide(b.x + clx, b.y + cly, cp.r);
+        if (n > 0) {
+          c = this.contacts[0];
+          if (c.seg.k === 's') { this.crash('spikes'); break; }
+          // Soften air-landing bonk tolerance by +15 deg (~111 deg from upright) so playful flips forgive slight tilts
+          var upDot = clamp(sa * c.nx - ca * c.ny, -1, 1);
+          if (airGrace && upDot > -0.37) {
+            resolveRigid(b, clx, cly, c, 0.08, 0.35);
+            var side = ca * c.nx + sa * c.ny;
+            b.w += (side >= 0 ? 1 : -1) * 10 * h;
+            this.chassisHit = 0.08;
+            continue;
+          }
+          this.crash('bonk'); break;
+        }
       }
     }
     // rollers
@@ -868,10 +897,22 @@
     this.loopStick = 0;
     for (i = 0; i < this.movers.length; i++) this.movers[i].on = 0;
     for (i = 0; i < SUB; i++) this.substep(inp);
-    for (i = 0; i < this.movers.length; i++) { var mv = this.movers[i]; mv.onT = mv.on === 3 ? mv.onT + DT : 0; }
+    var heldPlat = false;
+    for (i = 0; i < this.movers.length; i++) {
+      var mv = this.movers[i];
+      var onP = mv.type === 'platform' ? onPlatform(mv, b) : mv.on === 3;
+      mv.onT = onP ? mv.onT + DT : 0;
+      if (mv.type === 'platform' && onP && mv.st !== 2) heldPlat = true;
+    }
+    if (heldPlat && !this.crashed && !this.finished) {
+      var baseA = Math.round(b.a / (2 * Math.PI)) * (2 * Math.PI);
+      b.a = baseA + (b.a - baseA) * 0.85;
+      b.w *= 0.85;
+    }
     if (this.bounceCd > 0) this.bounceCd -= DT;
     if (this.boostCd > 0) this.boostCd -= DT;
     if (this.chassisHit > 0) this.chassisHit -= DT;
+    if (this.landGrace > 0) this.landGrace -= DT;
     this.stepCrates();
 
     // air time, flips, landings
@@ -883,6 +924,7 @@
       this.airT += DT;
       this.maxAirH = Math.max(this.maxAirH, this.takeoffY - b.y);
     } else if (!wasGround) {
+      if (this.airT > 0.2) this.landGrace = 0.25;
       var imp = Math.max(rear.impact, front.impact);
       if (this.airT > 0.3 && !this.crashed) {
         var rot = b.a - this.takeoffA, n = Math.floor((Math.abs(rot) + 1.1) / (2 * Math.PI));

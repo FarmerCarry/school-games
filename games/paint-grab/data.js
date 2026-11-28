@@ -6,7 +6,7 @@
   // Map + match constants
   PG.N = 150;              // grid cells per side
   PG.CS = 16;              // world pixels per cell
-  PG.MATCH_TIME = 180;     // seconds
+  PG.MATCH_TIME = 80;      // seconds
   PG.BASE_SPEED = 8.4;     // cells per second
   PG.PLAYER_TURN = 9.5;    // radians per second
 
@@ -39,7 +39,7 @@
       case 'kills': return 'أقصِ ' + count(r.v, 'روبوتاً واحداً', 'روبوتين', 'روبوتات', 'روبوتاً') + ' في المجموع';
       case 'stars': return 'اجمع ' + count(r.v, 'نجمة واحدة', 'نجمتين', 'نجوم', 'نجمة');
       case 'rounds': return 'العب ' + count(r.v, 'جولة واحدة', 'جولتين', 'جولات', 'جولة');
-      case 'wins': return r.v === 1 ? 'احصل على المركز الأول مرة واحدة' : r.v === 2 ? 'احصل على المركز الأول مرتين' : 'احصل على المركز الأول ' + r.v + ' مرات';
+      case 'wins': return r.v === 1 ? 'فُز بجولة واحدة' : r.v === 2 ? 'فُز بجولتين' : 'فُز بـ ' + r.v + ' جولات';
     }
     return '';
   };

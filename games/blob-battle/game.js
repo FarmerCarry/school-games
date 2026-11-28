@@ -80,10 +80,10 @@
 
   /* ================================================================ config */
   var MAXC = 16, MIN_SPLIT = 36, EJ_MIN = 34, EJ_COST = 16, EJ_MASS = 12, VM = 100, BS = 100;
-  var START_MASS = 20;
+  var START_MASS = 40;
   var PCOLS = ['#ff5c8a', '#ffb31a', '#3ddc84', '#2fb5ff', '#8e5cff', '#ff7a3d', '#12c9b5', '#f368e0'];
   var ARENAS = [
-    { name: 'ساحة الحديقة', diff: 'سهلة', size: 3400, bots: 16, vir: 12, smart: 0.3, aggro: 0.18, hate: 0.75, start: [12, 110], caps: [70, 1000], spd: 0.93, pellets: 2600,
+    { name: 'ساحة الحديقة', diff: 'سهلة', size: 2400, bots: 18, vir: 10, smart: 0.3, aggro: 0.18, hate: 0.75, start: [14, 75], caps: [70, 900], spd: 0.93, pellets: 1800,
       theme: { bg: '#f3fbee', grid: '#d9eed0', out: '#b9dfaa', border: '#58c247' }, icon: '🌳' },
     { name: 'ساحة المحيط', diff: 'متوسطة', size: 3800, bots: 19, vir: 16, smart: 0.6, aggro: 0.42, hate: 1, start: [12, 230], caps: [100, 2000], spd: 0.97, pellets: 3000,
       theme: { bg: '#edf7ff', grid: '#cfe5f6', out: '#a4cff0', border: '#2f93e0' }, icon: '🌊', need: { a: 0, m: 500 } },
@@ -263,7 +263,7 @@
     for (var v = 0; v < AR.vir; v++) spawnVirus();
     for (var b = 0; b < AR.bots; b++) {
       var o = newOwner(true); owners.push(o);
-      var m = AR.start[0] + (AR.start[1] - AR.start[0]) * Math.pow(Math.random(), 2.2);
+      var m = b % 2 === 0 ? rand(14, 28) : (AR.start[0] + (AR.start[1] - AR.start[0]) * Math.pow(Math.random(), 2.2));
       spawnBot(o, m);
     }
     if (withPlayer) {
@@ -398,9 +398,8 @@
       o.tx = cx + avx / al * (200 + myR); o.ty = cy + avy / al * (200 + myR);
     }
   }
-  // Grace period: at the start of a round bots mostly ignore the player, then hunt them more and more.
-  // Longest in the first (easy) arena so new players get a calm, fun first half-minute.
-  var GRACE = [40, 20, 10];
+  // Grace period: brief opening safety before bots start hunting, keeping action lively.
+  var GRACE = [10, 10, 8];
   function huntMul() {
     if (!round) return 1;
     var k = clamp((T - round.t0 - 2) / GRACE[arenaIdx], 0, 1);
@@ -426,13 +425,28 @@
   }
 
   /* ================================================================ simulation */
+  var kbOn = 0, kbA = 0, lmx = W / 2, lmy = H / 2;
   function sim(dt) {
     T += dt;
     var i, j, c, o;
-    // player steering
+    // player steering (mouse or smooth WASD/Arrows fallback)
     if (player && player.alive && state === 'play' && !autoMode) {
-      player.tx = cam.x + (ptr.x - W / 2) / cam.z;
-      player.ty = cam.y + (ptr.y - H / 2) / cam.z;
+      var K = Kit.keys;
+      var kx = (K.down('ArrowRight') || K.down('KeyD')) - (K.down('ArrowLeft') || K.down('KeyA'));
+      var ky = (K.down('ArrowDown') || K.down('KeyS')) - (K.down('ArrowUp') || K.down('KeyW'));
+      if (kx || ky) {
+        var ta = Math.atan2(ky, kx);
+        kbA = kbOn ? kbA + ((ta - kbA + Math.PI * 3) % TAU - Math.PI) * Math.min(1, dt * 12) : ta;
+        kbOn = 1; lmx = ptr.x; lmy = ptr.y;
+      } else if (kbOn && Math.hypot(ptr.x - lmx, ptr.y - lmy) > 12) { kbOn = 0; lmx = ptr.x; lmy = ptr.y; }
+      else if (!kbOn) { lmx = ptr.x; lmy = ptr.y; }
+      if (kbOn && player.cells.length) {
+        ownerCenter(player, tmpC);
+        var rc = 280 / Math.max(0.2, cam.z);
+        player.tx = tmpC.x + Math.cos(kbA) * rc; player.ty = tmpC.y + Math.sin(kbA) * rc;
+      } else {
+        player.tx = cam.x + (ptr.x - W / 2) / cam.z; player.ty = cam.y + (ptr.y - H / 2) / cam.z;
+      }
     }
     for (i = 0; i < owners.length; i++) {
       o = owners[i];
@@ -545,7 +559,7 @@
           var i = arr[k], dx = pX[i] - c.x, dy = pY[i] - c.y;
           if (dx * dx + dy * dy < r2) {
             var gold = pGold[i];
-            c.m += gold ? 6 : 1; got++;
+            c.m += gold ? 6 : 3; got++;
             if (c.o === player) {
               round.pellets++; stats.pellets++;
               if (gold) {
@@ -911,6 +925,7 @@
     round = { t0: T, maxMass: START_MASS, bestRank: 99, eaten: 0, pellets: 0, killer: null, prevBest: stats['best' + (arenaIdx + 1)],
       prevBestAll: stats.best, bestToast: false, wasKing: false, kingRun: 0, newSkins: [], newArena: -1, checkT: 0.4, hintSplit: false };
     comboN = 0; timeScale = 1; confetti.length = 0; round.danger = 0;
+    kbOn = 0; kbA = 0; lmx = ptr.x; lmy = ptr.y;
     state = 'play'; show(null);
     toast(AR.name, AR.theme.border); toasts[toasts.length - 1].hint = true;
     toast('كُل الحبوب لتكبر!', '#ffffff'); toasts[toasts.length - 1].hint = true;
@@ -1110,7 +1125,7 @@
       if (K.pressed('KeyP') || K.pressed('Escape')) pauseGame();
       else {
         if (K.pressed('Space') && player.alive) { if (splitOwner(player, player.tx, player.ty)) { sfx.split(); shake.add(2); } }
-        if (K.down('KeyW') && player.alive && T >= ejectT) { ejectT = T + 0.1; if (ejectOwner(player, player.tx, player.ty)) sfx.eject(); }
+        if ((K.down('KeyE') || K.down('ShiftLeft') || K.down('ShiftRight')) && player.alive && T >= ejectT) { ejectT = T + 0.1; if (ejectOwner(player, player.tx, player.ty)) sfx.eject(); }
       }
     } else if (state === 'pause') {
       if (K.pressed('KeyP') || K.pressed('Escape')) resumeGame();
@@ -1527,8 +1542,9 @@
       }
     }
     // ---- controls hint (bottom-left)
+    hintRow(g, 14, H - 80, 'فأرة / WASD', 'تحرّك');
     hintRow(g, 14, H - 50, 'مسافة', 'انقسم');
-    hintRow(g, 14, H - 20, 'W', 'اقذف');
+    hintRow(g, 14, H - 20, 'E', 'اقذف');
   }
   function rowText(g, num, name, lx, lw, y, me, col) {
     var right = lx + lw - 14;

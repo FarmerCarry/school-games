@@ -94,6 +94,18 @@ test('AHEngine: power-ups (multi, big, mini) apply cleanly and AHAI tracks pucks
   assert.ok(ctrl.x > 20, `AI should track incoming puck toward +x, got x=${ctrl.x}`);
   assert.ok(ctrl.spd > 0);
   assert.ok(AHData.LADDER.length >= 4 && AHData.TABLES.length >= 3);
+
+  // Wave 2 balance checks: snappy serve/goal timers, 5-goal duo, looser rung 0-1 defense
+  const fresh = AHEngine.create({ seed: 1 });
+  assert.equal(fresh.firstServe, 0.9);
+  assert.equal(+(fresh.goalDelay + fresh.serveDelay).toFixed(2), 1.0);
+  assert.equal(AHData.DUO_GOALS, 5);
+  const easyAi = AHAI.create(1, 0.1, 5), sharpAi = AHAI.create(1, 0.6, 5);
+  const cEasy = { x: 0, y: 0, spd: 0 }, cSharp = { x: 0, y: 0, spd: 0 };
+  p.alive = true; p.x = 0; p.y = 100; p.vx = 0; p.vy = 200; // moving away from top goal -> home mode
+  AHAI.think(easyAi, w, 0.5, cEasy);
+  AHAI.think(sharpAi, w, 0.5, cSharp);
+  assert.ok(Math.abs(cEasy.y) < Math.abs(cSharp.y) - 30, `beginner AI should not camp tight on goal line (easy y=${cEasy.y}, sharp y=${cSharp.y})`);
 });
 
 let browser, server;
@@ -126,11 +138,12 @@ test('Air Hockey 3D browser: title, play, mouse & keyboard control, pause/resume
     await page.click('#btnPlay');
     await page.waitForFunction(() => window.__game.state().screen === 'play' && !window.__game.state().paused);
 
-    // Move mallet with pointer over the table
+    // Move mallet with pointer over the table (cursor stays visible, no hide-cursor class)
     const before = await page.evaluate(() => window.__game.state().mallets[0]);
     const target = await page.evaluate(() => window.__game.tablePoint(140, 260));
     await page.mouse.move(target.x, target.y, { steps: 8 });
     await page.waitForFunction(bx => Math.abs(window.__game.state().mallets[0][0] - bx) > 15, before[0], { timeout: 5000 });
+    assert.equal(await page.evaluate(() => document.body.classList.contains('hide-cursor')), false, 'cursor must stay visible');
 
     // Pause, resume, restart
     await page.click('#pauseBtn');
@@ -152,6 +165,16 @@ test('Air Hockey 3D browser: title, play, mouse & keyboard control, pause/resume
     await page.waitForFunction(() => window.__game.state().screen === 'title');
     await page.click('#btnDuo');
     await page.waitForFunction(() => window.__game.state().screen === 'play' && window.__game.state().mode === 'duo');
+    // In 2P duo, P1 mouse must not dominate; keyboard moves P1 fairly
+    const duoStart = await page.evaluate(() => window.__game.state().mallets[0][0]);
+    const duoPt = await page.evaluate(() => window.__game.tablePoint(160, 260));
+    await page.mouse.move(duoPt.x, duoPt.y, { steps: 6 });
+    await page.waitForTimeout(180);
+    const afterDuoMouse = await page.evaluate(() => window.__game.state().mallets[0][0]);
+    assert.ok(Math.abs(afterDuoMouse - duoStart) < 2, `2P duo must disable P1 mouse dominance (moved ${(afterDuoMouse - duoStart).toFixed(1)})`);
+    await page.keyboard.down('KeyD');
+    await page.waitForFunction(bx => window.__game.state().mallets[0][0] > bx + 15, duoStart, { timeout: 5000 });
+    await page.keyboard.up('KeyD');
 
     assert.deepEqual(errors, [], `unexpected browser errors: ${errors.join('; ')}`);
   } finally {

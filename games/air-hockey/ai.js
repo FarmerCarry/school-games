@@ -98,11 +98,16 @@
       }
     } else if (vy > 0) {
       // Defend: meet the puck on a guard line in front of the goal.
+      // Beginner rungs (0–1) guard wider and slightly further out instead of brick-walling center.
+      var loose = P.skill < 0.45 ? 1 - P.skill / 0.45 : 0;
       var lineY = Math.min(homeY, Math.max(py + 20, T.HL - 230));
       var x = predictX(T, px, py, vx, vy, lineY, P.predict);
-      b.mode = 'guard'; b.tx = clamp(x + b.errX, -T.GOAL_HALF - 30, T.GOAL_HALF + 30); b.ty = lineY + b.errY * 0.3;
+      var guardLim = T.GOAL_HALF + 30 + loose * 95;
+      b.mode = 'guard'; b.tx = clamp(x + b.errX * (1 + loose * 0.5), -guardLim, guardLim); b.ty = lineY - loose * 45 + b.errY * 0.3;
     } else {
-      b.mode = 'home'; b.tx = px * 0.35 + b.errX * 0.3; b.ty = homeY;
+      var loose2 = P.skill < 0.45 ? 1 - P.skill / 0.45 : 0;
+      b.mode = 'home'; b.tx = clamp(px * (0.35 + loose2 * 0.25) + b.errX * (0.3 + loose2 * 0.6), -T.HW + m.r + 12, T.HW - m.r - 12);
+      b.ty = homeY - loose2 * 95;
     }
   }
 

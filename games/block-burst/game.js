@@ -458,6 +458,7 @@
     Kit.audio.unlock();
     try { canvas.focus({ preventScroll: true }); } catch (err) { /* ignore */ }
     if (state !== 'play') return;
+    if (banner) banner = null;
     var p = logical(e); lastPtr = p;
     if (e.button === 2) { if (drag) returnPiece(); return; }
     if (e.button !== 0) return;
@@ -596,7 +597,8 @@
     var go = k === 'Enter' || k === 'Space' || k === 'NumpadEnter';
     switch (state) {
       case 'title':
-        if (go) startClassic(false);
+        if (go) startLevel(nextLevelIdx());
+        else if (k === 'KeyC') startClassic(false);
         else if (k === 'KeyA') openMap();
         break;
       case 'map':
@@ -801,6 +803,7 @@
     $('classicGo').textContent = cont ? '▶ تابع' : '▶ العب';
     $('btnNew').hidden = !cont;
     $('advSub').innerHTML = '<i class="st"></i> ' + totalStars() + ' / ' + (LV.LEVELS.length * 3);
+    $('advGo').textContent = totalStars() ? '▶ 20 مرحلة' : '▶ المرحلة 1';
     var box = $('skins'); box.innerHTML = '';
     Art.SKINS.forEach(function (s, i) {
       var b = document.createElement('button'); b.type = 'button';
@@ -863,7 +866,7 @@
   function onClick(id, fn) { $(id).addEventListener('click', function (e) { if (e.detail > 0) e.currentTarget.blur(); Kit.audio.unlock(); fn(); }); }
   onClick('btnClassic', function () { startClassic(false); });
   onClick('btnNew', function () { dropRun(); startClassic(true); });
-  onClick('btnAdv', openMap);
+  onClick('btnAdv', function () { if (!totalStars()) startLevel(0); else openMap(); });
   onClick('btnMapBack', function () { Snd.back(); openTitle(); });
   onClick('btnPause', function () { if (state === 'play') pause(); });
   onClick('btnResume', resume);

@@ -107,7 +107,7 @@ test('a paused game draws until its effects settle, then only after a resize, ca
     __game.auto(1); // its score popup stays up for a second
     document.getElementById('btnPause').click();
     const settling = frames(10);
-    stepGame(60);
+    stepGame(90);
     return { state: __game.state, settling, settled: frames(20) };
   });
   assert.deepEqual(paused, { state: 'pause', settling: 10, settled: 1 }, 'one last frame once the effects are over');

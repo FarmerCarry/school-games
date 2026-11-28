@@ -95,11 +95,23 @@
   }
   P.mkBall = mkBall;
 
-  // Standard triangle rack: apex on the foot spot pointing at the head of the table.
-  P.rack = function (rand) {
+  // Standard triangle rack (15 balls), or snappy 7-ball hexagonal mini-rack when mini=true.
+  P.rack = function (rand, mini) {
     rand = rand || Math.random;
     var st = { balls: [], t: 0, shot: null, onEvent: null };
     st.balls.push(mkBall(0, P.HEAD_X - 40, CY));
+    if (mini) {
+      var mSol = [2, 3], mStr = [9, 10, 11];
+      shuffle(mSol, rand); shuffle(mStr, rand);
+      var d = 2 * R + 0.06, cx = P.FOOT_X + d;
+      st.balls.push(mkBall(8, cx, CY));
+      var ring = [1, mStr[0], mSol[0], mStr[1], mSol[1], mStr[2]];
+      for (var m = 0; m < 6; m++) {
+        var ang = Math.PI + m * (Math.PI / 3);
+        st.balls.push(mkBall(ring[m], cx + Math.cos(ang) * d + (rand() - 0.5) * 0.04, CY + Math.sin(ang) * d + (rand() - 0.5) * 0.04));
+      }
+      return st;
+    }
     var solids = [1, 2, 3, 4, 5, 6, 7], stripes = [9, 10, 11, 12, 13, 14, 15];
     shuffle(solids, rand); shuffle(stripes, rand);
     // slot layout: row r has r+1 balls. index 4 (row 2, middle) = 8, back corners = one solid one stripe

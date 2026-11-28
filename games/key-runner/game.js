@@ -212,9 +212,11 @@
 
   /* ---------------------------------------------------------------- map */
   const cardEls = [];
-  const CARD_KEYS = [['Space', 'ArrowUp', 'ArrowDown'], ['KeyF', 'KeyJ', 'KeyG'], ['KeyA', 'KeyS', 'KeyD'], ['KeyQ', 'KeyW', 'KeyE'],
+  let mapBuilt = false;
+  const CARD_KEYS = [['Space', 'KeyF', 'KeyJ'], ['KeyF', 'KeyJ', 'KeyG'], ['KeyA', 'KeyS', 'KeyD'], ['KeyQ', 'KeyW', 'KeyE'],
     ['KeyZ', 'KeyX', 'KeyC'], ['Digit1', 'Digit2', 'Digit3'], ['KeyK', 'KeyL', 'Semicolon']];
   function starRow() { return '<span class="st" aria-hidden="true">' + '<svg><use href="#i-star"/></svg>'.repeat(3) + '</span>'; }
+  function ensureMap() { if (mapBuilt) return; mapBuilt = true; buildMap(); }
   function buildMap() {
     const box = $('cards');
     KR.WORLDS.forEach((wd, w) => {
@@ -249,6 +251,7 @@
   }
   let painted = '';
   function paintCards(force) {
+    if (!mapBuilt) return;
     const sig = save.label + KR.WORLDS.map((_, w) => KR.worldOpen(save, w) ? 1 : 0).join('') + (KR.endlessOpen(save) ? 1 : 0) + save.color + '.' + save.hat;
     if (sig === painted && !force) return;
     painted = sig;
@@ -292,6 +295,7 @@
     setChip('mapStars');
   }
   function toMap(fresh) {
+    ensureMap();
     solo = null; lanes = null; mode = ''; ending = null;
     if (!demo) newDemo();
     refreshMap();
@@ -325,6 +329,8 @@
 
   /* ------------------------------------------------------------- closet */
   const items = [];
+  let closetBuilt = false;
+  function ensureCloset() { if (closetBuilt) return; closetBuilt = true; buildCloset(); }
   function hasNewItem() { return KR.unlocks(save.seen, KR.total(save)).length > 0; }
   function buildCloset() {
     [['color', KR.COLORS, 'colors'], ['hat', KR.HATS, 'hats']].forEach(([type, list, id]) => {
@@ -341,6 +347,7 @@
     });
   }
   function refreshCloset() {
+    if (!closetBuilt) return;
     const total = KR.total(save);
     items.forEach(it => {
       const list = it.type === 'color' ? KR.COLORS : KR.HATS, locked = list[it.i].need > total;
@@ -352,6 +359,7 @@
     setChip('closetStars');
   }
   function openCloset(from) {
+    ensureCloset();
     closetFrom = from;
     J.select();
     if (save.seen !== KR.total(save)) { save.seen = KR.total(save); persist(); }
@@ -1019,7 +1027,7 @@
   canvas.addEventListener('contextrestored', () => { A.reset(); dirty = true; paintCards(true); if (screen === 'closet') refreshCloset(); });
   if (document.fonts && document.fonts.load) {
     Promise.all([document.fonts.load('700 40px Fredoka', 'ب'), document.fonts.load('700 40px Fredoka', 'F'), document.fonts.load('500 20px Fredoka', 'Tab ب')])
-      .then(() => { A.reset(); dirty = true; painted = ''; if (screen === 'map') paintCards(); if (screen === 'closet') refreshCloset(); }, () => { /* fallback fonts */ });
+      .then(() => { A.resetText(); dirty = true; painted = ''; if (screen === 'map') paintCards(); if (screen === 'closet') refreshCloset(); }, () => { /* fallback fonts */ });
   }
 
   /* --------------------------------------------------- test and debug hook */
@@ -1047,8 +1055,6 @@
     keyPoint: code => { const p = A.keyCenter(code, KB.x, KB.y, KB.u, ''); return p ? page(p.x, p.y) : null; }
   };
 
-  buildMap();
-  buildCloset();
   Kit.muteButton({ key: false });
   Kit.lifecycle({ pause: () => pause(false), reset: () => { queue.length = 0; } });
   toTitle();

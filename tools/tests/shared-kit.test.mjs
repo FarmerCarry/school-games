@@ -148,7 +148,7 @@ test('reduced motion follows system defaults and persists explicit overrides', (
   const shake = h.Kit.shake(); shake.add(9); shake.update(.01);
   assert.equal(shake.power + Math.abs(shake.x) + Math.abs(shake.y), 0);
   h.Kit.motion.setPreference('full'); shake.add(9); shake.update(.01);
-  assert.equal(shake.power, 8.6);
+  assert.ok(shake.power > 8.4 && shake.power < 8.6, 'trauma² decay drops nonlinearly from peak');
   assert.equal(h.values.get('sg:site:motion'), '"full"');
   h.Kit.motion.setPreference('system');
   h.query.matches = false; h.query.emit('change');
@@ -468,29 +468,86 @@ test('telemetry: frames count only while engaged and in a round, never the first
   assert.ok(updates > 0, 'the loop still runs its updates');
 });
 
-test('Kit.gfx turns light graphics on after two 2-second windows of unsmooth round play, remembers it and offers the way back', () => {
+test('Kit.fit defaults maxDpr to 1.5, clamps to 1 on light/low-end hardware, and respects explicit overrides', () => {
+  const makeCanvas = () => ({ style: {}, width: 0, height: 0, getContext: () => ({ setTransform() {} }), getBoundingClientRect: () => ({ left: 0, top: 0 }) });
+  const fitWith = ({ dpr = 2, stored = {}, nav, opts } = {}) => {
+    const h = harness({ stored });
+    h.window.innerWidth = 1280; h.window.innerHeight = 720; h.window.devicePixelRatio = dpr;
+    if (nav) h.window.navigator = nav;
+    return h.Kit.fit(makeCanvas(), 1280, 720, opts);
+  };
+  assert.equal(fitWith({ dpr: 2, nav: { hardwareConcurrency: 8, deviceMemory: 8 } }).dpr, 1.5);
+  assert.equal(fitWith({ dpr: 2, stored: { 'sg:site:gfx-light': '1' }, nav: { hardwareConcurrency: 8, deviceMemory: 8 } }).dpr, 1);
+  assert.equal(fitWith({ dpr: 2, stored: { 'sg:site:gfx-light': 'true' }, nav: { hardwareConcurrency: 8, deviceMemory: 8 } }).dpr, 1);
+  assert.equal(fitWith({ dpr: 2, nav: { hardwareConcurrency: 4 } }).dpr, 1, '4c/0G clamps to 1.0');
+  assert.equal(fitWith({ dpr: 2, nav: { hardwareConcurrency: 2, deviceMemory: 2 } }).dpr, 1, '2c/2G clamps to 1.0');
+  assert.equal(fitWith({ dpr: 2, nav: { hardwareConcurrency: 4, deviceMemory: 8 } }).dpr, 1.5, '4c/8G stays 1.5');
+  assert.equal(fitWith({ dpr: 2, nav: { hardwareConcurrency: 2, deviceMemory: 2 }, opts: { maxDpr: 2 } }).dpr, 2, 'explicit maxDpr overrides auto clamp');
+});
+
+test('Kit.shake trauma², Kit.hitstop, and Kit.retrigger respect reduced motion and avoid layout reflow', () => {
+  const clock = { now: 100 }, raf = [], h = harness({ clock, raf });
+  const s = h.Kit.shake();
+  s.add(10);
+  s.update(0.05); const p1 = s.power;
+  s.update(0.15); const p2 = s.power;
+  assert.ok(p1 > p2 && p2 > 0 && (10 - p1) / 0.05 > (p1 - p2) / 0.15, 'quadratic trauma² decays punchier at impact');
+  s.update(1);
+  assert.deepEqual([s.power, s.x, s.y, s.rot], [0, 0, 0, 0]);
+
+  assert.equal(h.Kit.hitstop.active(), false);
+  h.Kit.hitstop(0.06);
+  assert.equal(h.Kit.hitstop.active(), true);
+  assert.equal(h.Kit.hitstop.tick(0.04), true);
+  assert.equal(h.Kit.hitstop.active(), true);
+  assert.equal(h.Kit.hitstop.tick(0.04), true);
+  assert.equal(h.Kit.hitstop.active(), false);
+  assert.equal(h.Kit.hitstop.tick(0.02), false);
+  h.Kit.hitstop(0.05);
+  clock.now = 160;
+  assert.equal(h.Kit.hitstop.active(), false, 'wall-clock expiry prevents stuck freeze without tick()');
+  h.Kit.motion.setPreference('reduce');
+  assert.equal(h.Kit.hitstop(0.06), 0);
+  assert.equal(h.Kit.hitstop.active(), false);
+
+  const classes = new Set(['pop']);
+  let reflowReads = 0;
+  const el = {
+    get offsetWidth() { reflowReads++; return 100; },
+    classList: { remove: c => classes.delete(c), add: c => classes.add(c), contains: c => classes.has(c) }
+  };
+  h.Kit.retrigger(el, 'pop');
+  assert.equal(reflowReads, 0, 'never reads offsetWidth');
+  assert.equal(classes.has('pop'), false);
+  h.Kit.retrigger(el, 'pop');
+  assert.equal(raf.length, 1, 'coalesces rapid calls while swap is pending');
+  raf.shift()();
+  assert.equal(classes.has('pop'), false);
+  raf.shift()();
+  assert.equal(classes.has('pop'), true);
+});
+
+test('Kit.gfx turns light graphics on after one 60-frame window of unsmooth round play, pre-trips on software GPU, and offers the way back', () => {
   const clock = {now: 1000}, h = withGfx(harness({clock, embedded: false}));
   const changes = [], g = h.Kit.gfx('rail-rush', {apply: (light, why) => changes.push([light, why])});
   assert.equal(g.light, false, 'a PC with no history starts with full graphics');
   const play = (n, ms) => { for (let i = 0; i < n; i++) { clock.now += ms; h.Kit.stats.frame(ms); } };
-  play(600, 30);
+  play(300, 30);
   assert.deepEqual(changes, [], 'frames outside a round say nothing');
   h.Kit.stats.round('main'); h.window.emit('keydown', {code: 'KeyA'});
-  play(102, 16); play(18, 30); play(240, 16);
+  play(51, 16); play(9, 30); play(120, 16);
   assert.deepEqual(changes, [], 'exactly 15 percent of slow frames is still smooth enough');
-  play(120, 400);
+  play(60, 400);
   assert.deepEqual(changes, [], 'stalls are left out');
   h.window.emit('keydown', {code: 'KeyA'});
-  play(100, 16); play(20, 30);
-  assert.deepEqual(changes, [], 'one slow window is not enough');
-  play(100, 16); play(20, 25);
-  assert.deepEqual(changes, [[true, 'auto']], 'the second slow window in a row switches');
+  play(50, 16); play(10, 30);
+  assert.deepEqual(changes, [[true, 'auto']], 'one slow 60-frame window switches');
   assert.equal(g.light, true);
   assert.equal(h.values.get('sg:rail-rush:gfx'), '"light"');
   assert.equal(h.values.get('sg:site:gfx-light'), 'true');
   const notice = h.document.body.children.find(c => c.className === 'sg-gfx-notice');
   assert.ok(notice && !notice.hidden, 'a notice says so');
-  play(600, 30);
+  play(300, 30);
   assert.equal(changes.length, 1, 'it switches once');
   notice.children[1].emit('click', {detail: 1});
   assert.deepEqual(changes, [[true, 'auto'], [false, 'child']], 'the notice\'s button brings full graphics back');
@@ -501,13 +558,19 @@ test('Kit.gfx turns light graphics on after two 2-second windows of unsmooth rou
   const kept = again.Kit.gfx('rail-rush', {apply: (light, why) => changes.push([light, why])});
   assert.equal(kept.light, false, 'the child\'s choice of full graphics stays');
   again.Kit.stats.round('main'); again.window.emit('keydown', {code: 'KeyA'});
-  play(0, 0); for (let i = 0; i < 600; i++) { clock.now += 30; again.Kit.stats.frame(30); }
+  for (let i = 0; i < 300; i++) { clock.now += 30; again.Kit.stats.frame(30); }
   assert.equal(changes.length, 2, 'and is never overruled by the automatic switch');
   const other = again.Kit.gfx('neon-slope');
   assert.equal(other.light, true, 'other heavy games on this PC start light');
   other.set(false);
   assert.equal(other.light, false);
   assert.equal(again.values.get('sg:neon-slope:gfx'), '"full"');
+
+  const soft = withGfx(harness({clock, embedded: false}));
+  soft.Kit.webgl = { isSoftware: () => true };
+  assert.equal(soft.Kit.gfx('road-hopper').light, true, 'software WebGL pre-trips immediately');
+  soft.window.location = { search: '?hq' };
+  assert.equal(soft.Kit.gfx('road-hopper').light, false, '?hq overrides software pre-trip');
 });
 
 test('Kit.gfx: ?lq and ?hq force a mode, and automated browsers never switch unless ?gfxauto', () => {

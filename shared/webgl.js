@@ -14,11 +14,14 @@
  *   Kit.webgl.watchContext(canvas, opts?) -> { lost, detach() } wiring webglcontextlost/restored
  *   Kit.webgl.showNoGL(opts?)             -> shows #nogl or creates an RTL Arabic fallback panel
  *   Kit.webgl.boot(fn, opts?)             -> deferred 3D init via rAF + setTimeout(0) with fallback timer
- *   Kit.webgl.createRenderer(canvas, opts?) -> { renderer, gl, software, ratio } | null
+ *   Kit.webgl.createRenderer(canvas, opts?) -> { renderer, gl, software, light, ratio } | null
+ *   Kit.webgl.uploadRange(attr, count)    -> partial updateRanges GPU upload (skips when count <= 0)
+ *   Kit.webgl.shrinkCount(mesh, count)    -> sets mesh.count and uploads only active matrices when count > 0
+ *   Kit.webgl.blobShadowPool(scene, count, opts?) -> pooled InstancedMesh soft radial shadow circles
  */
 (function () {
   'use strict';
-  var W = window, Kit = W.Kit;
+  var W = window, Kit = W.Kit, M = Math;
   if (!Kit || Kit.webgl) return;
 
   var SOFT_RE = /swiftshader|llvmpipe|softpipe|software|microsoft basic render|basic render|\bwarp\b|mesa/i;
@@ -26,13 +29,14 @@
   var cachedProbe = null;
 
   function doc() { return W.document; }
+  function isFn(v) { return typeof v === 'function'; }
   function nowMs() {
     var p = W.performance;
     return p && p.now ? p.now() : Date.now();
   }
   function getGl(target) {
     if (!target) return null;
-    if (typeof target.getContext === 'function') {
+    if (isFn(target.getContext)) {
       try { return target.getContext(); } catch (e) { return null; }
     }
     return target;
@@ -89,6 +93,15 @@
     return probe().software;
   }
 
+  function resolveLight(opts) {
+    if (opts.light != null) return !!opts.light;
+    if (opts.gfx) return !!opts.gfx.light;
+    try {
+      var v = W.localStorage && W.localStorage.getItem('sg:site:gfx-light');
+      return v === '1' || v === 'true';
+    } catch (e) { return false; }
+  }
+
   function pixelRatio(opts) {
     opts = opts || NO;
     var dpr = W.devicePixelRatio || 1;
@@ -99,24 +112,24 @@
     var soft = opts.software != null ? !!opts.software : isSoftware();
     if (soft) {
       var sr = opts.softRatio != null ? opts.softRatio : 0.75;
-      return Math.max(min, Math.min(max, sr));
+      return M.max(min, M.min(max, sr));
     }
-    var light = !!(opts.light || (opts.gfx && opts.gfx.light));
+    var light = resolveLight(opts);
     if (light) {
       var scale = opts.lightScale != null ? opts.lightScale : 0.75;
-      return Math.max(min, Math.min(dpr, 1) * scale);
+      return M.max(min, M.min(dpr, 1) * scale);
     }
-    return Math.max(min, Math.min(dpr, max));
+    return M.max(min, M.min(dpr, max));
   }
 
   function syncSignaled(gl, sync) {
     if (!gl || !sync) return true;
     try {
       if (gl.isContextLost && gl.isContextLost()) return true;
-      if (typeof gl.getSyncParameter === 'function') {
+      if (isFn(gl.getSyncParameter)) {
         return gl.getSyncParameter(sync, gl.SYNC_STATUS) === gl.SIGNALED;
       }
-      if (typeof gl.clientWaitSync === 'function') {
+      if (isFn(gl.clientWaitSync)) {
         return gl.clientWaitSync(sync, 0, 0) !== gl.TIMEOUT_EXPIRED;
       }
     } catch (e) { /* treat as signaled so loops never stall */ }
@@ -129,15 +142,15 @@
   }
 
   function whenDrawn(rendererOrGl, done, limit) {
-    if (typeof done !== 'function') return;
+    if (!isFn(done)) return;
     var gl = getGl(rendererOrGl);
     var maxMs = limit != null ? limit : 5000;
     if (!gl || (gl.isContextLost && gl.isContextLost())) { done(); return; }
     var t0 = nowMs(), sync = null;
-    if (typeof gl.fenceSync === 'function') {
+    if (isFn(gl.fenceSync)) {
       try {
         sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
-        if (typeof gl.flush === 'function') gl.flush();
+        if (isFn(gl.flush)) gl.flush();
       } catch (e) { sync = null; }
       (function poll() {
         var fin = !sync || nowMs() - t0 > maxMs || syncSignaled(gl, sync);
@@ -147,14 +160,14 @@
       })();
       return;
     }
-    try { if (typeof gl.finish === 'function') gl.finish(); } catch (e) { /* ignore */ }
+    try { if (isFn(gl.finish)) gl.finish(); } catch (e) { /* ignore */ }
     done();
   }
 
   function pacer(rendererOrGl, opts) {
     opts = opts || NO;
     var gl = getGl(rendererOrGl);
-    var hasFence = !!(gl && typeof gl.fenceSync === 'function');
+    var hasFence = !!(gl && isFn(gl.fenceSync));
     var soft = opts.software != null ? !!opts.software : (gl ? isSoftware(gl) : isSoftware());
     var active = opts.enabled != null ? !!opts.enabled : soft;
     var maxWait = opts.maxWait != null ? opts.maxWait : 1000;
@@ -172,7 +185,7 @@
           if (!syncSignaled(gl, sync) && t - t0 < maxWait) return false;
           deleteSync(gl, sync);
           sync = null;
-          busy = Math.min(maxBusy, Math.max(0, t - t0));
+          busy = M.min(maxBusy, M.max(0, t - t0));
         }
         return t - t0 >= busy * duty;
       },
@@ -182,25 +195,25 @@
           try {
             deleteSync(gl, sync);
             sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
-            if (typeof gl.flush === 'function') gl.flush();
+            if (isFn(gl.flush)) gl.flush();
             t0 = nowMs();
           } catch (e) { sync = null; active = false; }
         } else {
           t0 = nowMs();
-          try { if (typeof gl.finish === 'function') gl.finish(); } catch (e) { /* ignore */ }
-          busy = Math.min(maxBusy, Math.max(0, nowMs() - t0));
+          try { if (isFn(gl.finish)) gl.finish(); } catch (e) { /* ignore */ }
+          busy = M.min(maxBusy, M.max(0, nowMs() - t0));
         }
       },
       wait: function (timeoutMs) {
         if (!gl) return true;
-        if (sync && typeof gl.clientWaitSync === 'function') {
+        if (sync && isFn(gl.clientWaitSync)) {
           try {
             var res = gl.clientWaitSync(sync, gl.SYNC_FLUSH_COMMANDS_BIT || 0, timeoutMs > 0 ? timeoutMs : 0);
             if (res !== gl.TIMEOUT_EXPIRED) { deleteSync(gl, sync); sync = null; return true; }
             return false;
           } catch (e) { deleteSync(gl, sync); sync = null; return true; }
         }
-        try { if (typeof gl.finish === 'function') gl.finish(); } catch (e) { /* ignore */ }
+        try { if (isFn(gl.finish)) gl.finish(); } catch (e) { /* ignore */ }
         return true;
       },
       whenDrawn: function (done, limit) { whenDrawn(gl, done, limit); },
@@ -213,26 +226,26 @@
     var lost = false;
     function getNotice() { return resolveEl(opts.notice); }
     function onLost(e) {
-      if (e && typeof e.preventDefault === 'function') e.preventDefault();
+      if (e && isFn(e.preventDefault)) e.preventDefault();
       lost = true;
       var n = getNotice();
       if (n) n.hidden = false;
-      if (typeof opts.onLost === 'function') opts.onLost(e);
+      if (isFn(opts.onLost)) opts.onLost(e);
     }
     function onRestored(e) {
       lost = false;
       var n = getNotice();
       if (n) n.hidden = true;
-      if (typeof opts.onRestored === 'function') opts.onRestored(e);
+      if (isFn(opts.onRestored)) opts.onRestored(e);
     }
-    if (canvas && typeof canvas.addEventListener === 'function') {
+    if (canvas && isFn(canvas.addEventListener)) {
       canvas.addEventListener('webglcontextlost', onLost);
       canvas.addEventListener('webglcontextrestored', onRestored);
     }
     return {
       get lost() { return lost; },
       detach: function () {
-        if (canvas && typeof canvas.removeEventListener === 'function') {
+        if (canvas && isFn(canvas.removeEventListener)) {
           canvas.removeEventListener('webglcontextlost', onLost);
           canvas.removeEventListener('webglcontextrestored', onRestored);
         }
@@ -288,18 +301,18 @@
     var fallbackMs = opts.fallbackMs == null ? 80 : opts.fallbackMs;
     function run() {
       if (started || cancelled) return;
-      if (typeof opts.guard === 'function' && !opts.guard()) return;
+      if (isFn(opts.guard) && !opts.guard()) return;
       started = true;
       clearTimeout(innerTimer);
       clearTimeout(fallbackTimer);
       try {
         fn();
       } catch (err) {
-        if (typeof opts.onError === 'function') opts.onError(err);
+        if (isFn(opts.onError)) opts.onError(err);
         else if (Kit.fail) Kit.fail(err);
       }
     }
-    if (typeof W.requestAnimationFrame === 'function') {
+    if (isFn(W.requestAnimationFrame)) {
       rafId = W.requestAnimationFrame(function () {
         if (!started && !cancelled) innerTimer = setTimeout(run, 0);
       });
@@ -309,7 +322,7 @@
       run: run,
       cancel: function () {
         cancelled = true;
-        if (rafId && typeof W.cancelAnimationFrame === 'function') W.cancelAnimationFrame(rafId);
+        if (rafId && isFn(W.cancelAnimationFrame)) W.cancelAnimationFrame(rafId);
         clearTimeout(innerTimer);
         clearTimeout(fallbackTimer);
       }
@@ -324,7 +337,7 @@
       throw new Error('three.js is unavailable');
     }
     var software = opts.software != null ? !!opts.software : isSoftware();
-    var light = !!(opts.light || (opts.gfx && opts.gfx.light));
+    var light = resolveLight(opts);
     var ratio = pixelRatio({
       software: software, light: light, low: opts.low,
       min: opts.min, max: opts.max, softRatio: opts.softRatio,
@@ -348,7 +361,93 @@
     if (opts.srgb && T.SRGBColorSpace && renderer.outputColorSpace !== undefined) {
       renderer.outputColorSpace = T.SRGBColorSpace;
     }
-    return { renderer: renderer, gl: renderer.getContext(), software: software, ratio: ratio };
+    return { renderer: renderer, gl: renderer.getContext(), software: software, light: light, ratio: ratio };
+  }
+
+  function uploadRange(attr, count) {
+    if (!attr || !(count > 0)) return;
+    var r = attr._sgRng || (attr._sgRng = { start: 0, count: 0 });
+    r.count = count | 0;
+    if (attr.updateRanges) {
+      attr.updateRanges.length = 0;
+      attr.updateRanges.push(r);
+    } else if (attr.updateRange) {
+      attr.updateRange.offset = 0;
+      attr.updateRange.count = r.count;
+    }
+    attr.needsUpdate = true;
+  }
+
+  function shrinkCount(mesh, count) {
+    if (!mesh) return 0;
+    var n = count > 0 ? count | 0 : 0;
+    var im = mesh.instanceMatrix;
+    if (im && im.count != null && n > im.count) n = im.count;
+    mesh.count = n;
+    if (n > 0 && im) uploadRange(im, n * 16);
+    return n;
+  }
+
+  function blobShadowPool(scene, count, opts) {
+    opts = opts || NO;
+    var T = W.THREE;
+    if (!T || !T.InstancedMesh || !T.PlaneGeometry || !T.MeshBasicMaterial) return null;
+    var cap = M.max(1, count | 0), sz = opts.size > 0 ? opts.size | 0 : 64;
+    var alpha = opts.opacity != null ? opts.opacity : 0.42, yOff = opts.yOffset || 0;
+    var tex = null, d = doc();
+    if (d && d.createElement && T.CanvasTexture) {
+      var cv = d.createElement('canvas');
+      cv.width = cv.height = sz;
+      var g = cv.getContext && cv.getContext('2d');
+      if (g) {
+        var h = sz / 2, gr = g.createRadialGradient(h, h, 0, h, h, h), rgba = 'rgba(0,0,0,';
+        gr.addColorStop(0, rgba + alpha + ')');
+        gr.addColorStop(0.55, rgba + alpha * 0.6 + ')');
+        gr.addColorStop(1, rgba + '0)');
+        g.fillStyle = gr;
+        g.fillRect(0, 0, sz, sz);
+      }
+      tex = new T.CanvasTexture(cv);
+    }
+    var geo = new T.PlaneGeometry(1, 1);
+    geo.rotateX && geo.rotateX(-M.PI / 2);
+    var mat = new T.MeshBasicMaterial({
+      map: tex, transparent: true, depthWrite: opts.depthWrite === true,
+      polygonOffset: opts.polygonOffset !== false, polygonOffsetFactor: -1, polygonOffsetUnits: -2
+    });
+    var mesh = new T.InstancedMesh(geo, mat, cap), im = mesh.instanceMatrix;
+    if (im && im.setUsage && T.DynamicDrawUsage !== undefined) im.setUsage(T.DynamicDrawUsage);
+    mesh.frustumCulled = false;
+    mesh.count = 0;
+    mesh.renderOrder = opts.renderOrder != null ? opts.renderOrder : 1;
+    scene && scene.add && scene.add(mesh);
+    var a = im && im.array, used = 0;
+    function put(i, x, y, z, sx, szX, ry) {
+      if (i < 0 || i >= cap || !a) return -1;
+      var w = sx != null ? sx : 1, hZ = szX != null ? szX : w;
+      var o = i * 16, c = ry ? M.cos(ry) : 1, s = ry ? M.sin(ry) : 0;
+      a[o] = c * w; a[o + 1] = 0; a[o + 2] = -s * w; a[o + 3] = 0;
+      a[o + 4] = 0; a[o + 5] = 1; a[o + 6] = 0; a[o + 7] = 0;
+      a[o + 8] = s * hZ; a[o + 9] = 0; a[o + 10] = c * hZ; a[o + 11] = 0;
+      a[o + 12] = x; a[o + 13] = y + yOff; a[o + 14] = z; a[o + 15] = 1;
+      if (i >= used) used = i + 1;
+      return i;
+    }
+    return {
+      mesh: mesh,
+      capacity: cap,
+      reset: function () { used = 0; },
+      add: function (x, y, z, sx, szX, ry) { return put(used, x, y, z, sx, szX, ry); },
+      set: put,
+      commit: function (n) { return shrinkCount(mesh, n != null ? n : used); },
+      clear: function () { used = 0; return shrinkCount(mesh, 0); },
+      dispose: function () {
+        scene && scene.remove && scene.remove(mesh);
+        geo.dispose && geo.dispose();
+        mat.dispose && mat.dispose();
+        tex && tex.dispose && tex.dispose();
+      }
+    };
   }
 
   Kit.webgl = {
@@ -360,6 +459,9 @@
     watchContext: watchContext,
     showNoGL: showNoGL,
     boot: boot,
-    createRenderer: createRenderer
+    createRenderer: createRenderer,
+    uploadRange: uploadRange,
+    shrinkCount: shrinkCount,
+    blobShadowPool: blobShadowPool
   };
 })();

@@ -43,7 +43,10 @@
   ['games', 'splash', 'hops', 'coinsAll'].forEach(function (k) { save.stats[k] = +save.stats[k] || 0; });
   if (!save.tiers || typeof save.tiers !== 'object') save.tiers = {};
   if (!save.seen || typeof save.seen !== 'object') save.seen = { chick: 1 };
+  var persistTimer = 0, persistDirty = false;
   function persist() {
+    persistDirty = false;
+    if (persistTimer) { clearTimeout(persistTimer); persistTimer = 0; }
     var json;
     try { json = JSON.stringify(save); } catch (e) { json = null; }
     if (json !== null && json === savedJSON) return true;
@@ -52,33 +55,38 @@
     }
     savedJSON = json; saveUI.saved(); return true;
   }
+  function schedulePersist() {
+    persistDirty = true;
+    if (persistTimer) return;
+    persistTimer = setTimeout(function () {
+      persistTimer = 0;
+      if (persistDirty) persist();
+    }, 1200);
+  }
+  window.addEventListener('pagehide', function () { if (persistDirty) persist(); });
   function has(id) { return save.owned.indexOf(id) >= 0; }
 
   /* ============================================================ renderer */
   var canvas = $('gl');
   // Light graphics (Kit.gfx) for PCs that can't keep it smooth: no antialiasing from the
-  // next start, and from the moment it turns on no shadows and fewer pixels.
+  // next start, and from the moment it turns on fewer pixels.
   var gfx = Kit.gfx('road-hopper', { apply: applyGfx });
-  var wgl = Kit.webgl.createRenderer(canvas, { software: false, gfx: gfx, noGL: true });
+  var wgl = Kit.webgl.createRenderer(canvas, { gfx: gfx, noGL: true });
   if (!wgl) return;
   var renderer = wgl.renderer;
-  function glRatio() { return Kit.webgl.pixelRatio({ software: false, gfx: gfx }); }
+  function glRatio() { return Kit.webgl.pixelRatio({ gfx: gfx }); }
   var basePR = wgl.ratio;
-  renderer.shadowMap.enabled = !gfx.light;
-  renderer.shadowMap.type = THREE.PCFShadowMap;
+  renderer.shadowMap.enabled = false;
   var scene = new THREE.Scene();
   scene.background = new THREE.Color(THEMES[0].sky);
   var cam = new THREE.OrthographicCamera(-10, 10, 6, -6, 0.1, 90);
   var CAM_OFF = new THREE.Vector3(1.7, 9.6, 9.4);
   scene.add(new THREE.HemisphereLight(0xffffff, 0x9aa6c8, 1.25));
   var sun = new THREE.DirectionalLight(0xffffff, 2.1);
-  sun.castShadow = !gfx.light;
-  sun.shadow.mapSize.set(1024, 1024);
-  (function (sc) { sc.left = -15; sc.right = 15; sc.top = 15; sc.bottom = -15; sc.near = 1; sc.far = 60; })(sun.shadow.camera);
-  sun.shadow.bias = -0.0008;
-  sun.shadow.normalBias = 0.02;
+  sun.castShadow = false;
   scene.add(sun); scene.add(sun.target);
   var SUN_OFF = new THREE.Vector3(-9, 11, 3);
+  var shadows = Kit.webgl.blobShadowPool(scene, 140, { opacity: 0.34, yOffset: 0.025 });
 
   var matVC = new THREE.MeshLambertMaterial({ vertexColors: true });
   var matCoin = new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0x5a3a00 });
@@ -106,12 +114,11 @@
     return g;
   }
   var pools = {};
-  function take(key, mat, cast, recv) {
+  function take(key, mat) {
     var list = pools[key] || (pools[key] = []);
     var m = list.pop();
     if (!m) {
       m = new THREE.Mesh(geo(key), mat || matVC);
-      m.castShadow = !!cast; m.receiveShadow = !!recv;
       m.userData.key = key;
       scene.add(m);
     }
@@ -187,7 +194,7 @@
         var d = L.decor[i], key = 'deco:' + L.theme + ':' + d.k, im = decoIM[key];
         if (!im) {
           im = new THREE.InstancedMesh(geo(key), matVC, DECO_CAP);
-          im.castShadow = true; im.receiveShadow = true; im.frustumCulled = false; im.count = 0;
+          im.frustumCulled = false; im.count = 0;
           scene.add(im); decoIM[key] = im;
         }
         if (im.count >= DECO_CAP) continue;
@@ -196,7 +203,11 @@
         im.setMatrixAt(im.count++, _m4);
       }
     }
-    for (k in decoIM) { decoIM[k].instanceMatrix.needsUpdate = true; decoIM[k].visible = decoIM[k].count > 0; }
+    for (k in decoIM) {
+      var dm = decoIM[k];
+      dm.visible = dm.count > 0;
+      if (dm.count > 0) Kit.webgl.uploadRange(dm.instanceMatrix, dm.count * 16);
+    }
     decoDirty = false;
   }
 
@@ -206,17 +217,16 @@
     vel: new THREE.Vector3(), spin: 0, idle: 1.5, jump: 0 };
   var pGroup = new THREE.Group(); scene.add(pGroup);
   var pBody = new THREE.Mesh(geo('char:' + save.sel), matVC);
-  pBody.castShadow = true; pGroup.add(pBody); pGroup.scale.setScalar(1.18);
+  pGroup.add(pBody); pGroup.scale.setScalar(1.18);
   function setCharModel(id) { pBody.geometry = geo('char:' + id); }
   function charColor() { return CHAR_BY[save.sel].color; }
 
   // Eagle
   var eagle = new THREE.Group(), ep = RH.eagleParts();
-  var eBody = new THREE.Mesh(RH.build(ep.body), matVC); eBody.castShadow = true; eagle.add(eBody);
+  var eBody = new THREE.Mesh(RH.build(ep.body), matVC); eagle.add(eBody);
   var wingGeo = RH.build(ep.wing);
   var wR = new THREE.Mesh(wingGeo, matVC), wL = new THREE.Mesh(wingGeo, matVC);
   wR.position.set(0.3, 0.1, 0); wL.position.set(-0.3, 0.1, 0); wL.scale.x = -1;
-  wR.castShadow = wL.castShadow = true;
   eagle.add(wR); eagle.add(wL);
   eagle.rotation.y = Math.PI; eagle.scale.setScalar(1.3); eagle.visible = false;
   scene.add(eagle);
@@ -266,8 +276,10 @@
     pIM.setColorAt(pi, _col.set(0xffffff));
   }
   scene.add(pIM);
+  var hasParts = false;
   function burst(x, y, z, n, colors, o) {
     o = o || {};
+    if (n > 0) hasParts = true;
     for (var i = 0; i < n; i++) {
       var p = null;
       for (var j = 0; j < PMAX; j++) { var q = parts[(pNext + j) % PMAX]; if (!q.on) { p = q; pNext = (pNext + j + 1) % PMAX; break; } }
@@ -283,6 +295,7 @@
     }
   }
   function updateParts(dt) {
+    if (!hasParts) return;
     var k = 0;
     for (var i = 0; i < PMAX; i++) {
       var p = parts[i];
@@ -298,11 +311,11 @@
       k++;
     }
     _s.set(1, 1, 1);
-    pIM.count = k;
-    pIM.instanceMatrix.needsUpdate = true;
-    if (pIM.instanceColor) pIM.instanceColor.needsUpdate = true;
+    Kit.webgl.shrinkCount(pIM, k);
+    if (k > 0 && pIM.instanceColor) Kit.webgl.uploadRange(pIM.instanceColor, k * 3);
+    hasParts = k > 0;
   }
-  function clearParts() { for (var i = 0; i < PMAX; i++) parts[i].on = false; pIM.count = 0; }
+  function clearParts() { for (var i = 0; i < PMAX; i++) parts[i].on = false; hasParts = false; pIM.count = 0; }
 
   /* ============================================================== sound */
   // Own tiny synth (instead of Kit.audio.tone/noise): every gain starts silent BEFORE its note
@@ -644,7 +657,7 @@
     var c = L.coin, val = c.big ? 5 : 1;
     give(c.m); c.m = null;
     runCoins += val; save.coins += val; save.stats.coinsAll += val;
-    persist();
+    schedulePersist();
     S.coin(c.big);
     burst(c.c, 0.5, -L.row, 10, c.big ? [0x7ff0ff, 0xffffff, 0x3fb8e0] : [0xffd23f, 0xfff3a0, 0xff9f1a], { speed: 2.6, up: 4, size: 0.1, life: 0.5 });
     popup('+' + val, c.c, 1.0, -L.row, 'gold');
@@ -795,14 +808,18 @@
     _skyT.set(THEMES[th].sky);
     skyCol.lerp(_skyT, Math.min(1, dt * 1.5));
   }
+  var lastCamZoom = -1;
   function applyCamera() {
     _look.set(camX, 0, camZ);
     var sp = shakeP * shakeP * 2.2;
     cam.position.copy(_look).add(CAM_OFF);
     cam.position.x += (Math.random() - 0.5) * sp; cam.position.y += (Math.random() - 0.5) * sp;
     cam.lookAt(_look);
-    cam.zoom = 1 + camMode * 0.32;
-    cam.updateProjectionMatrix();
+    var zoom = 1 + camMode * 0.32;
+    if (Math.abs(zoom - lastCamZoom) > 1e-4) {
+      cam.zoom = lastCamZoom = zoom;
+      cam.updateProjectionMatrix();
+    }
     sun.position.copy(_look).add(SUN_OFF);
     sun.target.position.copy(_look);
     scene.background.copy(skyCol);
@@ -915,6 +932,39 @@
   // confetti still finishes first.
   var lastR = performance.now(), redraw = true;
   Kit.webgl.watchContext(canvas, { onRestored: function () { redraw = true; } });
+  function updateShadows() {
+    if (!shadows) return;
+    shadows.reset();
+    if (pGroup.visible && !(P.dead && (P.kind === 'water' || P.kind === 'drift'))) {
+      var pL = lanes[P.row];
+      if (!pL || pL.type !== 'river' || P.log) {
+        var gy = surfaceY(pL, P.log), hgt = Math.max(0, P.y - gy);
+        var ps = Kit.clamp(0.92 - hgt * 0.3, 0.45, 0.95);
+        shadows.add(P.x, gy, P.z, ps, ps);
+      }
+    }
+    if (eagle.visible) {
+      var eh = Math.max(0, eagle.position.y), es = Kit.clamp(1.7 - eh * 0.09, 0.7, 1.7);
+      shadows.add(eagle.position.x, 0.02, eagle.position.z, es * 1.35, es);
+    }
+    for (var r = laneMin; r <= laneMax; r++) {
+      var L = lanes[r];
+      if (!L || Math.abs(-r - camZ) > 15) continue;
+      if (L.vehicles) {
+        for (var i = 0; i < L.vehicles.length; i++) {
+          var v = L.vehicles[i];
+          if (Math.abs(v.x - camX) < 13) shadows.add(v.x, -0.02, -r, v.len * 1.05, 0.92);
+        }
+      }
+      if (L.rail && L.train && L.train.visible && Math.abs(L.rail.x - camX) < 18) {
+        shadows.add(L.rail.x, 0.03, -r, TL * 0.98, 1.05);
+      }
+      if (L.coin && L.coin.m && Math.abs(L.coin.c - camX) < 12) {
+        shadows.add(L.coin.c, surfaceY(L), -r, 0.52, 0.52);
+      }
+    }
+    shadows.commit();
+  }
   function render() {
     var now = performance.now(), rdt = Math.min(0.05, (now - lastR) / 1000);
     lastR = now;
@@ -925,6 +975,7 @@
     bestSign.visible = !titleLike(); // on the menu it would sit half-hidden under the missions box
     applyPlayer(rdt);
     applyCamera();
+    updateShadows();
     renderer.render(scene, cam);
     if (warmDraw) { warmDraw = false; scene.remove(warmGroup); warmGroup = null; }
     drawConfetti(rdt);
@@ -947,11 +998,12 @@
     $('warn').classList.toggle('on', !!on);
     $('vignette').style.opacity = on ? '1' : '0';
   }
+  var hudCoinsEl = document.querySelector('.hud-coins');
   function updateHUD(coinBump) {
     $('hScore').textContent = score;
     $('hBest').textContent = Math.max(save.best, score);
     $('hCoins').textContent = save.coins;
-    if (coinBump) { var hc = document.querySelector('.hud-coins'); hc.classList.remove('bump'); void hc.offsetWidth; hc.classList.add('bump'); }
+    if (coinBump) Kit.retrigger(hudCoinsEl, 'bump');
   }
   function popup(text, wx, wy, wz, cls) {
     _v.set(wx, wy, wz).project(cam);
@@ -973,7 +1025,7 @@
     var b = $('banner');
     b.querySelector('.b-top').textContent = top;
     b.querySelector('.b-main').textContent = main;
-    b.classList.remove('show'); void b.offsetWidth; b.classList.add('show');
+    b.classList.add('show');
     clearTimeout(bannerT);
     bannerT = setTimeout(function () { b.classList.remove('show'); }, 2400);
   }
@@ -1004,17 +1056,10 @@
   // Switching to reduced motion stops shake and confetti at once.
   Kit.motion.onChange(function (reduced) { if (reduced) { shakeP = 0; conf.length = 0; redraw = true; } });
 
-  // Shadows on or off changes every lit material's shader: rebuilt once, at the switch.
   function applyGfx() {
     basePR = glRatio();
     dres.ratio = basePR; dres.min = basePR * 0.6; dres.n = 0; dres.bad = 0;
     renderer.setPixelRatio(basePR);
-    renderer.shadowMap.enabled = sun.castShadow = !gfx.light;
-    scene.traverse(function (o) {
-      var m = o.material;
-      if (!m) return;
-      (Array.isArray(m) ? m : [m]).forEach(function (x) { x.needsUpdate = true; });
-    });
     onResize();
   }
   function onResize() {
@@ -1025,6 +1070,7 @@
     if (aspect < 1.6) viewH = 17.9 / aspect;
     cam.left = -viewH * aspect / 2; cam.right = viewH * aspect / 2; cam.top = viewH / 2; cam.bottom = -viewH / 2;
     cam.updateProjectionMatrix();
+    lastCamZoom = cam.zoom;
     ui.style.fontSize = (16 * Math.min(w / 1280, h / 720)) + 'px';
     fxc.width = w; fxc.height = h;
   }
@@ -1047,7 +1093,7 @@
     S.click();
     try { canvas.focus({ preventScroll: true }); } catch (e) { /* ignore */ }
   }
-  function pauseGame() { if (state !== 'play') return; state = 'paused'; redraw = true; setWarn(false); $('pScore').textContent = score; showScreen('pause'); S.click(); }
+  function pauseGame() { if (state !== 'play') return; if (persistDirty) persist(); state = 'paused'; redraw = true; setWarn(false); $('pScore').textContent = score; showScreen('pause'); S.click(); }
   function resumeGame() { if (state !== 'paused') return; state = 'play'; showScreen(null); S.click(); K.reset(); }
   // Leaving a run from the pause menu still keeps its best score and the unlock it
   // earned (coins are saved as they are picked up).
@@ -1359,9 +1405,8 @@
     persist(); refreshMachine();
     S.crank();
     var knob = $('gKnob'), g = $('gacha'), ball = $('gBall');
-    knob.classList.remove('turn'); g.classList.remove('shake'); ball.className = 'g-ball';
-    void knob.offsetWidth;
-    knob.classList.add('turn'); g.classList.add('shake');
+    ball.className = 'g-ball';
+    Kit.retrigger(knob, 'turn'); Kit.retrigger(g, 'shake');
     ball.style.background = 'linear-gradient(180deg, ' + pick.color + ' 0 50%, #fff 50% 100%)';
     setTimeout(function () { ball.classList.add('drop'); S.pop(); }, 800);
     setTimeout(function () {

@@ -110,10 +110,10 @@
   // Light graphics (Kit.gfx) for PCs that can't keep it smooth: no antialiasing from the
   // next start, and from the moment it turns on fewer pixels and no star field.
   var gfx = Kit.gfx('neon-slope', { apply: applyGfx });
-  var wgl = Kit.webgl.createRenderer(canvas, { software: false, gfx: gfx, noGL: { hide: 'title' } });
+  var wgl = Kit.webgl.createRenderer(canvas, { gfx: gfx, noGL: { hide: 'title' } });
   if (!wgl) return;
   var renderer = wgl.renderer;
-  function glRatio() { return Kit.webgl.pixelRatio({ software: false, gfx: gfx }); }
+  function glRatio() { return Kit.webgl.pixelRatio({ gfx: gfx }); }
   var DPR = wgl.ratio;
   function applyGfx() {
     DPR = glRatio();
@@ -123,7 +123,7 @@
     resize();
   }
   renderer.setClearColor(0x07021a, 1);
-  var maxAniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  var maxAniso = (wgl.software || gfx.light) ? 1 : Math.min(2, renderer.capabilities.getMaxAnisotropy());
 
   var scene = new T.Scene();
   var FOG_COL = 0x1c0638;
@@ -238,10 +238,10 @@
       for (var i = 0; i < pts.length; i++) g.lineTo(pts[i][0], pts[i][1] + off);
       g.lineTo(1024, base); g.lineTo(1024, 256); g.closePath();
       g.fillStyle = col; g.fill();
-      g.strokeStyle = line; g.lineWidth = 2.5; g.shadowColor = line; g.shadowBlur = 10;
       g.beginPath();
       for (var j = 0; j < pts.length; j++) { if (j === 0) g.moveTo(pts[j][0], pts[j][1] + off); else g.lineTo(pts[j][0], pts[j][1] + off); }
-      g.stroke(); g.shadowBlur = 0;
+      g.save(); g.globalAlpha = 0.28; g.strokeStyle = line; g.lineWidth = 9; g.stroke(); g.restore();
+      g.strokeStyle = line; g.lineWidth = 2.5; g.stroke();
     }
     range(7, 70, '#1a0638', '#8a3bff', 0);
     range(3, 40, '#240a45', '#ff3fd0', 10);
@@ -275,30 +275,31 @@
     m.frustumCulled = false; m.instanceMatrix.setUsage(T.DynamicDrawUsage);
     course.add(m);
   });
-  var ZERO_M = new T.Matrix4().makeScale(0, 0, 0), tmpM = new T.Matrix4(), tmpC = new T.Color();
-  for (var ii = 0; ii < NI; ii++) {
-    tileMesh.setMatrixAt(ii, ZERO_M); rampMesh.setMatrixAt(ii, ZERO_M);
-    // Ramps never change colour; a white instance colour just lets them share the tiles' shader.
-    tileMesh.setColorAt(ii, tmpC.set(0xffffff)); rampMesh.setColorAt(ii, tmpC);
-  }
-  var dirty = { lo: 1e9, hi: -1 };
+  var tmpM = new T.Matrix4(), tmpC = new T.Color();
+  tileMesh.setColorAt(0, tmpC.set(0xffffff)); rampMesh.setColorAt(0, tmpC);
+  tileMesh.count = 0; rampMesh.count = 0;
+  var courseDirty = false;
 
   var OBS_N = 80;
-  var obsMesh = new T.InstancedMesh(boxGeo, new T.MeshBasicMaterial({ map: hazardTex }), OBS_N);
+  var obsMat = new T.MeshBasicMaterial({ map: hazardTex });
+  var obsMesh = new T.InstancedMesh(boxGeo, obsMat, OBS_N);
   obsMesh.frustumCulled = false; obsMesh.instanceMatrix.setUsage(T.DynamicDrawUsage);
+  obsMesh.count = 0;
   course.add(obsMesh);
   course.add(decMesh);
   var obs = [];
-  for (var oi = 0; oi < OBS_N; oi++) { obs.push({ active: false }); obsMesh.setMatrixAt(oi, ZERO_M); obsMesh.setColorAt(oi, tmpC.set(0xffffff)); }
+  for (var oi = 0; oi < OBS_N; oi++) obs.push({ active: false });
 
   var GEM_N = 140;
   var gemGeo = new T.OctahedronGeometry(0.36, 0);
   var gemMesh = new T.InstancedMesh(gemGeo, new T.MeshPhongMaterial({ flatShading: true, emissive: 0x3a2200, specular: 0xffffff, shininess: 90 }), GEM_N);
   gemMesh.frustumCulled = false; gemMesh.instanceMatrix.setUsage(T.DynamicDrawUsage);
+  gemMesh.count = 0;
   course.add(gemMesh);
   var gems = [];
   var GEM_COL = new T.Color(0xffd93b), BIG_COL = new T.Color(0xff5fe0);
-  for (var gi = 0; gi < GEM_N; gi++) { gems.push({ active: false }); gemMesh.setMatrixAt(gi, ZERO_M); gemMesh.setColorAt(gi, GEM_COL); }
+  gemMesh.setColorAt(0, GEM_COL);
+  for (var gi = 0; gi < GEM_N; gi++) gems.push({ active: false });
 
   /* particles: one Points object with a tiny shader (size + color per point) */
   var ptShader = {
@@ -335,9 +336,10 @@
     var n = typeof hex === 'number' ? hex : parseInt(String(hex).slice(1), 16);
     out = out || {}; out.r = (n >> 16 & 255) / 255; out.g = (n >> 8 & 255) / 255; out.b = (n & 255) / 255; return out;
   }
-  var _rgb = {};
+  var _rgb = {}, pActive = false;
   function emit(x, y, z, vx, vy, vz, life, size, hex, grav, drag) {
     var i = pd.next; pd.next = (i + 1) % PN;
+    pActive = true;
     hexRGB(hex, _rgb);
     pd.x[i] = x; pd.y[i] = y; pd.z[i] = z; pd.vx[i] = vx; pd.vy[i] = vy; pd.vz[i] = vz;
     pd.life[i] = life; pd.max[i] = life; pd.s[i] = size; pd.r[i] = _rgb.r; pd.g[i] = _rgb.g; pd.b[i] = _rgb.b;
@@ -351,21 +353,31 @@
     }
   }
   function updateParticles(dt) {
-    var pos = P.pos, col = P.col, size = P.size;
+    if (!pActive) { if (P.geo.drawRange.count !== 0) P.geo.setDrawRange(0, 0); return; }
+    var pos = P.pos, col = P.col, size = P.size, pn = 0;
     for (var i = 0; i < PN; i++) {
-      if (pd.life[i] <= 0) { if (size[i] !== 0) size[i] = 0; continue; }
+      if (pd.life[i] <= 0) continue;
       pd.life[i] -= dt;
+      if (pd.life[i] <= 0) continue;
       var dr = Math.exp(-pd.drag[i] * dt);
       pd.vx[i] *= dr; pd.vz[i] *= dr; pd.vy[i] = pd.vy[i] * dr - pd.grav[i] * dt;
       pd.x[i] += pd.vx[i] * dt; pd.y[i] += pd.vy[i] * dt; pd.z[i] += pd.vz[i] * dt;
-      var f = Math.max(0, pd.life[i] / pd.max[i]);
-      pos[i * 3] = pd.x[i]; pos[i * 3 + 1] = pd.y[i]; pos[i * 3 + 2] = pd.z[i];
-      col[i * 3] = pd.r[i] * f; col[i * 3 + 1] = pd.g[i] * f; col[i * 3 + 2] = pd.b[i] * f;
-      size[i] = pd.s[i] * (0.4 + 0.6 * f);
+      var f = pd.life[i] / pd.max[i];
+      pos[pn * 3] = pd.x[i]; pos[pn * 3 + 1] = pd.y[i]; pos[pn * 3 + 2] = pd.z[i];
+      col[pn * 3] = pd.r[i] * f; col[pn * 3 + 1] = pd.g[i] * f; col[pn * 3 + 2] = pd.b[i] * f;
+      size[pn] = pd.s[i] * (0.4 + 0.6 * f);
+      pn++;
     }
-    P.geo.attributes.position.needsUpdate = true; P.geo.attributes.pcolor.needsUpdate = true; P.geo.attributes.psize.needsUpdate = true;
+    P.geo.setDrawRange(0, pn);
+    if (pn > 0) {
+      Kit.webgl.uploadRange(P.geo.attributes.position, pn * 3);
+      Kit.webgl.uploadRange(P.geo.attributes.pcolor, pn * 3);
+      Kit.webgl.uploadRange(P.geo.attributes.psize, pn);
+    } else {
+      pActive = false;
+    }
   }
-  function clearParticles() { for (var i = 0; i < PN; i++) { pd.life[i] = 0; P.size[i] = 0; } }
+  function clearParticles() { for (var i = 0; i < PN; i++) pd.life[i] = 0; pActive = false; P.geo.setDrawRange(0, 0); }
 
   /* ------------------------------------------------------------ ball */
   var ballRoot = new T.Group(), ballSquash = new T.Group();
@@ -409,9 +421,11 @@
   var SH_N = 36;
   var shardMesh = new T.InstancedMesh(new T.TetrahedronGeometry(0.2, 0), new T.MeshBasicMaterial({ color: 0xffffff }), SH_N);
   shardMesh.frustumCulled = false; shardMesh.instanceMatrix.setUsage(T.DynamicDrawUsage);
+  shardMesh.setColorAt(0, tmpC.set(0xffffff));
+  shardMesh.count = 0;
   course.add(shardMesh);
   var shards = [];
-  for (var sh = 0; sh < SH_N; sh++) { shards.push({ p: new T.Vector3(), v: new T.Vector3(), q: new T.Quaternion(), w: new T.Vector3(), s: 1, life: 0 }); shardMesh.setMatrixAt(sh, ZERO_M); shardMesh.setColorAt(sh, tmpC.set(0xffffff)); }
+  for (var sh = 0; sh < SH_N; sh++) shards.push({ p: new T.Vector3(), v: new T.Vector3(), q: new T.Quaternion(), w: new T.Vector3(), s: 1, life: 0, c: new T.Color(0xffffff) });
 
   /* pickups */
   function makeShieldPickup() {
@@ -453,11 +467,12 @@
     var g = bestCv.getContext('2d');
     g.clearRect(0, 0, 512, 128);
     g.fillStyle = 'rgba(40,10,60,0.75)'; roundRect(g, 8, 10, 496, 108, 30); g.fill();
-    g.lineWidth = 6; g.strokeStyle = '#ffd93b'; g.shadowColor = '#ffd93b'; g.shadowBlur = 16; roundRect(g, 8, 10, 496, 108, 30); g.stroke();
-    g.shadowBlur = 12; g.fillStyle = '#fff6c0'; g.font = '700 60px Fredoka, "Segoe UI", Tahoma, Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.lineWidth = 14; g.strokeStyle = 'rgba(255,217,59,0.28)'; roundRect(g, 8, 10, 496, 108, 30); g.stroke();
+    g.lineWidth = 6; g.strokeStyle = '#ffd93b'; roundRect(g, 8, 10, 496, 108, 30); g.stroke();
+    g.fillStyle = '#fff6c0'; g.font = '700 60px Fredoka, "Segoe UI", Tahoma, Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
     g.direction = 'rtl';
     fitText(g, 'أفضل مسافة: ' + Kit.fmt(m) + ' م', 256, 68, 460);
-    g.shadowBlur = 0; bestTex.needsUpdate = true;
+    bestTex.needsUpdate = true;
   }
   // Draws centered text, shrinking it horizontally if it would not fit maxW.
   function fitText(g, text, x, y, maxW) {
@@ -481,8 +496,8 @@
     var g = m.cv.getContext('2d');
     g.clearRect(0, 0, 256, 128);
     g.font = '700 68px Fredoka, "Segoe UI", Tahoma, Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.direction = 'rtl';
-    g.fillStyle = '#ffffff'; g.shadowColor = '#ffffff'; g.shadowBlur = 10;
-    g.globalAlpha = 0.55; fitText(g, meters + ' م', 128, 66, 240); g.globalAlpha = 1; g.shadowBlur = 0;
+    g.fillStyle = '#ffffff';
+    g.globalAlpha = 0.55; fitText(g, meters + ' م', 128, 66, 240); g.globalAlpha = 1;
     m.tex.needsUpdate = true;
     m.mesh.position.set(x, y + 0.04, -d); m.mesh.visible = true; m.d = d;
   }
@@ -784,25 +799,8 @@
   function materialize() {
     if (!queue.length) nextChunk();
     var r = queue.shift(), i = rowHead++, s = i % NR;
-    r.i = i; rows[s] = r;
-    var zc = -(i * TL + TL / 2);
-    tintFor(i, r, tmpC);
-    for (var c = 0; c < COLS; c++) {
-      var idx = s * COLS + c, bit = 1 << c, x = colX(c);
-      if (r.ramp & bit) {
-        var th2 = TH + 0.6;
-        setShear(rampMesh, idx, x, r.base + (r.rh0 + r.rh1) / 2 - th2 / 2, zc, TW, th2, TL, 0, -(r.rh1 - r.rh0) / TL);
-        tileMesh.setMatrixAt(idx, ZERO_M);
-      } else if (r.mask & bit) {
-        setShear(tileMesh, idx, x, r.base + r.bank * x - TH / 2, zc, TW, TH, TL, r.bank, 0);
-        tileMesh.setColorAt(idx, tmpC);
-        rampMesh.setMatrixAt(idx, ZERO_M);
-      } else {
-        tileMesh.setMatrixAt(idx, ZERO_M); rampMesh.setMatrixAt(idx, ZERO_M);
-      }
-    }
-    if (s * COLS < dirty.lo) dirty.lo = s * COLS;
-    if (s * COLS + COLS - 1 > dirty.hi) dirty.hi = s * COLS + COLS - 1;
+    r.i = i; r.tc = tintFor(i, r, new T.Color()); rows[s] = r;
+    courseDirty = true;
     var dc = i * TL + TL / 2, k, p;
     if (r.obs) for (k = 0; k < r.obs.length; k++) {
       var o = r.obs[k]; p = poolGet(obs); if (!p) break;
@@ -813,8 +811,6 @@
     if (r.gems) for (k = 0; k < r.gems.length; k++) {
       var gq = r.gems[k]; p = poolGet(gems); if (!p) break;
       p.active = true; p.x = gq.x; p.y = r.base + r.bank * gq.x + gq.h; p.d = dc; p.big = gq.big; p.ph = rand() * 6.28; p.pull = false;
-      gemMesh.setColorAt(gems.indexOf(p), gq.big ? BIG_COL : GEM_COL);
-      gemMesh.instanceColor.needsUpdate = true;
     }
     if (r.pw) {
       for (k = 0; k < pickups.length; k++) {
@@ -843,14 +839,30 @@
     while (rowHead < need && (full || n < 40)) { materialize(); n++; }
   }
   function flushInstances() {
-    if (dirty.hi >= 0) {
-      var lo = dirty.lo, cnt = dirty.hi - dirty.lo + 1;
-      [tileMesh, rampMesh].forEach(function (m) {
-        m.instanceMatrix.clearUpdateRanges(); m.instanceMatrix.addUpdateRange(lo * 16, cnt * 16); m.instanceMatrix.needsUpdate = true;
-      });
-      tileMesh.instanceColor.clearUpdateRanges(); tileMesh.instanceColor.addUpdateRange(lo * 3, cnt * 3); tileMesh.instanceColor.needsUpdate = true;
-      dirty.lo = 1e9; dirty.hi = -1;
+    if (!courseDirty) return;
+    courseDirty = false;
+    var r0 = Math.max(firstRow, rowHead - NR, Math.floor((ball.d - 12) / TL));
+    var tn = 0, rn = 0, th2 = TH + 0.6;
+    for (var i = r0; i < rowHead; i++) {
+      var r = rows[i % NR];
+      if (!r) continue;
+      var zc = -(i * TL + TL / 2), mask = r.mask, ramp = r.ramp;
+      if (!(mask | ramp)) continue;
+      for (var c = 0; c < COLS; c++) {
+        var bit = 1 << c;
+        if (ramp & bit) {
+          setShear(rampMesh, rn++, colX(c), r.base + (r.rh0 + r.rh1) / 2 - th2 / 2, zc, TW, th2, TL, 0, -(r.rh1 - r.rh0) / TL);
+        } else if (mask & bit) {
+          var x = colX(c);
+          setShear(tileMesh, tn, x, r.base + r.bank * x - TH / 2, zc, TW, TH, TL, r.bank, 0);
+          tileMesh.setColorAt(tn, r.tc);
+          tn++;
+        }
+      }
     }
+    Kit.webgl.shrinkCount(tileMesh, tn);
+    if (tn > 0) Kit.webgl.uploadRange(tileMesh.instanceColor, tn * 3);
+    Kit.webgl.shrinkCount(rampMesh, rn);
   }
 
   /* ============================================================ STATE */
@@ -874,15 +886,16 @@
     if (st.bestD) drawBestSign(save.best);
     bestGate.visible = false;
     var k;
-    for (k = 0; k < OBS_N; k++) { obs[k].active = false; obsMesh.setMatrixAt(k, ZERO_M); }
-    for (k = 0; k < GEM_N; k++) { gems[k].active = false; gemMesh.setMatrixAt(k, ZERO_M); GG.size[k] = 0; }
+    for (k = 0; k < OBS_N; k++) obs[k].active = false;
+    obsMesh.count = 0;
+    for (k = 0; k < GEM_N; k++) gems[k].active = false;
+    gemMesh.count = 0; GG.geo.setDrawRange(0, 0);
     for (k = 0; k < pickups.length; k++) { pickups[k].active = false; pickups[k].mesh.visible = false; }
     for (k = 0; k < markers.length; k++) markers[k].mesh.visible = false;
     for (k = 0; k < DEC_N; k++) decs[k].d = -999;
-    for (k = 0; k < SH_N; k++) { shards[k].life = 0; shardMesh.setMatrixAt(k, ZERO_M); }
-    shardMesh.instanceMatrix.needsUpdate = true;
-    for (k = 0; k < NI; k++) { tileMesh.setMatrixAt(k, ZERO_M); rampMesh.setMatrixAt(k, ZERO_M); }
-    dirty.lo = 0; dirty.hi = NI - 1;
+    for (k = 0; k < SH_N; k++) shards[k].life = 0;
+    shardMesh.count = 0;
+    courseDirty = true;
     clearParticles();
     var startRow = Math.floor(startAt / TL);
     resetGen(startRow); rowHead = startRow; firstRow = startRow;
@@ -1039,83 +1052,97 @@
       s.q.setFromEuler(new T.Euler(rand() * 6, rand() * 6, rand() * 6));
       s.w.set(rand() - 0.5, rand() - 0.5, rand() - 0.5).normalize();
       s.spin = 6 + rand() * 14; s.s = 0.6 + rand() * 1.2; s.life = 2.6 + rand();
-      shardMesh.setColorAt(k, tmpC.set(k % 3 === 0 ? '#ffffff' : glowHex));
+      s.c.set(k % 3 === 0 ? '#ffffff' : glowHex);
+      shardMesh.setColorAt(k, s.c);
     }
-    shardMesh.instanceColor.needsUpdate = true;
+    shardMesh.count = SH_N;
+    Kit.webgl.uploadRange(shardMesh.instanceColor, SH_N * 3);
     burst(b.x, cy, -b.d, 70, 14, 1.1, 0.8, [glowHex, '#ffffff', glowHex, '#ff3fd0'], 10, 2, b.vz * 0.3);
   }
   var _q = new T.Quaternion(), _v = new T.Vector3(), _s = new T.Vector3();
   function updateShards(dt) {
-    var any = false;
+    if (!shardMesh.count) return;
+    var sn = 0;
     for (var k = 0; k < SH_N; k++) {
       var s = shards[k];
       if (s.life <= 0) continue;
-      any = true;
       s.life -= dt;
+      if (s.life <= 0) continue;
       s.v.y -= G * 0.6 * dt; s.v.multiplyScalar(Math.exp(-dt * 0.6));
       s.p.addScaledVector(s.v, dt);
       _q.setFromAxisAngle(s.w, s.spin * dt); s.q.premultiply(_q);
-      var sc = s.life > 0 ? s.s * Math.min(1, s.life) : 0;
+      var sc = s.s * Math.min(1, s.life);
       _s.set(sc, sc, sc);
       tmpM.compose(s.p, s.q, _s);
-      shardMesh.setMatrixAt(k, s.life > 0 ? tmpM : ZERO_M);
+      shardMesh.setMatrixAt(sn, tmpM);
+      shardMesh.setColorAt(sn, s.c);
+      sn++;
     }
-    if (any) shardMesh.instanceMatrix.needsUpdate = true;
+    Kit.webgl.shrinkCount(shardMesh, sn);
+    if (sn > 0) Kit.webgl.uploadRange(shardMesh.instanceColor, sn * 3);
   }
 
   /* ------------------------------------------------ world objects step */
   var _pos = new T.Vector3(), _sc = new T.Vector3(), _qq = new T.Quaternion(), _e = new T.Euler();
   function updateObstacles(dt) {
     var pulse = 0.85 + 0.15 * Math.sin(st.t * 7);
-    tmpC.setRGB(pulse, pulse, pulse);
+    obsMat.color.setRGB(pulse, pulse, pulse);
+    var on = 0;
     for (var k = 0; k < OBS_N; k++) {
       var o = obs[k];
       if (!o.active) continue;
-      if (o.d < ball.d - 12) { o.active = false; obsMesh.setMatrixAt(k, ZERO_M); continue; }
+      if (o.d < ball.d - 12) { o.active = false; continue; }
       if (o.amp) o.x = o.cx + o.amp * Math.sin(st.t * o.om + o.ph);
       tmpM.makeScale(o.hw * 2, o.h, o.hl * 2);
       tmpM.setPosition(o.x, o.y + o.h / 2, -o.d);
-      obsMesh.setMatrixAt(k, tmpM);
-      obsMesh.setColorAt(k, tmpC);
+      obsMesh.setMatrixAt(on++, tmpM);
     }
-    obsMesh.instanceMatrix.needsUpdate = true;
-    obsMesh.instanceColor.needsUpdate = true;
+    Kit.webgl.shrinkCount(obsMesh, on);
   }
   function updateGems(dt) {
-    var b = ball, bcy = b.y + R;
+    var b = ball, bcy = b.y + R, gn = 0;
     for (var k = 0; k < GEM_N; k++) {
       var g = gems[k];
       if (!g.active) continue;
       var dz = g.d - b.d;
-      if (dz < -6) { g.active = false; gemMesh.setMatrixAt(k, ZERO_M); GG.size[k] = 0; continue; }
+      if (dz < -6) { g.active = false; continue; }
       if (!b.dead && b.magnet > 0 && dz < 16 && dz > -2) {
         var dx = b.x - g.x, dy = bcy - g.y;
         if (dx * dx + dy * dy + dz * dz < 64 || g.pull) {
           g.pull = true;
           var f = Math.min(1, dt * 10);
           g.x += dx * f; g.y += dy * f; g.d += (b.d - g.d) * f;
+          dz = g.d - b.d;
         }
+      }
+      if (!b.dead && Math.abs(dz) < 1.4) {
+        var ex = g.x - b.x, ey = g.y - bcy;
+        if (ex * ex + ey * ey + dz * dz < 1.15 * 1.15) { collectGem(k, g); continue; }
       }
       var bob = Math.sin(st.t * 3 + g.ph) * 0.12;
       var sc = g.big ? 1.6 : 1;
       _e.set(0, st.t * 3 + g.ph, 0); _qq.setFromEuler(_e);
       _pos.set(g.x, g.y + bob, -g.d); _sc.set(sc, sc * 1.35, sc);
       tmpM.compose(_pos, _qq, _sc);
-      gemMesh.setMatrixAt(k, tmpM);
-      GG.pos[k * 3] = g.x; GG.pos[k * 3 + 1] = g.y + bob; GG.pos[k * 3 + 2] = -g.d;
+      gemMesh.setMatrixAt(gn, tmpM);
+      gemMesh.setColorAt(gn, g.big ? BIG_COL : GEM_COL);
+      GG.pos[gn * 3] = g.x; GG.pos[gn * 3 + 1] = g.y + bob; GG.pos[gn * 3 + 2] = -g.d;
       var tw = 0.55 + 0.25 * Math.sin(st.t * 5 + g.ph);
-      GG.col[k * 3] = tw; GG.col[k * 3 + 1] = (g.big ? 0.37 : 0.85) * tw; GG.col[k * 3 + 2] = (g.big ? 0.88 : 0.23) * tw;
-      GG.size[k] = g.big ? 3.2 : 2.2;
-      if (!b.dead && Math.abs(dz) < 1.4) {
-        var ex = g.x - b.x, ey = g.y - bcy;
-        if (ex * ex + ey * ey + dz * dz < 1.15 * 1.15) collectGem(k, g);
-      }
+      GG.col[gn * 3] = tw; GG.col[gn * 3 + 1] = (g.big ? 0.37 : 0.85) * tw; GG.col[gn * 3 + 2] = (g.big ? 0.88 : 0.23) * tw;
+      GG.size[gn] = g.big ? 3.2 : 2.2;
+      gn++;
     }
-    gemMesh.instanceMatrix.needsUpdate = true;
-    GG.geo.attributes.position.needsUpdate = true; GG.geo.attributes.pcolor.needsUpdate = true; GG.geo.attributes.psize.needsUpdate = true;
+    Kit.webgl.shrinkCount(gemMesh, gn);
+    if (gn > 0) Kit.webgl.uploadRange(gemMesh.instanceColor, gn * 3);
+    GG.geo.setDrawRange(0, gn);
+    if (gn > 0) {
+      Kit.webgl.uploadRange(GG.geo.attributes.position, gn * 3);
+      Kit.webgl.uploadRange(GG.geo.attributes.pcolor, gn * 3);
+      Kit.webgl.uploadRange(GG.geo.attributes.psize, gn);
+    }
   }
   function collectGem(k, g) {
-    g.active = false; gemMesh.setMatrixAt(k, ZERO_M); GG.size[k] = 0;
+    g.active = false;
     var col = g.big ? '#ff5fe0' : '#ffd93b';
     burst(g.x, g.y, -g.d, g.big ? 22 : 10, g.big ? 7 : 4.5, 0.45, g.big ? 0.8 : 0.55, [col, '#ffffff'], 2, 0, ball.vz * 0.2);
     if (st.demo) return;
@@ -1165,14 +1192,15 @@
     decMesh.setColorAt(k, _dc); decMesh.instanceColor.needsUpdate = true;
   }
   function updateDecs() {
-    for (var k = 0; k < DEC_N; k++) {
+    var n = (wgl.software || gfx.light) ? 12 : DEC_N;
+    for (var k = 0; k < n; k++) {
       var o = decs[k];
-      if (o.d < ball.d - 12) spawnDec(k, o.d < 0 || o.d < ball.d - 60 ? ball.d + 8 + (k / DEC_N) * 165 + rand() * 6 : ball.d + 160 + rand() * 20);
+      if (o.d < ball.d - 12) spawnDec(k, o.d < 0 || o.d < ball.d - 60 ? ball.d + 8 + (k / n) * 165 + rand() * 6 : ball.d + 160 + rand() * 20);
       _e.set(st.t * o.sp + o.ph, st.t * o.sp * 0.7, 0); _qq.setFromEuler(_e);
       _pos.set(o.x, o.y + Math.sin(st.t * 0.8 + o.ph) * 0.6, -o.d); _sc.set(o.s, o.s, o.s);
       tmpM.compose(_pos, _qq, _sc); decMesh.setMatrixAt(k, tmpM);
     }
-    decMesh.instanceMatrix.needsUpdate = true;
+    Kit.webgl.shrinkCount(decMesh, n);
   }
   function checkObstacles() {
     var b = ball, cy = b.y + R, rr = R * 0.78;
@@ -1192,7 +1220,7 @@
       var dy = cy < o.y ? o.y - cy : (cy > o.y + o.h ? cy - (o.y + o.h) : 0);
       if (dx * dx + dy * dy + dz * dz < rr * rr) {
         if (b.shield) {
-          b.shield = false; o.active = false; obsMesh.setMatrixAt(k, ZERO_M);
+          b.shield = false; o.active = false;
           SND.sfx.shieldPop(); st.shake = 0.35; flash(0.3);
           burst(o.x, o.y + o.h / 2, -o.d, 40, 10, 0.7, 0.7, ['#ff1f4a', '#ffd0d8', '#3ff0ff'], 8);
           popup('أنقذك الدرع!', '#3ff0ff', true, b.x, cy + 1.2, b.d + 2);
@@ -1323,11 +1351,15 @@
 
   var CALLOUTS = { ramp: 'منصة قفز! طِر عاليًا!', narrow: 'طريق ضيق!', stairs: 'درجات!', holes: 'انتبه للحفر!', gates: 'ابحث عن الفتحة!',
     drop: 'سقطة كبيرة!', bank: 'طريق مائل! اصعد للأعلى!', sliders: 'مكعبات متحركة!', split: 'اختر طريقك!', slalom: 'يمينًا ويسارًا!' };
+  function replayAnim(e) {
+    e.style.animation = 'none';
+    requestAnimationFrame(function () { requestAnimationFrame(function () { e.style.animation = ''; }); });
+  }
   function callout(text) {
     var e = popEls[popNext]; popNext = (popNext + 1) % popEls.length;
     e.textContent = text; e.className = 'pop big callout'; e.style.setProperty('--pc', zoneInfo(st.zone).prism ? '#ff3fd0' : zoneInfo(st.zone).c);
     e.style.left = '50%'; e.style.top = '38%'; e.style.display = 'block';
-    e.style.animation = 'none'; void e.offsetWidth; e.style.animation = '';
+    replayAnim(e);
   }
   var TRAIL_RATE = { sparkle: 36, fire: 70, confetti: 34, stars: 26, zap: 44, snow: 30, bubbles: 22, toxic: 34 };
   var fxAcc = 0;
@@ -1479,8 +1511,14 @@
   }
 
   /* ================================================================ UI */
-  var hud = $('hud'), hDistN = $('hDistN'), hGemsN = $('hGemsN'), hZoneFill = $('hZoneFill'), hZoneLbl = $('hZoneLbl'), hPower = $('hPower');
-  var lastHud = { d: -1, g: -1, z: -1 };
+  var hud = $('hud'), hDistN = $('hDistN'), hGemsN = $('hGemsN'), hZoneFill = $('hZoneFill'), hZoneLbl = $('hZoneLbl'), hPower = $('hPower'), hGems = $('hGems');
+  var pwShield = document.createElement('div');
+  pwShield.className = 'pw'; pwShield.style.color = '#3ff0ff'; pwShield.textContent = 'درع'; pwShield.hidden = true;
+  var pwMag = document.createElement('div');
+  pwMag.className = 'pw'; pwMag.style.color = '#c48bff'; pwMag.innerHTML = 'مغناطيس <div class="pbar"><i style="width:100%;transform-origin:right center"></i></div>'; pwMag.hidden = true;
+  var pwMagBar = pwMag.querySelector('i');
+  hPower.appendChild(pwShield); hPower.appendChild(pwMag);
+  var lastHud = { d: -1, g: -1, z: -1, sh: false, mgOn: false, mgPct: -1 };
   function updateHud() {
     var m = Math.max(0, Math.floor(ball.d - START_D));
     if (m !== lastHud.d) { hDistN.textContent = Kit.fmt(m); lastHud.d = m; }
@@ -1497,12 +1535,16 @@
       if (lastHud.zs == null) lastHud.zs = getComputedStyle(hZoneFill).direction === 'rtl' ? 1 : -1;
       hZoneFill.style.transform = 'translateX(' + (lastHud.zs * (100 - zp)).toFixed(1) + '%)';
     }
-    var html = '';
-    if (ball.shield) html += '<div class="pw" style="color:#3ff0ff">درع</div>';
-    if (ball.magnet > 0) html += '<div class="pw" style="color:#c48bff">مغناطيس <div class="pbar"><i style="width:' + (ball.magnet * 10).toFixed(0) + '%"></i></div></div>';
-    if (html !== hPower._last) { hPower.innerHTML = html; hPower._last = html; }
+    var sh = !!ball.shield;
+    if (sh !== lastHud.sh) { lastHud.sh = sh; pwShield.hidden = !sh; }
+    var mgOn = ball.magnet > 0;
+    if (mgOn !== lastHud.mgOn) { lastHud.mgOn = mgOn; pwMag.hidden = !mgOn; }
+    if (mgOn) {
+      var mp = Math.max(0, Math.min(100, Math.round(ball.magnet * 10)));
+      if (mp !== lastHud.mgPct) { lastHud.mgPct = mp; pwMagBar.style.transform = 'scaleX(' + (mp / 100).toFixed(2) + ')'; }
+    }
   }
-  function bumpGems() { var e = $('hGems'); e.classList.remove('bump'); void e.offsetWidth; e.classList.add('bump'); }
+  function bumpGems() { Kit.retrigger(hGems, 'bump'); }
 
   var popEls = [], popNext = 0, popLayer = $('popups');
   for (var pe = 0; pe < 8; pe++) { var el = document.createElement('div'); el.className = 'pop'; el.style.display = 'none'; popLayer.appendChild(el); popEls.push(el); }
@@ -1513,21 +1555,22 @@
     var e = popEls[popNext]; popNext = (popNext + 1) % popEls.length;
     e.textContent = text; e.className = 'pop' + (big ? ' big' : ''); e.style.setProperty('--pc', color);
     e.style.left = sx + 'px'; e.style.top = sy + 'px'; e.style.display = 'block';
-    e.style.animation = 'none'; void e.offsetWidth; e.style.animation = '';
+    replayAnim(e);
   }
   function banner(top, name, color, small) {
     var b = $('banner');
     b.classList.toggle('small', !!small);
     $('bannerTop').textContent = top; $('bannerName').textContent = name;
     b.style.setProperty('--bc', color);
-    b.classList.remove('show'); void b.offsetWidth; b.classList.add('show');
+    Kit.retrigger(b, 'show');
   }
   var flashEl = $('flash');
   function flash(a) {
     if (reducedFx) return;
     flashEl.style.transition = 'none'; flashEl.style.opacity = a;
-    void flashEl.offsetWidth;
-    flashEl.style.transition = 'opacity 0.5s ease-out'; flashEl.style.opacity = 0;
+    requestAnimationFrame(function () { requestAnimationFrame(function () {
+      flashEl.style.transition = 'opacity 0.5s ease-out'; flashEl.style.opacity = 0;
+    }); });
   }
 
   // Buttons never take focus, so Space/Enter only ever go to the game.
@@ -1800,7 +1843,7 @@
       return;
     } else {
       SND.sfx.nope();
-      card.classList.remove('shake'); void card.offsetWidth; card.classList.add('shake');
+      Kit.retrigger(card, 'shake');
       return;
     }
     persist(); applySkin(); renderShop();

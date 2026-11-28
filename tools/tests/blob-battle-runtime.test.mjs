@@ -184,3 +184,40 @@ test('Blob Battle warns about failed saves, keeps them queued, and clears the wa
     rounds: typeof JSON.parse(localStorage.getItem('sg:blob-battle:stats')).rounds }));
   assert.deepEqual(saved, { skin: 'mint', rounds: 'number' }, 'the retry writes the stats and the queued skin');
 });
+
+test('Blob Battle starts at mass 40, supports smooth WASD/Arrow steering, and uses E for eject', async t => {
+  const page = await blob(t, undefined, 20261128);
+  const res = await page.evaluate(() => {
+    document.getElementById('btnPlay').click();
+    runtime.step(2);
+    const start = __game.info();
+    // Move right with ArrowRight without touching the mouse
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'ArrowRight' }));
+    runtime.step(30);
+    window.dispatchEvent(new KeyboardEvent('keyup', { code: 'ArrowRight' }));
+    const afterRight = __game.info();
+    // Press W to steer up — must move up and NOT eject mass
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyW' }));
+    runtime.step(25);
+    window.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyW' }));
+    const afterW = __game.info();
+    // Split immediately at start mass (>= 36)
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space' }));
+    runtime.step(2);
+    window.dispatchEvent(new KeyboardEvent('keyup', { code: 'Space' }));
+    const afterSplit = __game.info();
+    // Give mass and press E to eject
+    __game.setMass(60); runtime.step(1);
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyE' }));
+    runtime.step(8);
+    window.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyE' }));
+    const afterE = __game.info();
+    return { start, afterRight, afterW, afterSplit, afterE };
+  });
+  assert.ok(res.start.mass >= 40, `expected start mass >= 40, got ${res.start.mass}`);
+  assert.ok(res.afterRight.player.x - res.start.player.x > 40, 'ArrowRight steers blob right');
+  assert.ok(res.afterW.player.y < res.afterRight.player.y - 20, 'KeyW steers blob up');
+  assert.equal(res.afterW.ejected, 0, 'KeyW does not eject mass');
+  assert.ok(res.afterSplit.playerCells >= 2, 'player can split immediately at start mass 40');
+  assert.ok(res.afterE.ejected >= 1, 'KeyE ejects mass');
+});

@@ -168,3 +168,33 @@ test('Paint Grab keeps the best area and kills of a round left from the pause sc
       { best: 9, arena: 9, kills: 2, rounds: 0 }, `${exit} keeps the 9% and 2 kills (rounds count only when a round ends)`);
   }
 });
+
+test('Paint Grab Wave 2: 80s match, Top-3 / 2-star win even on death, and 28px mouse hijack threshold', async t => {
+  const page = await paintGrab(t);
+  const res = await page.evaluate(() => {
+    const ends = [];
+    const origEnd = Kit.stats.end.bind(Kit.stats);
+    Kit.stats.end = function (outcome, score) { ends.push([outcome, score]); return origEnd(outcome, score); };
+    const matchTime = PG.MATCH_TIME;
+    document.getElementById('bPlay').click();
+    runtime.step(2);
+    const startTime = Math.round(__game.time());
+    // Small mouse drift (<28px) must not hijack steering
+    const cv = document.getElementById('game'), r = cv.getBoundingClientRect();
+    const tBefore = __game.player.target;
+    cv.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: r.left + r.width / 2 + 6, clientY: r.top + r.height / 2 }));
+    runtime.step(2);
+    const tAfterSmall = __game.player.target;
+    // Grab large land (Top-3 & 2+ stars) and die: must still report 'win'
+    __game.grab(35);
+    runtime.step(2);
+    __game.die();
+    for (let i = 0; i < 400 && __game.state !== 'over'; i++) runtime.step(1);
+    return { matchTime, startTime, keptTarget: tAfterSmall === tBefore, state: __game.state, ends };
+  });
+  assert.equal(res.matchTime, 80);
+  assert.equal(res.startTime, 80);
+  assert.equal(res.keptTarget, true, 'small mouse move (<28px) does not hijack steering');
+  assert.equal(res.state, 'over');
+  assert.equal(res.ends[0][0], 'win', 'Top-3 / 2-star finish counts as win without requiring zero deaths');
+});

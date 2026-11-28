@@ -26,13 +26,13 @@
  */
 (function () {
   'use strict';
-  var W = window, Kit = W.Kit;
+  var W = window, Kit = W.Kit, M = Math;
   if (!Kit || Kit.art) return;
 
   var art = {};
   var ready = false, tier = 2, startTier = 2, themeName = 'day';
   var viewCanvas = null, fitView = null, fitWrapped = false, bucket = 1;
-  var cache = new Map(), pixels = 0, tinted = new Map();
+  var cache = new Map(), pixels = 0, tinted = new Map(), measureCtx = null;
   var t0 = 0, ema = null, badSince = 0, goodSince = 0, lastUp = -1e15;
   var listeners = [], layerCount = 0;
   var hitUntil = 0, fl = { t: 0, ms: 0, color: '#fff', last: -1e15 };
@@ -136,32 +136,52 @@
       pixels -= old.area;
     }
   }
-  function sprite(key, w, h, draw, opt) {
-    var pad, sc, bw, bh, id, hit, cnv, c, area, rec;
-    if (!ready) return { canvas: null, w: w | 0, h: h | 0, ox: 0, oy: 0 };
-    syncBucket();
-    opt = opt || NO;
-    pad = opt.pad || 0;
-    sc = opt.scale || bucket || 1;
-    bw = Math.max(1, Math.round(w)); bh = Math.max(1, Math.round(h));
-    id = key + '@' + bw + 'x' + bh + '@' + sc;
-    hit = cache.get(id);
-    if (hit) { cache.delete(id); cache.set(id, hit); return hit; }
-    cnv = makeCanvas(Math.ceil((bw + pad * 2) * sc), Math.ceil((bh + pad * 2) * sc));
-    c = cnv.getContext('2d');
+  function getCached(id) {
+    var hit = cache.get(id);
+    if (hit && pixels > capPixels() * 0.75) { cache.delete(id); cache.set(id, hit); }
+    return hit;
+  }
+  function bakeCanvas(id, bw, bh, pad, sc, draw) {
+    var cnv = makeCanvas(M.ceil((bw + pad * 2) * sc), M.ceil((bh + pad * 2) * sc)), c = cnv.getContext('2d');
     if (c) {
       if (c.setTransform) c.setTransform(sc, 0, 0, sc, pad * sc, pad * sc);
       c.lineJoin = 'round'; c.lineCap = 'round';
       draw(c, bw, bh);
     }
-    area = cnv.width * cnv.height;
-    rec = { canvas: cnv, w: bw, h: bh, ox: pad, oy: pad, area: area };
-    pixels += area;
-    cache.set(id, rec);
-    evict();
+    var rec = { canvas: cnv, w: bw, h: bh, ox: pad, oy: pad, area: cnv.width * cnv.height };
+    pixels += rec.area; cache.set(id, rec); evict();
     return rec;
   }
+  function sprite(key, w, h, draw, opt) {
+    if (!ready) return { canvas: null, w: w | 0, h: h | 0, ox: 0, oy: 0 };
+    syncBucket();
+    opt = opt || NO;
+    var pad = opt.pad || 0, sc = opt.scale || bucket || 1;
+    var bw = M.max(1, M.round(w)), bh = M.max(1, M.round(h));
+    var id = key + '@' + bw + 'x' + bh + '@' + sc;
+    return getCached(id) || bakeCanvas(id, bw, bh, pad, sc, draw);
+  }
   art.sprite = sprite;
+  art.textSprite = function (text, font, color, stroke, strokeW) {
+    if (!ready) return { canvas: null, w: 0, h: 0, ox: 0, oy: 0 };
+    syncBucket();
+    var str = String(text == null ? '' : text), f = font || '700 28px Fredoka', fill = color || '#fff';
+    var m = /(\d+(?:\.\d+)?)px/i.exec(f), px = m ? +m[1] : 28, b = bucket || 1;
+    if (stroke && typeof stroke === 'object') { strokeW = stroke.width; stroke = stroke.color || art.pal.ink; }
+    var sc = stroke ? String(stroke) : '', sw = sc ? (strokeW != null ? +strokeW : M.max(2, M.round(px * 0.14))) : 0;
+    var id = 't:' + str + '|' + f + '|' + fill + '|' + sc + '|' + sw + '@' + b, hit = getCached(id);
+    if (hit) return hit;
+    if (!measureCtx) measureCtx = makeCanvas(1, 1).getContext('2d');
+    var tw = 0;
+    if (measureCtx) { measureCtx.font = f; try { tw = measureCtx.measureText(str).width || 0; } catch (e) {} }
+    var pad = M.ceil(sw) + 2, bw = M.max(1, M.ceil((tw || px * M.max(1, str.length) * 0.6) + pad * 2));
+    var bh = M.max(1, M.ceil(px * 1.35 + pad * 2));
+    return bakeCanvas(id, bw, bh, 0, b, function (c, w, h) {
+      c.font = f; c.textAlign = 'center'; c.textBaseline = 'middle';
+      if (sc) { c.lineWidth = sw; c.strokeStyle = sc; c.strokeText(str, w / 2, h / 2); }
+      c.fillStyle = fill; c.fillText(str, w / 2, h / 2);
+    });
+  };
   art.bake = function (key, w, h, draw) { return sprite('bake:' + key, w, h, draw); };
   art.blit = function (ctx, s, x, y, o) {
     if (!ctx || !s || !s.canvas) return;
@@ -176,7 +196,7 @@
   };
 
   art.round = function (ctx, x, y, w, h, r) {
-    r = Math.max(0, Math.min(r || 0, w / 2, h / 2));
+    r = M.max(0, M.min(r || 0, w / 2, h / 2));
     ctx.beginPath();
     ctx.moveTo(x + r, y);
     ctx.arcTo(x + w, y, x + w, y + h, r);
@@ -191,8 +211,8 @@
     ctx.beginPath();
     for (i = 0; i <= n; i++) {
       a = i / n * 6.2831853;
-      rr = r * (1 + wobble * Math.sin(a * 3 + phase));
-      px = x + Math.cos(a) * rr; py = y + Math.sin(a) * rr;
+      rr = r * (1 + wobble * M.sin(a * 3 + phase));
+      px = x + M.cos(a) * rr; py = y + M.sin(a) * rr;
       if (i) ctx.lineTo(px, py); else ctx.moveTo(px, py);
     }
     ctx.closePath();
@@ -291,8 +311,8 @@
       for (i = 0; i < 10; i++) {
         a = -1.5708 + i * 0.62832;
         p = i % 2 ? cx * 0.42 : cx * 0.92;
-        if (i) c.lineTo(cx + Math.cos(a) * p, cy + Math.sin(a) * p);
-        else c.moveTo(cx + Math.cos(a) * p, cy + Math.sin(a) * p);
+        if (i) c.lineTo(cx + M.cos(a) * p, cy + M.sin(a) * p);
+        else c.moveTo(cx + M.cos(a) * p, cy + M.sin(a) * p);
       }
       c.closePath();
     } else if (kind === 2) c.rect(w * 0.2, h * 0.32, w * 0.6, h * 0.28);
@@ -321,9 +341,9 @@
     return n;
   }
   art.fx = function (maxCap) {
-    var N = Math.max(1, Math.min(600, maxCap || 600));
+    var N = M.max(1, M.min(600, maxCap || 600));
     var S = 9, buf = new Float32Array(N * S), n = 0;
-    function limit() { return Math.min(N, particleCap()); }
+    function limit() { return M.min(N, particleCap()); }
     return {
       burst: function (x, y, o) {
         var count, life, speed, size, shape, ci, fade, i, a, sp, k, lim;
@@ -342,7 +362,7 @@
           sp = fade ? 0 : speed * (0.45 + art.rand() * 0.7);
           k = n * S;
           buf[k] = x; buf[k + 1] = y;
-          buf[k + 2] = Math.cos(a) * sp; buf[k + 3] = Math.sin(a) * sp;
+          buf[k + 2] = M.cos(a) * sp; buf[k + 3] = M.sin(a) * sp;
           buf[k + 4] = life * (0.6 + art.rand() * 0.5); buf[k + 5] = life;
           buf[k + 6] = size * (0.6 + art.rand() * 0.7); buf[k + 7] = shape; buf[k + 8] = ci;
           n++;
@@ -391,17 +411,17 @@
     add: function (v) {
       if (!ready || reduced()) return;
       v = clamp(+v || 0, 0, 1);
-      sh.trauma = Math.min(0.6, sh.trauma + v);
+      sh.trauma = M.min(0.6, sh.trauma + v);
     },
     update: function (dt) {
       var mag, a;
       if (!ready || reduced()) { sh.trauma = sh.x = sh.y = 0; return; }
       if (frozen()) return;
-      sh.trauma = Math.max(0, sh.trauma - dt / 0.4);
+      sh.trauma = M.max(0, sh.trauma - dt / 0.4);
       mag = sh.trauma * sh.trauma * 14;
       a = art.rand() * 6.2831853;
-      sh.x = Math.cos(a) * mag;
-      sh.y = Math.sin(a) * mag;
+      sh.x = M.cos(a) * mag;
+      sh.y = M.sin(a) * mag;
     },
     apply: function (ctx) {
       if (ctx && (sh.x || sh.y)) ctx.translate(sh.x, sh.y);
@@ -428,10 +448,10 @@
       if (reduced()) { o.sx = o.sy = 1; o.v = 0; return; }
       if (frozen()) return;
       o.v += (1 - o.sy) * k * dt;
-      o.v *= Math.exp(-damp * dt);
+      o.v *= M.exp(-damp * dt);
       o.sy += o.v * dt;
       if (o.sy < 0.35) o.sy = 0.35;
-      o.sx = 1 / Math.sqrt(o.sy);
+      o.sx = 1 / M.sqrt(o.sy);
     };
     return o;
   };
@@ -447,7 +467,7 @@
         s.t += dt;
         if (s.t >= s.next) { s.t = 0; s.next = 2 + art.rand() * 3; }
         left = s.next - s.t;
-        s.v = left < 0.14 ? Math.sin((1 - left / 0.14) * 3.14159265) : 0;
+        s.v = left < 0.14 ? M.sin((1 - left / 0.14) * 3.14159265) : 0;
       }
     }
     s.then = now;

@@ -35,13 +35,13 @@
 }
 
 :root {
-  --sg-font: 'Fredoka', 'Segoe UI', Tahoma, 'Trebuchet MS', system-ui, sans-serif;
-  --sg-bg: #10142b;
-  --sg-panel: rgba(16, 20, 43, 0.88);
-  --sg-text: #ffffff;
-  --sg-accent: #ffcc00;
-  --sg-accent-ink: #3a2a00;
-  --sg-good: #3ddc84;
+  --sg-font:'Fredoka','Segoe UI',Tahoma,'Trebuchet MS',system-ui,sans-serif;
+  --sg-bg:#10142b;
+  --sg-panel:#10142be0;
+  --sg-text:#fff;
+  --sg-accent:#fc0;
+  --sg-accent-ink:#3a2a00;
+  --sg-good:#3ddc84;
 }
 
 * { box-sizing: border-box; }
@@ -62,62 +62,65 @@ html, body {
 
 canvas { display: block; outline: none; }
 
-/* Full-screen overlay for title / pause / game-over screens. */
 .sg-overlay {
   position: fixed;
   inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(8, 10, 24, 0.55);
+  background: #080a188c;
   z-index: 10;
 }
-.sg-overlay[hidden] { display: none; }
+.sg-overlay[hidden], .sg-save-status[hidden], .sg-save-status button[hidden] { display: none; }
+
+.sg-title, .sg-btn, .sg-pill, .sg-key, .sg-save-status button { font-weight: 700; }
+.sg-panel, .sg-pill { background: var(--sg-panel); }
+.sg-btn, .sg-pill { border-radius: 999px; }
+.sg-btn:focus-visible, .sg-mute:focus-visible, .sg-save-status button:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
 
 .sg-panel {
-  background: var(--sg-panel);
-  border: 3px solid rgba(255, 255, 255, 0.15);
+  border: 3px solid #fff3;
   border-radius: 24px;
   padding: 28px 36px;
   min-width: 320px;
   max-width: min(92vw, 560px);
   text-align: center;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
-  animation: sg-pop 0.25s ease-out;
+  box-shadow: inset 0 2px 0 #fff3, 0 6px 0 #0006, 0 20px 50px #0007;
+  animation: sg-pop .24s cubic-bezier(.22,1.25,.36,1);
 }
 
 .sg-title {
   margin: 0 0 8px;
   font-size: clamp(32px, 6vw, 56px);
-  font-weight: 700;
   line-height: 1.05;
-  letter-spacing: 0.5px;
-  text-shadow: 0 4px 0 rgba(0, 0, 0, 0.35);
+  letter-spacing: .5px;
+  text-shadow: 0 4px 0 #0006;
 }
 
-.sg-sub { margin: 0 0 18px; font-size: 18px; opacity: 0.85; }
+.sg-sub { margin: 0 0 18px; font-size: 18px; opacity: .85; }
 
 .sg-btn {
   display: inline-block;
   font: inherit;
-  font-weight: 700;
   font-size: 22px;
   color: var(--sg-accent-ink);
   background: var(--sg-accent);
-  border: none;
-  border-radius: 999px;
+  border: 0;
   padding: 12px 34px;
   margin: 6px;
   cursor: pointer;
-  box-shadow: 0 5px 0 rgba(0, 0, 0, 0.35);
-  transition: transform 0.08s ease, filter 0.08s ease;
+  box-shadow: inset 0 2px 0 #fff6, 0 5px 0 #0006;
+  transition: transform .08s ease, filter .08s ease;
 }
-.sg-btn:hover { transform: translateY(-2px) scale(1.04); filter: brightness(1.08); }
-.sg-btn:active { transform: translateY(3px); box-shadow: 0 2px 0 rgba(0, 0, 0, 0.35); }
-.sg-btn.secondary { background: #ffffff; color: #1d2340; }
+.sg-btn:hover { transform: translateY(-1px) scale(1.03); filter: brightness(1.06); }
+.sg-btn:active { transform: translateY(2px); box-shadow: inset 0 1px 0 #fff3, 0 2px 0 #0006; }
+.sg-btn.secondary { background: #fff; color: #1d2340; }
 .sg-btn.good { background: var(--sg-good); color: #07351c; }
 
-/* Keycap for "how to play" boxes: <span class="sg-key">←</span> */
+.sg-hud, .sg-pill { font-variant-numeric: tabular-nums; display: flex; align-items: center; }
+.sg-hud { gap: 8px; }
+.sg-pill { display: inline-flex; gap: 6px; padding: 6px 14px; border: 2px solid #fff3; box-shadow: inset 0 2px 0 #fff3, 0 3px 0 #0005; }
+
 .sg-key {
   display: inline-block;
   min-width: 30px;
@@ -128,7 +131,6 @@ canvas { display: block; outline: none; }
   border-radius: 7px;
   background: #fff;
   color: #1d2340;
-  font-weight: 700;
   font-size: 16px;
   box-shadow: 0 3px 0 #9aa3c7;
   text-align: center;
@@ -145,7 +147,6 @@ canvas { display: block; outline: none; }
   font-size: 17px;
 }
 
-/* Round mute button added by Kit.muteButton(). */
 .sg-mute {
   position: fixed;
   top: 10px;
@@ -155,15 +156,15 @@ canvas { display: block; outline: none; }
   width: 44px;
   height: 44px;
   border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, 0.25);
-  background: rgba(0, 0, 0, 0.35);
+  border: 2px solid #fff4;
+  background: #0006;
   color: #fff;
   font-size: 20px;
   line-height: 1;
   cursor: pointer;
 }
-.sg-mute:hover { background: rgba(0, 0, 0, 0.55); }
-.sg-mute:focus-visible { outline: 3px solid #ffcc00; outline-offset: 3px; }
+.sg-mute:hover { background: #0009; }
+.sg-mute:focus-visible { outline-color: #fc0; }
 
 .sg-save-status {
   position: fixed;
@@ -174,7 +175,7 @@ canvas { display: block; outline: none; }
   max-width: calc(100vw - 24px);
   margin-inline: auto;
   padding: 10px 16px;
-  border: 2px solid #ffcc00;
+  border: 2px solid #fc0;
   border-radius: 12px;
   background: #10142b;
   color: #fff;
@@ -182,25 +183,22 @@ canvas { display: block; outline: none; }
   font-size: 18px;
   box-shadow: 0 4px 18px #0008;
 }
-.sg-save-status[hidden], .sg-save-status button[hidden] { display: none; }
-.sg-save-status button { font: inherit; font-weight: 700; color: #3a2a00; background: #ffcc00; border: 0; border-radius: 8px; padding: 5px 10px; cursor: pointer; }
-.sg-save-status button:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+.sg-save-status button { font: inherit; color: #3a2a00; background: #fc0; border: 0; border-radius: 8px; padding: 5px 10px; cursor: pointer; }
 .sg-save-status[data-state="saved"] { border-color: #3ddc84; }
-/* Folded failure: a corner badge that keeps Retry and the meaning in its title. */
 .sg-save-status[data-compact="true"] { inset-inline: auto 12px; margin-inline: 0; padding: 4px 6px; font-size: 14px; }
 .sg-save-status[data-compact="true"] span { font-size: 0; }
 .sg-save-status[data-compact="true"] span::before { content: '💾'; font-size: 18px; margin-inline-end: 4px; vertical-align: middle; }
 
-/* Disable decorative CSS motion; canvas gameplay still runs normally. */
 html[data-sg-motion="reduce"] *, html[data-sg-motion="reduce"] *::before, html[data-sg-motion="reduce"] *::after {
-  animation-duration: 0.01ms !important;
+  animation-duration: .01ms !important;
   animation-iteration-count: 1 !important;
   transition: none !important;
   scroll-behavior: auto !important;
 }
 html[data-sg-motion="reduce"] .sg-btn:hover, html[data-sg-motion="reduce"] .sg-btn:active { transform: none; }
+@media (prefers-reduced-motion: reduce) { .sg-panel, .sg-btn { animation: none; transition: none; } }
 
 @keyframes sg-pop {
-  from { transform: scale(0.85); opacity: 0; }
-  to { transform: scale(1); opacity: 1; }
+  from { transform: translateY(8px) scale(.92); opacity: 0; }
+  to { transform: none; opacity: 1; }
 }

@@ -204,6 +204,30 @@ test('sprite LRU respects the tier cap and rebuilds when the scale bucket change
   assert.equal(draws, 2, 'a new DPR×scale bucket redraws the sprite');
 });
 
+test('sprite hit path avoids Map delete/set thrash below 75% cap and textSprite caches rendered labels', () => {
+  const h = harness();
+  let measures = 0;
+  const baseCreate = h.document.createElement;
+  h.document.createElement = tag => {
+    const el = baseCreate(tag);
+    if (tag === 'canvas') {
+      const ctx = mockCtx({ measureText: s => { measures++; return { width: s.length * 14 }; } });
+      el.getContext = () => ctx;
+    }
+    return el;
+  };
+  assert.equal(h.art.textSprite('+10', '700 32px Fredoka', '#fff', '#1b1640').canvas, null, 'inert before init');
+  h.art.init({ canvas: mockCanvas(), ctx: mockCtx(), mode: '2d' });
+  const t1 = h.art.textSprite('+50', '700 32px Fredoka', '#ffcc00', '#1b1640');
+  const t2 = h.art.textSprite('+50', '700 32px Fredoka', '#ffcc00', '#1b1640');
+  assert.equal(t1.canvas, t2.canvas, 'identical textSprite calls hit cache');
+  assert.equal(measures, 1, 'measureText runs once on miss, never on cache hit');
+  assert.ok(t1.w > 40 && t1.h > 40);
+  const t3 = h.art.textSprite('+50', '700 32px Fredoka', '#ffcc00', { color: '#000', width: 6 });
+  assert.notEqual(t3.canvas, t1.canvas, 'different stroke config gets its own cache entry');
+  assert.doesNotThrow(() => h.art.blit(mockCtx(), t1, 50, 50));
+});
+
 test('tier changes follow the frame-time rules and a failed save is ignored', () => {
   const clock = { now: 0 };
   const h = harness({ clock });

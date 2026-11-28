@@ -82,7 +82,7 @@
   // n: the new keys a level introduces (each twice in a row first), k: the keys it uses.
   KR.WORLDS = [
     { name: 'المسافة', levels: [
-      { n: ['Space'], k: ['Space'] },
+      { n: ['Space', 'KeyF', 'KeyJ'], k: ['Space', 'KeyF', 'KeyJ'] },
       { n: ['ArrowUp'], k: ['Space', 'ArrowUp'] },
       { n: ['ArrowDown'], k: ['Space', 'ArrowDown'] },
       { n: [], k: ['Space', 'ArrowUp', 'ArrowDown'] }] },
@@ -478,7 +478,7 @@
   KR.freshSave = function () {
     var stars = [], best = [];
     for (var w = 0; w < KR.WORLD_COUNT; w++) { stars.push([0, 0, 0, 0]); best.push([0, 0, 0, 0]); }
-    return { v: 2, stars: stars, best: best, endless: 0, label: 'both', color: 0, hat: 0, seen: 0, coach: false };
+    return { v: 2, stars: stars, best: best, endless: 0, label: 'ar', color: 0, hat: 0, seen: 0, coach: false };
   };
   function int(v, lo, hi) { return typeof v === 'number' && Math.floor(v) === v && v >= lo && v <= hi; }
   // Every field is checked: an old save from the 3D version, a damaged or a hand-edited one
@@ -495,7 +495,7 @@
       }
     }
     s.endless = int(raw.endless, 0, 999999) ? raw.endless : 0;
-    s.label = KR.LABELS.indexOf(raw.label) >= 0 ? raw.label : 'both';
+    s.label = KR.LABELS.indexOf(raw.label) >= 0 ? raw.label : 'ar';
     var total = KR.total(s);
     s.color = int(raw.color, 0, KR.COLORS.length - 1) && KR.COLORS[raw.color].need <= total ? raw.color : 0;
     s.hat = int(raw.hat, 0, KR.HATS.length - 1) && KR.HATS[raw.hat].need <= total ? raw.hat : 0;

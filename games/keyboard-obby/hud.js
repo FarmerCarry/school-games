@@ -62,19 +62,29 @@
   function kbBase(u, lang, ps) {
     var key = 'K' + u + lang + ps;
     if (cache[key]) return cache[key];
-    var c = cv(KO.KB_W * u * ps, KO.KB_ROWS * u * ps), g = c.getContext('2d'), gap = u * 0.1;
+    var pad = u * 0.3, w = KO.KB_W * u, h = KO.KB_ROWS * u, margin = 6;
+    var cw = w + (pad + margin) * 2, ch = h + (pad + margin) * 2;
+    var c = cv(cw * ps, ch * ps), g = c.getContext('2d'), gap = u * 0.1;
     g.scale(ps, ps);
-    KO.KEYS.forEach(function (k) { keyCap(g, k, k.x * u + gap / 2, k.row * u + gap / 2, k.w * u - gap, u - gap, 'idle', lang, k.finger >= 0 && k.finger < 8 ? KO.ZONES[k.finger] : ''); });
-    return (cache[key] = c);
+    rr(g, margin, margin, w + pad * 2, h + pad * 2, u * 0.4); fill(g, '#3b4166'); ink(g, 5);
+    rr(g, margin + 5, margin + 5, w + pad * 2 - 10, h + pad * 2 - 10, u * 0.32); fill(g, '#11142a');
+    var ox = pad + margin, oy = pad + margin;
+    KO.KEYS.forEach(function (k) { keyCap(g, k, ox + k.x * u + gap / 2, oy + k.row * u + gap / 2, k.w * u - gap, u - gap, 'idle', lang, k.finger >= 0 && k.finger < 8 ? KO.ZONES[k.finger] : ''); });
+    return (cache[key] = { c: c, ox: ox, oy: oy, w: cw, h: ch });
+  }
+  function glowSprite() {
+    if (cache.glow) return cache.glow;
+    var c = cv(96, 96), g = c.getContext('2d'), gr = g.createRadialGradient(48, 48, 3, 48, 48, 46);
+    gr.addColorStop(0, 'rgba(255,225,77,0.85)'); gr.addColorStop(0.55, 'rgba(255,225,77,0.3)'); gr.addColorStop(1, 'rgba(255,225,77,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, 96, 96);
+    return (cache.glow = c);
   }
   H.kbSize = function (u) { return { w: KO.KB_W * u, h: KO.KB_ROWS * u }; };
   H.keyCenter = function (code, x, y, u) { var k = KO.KEY[code]; return k ? { x: x + k.cx * u, y: y + k.cz * u } : null; };
   // o: { lang, target, pulse 0..1, flash: { code: [state, t] }, ps }
   H.keyboard = function (g, x, y, u, o) {
-    var pad = u * 0.3, w = KO.KB_W * u, h = KO.KB_ROWS * u, gap = u * 0.1, lang = o.lang || 'ar';
-    rr(g, x - pad, y - pad, w + pad * 2, h + pad * 2, u * 0.4); fill(g, '#3b4166'); ink(g, 5);
-    rr(g, x - pad + 5, y - pad + 5, w + pad * 2 - 10, h + pad * 2 - 10, u * 0.32); fill(g, '#11142a');
-    g.drawImage(kbBase(u, lang, o.ps || 1), x, y, w, h);
+    var gap = u * 0.1, lang = o.lang || 'ar', base = kbBase(u, lang, o.ps || 1);
+    g.drawImage(base.c, x - base.ox, y - base.oy, base.w, base.h);
     function cap(code, st) {
       var k = KO.KEY[code];
       if (k) keyCap(g, k, x + k.x * u + gap / 2, y + k.row * u + gap / 2, k.w * u - gap, u - gap, st, lang, '');
@@ -85,9 +95,8 @@
       var k = KO.KEY[o.target];
       if (k) {
         var kx = x + k.x * u + gap / 2, ky = y + k.row * u + gap / 2, grow = (o.pulse || 0) * u * 0.1;
-        var gr = g.createRadialGradient(kx + k.w * u / 2, ky + u / 2, 2, kx + k.w * u / 2, ky + u / 2, u * (1 + k.w * 0.4));
-        gr.addColorStop(0, 'rgba(255,225,77,0.8)'); gr.addColorStop(1, 'rgba(255,225,77,0)');
-        g.fillStyle = gr; g.fillRect(kx - u, ky - u, k.w * u + u * 2, u * 3);
+        var rad = u * (1 + k.w * 0.4);
+        g.drawImage(glowSprite(), kx + k.w * u / 2 - rad, ky + u / 2 - rad, rad * 2, rad * 2);
         cap(o.target, o.flash && o.flash[o.target] && o.flash[o.target][1] > 0 ? o.flash[o.target][0] : 'target');
         rr(g, kx - 3 - grow, ky - 3 - grow, k.w * u - gap + 6 + grow * 2, u - gap + 6 + grow * 2, u * 0.22); ink(g, Math.max(3, u * 0.1), '#fff7c2');
       }
@@ -126,25 +135,32 @@
     return bh;
   };
   // A word with the letters done in green, the letter to type in yellow on a dark chip.
+  // Cached per (text, at, lang) so zero per-frame measureText() or ctx.clip() runs during play!
   function word(g, w, cx, cy, lang) {
-    var size = 44, txt = w.text, rtl = AR.test(txt);
-    g.font = '700 ' + size + 'px Fredoka';
-    g.direction = rtl ? 'rtl' : 'ltr';
-    g.textAlign = 'center'; g.textBaseline = 'middle';
-    var chars = Array.from(txt), total = g.measureText(txt).width, ZWJ = '‍';
-    var done = chars.slice(0, w.at).join(''), cur = chars.slice(0, w.at + 1).join('');
-    // Joined widths: a zero-width joiner keeps the last letter in its joined form.
-    var wDone = w.at > 0 ? g.measureText(done + (rtl ? ZWJ : '')).width : 0, wCur = g.measureText(cur + (rtl && w.at + 1 < chars.length ? ZWJ : '')).width;
-    var x0 = cx - total / 2, x1 = cx + total / 2;
-    var a = rtl ? x1 - wCur : x0 + wDone, b = rtl ? x1 - wDone : x0 + wCur;
-    if (w.at < chars.length) { rr(g, a - 6, cy - 30, b - a + 12, 60, 14); fill(g, INK); }
-    text(g, txt, cx, cy, size, '#9aa3c7');
-    function part(from, to, color) {
-      g.save(); g.beginPath(); g.rect(Math.min(from, to), cy - 40, Math.abs(to - from), 80); g.clip();
-      text(g, txt, cx, cy, size, color); g.restore();
+    var key = 'W|' + w.text + '|' + w.at + '|' + (lang || '');
+    var spr = cache[key];
+    if (!spr) {
+      var size = 44, txt = w.text, rtl = AR.test(txt), cw = 320, ch = 84;
+      var c = cv(cw, ch), cg = c.getContext('2d');
+      cg.font = '700 ' + size + 'px Fredoka';
+      cg.direction = rtl ? 'rtl' : 'ltr';
+      cg.textAlign = 'center'; cg.textBaseline = 'middle';
+      var chars = Array.from(txt), total = cg.measureText(txt).width, ZWJ = '‍';
+      var done = chars.slice(0, w.at).join(''), cur = chars.slice(0, w.at + 1).join('');
+      var wDone = w.at > 0 ? cg.measureText(done + (rtl ? ZWJ : '')).width : 0, wCur = cg.measureText(cur + (rtl && w.at + 1 < chars.length ? ZWJ : '')).width;
+      var mx = cw / 2, my = ch / 2, x0 = mx - total / 2, x1 = mx + total / 2;
+      var a = rtl ? x1 - wCur : x0 + wDone, b = rtl ? x1 - wDone : x0 + wCur;
+      if (w.at < chars.length) { rr(cg, a - 6, my - 30, b - a + 12, 60, 14); fill(cg, INK); }
+      text(cg, txt, mx, my, size, '#9aa3c7');
+      function part(from, to, color) {
+        cg.save(); cg.beginPath(); cg.rect(Math.min(from, to), my - 40, Math.abs(to - from), 80); cg.clip();
+        text(cg, txt, mx, my, size, color); cg.restore();
+      }
+      if (w.at > 0) part(rtl ? x1 - wDone : x0, rtl ? x1 : x0 + wDone, '#2fae62');
+      if (w.at < chars.length) part(a, b, '#ffe14d');
+      spr = cache[key] = { c: c, w: cw, h: ch };
     }
-    if (w.at > 0) part(rtl ? x1 - wDone : x0, rtl ? x1 : x0 + wDone, '#2fae62');
-    if (w.at < chars.length) part(a, b, '#ffe14d');
+    g.drawImage(spr.c, cx - spr.w / 2, cy - spr.h / 2, spr.w, spr.h);
   }
 
   /* ---------------------------------------------------------------- chips */

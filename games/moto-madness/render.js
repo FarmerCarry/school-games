@@ -36,7 +36,7 @@
   };
   MMR.THEMES = THEMES;
   var T = THEMES.grass, themeId = 'grass';
-  var layers = { far: null, mid: null, pattern: null, sprites: [] }, layersFor = null; // the theme they were painted for
+  var layers = { far: null, mid: null, pattern: null, sprites: [], gen: 0, earthGrad: null, earthKey: '' }, layersFor = null; // the theme they were painted for
 
   // Every cached canvas is painted once, so a GPU reset that blanks one repaints them all on the next frame.
   function dropLayers() { layersFor = null; }
@@ -259,6 +259,9 @@
   };
   function paintLayers(ctx) {
     layersFor = themeId;
+    layers.gen++;
+    layers.earthGrad = null;
+    layers.earthKey = '';
     layers.far = genFar(themeId);
     layers.mid = genMid(themeId);
     layers.pattern = genPattern(ctx);
@@ -347,23 +350,23 @@
   }
   function drawTerrain(ctx, L, x0, x1, ym, yb, t) {
     var ch = L.chain, r = chainRange(ch, x0, x1), i, p, q;
-    // ground fill
+    // ground fill (direct polygon fill — no full-viewport ctx.clip() stencil overhead)
     ctx.beginPath();
     ctx.moveTo(ch[r[0]].x, yb);
     for (i = r[0]; i <= r[1]; i++) ctx.lineTo(ch[i].x, ch[i].y);
     ctx.lineTo(ch[r[1]].x, yb);
     ctx.closePath();
     ctx.fillStyle = layers.pattern; ctx.fill();
-    // darker band just under the surface, clipped to the ground so it never spills into the sky
+    // subtle earth depth shading directly on the same polygon path with a quantized cached gradient
+    var qm = Math.round(ym / 32) * 32, qb = Math.round(yb / 32) * 32;
+    var ek = qm + '|' + qb;
+    if (!layers.earthGrad || layers.earthKey !== ek) {
+      var gr = ctx.createLinearGradient(0, qm, 0, Math.max(qm + 1, qb));
+      gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(1, 'rgba(0,0,0,0.25)');
+      layers.earthGrad = gr; layers.earthKey = ek;
+    }
+    ctx.fillStyle = layers.earthGrad; ctx.fill();
     ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-    ctx.save(); ctx.clip();
-    // and the ground darkens towards the bottom of the screen, so it reads as deep earth, not a flat slab
-    var gr = ctx.createLinearGradient(0, ym, 0, yb);
-    gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(1, 'rgba(0,0,0,0.25)');
-    ctx.fillStyle = gr; ctx.fillRect(x0, ym, x1 - x0, yb - ym);
-    ctx.strokeStyle = T.edge; ctx.globalAlpha = 0.35; ctx.lineWidth = 34;
-    ctx.stroke();
-    ctx.restore();
     // surface strips (skip steep walls)
     var run = false;
     ctx.beginPath();
@@ -374,6 +377,11 @@
       if (!run) { ctx.moveTo(p.x, p.y); run = true; }
       ctx.lineTo(q.x, q.y);
     }
+    // darker under-edge band drawn shifted just below the top strip (no clip required)
+    ctx.save(); ctx.translate(0, 10);
+    ctx.strokeStyle = T.edge; ctx.globalAlpha = 0.35; ctx.lineWidth = 18;
+    ctx.stroke();
+    ctx.restore();
     if (themeId === 'factory') {
       ctx.strokeStyle = '#1d1e2b'; ctx.lineWidth = 16; ctx.stroke();
       ctx.strokeStyle = T.top; ctx.lineWidth = 10; ctx.setLineDash([18, 18]); ctx.lineDashOffset = 0; ctx.lineCap = 'butt'; ctx.stroke();
@@ -414,9 +422,12 @@
     if (s.type === 'pit') {
       if (s.x2 < x0 || s.x1 > x1) return;
       var top = Math.min(s.y1, s.y2) - 5;
-      var gr = ctx.createLinearGradient(0, top, 0, s.bottom);
-      gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(1, T.pit);
-      ctx.fillStyle = gr; ctx.fillRect(s.x1, top, s.x2 - s.x1, s.bottom - top);
+      if (!s._gr || s._grGen !== layers.gen) {
+        var gr = ctx.createLinearGradient(0, top, 0, s.bottom);
+        gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(1, T.pit);
+        s._gr = gr; s._grGen = layers.gen;
+      }
+      ctx.fillStyle = s._gr; ctx.fillRect(s.x1, top, s.x2 - s.x1, s.bottom - top);
     } else if (s.type === 'loop') {
       if (s.cx + s.R < x0 - 60 || s.cx - s.R > x1 + 60) return;
       // two support legs
@@ -440,8 +451,6 @@
       for (var sx = s.x1 + 40; sx < s.x2 - 10; sx += 46) { ctx.moveTo(sx, s.y); ctx.lineTo(sx, s.y - s.h); }
       ctx.moveTo(s.x1 + 10, s.y - 4); ctx.lineTo(s.x2 - 10, s.y - s.h * 0.6);
       ctx.stroke();
-      ctx.save(); ctx.clip();
-      ctx.restore();
       // top deck
       ctx.beginPath();
       var st = s.type === 'lander' ? 1 : 0;
@@ -483,12 +492,33 @@
       ctx.fillStyle = '#2b2b33'; ctx.fillRect(s.x1, s.y - 6, s.x2 - s.x1, 12);
       ctx.fillStyle = '#ffb21f';
       var off = (t * 300) % 44;
-      ctx.save(); ctx.beginPath(); ctx.rect(s.x1, s.y - 10, s.x2 - s.x1, 16); ctx.clip();
-      for (var bx = s.x1 - 44 + off; bx < s.x2; bx += 44) {
+      for (var bx = s.x1 + off; bx + 26 <= s.x2; bx += 44) {
         ctx.beginPath(); ctx.moveTo(bx, s.y - 6); ctx.lineTo(bx + 14, s.y - 6); ctx.lineTo(bx + 26, s.y); ctx.lineTo(bx + 14, s.y + 6); ctx.lineTo(bx, s.y + 6); ctx.lineTo(bx + 12, s.y); ctx.closePath(); ctx.fill();
       }
-      ctx.restore();
       ctx.globalAlpha = 0.25 + 0.2 * Math.sin(t * 10); ctx.fillStyle = '#ffe14d'; ctx.fillRect(s.x1, s.y - 30, s.x2 - s.x1, 24); ctx.globalAlpha = 1;
+    } else if (s.type === 'pit') {
+      if (themeId !== 'factory' || s.shaft || s.x2 < x0 - 90 || s.x1 > x1 + 90) return;
+      // Glowing neon cyan/amber edge chevrons at night pit lips for crystal-clear jump readability
+      var pulse = 0.72 + 0.28 * Math.sin(t * 7);
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      // Takeoff lip (left): neon amber glow bar + upward-right jump chevrons
+      ctx.globalAlpha = 0.32 * pulse;
+      ctx.fillStyle = '#ffcf2e'; ctx.fillRect(s.x1 - 56, s.y1 - 14, 62, 16);
+      ctx.fillStyle = '#29e6ff'; ctx.fillRect(s.x2 - 6, s.y2 - 14, 62, 16);
+      ctx.globalAlpha = pulse;
+      ctx.strokeStyle = '#ffcf2e'; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.moveTo(s.x1 - 44, s.y1 - 4); ctx.lineTo(s.x1, s.y1 - 4); ctx.lineTo(s.x1, s.y1 + 26); ctx.stroke();
+      for (i = 0; i < 2; i++) {
+        var cx1 = s.x1 - 36 + i * 18, cy1 = s.y1 - 24;
+        ctx.strokeStyle = i === 1 ? '#29e6ff' : '#ffcf2e'; ctx.lineWidth = 4;
+        ctx.beginPath(); ctx.moveTo(cx1 - 6, cy1 - 8); ctx.lineTo(cx1 + 4, cy1); ctx.lineTo(cx1 - 6, cy1 + 8); ctx.stroke();
+      }
+      // Landing lip (right): neon cyan beacon edge + chevron
+      ctx.strokeStyle = '#29e6ff'; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.moveTo(s.x2, s.y2 + 26); ctx.lineTo(s.x2, s.y2 - 4); ctx.lineTo(s.x2 + 44, s.y2 - 4); ctx.stroke();
+      ctx.strokeStyle = '#ffcf2e'; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.moveTo(s.x2 + 12, s.y2 - 32); ctx.lineTo(s.x2 + 22, s.y2 - 24); ctx.lineTo(s.x2 + 12, s.y2 - 16); ctx.stroke();
+      ctx.globalAlpha = 1;
     } else if (s.type === 'rockpile') {
       if (s.x < x0 - 200 || s.x > x1 + 200) return;
       ctx.fillStyle = themeId === 'winter' ? '#dfe9f5' : themeId === 'factory' ? '#5d6386' : '#8a6a58';
@@ -533,11 +563,13 @@
         ctx.fillStyle = '#5d6385'; ctx.fillRect(m.x - 16, m.y + 18, 8, d.by + 60 - m.y - 18);
       }
       ctx.fillStyle = '#3b3f55'; rrect(ctx, m.x - hl, m.y, m.len, 22, 6); ctx.fill();
-      ctx.save(); ctx.beginPath(); ctx.rect(m.x - hl + 4, m.y + 4, m.len - 8, 14); ctx.clip();
-      ctx.fillStyle = '#ffcf2e'; ctx.fillRect(m.x - hl, m.y + 4, m.len, 14);
+      var pL = m.x - hl + 4, pR = m.x + hl - 4;
+      ctx.fillStyle = '#ffcf2e'; ctx.fillRect(pL, m.y + 4, m.len - 8, 14);
       ctx.fillStyle = '#23252f';
-      for (var sx = m.x - hl - 20; sx < m.x + hl; sx += 28) { ctx.beginPath(); ctx.moveTo(sx, m.y + 18); ctx.lineTo(sx + 14, m.y + 4); ctx.lineTo(sx + 26, m.y + 4); ctx.lineTo(sx + 12, m.y + 18); ctx.fill(); }
-      ctx.restore();
+      for (var sx = pL; sx < pR; sx += 28) {
+        var b0 = sx, b1 = Math.min(pR, sx + 12), t0 = Math.min(pR, sx + 14), t1 = Math.min(pR, sx + 26);
+        if (b1 > b0) { ctx.beginPath(); ctx.moveTo(b0, m.y + 18); ctx.lineTo(t0, m.y + 4); ctx.lineTo(t1, m.y + 4); ctx.lineTo(b1, m.y + 18); ctx.fill(); }
+      }
       // status light
       ctx.fillStyle = m.st === 0 ? '#3ddc84' : m.st === 2 ? '#3ddc84' : (Math.sin(t * 20) > 0 ? '#ff5a5f' : '#7a2a2c');
       circle(ctx, m.x, m.y + 11, 5);

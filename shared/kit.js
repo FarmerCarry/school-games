@@ -8,264 +8,231 @@
  * Everything lives on window.Kit. Nothing here is required, but using it keeps
  * sound, saving, keyboard and screen scaling consistent across games.
  */
-(function () {
+(() => {
   'use strict';
 
-  var Kit = {}, win = window, doc = document, M = Math;
+  const Kit = {}, win = window, doc = document, M = Math;
+  const st = (f, ms) => setTimeout(f, ms), ct = id => clearTimeout(id);
+  const max = M.max, min = M.min, flr = M.floor, rndI = M.round;
+  const PD = 'pointerdown', KD = 'keydown', VC = 'visibilitychange', TR = 'triangle', RD = 'reduce', SY = 'system', BTN = 'button';
+  const rnd = () => M.random();
+  const bi = () => rnd() * 2 - 1;
+  const is = (v, t) => typeof v === t;
+  const on = (t, e, f, c) => t.addEventListener(e, f, c);
+  const sa = (el, k, v) => el.setAttribute(k, v);
+  const ap = (p, c) => p.appendChild(c);
+  const stop = e => e.stopPropagation();
+  const pd = e => e.preventDefault();
+  const each = (list, fn) => list.forEach(fn);
+  const z6 = () => [0, 0, 0, 0, 0, 0];
 
   /* ---------------------------------------------------------------- math */
-  Kit.clamp = function (v, a, b) { return v < a ? a : v > b ? b : v; };
-  Kit.lerp = function (a, b, t) { return a + (b - a) * t; };
-  Kit.rand = function (a, b) { return a + M.random() * (b - a); };
-  Kit.randInt = function (a, b) { return M.floor(a + M.random() * (b - a + 1)); };
-  Kit.pick = function (arr) { return arr[M.floor(M.random() * arr.length)]; };
-  Kit.shuffle = function (arr) {
-    for (var i = arr.length - 1; i > 0; i--) {
-      var j = M.floor(M.random() * (i + 1));
-      var t = arr[i]; arr[i] = arr[j]; arr[j] = t;
+  Kit.clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+  Kit.lerp = (a, b, t) => a + (b - a) * t;
+  Kit.rand = (a, b) => a + rnd() * (b - a);
+  Kit.randInt = (a, b) => flr(a + rnd() * (b - a + 1));
+  Kit.pick = arr => arr[flr(rnd() * arr.length)];
+  Kit.shuffle = arr => {
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = flr(rnd() * (i + 1)), t = arr[i];
+      arr[i] = arr[j]; arr[j] = t;
     }
     return arr;
   };
-  Kit.dist = function (x1, y1, x2, y2) { var dx = x2 - x1, dy = y2 - y1; return M.sqrt(dx * dx + dy * dy); };
+  Kit.dist = (x1, y1, x2, y2) => { const dx = x2 - x1, dy = y2 - y1; return M.sqrt(dx * dx + dy * dy); };
 
   /* ------------------------------------------------------------- storage */
-  // Kit.store('my-game') -> { get(key, fallback), set(key, value), remove(key) }
-  // Keys are namespaced as "sg:<slug>:<key>". Values are JSON. Never throws.
-  Kit.store = function (slug) {
-    var prefix = 'sg:' + slug + ':';
+  const ls = () => win.localStorage;
+  Kit.store = slug => {
+    const prefix = 'sg:' + slug + ':';
     return {
-      get: function (key, fallback) {
+      get: (key, fallback) => {
         try {
-          var raw = win.localStorage.getItem(prefix + key);
+          const raw = ls().getItem(prefix + key);
           return raw === null ? fallback : JSON.parse(raw);
-        } catch (e) { return fallback; }
+        } catch { return fallback; }
       },
-      set: function (key, value) {
-        try { win.localStorage.setItem(prefix + key, JSON.stringify(value)); return true; } catch (e) { return false; }
+      set: (key, value) => {
+        try { ls().setItem(prefix + key, JSON.stringify(value)); return true; } catch { return false; }
       },
-      remove: function (key) {
-        try { win.localStorage.removeItem(prefix + key); } catch (e) { /* ignore */ }
+      remove: key => {
+        try { ls().removeItem(prefix + key); } catch { /* ignore */ }
       }
     };
   };
-  var siteStore = Kit.store('site');
+  const siteStore = Kit.store('site');
 
   /* --------------------------------------------------------- preferences */
-  // System default, with an explicit local override shared by every game.
-  var motionQuery = win.matchMedia ? win.matchMedia('(prefers-reduced-motion: reduce)') : null;
-  var motionListeners = [];
-  function validMotion(value) { return value === 'reduce' || value === 'full' ? value : 'system'; }
-  // Adds fn to a listener list and returns its unsubscribe function.
-  function subscribe(list, fn) { list.push(fn); return function () { var i = list.indexOf(fn); if (i !== -1) list.splice(i, 1); }; }
-  Kit.motion = {
-    preference: validMotion(siteStore.get('motion', 'system')),
-    reduced: function () { return this.preference === 'reduce' || (this.preference === 'system' && !!(motionQuery && motionQuery.matches)); },
-    setPreference: function (value) { this.preference = validMotion(value); siteStore.set('motion', this.preference); paintMotion(); },
-    onChange: function (fn) { return subscribe(motionListeners, fn); }
+  const motionQuery = win.matchMedia ? win.matchMedia('(prefers-reduced-motion: reduce)') : null;
+  const motionListeners = [];
+  const validMotion = value => value === RD || value === 'full' ? value : SY;
+  const subscribe = (list, fn) => { list.push(fn); return () => { const i = list.indexOf(fn); if (i !== -1) list.splice(i, 1); }; };
+  const motion = Kit.motion = {
+    preference: validMotion(siteStore.get('motion', SY)),
+    reduced() { return this.preference === RD || (this.preference === SY && !!(motionQuery && motionQuery.matches)); },
+    setPreference(value) { this.preference = validMotion(value); siteStore.set('motion', this.preference); paintMotion(); },
+    onChange: fn => subscribe(motionListeners, fn)
   };
-  function paintMotion() {
-    var reduced = Kit.motion.reduced();
-    doc.documentElement.setAttribute('data-sg-motion', reduced ? 'reduce' : 'full');
-    motionListeners.forEach(function (fn) { fn(reduced); });
-  }
+  const isRed = () => motion.reduced();
+  const paintMotion = () => {
+    const reduced = isRed();
+    sa(doc.documentElement, 'data-sg-motion', reduced ? RD : 'full');
+    each(motionListeners, fn => fn(reduced));
+  };
   if (motionQuery) {
-    if (motionQuery.addEventListener) motionQuery.addEventListener('change', paintMotion);
+    if (motionQuery.addEventListener) on(motionQuery, 'change', paintMotion);
     else if (motionQuery.addListener) motionQuery.addListener(paintMotion);
   }
   paintMotion();
 
   /* ----------------------------------------------------------- lifecycle */
-  var lifecycleHandlers = [], pointerResets = [], ready = false, failed = false;
-  var perf = win.performance;
-  // Whole milliseconds (an int32 holds 24 days of performance.now()).
-  function clock() { return perf ? perf.now() | 0 : Date.now(); }
-  function tellPortal(message) {
+  const lifecycleHandlers = [], pointerResets = [], perf = win.performance;
+  let ready = false, failed = false;
+  const clock = () => perf ? perf.now() | 0 : Date.now();
+  const tellPortal = message => {
     if (win.parent !== win) win.parent.postMessage(message, win.location && win.location.protocol !== 'file:' ? win.location.origin : '*');
-  }
-  // Window capture listeners run before any game listener can stop the event.
-  function listen(type, fn) { win.addEventListener(type, fn, true); }
-  function suspend(reason) {
-    // One pause per stop of play: a blur and the hidden page that follows it, or Kit's own
-    // fullscreen exit and the portal's, find play already cut (until 0) and count once.
+  };
+  const tellV1 = (type, data) => {
+    data = data || {}; data.type = type; data.version = 1;
+    tellPortal(data);
+  };
+  const listen = (type, fn) => on(win, type, fn, true);
+  const runHooks = reason => each(lifecycleHandlers.slice(), hooks => {
+    try { if (hooks.reset) hooks.reset(); } catch { /* keep going */ }
+    try { hooks.pause(reason); } catch { /* one faulty hook must not skip later save hooks */ }
+  });
+  const suspend = reason => {
     if (roundId && until !== 0) rp++;
     send(true);
     cueAt = -1;
     if (Kit.keys) Kit.keys.reset();
-    pointerResets.forEach(function (reset) { reset(); });
-    lifecycleHandlers.slice().forEach(function (hooks) {
-      try { if (hooks.reset) hooks.reset(); } catch (e) { /* keep going */ }
-      try { hooks.pause(reason); } catch (e) { /* one faulty hook must not skip later save hooks */ }
-    });
-  }
-  // Enter the game's existing pause state. Returning focus NEVER resumes play.
-  // Games retain control of which states can pause (idle games may keep accruing).
-  Kit.lifecycle = function (hooks) {
-    if (!hooks || typeof hooks.pause !== 'function') throw new TypeError('Kit.lifecycle requires pause');
-    lifecycleHandlers.push(hooks);
-    return function () { var i = lifecycleHandlers.indexOf(hooks); if (i !== -1) lifecycleHandlers.splice(i, 1); };
+    each(pointerResets, reset => reset());
+    runHooks(reason);
   };
-  Kit.ready = function () {
+  Kit.lifecycle = hooks => {
+    if (!hooks || !is(hooks.pause, 'function')) throw new TypeError('Kit.lifecycle requires pause');
+    return subscribe(lifecycleHandlers, hooks);
+  };
+  Kit.ready = () => {
     if (failed) return;
     ready = true;
-    tellPortal({ type: 'sg:ready', version: 1 });
+    tellV1('sg:ready');
     tick();
   };
-  function errorText(error) {
-    return String(error && error.message || error || 'Game failed to initialize').slice(0, 240);
-  }
-  Kit.fail = function (error) {
+  const errorText = error => String(error && error.message || error || 'Game failed to initialize').slice(0, 240);
+  Kit.fail = error => {
     if (failed) return;
     failed = true;
-    tellPortal({ type: 'sg:error', version: 1, message: errorText(error) });
+    tellV1('sg:error', { message: errorText(error) });
   };
-  // Before ready, any error still fails the handshake. Afterwards one stray
-  // exception must not throw the run away: warn the portal at most once per
-  // 10 s. Five in that window pause first (games save from that hook), then fail.
-  var warnAt = -1, recent = [], reporting = false;
-  function runtimeError(error) {
+  let warnAt = -1, recent = [], reporting = false;
+  const runtimeError = error => {
     if (failed || reporting) return;
     if (!ready) return Kit.fail(error);
-    var t = clock();
-    recent = recent.filter(function (x) { return t - x < 10000; });
+    const t = clock();
+    recent = recent.filter(x => t - x < 10000);
     recent.push(t);
     if (recent.length >= 5) {
       reporting = true;
-      lifecycleHandlers.slice().forEach(function (hooks) {
-        try { if (hooks.reset) hooks.reset(); } catch (e) { /* keep going */ }
-        try { hooks.pause('error'); } catch (e) { /* a save hook must not hide the failure */ }
-      });
+      runHooks('error');
       return Kit.fail(error);
     }
     if (warnAt >= 0 && t - warnAt < 10000) return;
     warnAt = t;
-    tellPortal({ type: 'sg:warn', version: 1, message: errorText(error) });
-  }
-  listen('error', function (e) {
-    // Capture script download failures as well as exceptions. Optional media do
-    // not make a successfully initialized game fail its readiness handshake.
+    tellV1('sg:warn', { message: errorText(error) });
+  };
+  listen('error', e => {
     if (e.message || (e.target && e.target.tagName === 'SCRIPT')) runtimeError(e.error || e.message || 'Game script failed to load');
   });
-  win.addEventListener('unhandledrejection', function (e) { runtimeError(e.reason); });
-  win.addEventListener('blur', function () { suspend('blur'); });
-  doc.addEventListener('visibilitychange', function () { if (doc.hidden) suspend('hidden'); });
-  var wasFullscreen = !!doc.fullscreenElement;
-  doc.addEventListener('fullscreenchange', function () {
-    var fullscreen = !!doc.fullscreenElement;
+  on(win, 'unhandledrejection', e => runtimeError(e.reason));
+  on(win, 'blur', () => suspend('blur'));
+  on(doc, VC, () => { if (doc.hidden) suspend('hidden'); });
+  let wasFullscreen = !!doc.fullscreenElement;
+  on(doc, 'fullscreenchange', () => {
+    const fullscreen = !!doc.fullscreenElement;
     if (wasFullscreen && !fullscreen) suspend('fullscreen-exit');
     wasFullscreen = fullscreen;
   });
-  win.addEventListener('message', function (e) {
+  on(win, 'message', e => {
     if (win.parent === win || e.source !== win.parent) return;
-    var message = e.data;
-    if (!message || typeof message !== 'object') return;
-    if (message.type === 'sg:pause') suspend(message.reason || 'portal');
-    else if (message.type === 'sg:request-ready' && ready && !failed) Kit.ready();
-    else if (message.type === 'sg:preferences') {
-      // The portal's sound and motion settings, for file:// pages that cannot share its storage.
-      if (typeof message.quiet === 'boolean') audio.setMuted(message.quiet);
-      if (typeof message.motionPreference === 'string') Kit.motion.setPreference(message.motionPreference);
-      else if (typeof message.reducedMotion === 'boolean') Kit.motion.setPreference(message.reducedMotion ? 'reduce' : 'full');
-      // Whether the portal's statistics sender is on: off drops what waits and stops counting.
-      if (typeof message.telemetry === 'boolean' && !(telemetry = message.telemetry)) { tev = []; unacked = []; il = [0, 0, 0, 0, 0, 0]; cueAt = -1; clearTimeout(timer); timer = 0; }
+    const m = e.data;
+    if (!m || !is(m, 'object')) return;
+    if (m.type === 'sg:pause') suspend(m.reason || 'portal');
+    else if (m.type === 'sg:request-ready' && ready && !failed) Kit.ready();
+    else if (m.type === 'sg:preferences') {
+      if (is(m.quiet, 'boolean')) audio.setMuted(m.quiet);
+      if (is(m.motionPreference, 'string')) motion.setPreference(m.motionPreference);
+      else if (is(m.reducedMotion, 'boolean')) motion.setPreference(m.reducedMotion ? RD : 'full');
+      if (is(m.telemetry, 'boolean') && !(telemetry = m.telemetry)) { tev = []; unacked = []; il = z6(); cueAt = -1; ct(timer); timer = 0; }
       tick();
     }
   });
 
   /* ----------------------------------------------------- play statistics */
-  // Anonymous play statistics for the portal's sender (docs/TELEMETRY.md). Kit only counts
-  // and posts small deltas as sg:telemetry version 2: while embedded, after Kit.ready(), and
-  // only once the portal says its sender is on (sg:preferences telemetry: true). Until the
-  // portal says, Kit keeps at most 400 waiting events in memory; told off (or standalone),
-  // it counts nothing, posts nothing and starts no timer. Kit stores nothing, never uses the
-  // network and never sees who plays. Engaged time: a key press or click starts or extends a
-  // 20 s window; mouse moves, the wheel and Kit.stats.busy() only extend an open one; every
-  // pause and pagehide cuts it. Every Kit.stats and Kit.track call is safe standalone,
-  // before Kit.ready() and with any argument.
-  // Events: ['rs', id, tier]; ['rx', wallMs, inputs, idleLapses, pauses, rtSumMs, rtN,
-  // ddaPermille] right before ['re', code, id, engagedMs, score, tier, hits, misses, rt[6]];
-  // ['tu', 's' | 'd'] for a first-time tutorial's start and end. Histograms: upper bounds in
-  // ms, the last bucket open: rt 300 500 800 1200 2000, il (input latency) 8 16 33 50 100.
-  // Frames: smooth <= 20 ms, ok <= 34 ms, choppy <= 250 ms, stall; only engaged play in a round.
-  var telemetry = win.parent !== win ? null : false, timer = 0, from, until, tn = 0, engaged = 0, roundMs = 0, roundId = '';
-  var frames = [0, 0, 0, 0], il = [0, 0, 0, 0, 0, 0], rt = [0, 0, 0, 0, 0, 0], tev = [], unacked = [], tutorials = {};
-  var tier = 0, hits = 0, misses = 0, cueAt = -1, r0 = 0, ri = 0, rd = 0, rp = 0, rsum = 0, rn = 0, dl = -1;
-  function live() { return telemetry !== false && !failed; }
-  function push() { if (live() && tev.length < 400) tev.push.apply(tev, arguments); }
-  // tn: the time of the last tally, which every mark() follows: a round's wall time and its
-  // engaged time come from the same clock reading, so wall time always covers it.
-  function tally() {
-    var t = tn = clock(), x = t < until ? t : until;
+  let telemetry = win.parent !== win ? null : false, timer = 0, from, until, tn = 0, engaged = 0, roundMs = 0, roundId = '';
+  let frames = [0, 0, 0, 0], il = z6(), rt = z6(), tev = [], unacked = [], tutorials = {};
+  let tier = 0, hits = 0, misses = 0, cueAt = -1, r0 = 0, ri = 0, rd = 0, rp = 0, rsum = 0, rn = 0, dl = -1;
+  const live = () => telemetry !== false && !failed;
+  const push = (...a) => { if (live() && tev.length < 400) tev.push(...a); };
+  const tally = () => {
+    const t = tn = clock(), x = t < until ? t : until;
     if (x > from) { engaged += x - from; if (roundId) roundMs += x - from; from = x; }
     return t;
-  }
-  // A key press or click in a round after its window lapsed is an idle lapse;
-  // after a pause until is 0, so the press that resumes play is not one.
-  function engage(extendOnly) {
-    var t = tally();
+  };
+  const engage = extendOnly => {
+    const t = tally();
     if (!extendOnly && roundId && until && t >= until) rd++;
     if (!extendOnly || t < until) { from = t; until = t + 20000; }
-  }
-  // Kit._frame: the same frames for shared/gfx.js (light graphics), when a game loads it.
-  function countFrame(ms) {
+  };
+  const countFrame = ms => {
     try {
       if (ms > 0 && roundId && clock() < until) {
         frames[ms > 20 ? ms > 34 ? ms > 250 ? 3 : 2 : 1 : 0]++;
         if (Kit._frame) Kit._frame(ms);
       }
-    } catch (e) { /* ignore */ }
-  }
-  function send(cut, out) {
+    } catch { /* ignore */ }
+  };
+  const send = (cut, out) => {
     tally();
     if (cut) until = 0;
     while (telemetry && ready && !failed && (engaged || frames.some(Number) || il.some(Number) || tev.length)) {
-      var m = { type: 'sg:telemetry', version: 2, e: engaged, f: frames, il: il, ev: tev.splice(0, 64) };
+      const m = { type: 'sg:telemetry', version: 2, e: engaged, f: frames, il, ev: tev.splice(0, 64) };
       if (out) out.push(m); else { if (unacked.length < 16) unacked.push(m); tellPortal(m); }
-      engaged = 0; frames = [0, 0, 0, 0]; il = [0, 0, 0, 0, 0, 0];
+      engaged = 0; frames = [0, 0, 0, 0]; il = z6();
     }
     return out;
-  }
-  // One 10 s timer, only while the portal's sender is on and the game is ready.
-  function tick() {
-    if (!timer && telemetry && ready && !failed) timer = setTimeout(function () { timer = 0; send(); tick(); }, 10000);
-  }
-  function put(list, ms, bounds) { for (var i = 0; i < 5 && ms >= bounds[i]; i++); list[i]++; }
-  function timed(ms) { put(rt, ms, [300, 500, 800, 1200, 2000]); rsum += ms; rn++; }
-  // A round start (no code) or the end of the open round. hits, misses, reaction times and
-  // the counters belong to the open round; the tier and the DDA level are state.
-  function mark(code, score) {
+  };
+  const tick = () => {
+    if (!timer && telemetry && ready && !failed) timer = st(() => { timer = 0; send(); tick(); }, 10000);
+  };
+  const put = (list, ms, bounds) => { let i = 0; for (; i < 5 && ms >= bounds[i]; i++); list[i]++; };
+  const timed = ms => { put(rt, ms, [300, 500, 800, 1200, 2000]); rsum += ms; rn++; };
+  const mark = (code, score) => {
     if (code == null) push(['rs', roundId, tier]);
     else push(['rx', tn - r0, ri, rd, rp, rsum, rn, dl], ['re', code, roundId, roundMs, fin(score) ? score : -1, tier, hits, misses, rt]);
-    hits = misses = ri = rd = rp = rsum = rn = 0; rt = [0, 0, 0, 0, 0, 0]; cueAt = -1; r0 = tn;
-  }
-  // Every key press and click: engaged time, then (key repeats aside) how long the event
-  // waited for the page and the reaction time to a pending cue. Only a click or a key the
-  // game accepts (Kit.isGameKeyEvent) answers the cue.
-  function input(e, key) {
+    hits = misses = ri = rd = rp = rsum = rn = 0; rt = z6(); cueAt = -1; r0 = tn;
+  };
+  const input = (e, key) => {
     engage();
     if (roundId && !e.repeat) ri++;
     if (live() && !e.repeat) {
-      var t = e.timeStamp;
-      if (perf && typeof t === 'number' && t > 0 && (t = perf.now() - t) >= 0 && t <= 1000) put(il, t, [8, 16, 33, 50, 100]);
+      let t = e.timeStamp;
+      if (perf && is(t, 'number') && t > 0 && (t = perf.now() - t) >= 0 && t <= 1000) put(il, t, [8, 16, 33, 50, 100]);
       if (cueAt >= 0 && (!key || acceptsKeyEvent(e))) { timed(clock() - cueAt); cueAt = -1; }
     }
-  }
-  function text(value) { try { return String(value).slice(0, 24); } catch (e) { return ''; } }
-  // A page that goes away (not kept in the back-forward cache) with a round open quits it.
-  function quitOpen(quit) { if (quit && roundId) { tally(); mark('q'); roundId = ''; } }
-  Kit._ack = function () { unacked.shift(); };
-  Kit._flush = function (quit) { quitOpen(quit); return [unacked.splice(0), send(quit, [])]; };
-  listen('pagehide', function (e) { quitOpen(!(e && e.persisted)); send(e); });
+  };
+  const text = value => { try { return String(value).slice(0, 24); } catch { return ''; } };
+  const quitOpen = quit => { if (quit && roundId) { tally(); mark('q'); roundId = ''; } };
+  Kit._ack = () => { unacked.shift(); };
+  Kit._flush = quit => { quitOpen(quit); return [unacked.splice(0), send(quit, [])]; };
+  listen('pagehide', e => { quitOpen(!(e && e.persisted)); send(e); });
   listen('pointermove', engage);
   listen('wheel', engage);
-  // The portal hears when a round starts and ends (sg:round), whether or not statistics
-  // are on, so it can offer the next game, and its «new version» button, between rounds. Only the phase and the result's
-  // letter: no score, no id.
-  function roundNews(phase, code) {
-    if (ready && !failed) tellPortal({ type: 'sg:round', version: 1, phase: phase, result: code || '' });
-  }
+  const roundNews = (phase, code) => {
+    if (ready && !failed) tellV1('sg:round', { phase, result: code || '' });
+  };
   Kit.stats = {
-    // A new round while one is open ends the open one as a quit.
-    round: function (id) {
+    round: id => {
       tally();
       if (roundId) mark('q');
       roundId = text(id);
@@ -274,480 +241,455 @@
       send();
       roundNews('start');
     },
-    // result: 'win', 'lose', 'draw', 'end' (no winner) or 'quit' (its first letter is sent).
-    end: function (result, score) {
+    end: (result, score) => {
       if (!roundId) return;
       tally();
-      var code = text(result).charAt(0);
+      const code = text(result).charAt(0);
       mark(code, score);
       roundId = '';
       send();
       roundNews('end', code);
     },
-    tutorial: function (step) {
+    tutorial: step => {
       if ((step === 'start' || step === 'done') && !tutorials[step]) { tutorials[step] = 1; push(['tu', step.charAt(0)]); }
     },
-    busy: function () { engage(1); },
+    busy: () => engage(1),
     frame: countFrame
   };
   Kit.track = {
-    hit: function () { if (live()) hits++; },
-    miss: function () { if (live()) misses++; },
-    // A stimulus just appeared: the next click, or key the game accepts, is a reaction time.
-    cue: function () { if (live()) cueAt = clock(); },
-    react: function (ms) { if (live() && fin(ms)) timed(ms); },
-    // The current difficulty tier 0..9 (0 = no DDA); Kit.dda reports its own at every read.
-    tier: function (n) { if (fin(n) && n < 10) tier = n | 0; }
+    hit: () => { if (live()) hits++; },
+    miss: () => { if (live()) misses++; },
+    cue: () => { if (live()) cueAt = clock(); },
+    react: ms => { if (live() && fin(ms)) timed(ms); },
+    tier: n => { if (fin(n) && n < 10) tier = n | 0; }
   };
 
   /* ------------------------------------------------------------- DDA */
-  // var dda = Kit.dda('my-game', { id: 'main', target: 0.72, tiers: 5, start });
-  // At round start read dda.level (0..1), dda.tier (1..tiers), dda.value(easy, hard)
-  // or dda.pick([...one per tier]); report each try with dda.result(true/false or 0..1).
-  // The difficulty belongs to this PC: Kit.store(slug) 'dda' is { <id>: [level, n] }.
-  function fin(v) { return typeof v === 'number' && v >= 0 && v < 1 / 0; }
-  function obj(v) { return v && typeof v === 'object' && !Array.isArray(v) ? v : {}; }
-  function unit(v, fallback) { return fin(v) && v <= 1 ? v : fallback; }
-  function pair(v) { return Array.isArray(v) && v[1] >= 1 && unit(v[0], -1) >= 0 ? v : null; }
-  // Saves from when the site had player profiles nested this by player
-  // ({ <player>: { <id>: [level, n] } }, newest last): the newest player's level carries over.
-  function ddaSaved(store) {
-    var raw = obj(store.get('dda')), out = {}, k, id;
-    for (k in raw) if (!pair(raw[k])) { var old = obj(raw[k]); for (id in old) if (pair(old[id])) out[id] = old[id]; }
-    for (k in raw) if (pair(raw[k])) out[k] = raw[k];
+  const fin = v => is(v, 'number') && v >= 0 && v < 1 / 0;
+  const obj = v => v && is(v, 'object') && !Array.isArray(v) ? v : {};
+  const unit = (v, fallback) => fin(v) && v <= 1 ? v : fallback;
+  const pair = v => Array.isArray(v) && v[1] >= 1 && unit(v[0], -1) >= 0 ? v : null;
+  const ddaSaved = store => {
+    const raw = obj(store.get('dda')), out = {};
+    for (const k in raw) if (!pair(raw[k])) { const old = obj(raw[k]); for (const id in old) if (pair(old[id])) out[id] = old[id]; }
+    for (const k in raw) if (pair(raw[k])) out[k] = raw[k];
     return out;
-  }
-  Kit.dda = function (slug, opts) {
+  };
+  Kit.dda = (slug, opts) => {
     opts = opts || {};
-    var store = Kit.store(slug), id = opts.id || 'main', level = 0, n = 0, low = 0, high = 0, loaded = false;
-    var target = unit(opts.target, 0.72), tiers = Kit.clamp(opts.tiers | 0, 0, 9) || 5;
-    // A PC with no saved results starts in the middle, unless the game says otherwise.
-    function now() {
+    const store = Kit.store(slug), id = opts.id || 'main';
+    let level = 0, n = 0, low = 0, high = 0, loaded = false;
+    const target = unit(opts.target, 0.72), tiers = Kit.clamp(opts.tiers | 0, 0, 9) || 5;
+    const now = () => {
       if (!loaded) {
         loaded = true;
-        var mine = ddaSaved(store)[id];
+        const mine = ddaSaved(store)[id];
         if (mine) { level = mine[0]; n = mine[1] >>> 0; }
       }
       return n ? level : unit(opts.start, 0.35);
-    }
-    function tierOf(l) { return 1 + Math.floor(l * tiers * 0.9999); }
-    // Every read reports the tier and the level (in thousandths) for the round events.
-    function read() { var l = now(); tier = tierOf(l); dl = Math.round(l * 1000); return l; }
-    function save() {
-      var all = ddaSaved(store);
+    };
+    const tierOf = l => 1 + flr(l * tiers * 0.9999);
+    const read = () => { const l = now(); tier = tierOf(l); dl = rndI(l * 1000); return l; };
+    const save = () => {
+      const all = ddaSaved(store);
       if (n) all[id] = [level, n]; else delete all[id];
       store.set('dda', all);
-    }
-    var dda = {
+    };
+    const dda = {
       get level() { return read(); },
       get tier() { return tierOf(read()); },
-      value: function (easy, hard) { return Kit.lerp(easy, hard, read()); },
-      pick: function (list) { return list[Math.min(dda.tier, list.length) - 1]; },
-      result: function (outcome) {
-        var x = outcome === true ? 1 : outcome === false ? 0 : outcome, l = now();
+      value: (easy, hard) => Kit.lerp(easy, hard, read()),
+      pick: list => list[min(dda.tier, list.length) - 1],
+      result: outcome => {
+        let x = outcome === true ? 1 : outcome === false ? 0 : outcome, l = now();
         if (!Number.isFinite(x)) return;
         x = Kit.clamp(x, 0, 1);
-        var step = Kit.clamp(0.18 / Math.sqrt(1 + n / 2), 0.03, 0.18);
+        const step = Kit.clamp(0.18 / M.sqrt(1 + n / 2), 0.03, 0.18);
         low = x < 0.3 ? low + 1 : 0; high = x >= 0.9 ? high + 1 : 0;
-        // Mercy: two poor tries in a row drop an extra step; three great ones add half a step.
         l += step * (x - target) - (low > 1 ? step : 0) + (high > 2 ? step / 2 : 0);
-        level = Math.round(Kit.clamp(l, 0, 1) * 1000) / 1000;
+        level = rndI(Kit.clamp(l, 0, 1) * 1000) / 1000;
         n++;
         save();
       },
-      reset: function () { now(); n = low = high = 0; save(); }
+      reset: () => { now(); n = low = high = 0; save(); }
     };
     return dda;
   };
 
   /* --------------------------------------------------------------- audio */
-  // Synthesised sound effects (no audio files). The AudioContext is created
-  // lazily on the first user gesture, as browsers require.
-  var personalMuted = !!siteStore.get('muted', false);
-  var audio = { ctx: null, master: null, muted: personalMuted };
-  Kit.audio = audio;
+  let personalMuted = !!siteStore.get('muted', false);
+  const audio = Kit.audio = { ctx: null, master: null, muted: personalMuted };
+  const muteListeners = [];
 
-  audio.unlock = function () {
-    if (!audio.ctx) {
-      var AC = window.AudioContext || window.webkitAudioContext;
+  audio.unlock = () => {
+    let c = audio.ctx;
+    if (!c) {
+      const AC = win.AudioContext || win.webkitAudioContext;
       if (!AC) return null;
       try {
-        audio.ctx = new AC();
-        audio.master = audio.ctx.createGain();
-        audio.master.gain.value = audio.muted ? 0 : 0.5;
-        audio.master.connect(audio.ctx.destination);
-      } catch (e) { audio.ctx = null; return null; }
+        c = audio.ctx = new AC();
+        const m = audio.master = c.createGain();
+        m.gain.value = audio.muted ? 0 : 0.5;
+        m.connect(c.destination);
+      } catch { return audio.ctx = null; }
     }
-    // A refused resume() must not reach the unhandledrejection listener and fail the game.
-    if (audio.ctx.state === 'suspended') { try { var p = audio.ctx.resume(); if (p && p.catch) p.catch(function () {}); } catch (e) { /* ignore */ } }
-    return audio.ctx;
+    if (c.state === 'suspended') { try { const p = c.resume(); if (p && p.catch) p.catch(() => {}); } catch { /* ignore */ } }
+    return c;
   };
 
-  function paintAudio() {
+  const paintAudio = () => {
     audio.muted = personalMuted;
     if (audio.master) audio.master.gain.setTargetAtTime(audio.muted ? 0 : 0.5, audio.ctx.currentTime, 0.015);
-    muteListeners.forEach(function (fn) { fn(audio.muted); });
-  }
-  audio.setMuted = function (m) {
-    personalMuted = !!m;
-    siteStore.set('muted', personalMuted);
-    paintAudio();
+    each(muteListeners, fn => fn(audio.muted));
   };
-  audio.toggleMute = function () { audio.setMuted(!personalMuted); return audio.muted; };
-  var muteListeners = [];
-  audio.onMuteChange = function (fn) { muteListeners.push(fn); };
-  window.addEventListener('storage', function (e) {
-    if (e.key === 'sg:site:motion' || e.key === null) { Kit.motion.preference = validMotion(siteStore.get('motion', 'system')); paintMotion(); }
-    if (e.key === 'sg:site:muted' || e.key === null) {
-      personalMuted = !!siteStore.get('muted', false);
-      paintAudio();
-    }
+  audio.setMuted = m => { personalMuted = !!m; siteStore.set('muted', personalMuted); paintAudio(); };
+  audio.toggleMute = () => { audio.setMuted(!personalMuted); return audio.muted; };
+  audio.onMuteChange = fn => { muteListeners.push(fn); };
+  on(win, 'storage', e => {
+    if (e.key === 'sg:site:motion' || e.key === null) { motion.preference = validMotion(siteStore.get('motion', SY)); paintMotion(); }
+    if (e.key === 'sg:site:muted' || e.key === null) { personalMuted = !!siteStore.get('muted', false); paintAudio(); }
   });
 
-  // Play one synthesised tone.
-  // opts: { freq=440, to (slide target freq), type='square'|'sine'|'triangle'|'sawtooth',
-  //         dur=0.12 (s), vol=0.3, delay=0 (s), attack=0.005 }
-  audio.tone = function (opts) {
-    var ctx = audio.ctx;
+  const at = (p, v, t) => p.setValueAtTime(v, t);
+  const expRamp = (p, v, t) => p.exponentialRampToValueAtTime(v, t);
+  audio.tone = opts => {
+    const ctx = audio.ctx;
     if (!ctx || audio.muted) return;
     opts = opts || {};
-    var t0 = ctx.currentTime + (opts.delay || 0);
-    var dur = opts.dur || 0.12;
-    var vol = opts.vol == null ? 0.3 : opts.vol;
-    var osc = ctx.createOscillator();
-    var g = ctx.createGain();
-    g.gain.value = 0; // start silent: avoids a click before the envelope begins
+    const t0 = ctx.currentTime + (opts.delay || 0), dur = opts.dur || 0.12, vol = opts.vol == null ? 0.3 : opts.vol;
+    const osc = ctx.createOscillator(), g = ctx.createGain(), gg = g.gain;
+    gg.value = 0;
     osc.type = opts.type || 'square';
-    osc.frequency.setValueAtTime(opts.freq || 440, t0);
-    if (opts.to) osc.frequency.exponentialRampToValueAtTime(Math.max(1, opts.to), t0 + dur);
-    g.gain.setValueAtTime(0.0001, t0);
-    g.gain.exponentialRampToValueAtTime(vol, t0 + (opts.attack || 0.005));
-    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    at(osc.frequency, opts.freq || 440, t0);
+    if (opts.to) expRamp(osc.frequency, max(1, opts.to), t0 + dur);
+    at(gg, 0.0001, t0);
+    expRamp(gg, vol, t0 + (opts.attack || 0.005));
+    expRamp(gg, 0.0001, t0 + dur);
     osc.connect(g); g.connect(audio.master);
     osc.start(t0); osc.stop(t0 + dur + 0.02);
   };
 
-  // White-noise burst (explosions, splashes, hits).
-  // opts: { dur=0.25, vol=0.3, delay=0, filter=lowpass cutoff Hz (optional), to (cutoff slide target) }
-  var noiseBuf = null;
-  audio.noise = function (opts) {
-    var ctx = audio.ctx;
+  let noiseBuf = null;
+  audio.noise = opts => {
+    const ctx = audio.ctx;
     if (!ctx || audio.muted) return;
     opts = opts || {};
     if (!noiseBuf) {
       noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
-      var d = noiseBuf.getChannelData(0);
-      for (var i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      const d = noiseBuf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = bi();
     }
-    var t0 = ctx.currentTime + (opts.delay || 0);
-    var dur = opts.dur || 0.25;
-    var src = ctx.createBufferSource();
+    const t0 = ctx.currentTime + (opts.delay || 0), dur = opts.dur || 0.25;
+    const src = ctx.createBufferSource(), g = ctx.createGain(), gg = g.gain;
     src.buffer = noiseBuf;
-    var g = ctx.createGain();
-    g.gain.value = 0;
-    g.gain.setValueAtTime(0.0001, t0);
-    g.gain.linearRampToValueAtTime(opts.vol == null ? 0.3 : opts.vol, t0 + 0.003);
-    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-    var node = src;
+    gg.value = 0;
+    at(gg, 0.0001, t0);
+    gg.linearRampToValueAtTime(opts.vol == null ? 0.3 : opts.vol, t0 + 0.003);
+    expRamp(gg, 0.0001, t0 + dur);
+    let node = src;
     if (opts.filter) {
-      var f = ctx.createBiquadFilter();
+      const f = ctx.createBiquadFilter();
       f.type = 'lowpass';
-      f.frequency.setValueAtTime(opts.filter, t0);
-      if (opts.to) f.frequency.exponentialRampToValueAtTime(Math.max(20, opts.to), t0 + dur);
+      at(f.frequency, opts.filter, t0);
+      if (opts.to) expRamp(f.frequency, max(20, opts.to), t0 + dur);
       src.connect(f); node = f;
     }
     node.connect(g); g.connect(audio.master);
     src.start(t0); src.stop(t0 + dur + 0.02);
   };
 
-  // Ready-made effects. Call e.g. Kit.sfx.win().
+  const sfxTone = (f, to, t, d, v) => () => audio.tone({ freq: f, to, type: t, dur: d, vol: v });
+  const sfxSeq = (a, d, v, step) => () => each(a, (f, i) => audio.tone({ freq: f, type: TR, dur: d, vol: v, delay: i * step }));
   Kit.sfx = {
-    click: function () { audio.tone({ freq: 660, type: 'triangle', dur: 0.05, vol: 0.15 }); },
-    land: function () { audio.tone({ freq: 160, to: 80, type: 'triangle', dur: 0.08, vol: 0.25 }); },
-    pop: function () { audio.tone({ freq: 500, to: 1200, type: 'sine', dur: 0.08, vol: 0.3 }); },
-    boom: function () { audio.noise({ dur: 0.6, vol: 0.5, filter: 1200, to: 60 }); },
-    power: function () { [523, 659, 784, 1047].forEach(function (f, i) { audio.tone({ freq: f, type: 'triangle', dur: 0.09, vol: 0.15, delay: i * 0.06 }); }); },
-    win: function () { [523, 659, 784, 1047, 784, 1047].forEach(function (f, i) { audio.tone({ freq: f, type: 'triangle', dur: 0.16, vol: 0.3, delay: i * 0.1 }); }); },
-    lose: function () { [392, 330, 262, 196].forEach(function (f, i) { audio.tone({ freq: f, type: 'triangle', dur: 0.22, vol: 0.3, delay: i * 0.15 }); }); }
+    click: sfxTone(660, 0, TR, 0.05, 0.15),
+    land: sfxTone(160, 80, TR, 0.08, 0.25),
+    pop: sfxTone(500, 1200, 'sine', 0.08, 0.3),
+    boom: () => audio.noise({ dur: 0.6, vol: 0.5, filter: 1200, to: 60 }),
+    power: sfxSeq([523, 659, 784, 1047], 0.09, 0.15, 0.06),
+    win: sfxSeq([523, 659, 784, 1047, 784, 1047], 0.16, 0.3, 0.1),
+    lose: sfxSeq([392, 330, 262, 196], 0.22, 0.3, 0.15)
   };
 
   /* ------------------------------------------------------------ keyboard */
-  // Kit.keys.down('ArrowLeft')     -> true while held (uses KeyboardEvent.code)
-  // Kit.keys.pressed('Space')      -> true once per press; call Kit.keys.endFrame()
-  //                                   at the end of every update step to clear it.
-  // Kit.keys.anyDown(['KeyA','ArrowLeft'])
-  var held = {}, hit = {}, tabCapture = null;
-  var scrollBlocked = new WeakSet();
-  function nativeKeyTarget(target) {
-    return !!(target && (target.isContentEditable || (target.closest && target.closest('button, input, textarea, select, option, a[href], summary, [role="button"], [role="link"], [role="textbox"], [role="combobox"], [role="slider"], [role="spinbutton"], [role="checkbox"], [role="radio"], [role="switch"], [role="tab"], [role="menuitem"]'))));
-  }
-  function acceptsKeyEvent(e) {
-    // Later game listeners may consume a scroll key prevented by Kit itself,
-    // while keys already handled by a UI listener stay out of gameplay.
-    if (e.isComposing || e.ctrlKey || e.metaKey || e.altKey || (e.defaultPrevented && !scrollBlocked.has(e))) return false;
-    if (nativeKeyTarget(e.target)) {
-      // Escape closes a game's menu/pause overlay even when one of its buttons
-      // has focus. Text fields and selects retain their own Escape behavior.
-      return e.code === 'Escape' && !e.target.isContentEditable && !!(e.target.closest && e.target.closest('button, [role="button"]')) && !e.target.closest('input, textarea, select, option, [role="textbox"], [role="combobox"], [role="slider"], [role="spinbutton"]');
+  let held = {}, hit = {}, tabCapture = null;
+  const scrollBlocked = new WeakSet();
+  const FORM_SEL = 'input, textarea, select, option, [role="textbox"], [role="combobox"], [role="slider"], [role="spinbutton"]';
+  const NATIVE_SEL = 'button, a[href], summary, [role="button"], [role="link"], [role="checkbox"], [role="radio"], [role="switch"], [role="tab"], [role="menuitem"], ' + FORM_SEL;
+  const nativeKeyTarget = t => !!(t && (t.isContentEditable || (t.closest && t.closest(NATIVE_SEL))));
+  const hasMod = e => e.isComposing || e.ctrlKey || e.metaKey || e.altKey;
+  const acceptsKeyEvent = e => {
+    if (hasMod(e) || (e.defaultPrevented && !scrollBlocked.has(e))) return false;
+    const t = e.target;
+    if (nativeKeyTarget(t)) {
+      return e.code === 'Escape' && !t.isContentEditable && !!(t.closest && t.closest('button, [role="button"]')) && !t.closest(FORM_SEL);
     }
     return e.code !== 'Tab' || !!(!e.shiftKey && tabCapture && tabCapture());
-  }
-  Kit.isGameKeyEvent = acceptsKeyEvent;
-  // Tab stays available for menu navigation and leaving an embedded game.
-  // Games with a Tab action can handle it while their playing surface is active.
-  var BLOCK = { ArrowUp: 1, ArrowDown: 1, ArrowLeft: 1, ArrowRight: 1, Space: 1, PageUp: 1, PageDown: 1, Home: 1, End: 1 };
-  Kit.keys = {
-    isNativeTarget: nativeKeyTarget,
-    // Only games with a Tab action reserve it, and only while that action is available.
-    captureTab: function (active) { tabCapture = active; },
-    down: function (code) { return !!held[code]; },
-    pressed: function (code) { return !!hit[code]; },
-    anyDown: function (codes) { for (var i = 0; i < codes.length; i++) if (held[codes[i]]) return true; return false; },
-    anyPressed: function (codes) { for (var i = 0; i < codes.length; i++) if (hit[codes[i]]) return true; return false; },
-    endFrame: function () { hit = {}; },
-    reset: function () { held = {}; hit = {}; }
   };
-  listen('keydown', function (e) {
+  Kit.isGameKeyEvent = acceptsKeyEvent;
+  const BLOCK = { ArrowUp: 1, ArrowDown: 1, ArrowLeft: 1, ArrowRight: 1, Space: 1, PageUp: 1, PageDown: 1, Home: 1, End: 1 };
+  const anyKey = (map, codes) => codes.some(c => map[c]);
+  const keys = Kit.keys = {
+    isNativeTarget: nativeKeyTarget,
+    captureTab: active => { tabCapture = active; },
+    down: code => !!held[code],
+    pressed: code => !!hit[code],
+    anyDown: codes => anyKey(held, codes),
+    anyPressed: codes => anyKey(hit, codes),
+    endFrame: () => { hit = {}; },
+    reset: () => { held = {}; hit = {}; }
+  };
+  listen(KD, e => {
     input(e, 1);
-    // Shift+Tab from the game surface returns to the portal. Native controls keep
-    // their ordinary Tab order; standalone game pages keep browser navigation.
-    if (e.code === 'Tab' && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && !e.isComposing && !e.defaultPrevented && !nativeKeyTarget(e.target) && window.parent !== window) {
-      e.preventDefault();
+    if (e.code === 'Tab' && e.shiftKey && !hasMod(e) && !e.defaultPrevented && !nativeKeyTarget(e.target) && win.parent !== win) {
+      pd(e);
       e.stopImmediatePropagation();
       suspend('portal-escape');
-      try { if (document.pointerLockElement) document.exitPointerLock(); } catch (err) { /* ignore */ }
+      try { if (doc.pointerLockElement) doc.exitPointerLock(); } catch { /* ignore */ }
       tellPortal('sg:focus-portal');
     }
   });
-  window.addEventListener('keydown', function (e) {
+  on(win, KD, e => {
     audio.unlock();
-    if (!acceptsKeyEvent(e)) { if (e.code === 'Tab') Kit.keys.reset(); return; }
-    if (BLOCK[e.code] || e.code === 'Tab') { scrollBlocked.add(e); e.preventDefault(); }
+    if (!acceptsKeyEvent(e)) { if (e.code === 'Tab') keys.reset(); return; }
+    if (BLOCK[e.code] || e.code === 'Tab') { scrollBlocked.add(e); pd(e); }
     if (!held[e.code]) hit[e.code] = true;
     held[e.code] = true;
   });
-  listen('keyup', function (e) { held[e.code] = false; });
-  window.addEventListener('blur', Kit.keys.reset);
-  window.addEventListener('focusin', function (e) { if (nativeKeyTarget(e.target)) Kit.keys.reset(); });
+  listen('keyup', e => { held[e.code] = false; });
+  on(win, 'blur', keys.reset);
+  on(win, 'focusin', e => { if (nativeKeyTarget(e.target)) keys.reset(); });
 
-  // Any click/tap counts as play, unlocks audio and makes sure the game frame has keyboard focus.
-  listen('pointerdown', function (e) { input(e); audio.unlock(); try { window.focus(); } catch (err) { /* ignore */ } });
-  window.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+  listen(PD, e => { input(e); audio.unlock(); try { win.focus(); } catch { /* ignore */ } });
+  on(win, 'contextmenu', pd);
 
   /* ------------------------------------------------------ canvas scaling */
-  // Kit.fit(canvas, 1280, 720) makes the canvas fill the window while keeping
-  // a fixed LOGICAL resolution (letterboxed, centred, sharp on HiDPI).
-  // Draw using logical coordinates with view.ctx, which is scaled on every resize.
-  // Returns { ctx, width, height, scale, toLogical(clientX, clientY) }.
-  Kit.fit = function (canvas, width, height, opts) {
+  const lightCap = () => {
+    const v = siteStore.get('gfx-light', 0), nav = win.navigator, hc = nav && nav.hardwareConcurrency;
+    return v === true || v === 1 || v === '1' || (is(hc, 'number') && hc > 0 && hc <= 4 && (nav.deviceMemory || 4) <= 4) ? 1 : 1.5;
+  };
+  Kit.fit = (canvas, width, height, opts) => {
     opts = opts || {};
-    var view = { canvas: canvas, width: width, height: height, scale: 1, dpr: 1, ctx: null };
-    if (!opts.webgl) view.ctx = canvas.getContext('2d');
-    canvas.style.position = 'absolute';
-    function resize() {
-      var ww = window.innerWidth, wh = window.innerHeight;
-      var s = Math.min(ww / width, wh / height);
-      var dpr = Math.min(window.devicePixelRatio || 1, opts.maxDpr || 2);
+    const view = { canvas, width, height, scale: 1, dpr: 1, ctx: opts.webgl ? null : canvas.getContext('2d') }, stStyle = canvas.style;
+    stStyle.position = 'absolute';
+    const resize = () => {
+      const ww = win.innerWidth, wh = win.innerHeight, s = min(ww / width, wh / height);
+      const dpr = min(win.devicePixelRatio || 1, opts.maxDpr != null ? opts.maxDpr : lightCap());
       view.scale = s; view.dpr = dpr;
-      var cw = Math.round(width * s), ch = Math.round(height * s);
-      canvas.style.width = cw + 'px';
-      canvas.style.height = ch + 'px';
-      canvas.style.left = Math.round((ww - cw) / 2) + 'px';
-      canvas.style.top = Math.round((wh - ch) / 2) + 'px';
+      const cw = rndI(width * s), ch = rndI(height * s);
+      stStyle.width = cw + 'px';
+      stStyle.height = ch + 'px';
+      stStyle.left = rndI((ww - cw) / 2) + 'px';
+      stStyle.top = rndI((wh - ch) / 2) + 'px';
       if (!opts.webgl) {
-        canvas.width = Math.round(cw * dpr);
-        canvas.height = Math.round(ch * dpr);
+        canvas.width = rndI(cw * dpr);
+        canvas.height = rndI(ch * dpr);
         view.ctx.setTransform(s * dpr, 0, 0, s * dpr, 0, 0);
         view.ctx.imageSmoothingEnabled = opts.smooth !== false;
       }
       if (opts.onResize) opts.onResize(view);
-    }
-    view.toLogical = function (clientX, clientY) {
-      var r = canvas.getBoundingClientRect();
+    };
+    view.toLogical = (clientX, clientY) => {
+      const r = canvas.getBoundingClientRect();
       return { x: (clientX - r.left) / view.scale, y: (clientY - r.top) / view.scale };
     };
     view.resize = resize;
-    window.addEventListener('resize', resize);
+    on(win, 'resize', resize);
     resize();
     return view;
   };
 
-  // Tracks the mouse in logical coordinates for a Kit.fit view.
-  // Kit.pointer(view) -> { x, y, down, pressed (edge), released (edge), endFrame() }
-  Kit.pointer = function (view) {
-    var p = { x: view.width / 2, y: view.height / 2, down: false, pressed: false, released: false, right: false };
-    function move(e) { var l = view.toLogical(e.clientX, e.clientY); p.x = l.x; p.y = l.y; }
-    window.addEventListener('pointermove', move);
-    window.addEventListener('pointerdown', function (e) { move(e); if (e.button === 2) { p.right = true; return; } p.down = true; p.pressed = true; });
-    window.addEventListener('pointerup', function (e) { move(e); if (e.button === 2) { p.right = false; return; } if (p.down) p.released = true; p.down = false; });
-    p.reset = function () { p.down = false; p.right = false; p.pressed = false; p.released = false; };
+  Kit.pointer = view => {
+    const p = { x: view.width / 2, y: view.height / 2, down: false, pressed: false, released: false, right: false };
+    const move = e => { const l = view.toLogical(e.clientX, e.clientY); p.x = l.x; p.y = l.y; };
+    on(win, 'pointermove', move);
+    on(win, PD, e => { move(e); if (e.button === 2) { p.right = true; return; } p.down = p.pressed = true; });
+    on(win, 'pointerup', e => { move(e); if (e.button === 2) { p.right = false; return; } if (p.down) p.released = true; p.down = false; });
+    p.reset = () => { p.down = p.right = p.pressed = p.released = false; };
     pointerResets.push(p.reset);
-    p.endFrame = function () { p.pressed = false; p.released = false; };
+    p.endFrame = () => { p.pressed = p.released = false; };
     return p;
   };
 
   /* ---------------------------------------------------------- game loop */
-  // Kit.loop(update, render) runs update(dt) at a fixed 60 Hz and render(alpha)
-  // once per animation frame. Automatically pauses while the tab is hidden.
-  // Returns { stop(), running }.
-  Kit.loop = function (update, render, opts) {
+  Kit.loop = (update, render, opts) => {
     opts = opts || {};
-    var step = 1 / (opts.hz || 60);
-    var acc = 0, last = 0, rafId = 0;
-    var handle = { running: true };
-    function frame(t) {
+    const step = 1 / (opts.hz || 60), handle = { running: true };
+    let acc = 0, last = 0, rafId = 0;
+    const frame = t => {
       if (!handle.running) return;
       rafId = requestAnimationFrame(frame);
-      // The first frame after starting or showing the page has no frame time.
-      var ms = last ? t - last : 0;
+      const ms = last ? t - last : 0;
       last = t;
       if (doc.hidden) return;
       countFrame(ms);
-      acc += M.min(0.25, ms / 1000);
-      var n = 0;
+      acc += min(0.25, ms / 1000);
+      let n = 0;
       while (acc >= step && n < 8) { update(step); acc -= step; n++; }
       if (n === 8) acc = 0;
       if (render) render(acc / step);
-    }
+    };
     rafId = requestAnimationFrame(frame);
-    doc.addEventListener('visibilitychange', function () { last = 0; });
-    handle.stop = function () { handle.running = false; cancelAnimationFrame(rafId); };
+    on(doc, VC, () => { last = 0; });
+    handle.stop = () => { handle.running = false; cancelAnimationFrame(rafId); };
     return handle;
   };
 
   /* ------------------------------------------------------------- effects */
-  // Simple particle system for 2D canvas games.
-  // var fx = Kit.particles(); fx.burst(x, y, {count, color|colors, speed, life, size, gravity});
-  // fx.update(dt); fx.draw(ctx);
-  Kit.particles = function () {
-    var list = [];
+  Kit.particles = () => {
+    const list = [];
     return {
-      list: list,
-      burst: function (x, y, o) {
-        if (Kit.motion.reduced()) return;
+      list,
+      burst: (x, y, o) => {
+        if (isRed()) return;
         o = o || {};
-        var n = o.count || 12;
-        for (var i = 0; i < n; i++) {
-          var a = o.angle != null ? o.angle + (M.random() - 0.5) * (o.spread || M.PI * 2) : M.random() * M.PI * 2;
-          var sp = (o.speed || 200) * (0.4 + M.random() * 0.6);
+        const n = o.count || 12, life = o.life || 0.6;
+        for (let i = 0; i < n; i++) {
+          const a = o.angle != null ? o.angle + (rnd() - 0.5) * (o.spread || M.PI * 2) : rnd() * M.PI * 2;
+          const sp = (o.speed || 200) * (0.4 + rnd() * 0.6);
           list.push({
-            x: x, y: y, vx: M.cos(a) * sp, vy: M.sin(a) * sp,
-            life: (o.life || 0.6) * (0.6 + M.random() * 0.4), max: o.life || 0.6,
-            size: (o.size || 5) * (0.6 + M.random() * 0.6),
-            color: o.colors ? o.colors[M.floor(M.random() * o.colors.length)] : (o.color || '#fff'),
+            x, y, vx: M.cos(a) * sp, vy: M.sin(a) * sp,
+            life: life * (0.6 + rnd() * 0.4), max: life,
+            size: (o.size || 5) * (0.6 + rnd() * 0.6),
+            color: o.colors ? o.colors[flr(rnd() * o.colors.length)] : (o.color || '#fff'),
             g: o.gravity == null ? 400 : o.gravity
           });
         }
         if (list.length > 800) list.splice(0, list.length - 800);
       },
-      update: function (dt) {
-        if (Kit.motion.reduced()) { list.length = 0; return; }
-        for (var i = list.length - 1; i >= 0; i--) {
-          var p = list[i];
-          p.life -= dt;
-          if (p.life <= 0) { list.splice(i, 1); continue; }
+      update: dt => {
+        if (isRed()) { list.length = 0; return; }
+        for (let i = list.length - 1; i >= 0; i--) {
+          const p = list[i];
+          if ((p.life -= dt) <= 0) { list.splice(i, 1); continue; }
           p.vy += p.g * dt; p.x += p.vx * dt; p.y += p.vy * dt;
         }
       },
-      draw: function (ctx) {
-        for (var i = 0; i < list.length; i++) {
-          var p = list[i];
-          ctx.globalAlpha = M.max(0, p.life / p.max);
+      draw: ctx => {
+        for (let i = 0; i < list.length; i++) {
+          const p = list[i], h = p.size / 2;
+          ctx.globalAlpha = max(0, p.life / p.max);
           ctx.fillStyle = p.color;
-          ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
+          ctx.fillRect(p.x - h, p.y - h, p.size, p.size);
         }
         ctx.globalAlpha = 1;
       },
-      clear: function () { list.length = 0; }
+      clear: () => { list.length = 0; }
     };
   };
 
-  // Screen shake helper: var shake = Kit.shake(); shake.add(8); shake.update(dt);
-  // then ctx.translate(shake.x, shake.y) while drawing the world.
-  Kit.shake = function () {
-    var s = { x: 0, y: 0, power: 0 };
-    s.add = function (p) { if (!Kit.motion.reduced()) s.power = M.max(s.power, p); };
-    s.update = function (dt) {
-      if (Kit.motion.reduced()) { s.power = s.x = s.y = 0; return; }
-      s.power = M.max(0, s.power - dt * 40);
-      s.x = (M.random() - 0.5) * 2 * s.power;
-      s.y = (M.random() - 0.5) * 2 * s.power;
+  Kit.shake = opts => {
+    let peak = 0, tr = 0;
+    const decay = (opts && opts.decay) || 2.8, s = { x: 0, y: 0, rot: 0, power: 0, trauma: 0 };
+    s.add = p => {
+      if (isRed() || !(p > 0)) return;
+      if (p > peak) peak = p;
+      tr = min(1, max(tr, M.sqrt(max(peak * tr * tr, p) / peak)));
+      s.trauma = tr; s.power = peak * tr * tr;
+    };
+    s.update = dt => {
+      if (isRed() || tr <= 0) { peak = tr = s.trauma = s.power = s.x = s.y = s.rot = 0; return; }
+      tr = max(0, tr - dt * decay);
+      const t2 = tr * tr;
+      s.trauma = tr; s.power = peak * t2;
+      if (!tr) { peak = s.x = s.y = s.rot = 0; return; }
+      s.x = bi() * s.power; s.y = bi() * s.power; s.rot = bi() * t2 * 0.035;
     };
     return s;
   };
 
-  /* ------------------------------------------------------------------ UI */
-  var mkEl = function (t) { return doc.createElement(t); };
-  // Adds the standard round mute button (top-right corner). Also binds the
-  // M key unless opts.key === false.
-  Kit.muteButton = function (opts) {
-    opts = opts || {};
-    var b = mkEl('button');
-    b.className = 'sg-mute';
-    b.type = 'button';
-    b.setAttribute('aria-label', 'كتم الصوت');
-    b.title = opts.key === false ? 'الصوت' : 'الصوت (M)';
-    function paint() {
-      b.textContent = audio.muted ? '🔇' : '🔊'; b.setAttribute('aria-pressed', String(audio.muted));
+  let hitLeft = 0, hitUntil = 0;
+  const clrHit = () => { hitLeft = hitUntil = 0; return false; };
+  const hitstop = sec => {
+    if (isRed()) { clrHit(); return 0; }
+    if (sec > 0) {
+      const s = Kit.clamp(sec, 0, 0.4), u = clock() + s * 1000;
+      if (s > hitLeft) hitLeft = s;
+      if (u > hitUntil) hitUntil = u;
     }
+    return hitstop.active() ? hitLeft : 0;
+  };
+  hitstop.active = () => isRed() || hitLeft <= 0 || (hitUntil && clock() >= hitUntil) ? clrHit() : true;
+  hitstop.tick = dt => {
+    if (isRed() || hitLeft <= 0) return clrHit();
+    hitLeft = max(0, hitLeft - (dt > 0 ? dt : 0));
+    hitUntil = hitLeft ? clock() + hitLeft * 1000 : 0;
+    return true;
+  };
+  hitstop.reset = clrHit;
+  Kit.hitstop = hitstop;
+
+  const rtMap = typeof WeakMap === 'function' ? new WeakMap() : null;
+  Kit.retrigger = (el, cls) => {
+    const cl = el && cls && el.classList;
+    let p = cl && rtMap && rtMap.get(el);
+    if (!cl || (p && p[cls])) return;
+    cl.remove(cls);
+    const raf = win.requestAnimationFrame || (typeof requestAnimationFrame === 'function' && requestAnimationFrame);
+    if (!raf) { cl.add(cls); return; }
+    if (rtMap) { if (!p) rtMap.set(el, p = {}); p[cls] = 1; }
+    raf(() => raf(() => { if (p) delete p[cls]; cl.add(cls); }));
+  };
+
+  /* ------------------------------------------------------------------ UI */
+  const mkEl = t => doc.createElement(t);
+  Kit.muteButton = opts => {
+    opts = opts || {};
+    const b = mkEl(BTN);
+    b.className = 'sg-mute'; b.type = BTN;
+    sa(b, 'aria-label', 'كتم الصوت');
+    b.title = opts.key === false ? 'الصوت' : 'الصوت (M)';
+    const paint = () => { b.textContent = audio.muted ? '🔇' : '🔊'; sa(b, 'aria-pressed', String(audio.muted)); };
     paint();
     audio.onMuteChange(paint);
-    b.addEventListener('click', function (e) { e.stopPropagation(); audio.unlock(); audio.toggleMute(); if (e.detail > 0) b.blur(); });
-    b.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
-    doc.body.appendChild(b);
+    on(b, 'click', e => { stop(e); audio.unlock(); audio.toggleMute(); if (e.detail > 0) b.blur(); });
+    on(b, PD, stop);
+    ap(doc.body, b);
     if (opts.key !== false) {
-      win.addEventListener('keydown', function (e) { if (Kit.isGameKeyEvent(e) && e.code === 'KeyM' && !e.repeat) audio.toggleMute(); });
+      on(win, KD, e => { if (acceptsKeyEvent(e) && e.code === 'KeyM' && !e.repeat) audio.toggleMute(); });
     }
     return b;
   };
 
-  // Keep failed writes visible until the caller confirms a successful save.
-  // A failure shows its message, then folds into a small corner badge that keeps
-  // Retry, so a PC whose storage is blocked is not covered for the whole session.
-  Kit.saveStatus = function (opts) {
+  Kit.saveStatus = opts => {
     opts = opts || {};
-    var panel = mkEl('div'), message = mkEl('span'), retry = mkEl('button');
-    var timer = 0, foldTimer = 0, hasFailed = false, retrying = false;
+    const panel = mkEl('div'), message = mkEl('span'), retry = mkEl(BTN);
+    let timer = 0, foldTimer = 0, hasFailed = false, retrying = false;
     panel.className = 'sg-save-status'; panel.hidden = true;
-    panel.setAttribute('role', 'status'); panel.setAttribute('aria-live', 'polite');
-    retry.type = 'button'; retry.textContent = 'أعد المحاولة'; retry.title = 'تعذّر الحفظ — أعد المحاولة';
-    retry.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
-    retry.addEventListener('click', function (e) {
-      e.stopPropagation();
+    sa(panel, 'role', 'status'); sa(panel, 'aria-live', 'polite');
+    retry.type = BTN; retry.textContent = 'أعد المحاولة'; retry.title = 'تعذّر الحفظ — أعد المحاولة';
+    on(retry, PD, stop);
+    on(retry, 'click', e => {
+      stop(e);
       retrying = true;
       try { if (opts.retry) opts.retry(); } finally { retrying = false; }
       if (e.detail > 0) retry.blur();
     });
-    panel.appendChild(message); panel.appendChild(retry); doc.body.appendChild(panel);
-    function fold(on) {
-      clearTimeout(foldTimer);
-      panel.setAttribute('data-compact', on ? 'true' : 'false');
-      if (!on) foldTimer = setTimeout(function () { fold(true); }, 6000);
-    }
+    ap(panel, message); ap(panel, retry); ap(doc.body, panel);
+    const dc = v => sa(panel, 'data-compact', v);
+    const fold = onF => {
+      ct(foldTimer);
+      dc(onF ? 'true' : 'false');
+      if (!onF) foldTimer = st(() => fold(true), 6000);
+    };
     return {
-      failed: function () {
-        // Autosaves can fail every few seconds; only a new failure or the
-        // child's own Retry unfolds the full message again.
-        var fresh = !hasFailed || retrying;
-        clearTimeout(timer); hasFailed = true; panel.hidden = false; retry.hidden = false;
-        message.textContent = 'تعذّر الحفظ — '; panel.setAttribute('data-state', 'failed');
+      failed: () => {
+        const fresh = !hasFailed || retrying;
+        ct(timer); hasFailed = true; panel.hidden = retry.hidden = false;
+        message.textContent = 'تعذّر الحفظ — '; sa(panel, 'data-state', 'failed');
         if (fresh) fold(false);
       },
-      saved: function () {
+      saved: () => {
         if (!hasFailed) return;
-        clearTimeout(timer); clearTimeout(foldTimer); hasFailed = false; retry.hidden = true;
-        panel.setAttribute('data-compact', 'false');
-        message.textContent = 'تم الحفظ'; panel.setAttribute('data-state', 'saved');
-        timer = setTimeout(function () { panel.hidden = true; }, 2500);
+        ct(timer); ct(foldTimer); hasFailed = false; retry.hidden = true;
+        dc('false');
+        message.textContent = 'تم الحفظ'; sa(panel, 'data-state', 'saved');
+        timer = st(() => { panel.hidden = true; }, 2500);
       }
     };
   };
 
-  // Formats 12345 -> "12,345".
-  // One shared formatter: toLocaleString() builds a new ICU formatter on every call,
-  // which is slow when a HUD formats numbers every frame.
-  var numFmt = (typeof Intl !== 'undefined' && Intl.NumberFormat) ? new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }) : null;
-  Kit.fmt = function (n) { n = M.floor(n); return numFmt ? numFmt.format(n) : n.toLocaleString('en-US'); };
+  const numFmt = (typeof Intl !== 'undefined' && Intl.NumberFormat) ? new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }) : null;
+  Kit.fmt = n => { n = flr(n); return numFmt ? numFmt.format(n) : n.toLocaleString('en-US'); };
 
   win.Kit = Kit;
 })();

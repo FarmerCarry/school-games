@@ -15,8 +15,8 @@ function seeded(seed) {
   return () => { s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; };
 }
 
-// The game's own lift rule (isOnLift in game.js): on a lift means both wheels on it, or it is moving.
-const onLift = m => m.on === 3 || (m.on && (m.st === 1 || m.st === 3));
+// The game's own lift rule (isOnLift in game.js): on a lift means both wheels on it, magnet-held, or moving.
+const onLift = m => m.type === 'platform' && (m.on === 3 || m.onT > 0 || (m.on && (m.st === 1 || m.st === 3)));
 
 // Plays level i to the finish, with the game's own "stuck for 6 s: back to the checkpoint" rule,
 // then `past` more frames (the game rides on for a moment before it shows the results).
@@ -139,15 +139,16 @@ test('Moto Madness the 1-1 tutorial flip works from anywhere on the ramp', () =>
   }
 });
 
-// A short ← tap while holding ↑ can leave the bike in a wheelie against a waiting lift's end wall,
-// with only the rear wheel on it. The lift waits for both wheels, so the bike would stand there
-// for good; the stuck rule must still see it and send the rider back to the checkpoint.
-test('Moto Madness a wheelie into a waiting lift still gets rescued', () => {
-  let t0 = null;
-  const run = ride(16, w => {
-    if (t0 == null && w.bike.x >= 600) t0 = w.time;
-    return { gas: true, brake: false, lean: t0 != null && w.time - t0 < 0.3 ? -1 : 0 };
-  });
-  assert.ok(run.finished, `4-2 with a 0.3 s ← tap at x 600 must finish: ${JSON.stringify(run)}`);
-  assert.ok(run.rescues >= 1, `the bike should have been stuck at the lift: ${JSON.stringify(run)}`);
+// A short ← tap while holding ↑ approaching a waiting lift now triggers the single-wheel
+// magnet inside the center 80%, gently levels the bike, and rides the lift cleanly without stalling.
+test('Moto Madness a wheelie into a waiting lift settles cleanly and finishes without stalling', () => {
+  for (const idx of [12, 16]) {
+    let t0 = null;
+    const run = ride(idx, w => {
+      if (t0 == null && w.bike.x >= 600) t0 = w.time;
+      return { gas: true, brake: false, lean: t0 != null && w.time - t0 < 0.3 ? -1 : 0 };
+    });
+    assert.ok(run.finished, `level ${idx} with a 0.3 s ← tap at x 600 must finish: ${JSON.stringify(run)}`);
+    assert.equal(run.rescues, 0, `level ${idx} should ride the lift cleanly without stuck rescues: ${JSON.stringify(run)}`);
+  }
 });

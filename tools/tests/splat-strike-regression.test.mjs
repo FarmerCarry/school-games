@@ -147,3 +147,39 @@ test('Splat Strike results show the experience gained in Arabic with the number 
   assert.match(xp, /^⁦\+\d+⁩ خبرة$/);
   assert.doesNotMatch(xp, /[A-Za-z]/, 'no English on the results screen');
 });
+
+test('Splat Strike Wave 2: shortened rules, merged ground, active ally, FFA top-3 win, and 1st-fail drag-look', async t => {
+  const page = await game(t, { init: () => {
+    window.__endCalls = [];
+    HTMLCanvasElement.prototype.requestPointerLock = () => Promise.reject(new DOMException('Denied', 'NotAllowedError'));
+  } });
+  const res = await page.evaluate(async () => {
+    const origEnd = Kit.stats.end.bind(Kit.stats);
+    Kit.stats.end = function (outcome, score) { window.__endCalls.push([outcome, score]); return origEnd(outcome, score); };
+    // Team mode: 150s / 20 target, ally bot must not be forced into follow mode
+    __game.start({ mode: 'team', skipCountdown: true });
+    const bots = () => SS.G.ents.filter(e => !e.isPlayer);
+    const teamCfg = { time: SS.G.limit, target: SS.G.target, groundN: SS.G.map.kit.groundData.n,
+      allyFollow: bots().some(b => b.team === 1 && b.bot && b.bot.follow) };
+    // Trigger 1st pointer-lock failure during play: must switch to drag-look immediately without pausing
+    const gl = document.getElementById('gl');
+    gl.dispatchEvent(new MouseEvent('mousedown', { button: 0, clientX: 400, clientY: 250 }));
+    await new Promise(r => setTimeout(r, 20));
+    const afterFail = { paused: __game.state.paused };
+    // FFA mode: 120s / 12 target, finishing 3rd counts as a win
+    __game.start({ mode: 'ffa', skipCountdown: true }); __game.botsFrozen = true;
+    const ffaCfg = { time: SS.G.limit, target: SS.G.target };
+    const fb = bots();
+    fb[0].kills = 10; fb[1].kills = 8; SS.G.player.kills = 5;
+    for (let i = 2; i < fb.length; i++) fb[i].kills = 0;
+    const r = SS.G.results();
+    __game.endNow();
+    runtime.step(5);
+    return { teamCfg, afterFail, ffaCfg, ffaPlace: r.place, ffaWin: r.win, ends: window.__endCalls };
+  });
+  assert.deepEqual(res.teamCfg, { time: 150, target: 20, groundN: 40, allyFollow: false });
+  assert.equal(res.afterFail.paused, false, '1st pointer-lock failure switches to drag-look without pausing');
+  assert.deepEqual(res.ffaCfg, { time: 120, target: 12 });
+  assert.deepEqual([res.ffaPlace, res.ffaWin], [3, 1], 'FFA 3rd place counts as a win');
+  assert.equal(res.ends[res.ends.length - 1][0], 'win');
+});

@@ -12,38 +12,24 @@
 <canvas id="game" tabindex="0"></canvas>
 <div id="ui">
   <section id="scrTitle" class="scr">
-    <div class="panel brand">
+    <div class="title-hero">
       <div class="pill">قلعة الرشاشات المائية</div>
       <h1>معركة البالونات</h1>
-      <div class="diffs" id="diffBar" role="group" aria-label="مستوى الصعوبة">
-        <button type="button" data-diff="easy">سهل</button>
-        <button type="button" data-diff="normal" class="on">متوسط</button>
-        <button type="button" data-diff="hero">بطل</button>
+      <button type="button" id="play1" class="btn go hero-play">▶ العب الآن</button>
+      <div class="panel dock">
+        <div class="diffs" id="diffBar" role="group" aria-label="مستوى الصعوبة">
+          <button type="button" data-diff="easy" class="on">سهل</button>
+          <button type="button" data-diff="normal">متوسط</button>
+          <button type="button" data-diff="hero">بطل</button>
+        </div>
+        <p class="diff-desc" id="diffDesc">درع فقاعة مجاني وحماية من بالونك</p>
+        <div class="sub-menu">
+          <button type="button" id="playAdv" class="btn gold sm">مغامرة الزعماء</button>
+          <button type="button" id="play2" class="btn blue sm">لاعبان</button>
+          <button type="button" id="btnShop" class="btn purple sm">خزانة الأبطال<small id="shopSub">نينجا الماء · العملات 0</small></button>
+        </div>
       </div>
-      <p class="diff-desc" id="diffDesc">معركة متوازنة وسريعة الإيقاع</p>
-      <div class="menu">
-        <button type="button" id="play1" class="btn go">معركة سريعة<small>ابدأ فوراً ضد 3 منافسين</small></button>
-        <button type="button" id="playAdv" class="btn gold">مغامرة الزعماء<small>3 عوالم مفتوحة وزعماء عمالقة</small></button>
-        <button type="button" id="play2" class="btn blue">لاعبان<small>مواجهة أو تعاون على جهاز واحد</small></button>
-        <button type="button" id="btnShop" class="btn purple">خزانة الأبطال<small id="shopSub">نينجا الماء · العملات 0</small></button>
-      </div>
-    </div>
-
-    <div class="panel howto">
-      <h2>طريقة اللعب</h2>
-      <div class="krow"><span>الحركة</span><span><span dir="ltr"><span class="sg-key">WASD</span></span> أو الفأرة</span></div>
-      <div class="krow"><span>رمي بالون</span><span><span dir="ltr"><span class="sg-key">Space</span></span> أو نقر يمين</span></div>
-      <div class="krow"><span>ركل / قذف</span><span dir="ltr"><span class="sg-key">E</span></span></div>
-      <div class="krow"><span>اللاعب 2</span><span dir="ltr"><span class="sg-key">←↑↓→</span> <span class="sg-key">Enter</span></span></div>
-      <div class="krow"><span>إيقاف مؤقت</span><span dir="ltr"><span class="sg-key">P</span></span></div>
-      <div class="toys">
-        <span>بالون إضافي</span>
-        <span>نافورة عملاقة</span>
-        <span>حذاء التيربو</span>
-        <span>قفاز الركل</span>
-        <span>درع الفقاعة</span>
-        <span>سلحفاة نفاثة</span>
-      </div>
+      <div class="keybar">الحركة: <span dir="ltr"><span class="sg-key">WASD</span></span> أو الفأرة · بالون: <span dir="ltr"><span class="sg-key">Space</span></span> أو نقر صندوق · ركل: <span dir="ltr"><span class="sg-key">E</span></span></div>
     </div>
   </section>
 

@@ -40,16 +40,32 @@ const canvasOf = (page, id) => page.evaluate(id => {
   return { width: c.width, antialias: gl ? gl.getContextAttributes().antialias : null };
 }, id);
 
+async function hardwareContext() {
+  const context = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
+  // Simulate an integrated hardware GPU so SwiftShader in headless CI does not pre-trip before frame-drop tests.
+  await context.addInitScript(() => {
+    for (const Ctor of [window.WebGLRenderingContext, window.WebGL2RenderingContext]) {
+      if (!Ctor || !Ctor.prototype) continue;
+      const orig = Ctor.prototype.getParameter;
+      Ctor.prototype.getParameter = function (p) {
+        if (p === 0x1f01 || p === 0x9246) return 'ANGLE (Intel, UHD 620)';
+        return orig.call(this, p);
+      };
+    }
+  });
+  return context;
+}
+
 for (const [slug, game] of Object.entries(GAMES)) {
   test(`${slug}: slow frames switch to light graphics during play, and the next start is light`, async t => {
-    const context = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
+    const context = await hardwareContext();
     t.after(() => context.close());
     const first = await open(context, slug);
     const full = await canvasOf(first.page, game.canvas);
     await first.page.evaluate(`(${game.start})(window.__game)`);
     await first.page.evaluate(() => {
       window.dispatchEvent(new KeyboardEvent('keydown', { code: 'F13' }));
-      for (let i = 0; i < 240; i++) window.Kit.stats.frame(30);
+      for (let i = 0; i < 60; i++) window.Kit.stats.frame(30);
     });
     await first.page.waitForTimeout(300);
     const light = await canvasOf(first.page, game.canvas);
@@ -72,14 +88,14 @@ for (const [slug, game] of Object.entries(GAMES)) {
 }
 
 test('the way back: the notice\'s button restores full graphics and keeps them', async t => {
-  const context = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
+  const context = await hardwareContext();
   t.after(() => context.close());
   const { page, errors } = await open(context, 'road-hopper');
   const full = await canvasOf(page, 'gl');
   await page.evaluate(() => {
     const g = window.__game; g.god(); g.start();
     window.dispatchEvent(new KeyboardEvent('keydown', { code: 'F13' }));
-    for (let i = 0; i < 240; i++) window.Kit.stats.frame(30);
+    for (let i = 0; i < 60; i++) window.Kit.stats.frame(30);
   });
   await page.locator('.sg-gfx-notice button').click();
   assert.equal((await canvasOf(page, 'gl')).width, full.width);
@@ -89,4 +105,16 @@ test('the way back: the notice\'s button restores full graphics and keeps them',
   assert.equal((await canvasOf(other.page, 'gl')).antialias, false, 'other heavy games on this PC still start light');
   assert.deepEqual(errors, []);
   assert.deepEqual(other.errors, []);
+});
+
+test('software WebGL pre-trips light graphics immediately on start without a mid-play notice', async t => {
+  const context = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
+  t.after(() => context.close());
+  const { page, errors } = await open(context, 'road-hopper');
+  const soft = await page.evaluate(() => window.Kit.webgl.isSoftware());
+  assert.equal(soft, true, 'headless CI runs SwiftShader');
+  const info = await canvasOf(page, 'gl');
+  assert.equal(info.antialias, false, 'pre-tripped light mode disables antialiasing immediately');
+  assert.equal(await page.locator('.sg-gfx-notice').count(), 0, 'no mid-play notice when pre-tripped');
+  assert.deepEqual(errors, []);
 });

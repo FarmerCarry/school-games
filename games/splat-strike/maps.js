@@ -71,24 +71,16 @@
   M.spawn = function (x, z, team, y, ffa) { this.spawns.push({ x: x, z: z, y: y || 0, team: team || 0, ffa: !!ffa }); };
   M.pick = function (type, x, z, y) { this.pickups.push({ type: type, x: x, z: z, y: y || 0 }); };
   M.hotspot = function (x, z, y) { this.hot.push({ x: x, z: z, y: y || 0 }); };
-  // ground tiles (1 m) coloured by fn(x,z) -> hex, darkened under decks
+  // ground tiles (1 m) baked into a compact colour grid for a single merged 2-tri mesh
   M.ground = function (fn) {
-    var h = this.half, b = this.b, ao = b.ao;
-    b.ao = false;
-    var k, c, col = [0, 0, 0];
-    for (var z = -h; z < h; z++) {
-      for (var x = -h; x < h; x++) {
-        c = SS.lin(fn(x + 0.5, z + 0.5));
-        k = 1;
-        for (var s = 0; s < this.shades.length; s++) {
-          var S = this.shades[s];
-          if (x + 0.5 > S[0] && x + 0.5 < S[2] && z + 0.5 > S[1] && z + 0.5 < S[3]) k = Math.min(k, S[4]);
-        }
-        col[0] = c[0] * k; col[1] = c[1] * k; col[2] = c[2] * k;
-        b.quad(x, 0, z + 1, x + 1, 0, z + 1, x + 1, 0, z, x, 0, z, col.slice());
-      }
+    var h = this.half, n = h * 2, data = new Uint8Array(n * n * 4), p = 0, sh = this.shades;
+    for (var z = -h; z < h; z++) for (var x = -h; x < h; x++) {
+      var cx = x + 0.5, cz = z + 0.5, c = fn(cx, cz), k = 1;
+      for (var s = 0; s < sh.length; s++) { var S = sh[s]; if (cx > S[0] && cx < S[2] && cz > S[1] && cz < S[3]) k = Math.min(k, S[4]); }
+      var sk = k < 1 ? Math.sqrt(k) : 1;
+      data[p++] = (c >> 16 & 255) * sk | 0; data[p++] = (c >> 8 & 255) * sk | 0; data[p++] = (c & 255) * sk | 0; data[p++] = 255;
     }
-    b.ao = ao;
+    this.groundData = { half: h, n: n, data: data };
   };
   // big flat apron outside the arena (fog hides its edge)
   M.apron = function (col, col2) {

@@ -70,7 +70,7 @@ async function until(page, cond, max = 3600) {
 }
 // Opens a level from the map with a real click on its pebble.
 async function openLevel(page, w, l) {
-  await page.keyboard.press('Enter');
+  await page.locator('#btnTitleMap').click();
   await step(page, 2);
   assert.equal((await state(page)).screen, 'map');
   // Worlds 6-11 are on the map's second page, behind the big arrow.
@@ -91,75 +91,86 @@ async function chase(page, { click = false, max = 400 } = {}) {
   return false;
 }
 
-test('Enter or a click starts; a first visit shows the two picture cards, then the first bubbles', async t => {
+test('Enter or Play starts gameplay immediately with no grip wall; returning saves jump to next level; #btnParty launches instant 60s arcade party', async t => {
   const page = await game(t);
   assert.equal((await state(page)).screen, 'title');
+  assert.equal(await page.locator('#gripImg').getAttribute('src'), null, 'grip-mouse.webp is lazy-loaded only when #scrGrip opens');
   await page.keyboard.press('Enter');
   await step(page);
-  assert.equal((await state(page)).screen, 'grip');
-  assert.equal(await page.locator('#gripImg').getAttribute('src'), 'grip-mouse.webp');
-  await page.keyboard.press('KeyJ');
-  await step(page);
-  assert.equal(await page.locator('#gripImg').getAttribute('src'), 'grip-keys.webp');
-  await page.locator('#gripNext').click();
-  await step(page);
   const s = await state(page);
-  assert.equal(s.screen, 'play'); assert.equal(s.world, 0); assert.equal(s.level, 0); assert.equal(s.mode, 'touch');
+  assert.equal(s.screen, 'play', 'Enter on fresh save launches straight into gameplay');
+  assert.equal(s.world, 0); assert.equal(s.level, 0); assert.equal(s.mode, 'touch');
   assert.equal(s.party, false); assert.equal(s.hits, 0);
-  assert.equal((await page.evaluate(() => __game.save)).grip, true, 'the cards are seen once');
 
-  const again = await game(t, { save: SAVE(0) });
-  await again.locator('#btnPlay').click();
-  await step(again);
-  assert.equal((await state(again)).screen, 'play', 'a click on Play goes straight to the bubbles once the cards were seen');
   const back = await game(t, { save: SAVE(1) });
   await back.locator('#btnPlay').click();
   await step(back);
-  assert.equal((await state(back)).screen, 'map', 'a child with stars picks a level on the map');
+  const bs = await state(back);
+  assert.equal(bs.screen, 'play', 'Play on returning save jumps straight into next open level');
+  assert.equal(bs.world, 1); assert.equal(bs.level, 0);
+
+  const partyPage = await game(t);
+  await partyPage.locator('#btnParty').click();
+  await step(partyPage);
+  const ps = await state(partyPage);
+  assert.equal(ps.screen, 'play'); assert.equal(ps.party, true); assert.ok(ps.tier >= 4, 'instant arcade party starts fast at tier 4+');
 });
 
-test('a click anywhere on the picture cards turns them, but a double click on Play skips none', async t => {
+test('the optional picture cards under #btnHow turn on click-anywhere and can be skipped with X or Esc', async t => {
   const page = await game(t);
-  const play = await page.locator('#btnPlay').boundingBox();
-  await page.mouse.dblclick(play.x + play.width / 2, play.y + play.height / 2);
+  const how = await page.locator('#btnHow').boundingBox();
+  await page.mouse.dblclick(how.x + how.width / 2, how.y + how.height / 2);
   await step(page);
   let s = await state(page);
   assert.equal(s.screen, 'grip'); assert.equal(s.grip, 0, 'the second click of the double click does not turn the first card');
+  assert.equal(await page.locator('#gripImg').getAttribute('src'), 'grip-mouse.webp');
   await step(page, 30);
   await page.mouse.click(100, 650); // the dimmed sea below the card, nowhere near a button
   await step(page);
   assert.equal((await state(page)).grip, 1, 'a click beside the card turns it');
+  assert.equal(await page.locator('#gripImg').getAttribute('src'), 'grip-keys.webp');
   await step(page, 30);
   await page.mouse.click(1180, 300);
   await step(page);
   s = await state(page);
-  assert.equal(s.screen, 'play', 'and the next one starts the first bubbles');
-  assert.equal(s.world, 0); assert.equal(s.level, 0);
-  assert.equal((await page.evaluate(() => __game.save)).grip, true, 'the cards are seen once');
-});
+  assert.equal(s.screen, 'title', 'finishing optional grip cards returns to title');
+  assert.equal((await page.evaluate(() => __game.save)).grip, true);
 
-test('the picture cards can be skipped with the X or Esc', async t => {
   for (const skip of ['x', 'Escape']) {
-    const page = await game(t);
-    await page.keyboard.press('Enter');
-    await step(page);
-    assert.equal((await state(page)).screen, 'grip');
-    if (skip === 'x') await page.locator('#gripSkip').click(); else await page.keyboard.press('Escape');
-    await step(page);
-    assert.equal((await state(page)).screen, 'play', skip + ': straight into the first bubbles');
-    assert.equal((await page.evaluate(() => __game.save)).grip, true, skip + ': the cards are not shown again');
-    const s = await state(page);
-    assert.equal(s.world, 0, skip); assert.equal(s.level, 0, skip);
+    const p2 = await game(t);
+    await p2.locator('#btnHow').click();
+    await step(p2);
+    assert.equal((await state(p2)).screen, 'grip');
+    if (skip === 'x') await p2.locator('#gripSkip').click(); else await p2.keyboard.press('Escape');
+    await step(p2);
+    assert.equal((await state(p2)).screen, 'title', skip + ': returns to title');
   }
 });
 
+test('auto-fast-track boosts experienced kids to Tier 4 when first 3 bubbles pop in under 1.2s each', async t => {
+  const page = await game(t, { save: SAVE(0), dda: { _: { w1: [0.35, 1] } } });
+  await page.locator('#btnPlay').click();
+  await step(page);
+  assert.equal((await state(page)).tier, 2);
+  for (let popped = 0; popped < 3; ) {
+    await until(page, 's.targets.length > 0', 180);
+    const p = await page.evaluate(() => __game.targetPoint(0));
+    if (p) await page.mouse.move(p.x, p.y);
+    await step(page, 4);
+    popped = (await state(page)).hits;
+  }
+  const s = await state(page);
+  assert.equal(s.fastTrack, true, 'fast-track triggered after 3 quick pops');
+  assert.ok(s.tier >= 4, `tier elevated to ${s.tier}`);
+});
+
 test('a double click on a button acts once: its second click never lands on the next screen', async t => {
-  // Worlds 1-3 open: the map's world-3 island and pebbles lie under Play and under the pause card's Map button.
+  // Worlds 1-3 open: double-clicking the title Map button opens the map without clicking through.
   const page = await game(t, { save: SAVE(3) });
-  const play = await page.locator('#btnPlay').boundingBox();
-  await page.mouse.dblclick(play.x + play.width / 2, play.y + 20);
+  const mapBtn = await page.locator('#btnTitleMap').boundingBox();
+  await page.mouse.dblclick(mapBtn.x + mapBtn.width / 2, mapBtn.y + mapBtn.height / 2);
   await step(page, 2);
-  assert.equal((await state(page)).screen, 'map', 'a double click on Play opens the map, not a world-3 level');
+  assert.equal((await state(page)).screen, 'map', 'a double click on Map opens the map');
   await page.locator('.pebble[data-w="0"][data-l="0"]').click();
   await step(page);
   const lv = await state(page);
@@ -326,7 +337,7 @@ test('P and Esc pause and resume; a paused level stays frozen; leaving the windo
 
 test('every row reads right to left: the picture cards\' dots, the party\'s waves, Map then Again', async t => {
   const page = await game(t);
-  await page.keyboard.press('Enter');
+  await page.locator('#btnHow').click();
   await step(page);
   const dots = await page.locator('.grip-dots i').evaluateAll(list => list.map(i => i.getBoundingClientRect().x));
   assert.ok(dots[0] > dots[1], 'the first card\'s dot is on the right');
@@ -341,6 +352,8 @@ test('every row reads right to left: the picture cards\' dots, the party\'s wave
   // The pause card keeps the Map and Again buttons where the result card has them.
   const box = id => page.locator('#' + id).boundingBox();
   await page.keyboard.press('Escape');
+  await step(page, 2);
+  await page.keyboard.press('Enter');
   await step(page, 2);
   await page.keyboard.press('KeyP');
   await step(page);
@@ -361,7 +374,7 @@ test('stars and unlocks are saved at once and survive a reload', async t => {
   await page.reload();
   await page.waitForFunction(() => window.__game && window.bb.step);
   assert.ok((await page.evaluate(() => __game.save)).stars[0][0] >= 1);
-  await page.keyboard.press('Enter');
+  await page.locator('#btnTitleMap').click();
   await step(page, 2);
   assert.equal((await state(page)).screen, 'map');
   assert.equal(await page.locator('.pebble[data-w="0"][data-l="1"]').evaluate(b => b.classList.contains('next') && !b.classList.contains('locked')), true, 'level 2 is open');
@@ -371,7 +384,7 @@ test('stars and unlocks are saved at once and survive a reload', async t => {
   const broken = await game(t, { save: { stars: 'x', best: [-1], color: 99 } });
   await broken.keyboard.press('Enter');
   await step(broken);
-  assert.equal((await state(broken)).screen, 'grip');
+  assert.equal((await state(broken)).screen, 'play');
 });
 
 test('the mute button and M mute every sound and remember it', async t => {
@@ -402,9 +415,7 @@ test('reduced motion turns off screen shake; full motion shakes on a pop', async
 
 test('the idle hand shows the move after a few seconds and repeats while the child waits', async t => {
   const page = await game(t, { save: SAVE(0, { stars: [[1, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]] }) });
-  await page.keyboard.press('Enter');
-  await step(page, 2);
-  await page.locator('.pebble[data-w="0"][data-l="0"]').click();
+  await openLevel(page, 0, 0);
   assert.ok(await until(page, 's.ghost', 60 * 3), 'the first hint comes quickly the first time');
   assert.ok(await until(page, '!s.ghost', 60 * 4));
   assert.ok(await until(page, 's.ghost', 60 * 7), 'and it comes back about 6 s later');
@@ -503,7 +514,7 @@ const at = (page, x, y) => page.evaluate(([x, y]) => __game.point(x, y), [x, y])
 test('a five-world save opens world 6 on the map\'s second page; the arrows and ← → turn the pages', async t => {
   const page = await game(t, { save: SAVE(5) });
   assert.equal((await page.evaluate(() => __game.save)).stars.length, 11, 'an old save grows to eleven worlds');
-  await page.keyboard.press('Enter');
+  await page.locator('#btnTitleMap').click();
   await step(page, 2);
   let s = await state(page);
   assert.equal(s.screen, 'map'); assert.equal(s.mapPage, 1, 'the map opens where the next level is');

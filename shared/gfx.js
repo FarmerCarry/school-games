@@ -7,8 +7,9 @@
  *   gfx.set(light)  the child's choice, kept for this game
  *
  * It turns on by itself when engaged round play (the frames Kit.stats.frame and Kit.loop
- * count) is not smooth: more than 15 percent of frames over 20 ms in two 120-frame windows
- * in a row; stalls over 250 ms are left out. A PC that keeps 60 fps never switches. Then
+ * count) is not smooth: more than 15 percent of frames over 20 ms in a 60-frame window;
+ * stalls over 250 ms are left out. Software WebGL renderers (Kit.webgl.isSoftware())
+ * pre-trip immediately unless forced or overridden. A PC that keeps 60 fps never switches. Then
  * apply(true, 'auto') changes what can change during play, 'sg:<slug>:gfx' remembers it
  * for the next start, 'sg:site:gfx-light' makes the other heavy games on this PC start
  * light too, and a short notice offers the way back ('full', never overruled for that game).
@@ -18,7 +19,7 @@
   'use strict';
   var Kit = window.Kit, doc = document;
   if (!Kit) return;
-  var WINDOW = 120, SLOW_MS = 20, SLOW_SHARE = 0.15, notice = null;
+  var WINDOW = 60, SLOW_MS = 20, SLOW_SHARE = 0.15, notice = null;
 
   Kit.gfx = function (slug, opts) {
     opts = opts || {};
@@ -27,8 +28,11 @@
     var forced = /[?&]lq\b/.test(q) ? 'light' : /[?&]hq\b/.test(q) ? 'full' : null;
     var saved = own.get('gfx', null);
     if (saved !== 'light' && saved !== 'full') saved = null;
-    var g = { light: forced ? forced === 'light' : saved ? saved === 'light' : site.get('gfx-light', false) === true };
-    var n = 0, slow = 0, bad = 0;
+    var sv = site.get('gfx-light', false);
+    var siteLight = sv === true || sv === 1 || sv === '1';
+    var soft = !!(Kit.webgl && typeof Kit.webgl.isSoftware === 'function' && Kit.webgl.isSoftware());
+    var g = { light: forced ? forced === 'light' : saved ? saved === 'light' : (siteLight || soft) };
+    var n = 0, slow = 0;
     function change(light, why) {
       Kit._frame = null;
       if (g.light === light) return;
@@ -47,9 +51,9 @@
       n++;
       if (ms > SLOW_MS) slow++;
       if (n < WINDOW) return;
-      bad = slow > WINDOW * SLOW_SHARE ? bad + 1 : 0;
+      var bad = slow > WINDOW * SLOW_SHARE;
       n = slow = 0;
-      if (bad < 2) return;
+      if (!bad) return;
       own.set('gfx', 'light');
       site.set('gfx-light', true);
       change(true, 'auto');

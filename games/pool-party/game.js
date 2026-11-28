@@ -272,7 +272,7 @@
       phase: 'aim', aim: 0, power: 0, drag: null, spinX: 0, spinY: 0, legal: [], tray: [], potAnims: [], banner: null,
       stats: { pots: [0, 0], fouls: [0, 0], shots: [0, 0] }, coinsEarned: 0, cpu: null, timeScale: 1, zoom: 1, zx: P.CX, zy: P.CY,
       shotPots: [], overT: -1, rollT: 0, fineHold: 0, lastTick: 0, strike: null, cueAlpha: 1, hover: false, placeOk: true,
-      comboStreak: 0, tipT: 0
+      comboStreak: 0, tipT: 0, mini: false, pullCue: null
     };
   }
 
@@ -283,10 +283,11 @@
 
   function newMatch(kind, oppId) {
     G = baseSession(kind);
-    G.st = P.rack();
+    if (kind === 'cpu') G.opp = oppById(oppId);
+    G.mini = !!(G.opp && G.opp.id === 'easy');
+    G.st = P.rack(null, G.mini);
     wireState(G.st);
     if (kind === 'cpu') {
-      G.opp = oppById(oppId);
       G.players = [{ name: 'أنت', avatar: 'you', cpu: null }, { name: G.opp.name, fem: !!G.opp.fem, avatar: G.opp.avatar, cpu: G.opp.id }];
     } else if (kind === 'pvp') {
       G.players = [{ name: 'اللاعب 1', avatar: 'you', cpu: null }, { name: 'اللاعب 2', avatar: 'p2', cpu: null }];
@@ -462,6 +463,7 @@
   function updateGame(dt) {
     if (G.banner) { G.banner.t += dt; if (G.banner.t > G.banner.dur) G.banner = null; }
     if (G.say) { G.say.t += dt; if (G.say.t > 2.4) G.say = null; }
+    if (G.pullCue) { G.pullCue.t += dt; if (G.pullCue.t > G.pullCue.dur) G.pullCue = null; }
     // sprite squash decay
     for (var i = 0; i < sprites.length; i++) if (sprites[i].sq) { sprites[i].sq *= Math.pow(0.0005, dt); if (sprites[i].sq < 0.005) sprites[i].sq = 0; }
     // pot animations
@@ -617,17 +619,19 @@
     var prevPow = G.power;
     if (d.type === 'shot') {
       G.power = clamp(Kit.dist(mx, my, d.x0, d.y0) / 250, 0, 1);
+      if (G.power >= 0.03) G.pullCue = null;
       if (ptr.right) { G.drag = null; G.power = 0; return; }
-      if (!ptr.down) release();
+      if (!ptr.down) release('shot');
     } else if (d.type === 'bar') {
       G.power = clamp((my - d.y0) / (BAR.h * 0.8), 0, 1);
+      if (G.power >= 0.03) G.pullCue = null;
       if (ptr.right) { G.drag = null; G.power = 0; return; }
-      if (!ptr.down) release();
+      if (!ptr.down) release('bar');
     } else if (d.type === 'key') {
       d.t += dt;
       var ph = (d.t / 1.3) % 2; G.power = ph < 1 ? ph : 2 - ph;
       G.power = Math.max(0.02, G.power);
-      if (!Kit.keys.down(d.code)) release();
+      if (!Kit.keys.down(d.code)) release('key');
     }
     if (G.drag && Math.floor(G.power * 10) !== Math.floor(prevPow * 10)) SFX.tick(G.power);
   }
@@ -659,9 +663,20 @@
     return best;
   }
 
-  function release() {
+  function release(kind) {
     G.drag = null;
-    if (G.power < 0.03) { G.power = 0; return; }
+    if (G.power < 0.03) {
+      G.power = 0;
+      if (kind === 'shot' || kind === 'bar') {
+        var cue = P.ball(G.st, 0);
+        if (cue && cue.on) {
+          G.pullCue = { t: 0, dur: 1.5, x: cue.x, y: cue.y, ang: G.aim };
+          float('اسحب للخلف ثم اترك!', clamp(cue.x, P.TX0 + 140, P.TX1 - 140), Math.max(P.TY0 + 44, cue.y - 46), '#ffe45c', 26, 1.35);
+        }
+      }
+      return;
+    }
+    G.pullCue = null;
     strike(G.aim, speedFromPower(G.power), G.spinX, G.spinY);
   }
 
@@ -689,19 +704,19 @@
         } else { c.stage = 'aim'; c.t = 0; c.a0 = G.aim; }
       }
     } else if (c.stage === 'place') {
-      var k = Math.min(1, c.t / 0.5), e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+      var k = Math.min(1, c.t / 0.25), e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
       cue.x = c.from.x + (c.res.place.x - c.from.x) * e; cue.y = c.from.y + (c.res.place.y - c.from.y) * e;
       if (k >= 1) { SFX.place(); ring(cue.x, cue.y, '#fff', R, R * 2.5, 0.3); c.stage = 'aim'; c.t = 0; c.a0 = G.aim; }
     } else if (c.stage === 'aim') {
-      var k2 = Math.min(1, c.t / 0.7), e2 = 1 - Math.pow(1 - k2, 3);
+      var k2 = Math.min(1, c.t / 0.35), e2 = 1 - Math.pow(1 - k2, 3);
       var da = Math.atan2(Math.sin(c.res.angle - c.a0), Math.cos(c.res.angle - c.a0));
       G.aim = c.a0 + da * e2;
       G.spinX = c.res.spinX; G.spinY = c.res.spinY;
-      if (k2 >= 1 && c.t > 0.95) { c.stage = 'pull'; c.t = 0; }
+      if (k2 >= 1 && c.t > 0.45) { c.stage = 'pull'; c.t = 0; }
     } else if (c.stage === 'pull') {
       var target = powerFromSpeed(c.res.speed);
-      G.power = target * Math.min(1, c.t / 0.45);
-      if (c.t > 0.6) {
+      G.power = target * Math.min(1, c.t / 0.22);
+      if (c.t > 0.3) {
         G.aim = c.res.angle; strike(c.res.angle, c.res.speed, c.res.spinX, c.res.spinY);
         if (G.kind === 'cpu') Kit.stats.busy(); // the child watches the CPU shot
       }
@@ -769,7 +784,8 @@
       startTurn();
       if (res.assign) {
         var mine = G.kind === 'cpu' && human ? 'كراتك: ' : (name + ': ');
-        banner(mine + (res.assign === 'solid' ? 'السادة!' : 'المخطّطة!'), res.assign === 'solid' ? 'الكرات من 1 إلى 7' : 'الكرات من 9 إلى 15', '#ffe45c', 1.8);
+        var rng = res.assign === 'solid' ? (G.mini ? 'الكرات من 1 إلى 3' : 'الكرات من 1 إلى 7') : (G.mini ? 'الكرات من 9 إلى 11' : 'الكرات من 9 إلى 15');
+        banner(mine + (res.assign === 'solid' ? 'السادة!' : 'المخطّطة!'), rng, '#ffe45c', 1.8);
       } else if (G.legal.length === 1 && G.legal[0] === 8) {
         banner('الآن الكرة 8!', 'أدخل الكرة 8 لتفوز!', '#ffe45c', 1.8);
       } else if (G.comboStreak >= 3 && human) {
@@ -1093,6 +1109,21 @@
     }
     var skin = G.players[G.turn].cpu ? (G.turn === 1 && G.kind === 'cpu' ? cpuCue() : 'classic') : save.cue;
     Art.drawCue(ctx, cue.x, cue.y, G.aim, gap, skin, alpha);
+    if (G.pullCue && G.phase === 'aim' && !G.players[G.turn].cpu) {
+      var pc = G.pullCue, pk = pc.t / pc.dur;
+      var fade = pk > 0.72 ? (1 - pk) / 0.28 : 1;
+      var pulse = (pc.t * 1.6) % 1;
+      var ba = G.aim + Math.PI, bx = Math.cos(ba), by = Math.sin(ba);
+      var s0 = R + 22, s1 = s0 + 26 + pulse * 58;
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, fade * 0.95);
+      ctx.strokeStyle = '#ffe45c'; ctx.lineWidth = 4.5; ctx.lineCap = 'round';
+      ctx.setLineDash([8, 6]);
+      ctx.beginPath(); ctx.moveTo(cue.x + bx * s0, cue.y + by * s0); ctx.lineTo(cue.x + bx * s1, cue.y + by * s1); ctx.stroke();
+      ctx.setLineDash([]);
+      arrowHead(cue.x + bx * s1, cue.y + by * s1, ba, '#ffe45c');
+      ctx.restore();
+    }
   }
   function cpuCue() { return G.opp.id === 'hard' ? 'gold' : G.opp.id === 'medium' ? 'ocean' : 'candy'; }
 
@@ -1217,10 +1248,13 @@
     ctx.fillStyle = g ? '#2a1a00' : '#fff'; ctx.textAlign = 'center';
     ctx.fillText(label, cx + tw / 2, y + 55.5);
     // balls row
-    var list = g === 'solid' ? [1, 2, 3, 4, 5, 6, 7] : g === 'stripe' ? [9, 10, 11, 12, 13, 14, 15] : null;
-    for (var k = 0; k < 8; k++) {
+    var solids = G.mini ? [1, 2, 3] : [1, 2, 3, 4, 5, 6, 7];
+    var stripes = G.mini ? [9, 10, 11] : [9, 10, 11, 12, 13, 14, 15];
+    var cnt = solids.length;
+    var list = g === 'solid' ? solids : g === 'stripe' ? stripes : null;
+    for (var k = 0; k <= cnt; k++) {
       var bx = mirror ? tx - 12 - k * 30 : tx + 12 + k * 30, by = y + 84;
-      if (k === 7) {
+      if (k === cnt) {
         var onEight = list && Rules.remaining(G.st, g) === 0;
         Art.drawMiniBall(ctx, bx, by, 11, 8, onEight ? 1 : 0.25);
         if (onEight && active) { ctx.strokeStyle = '#ffe45c'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(bx, by, 14 + Math.sin(time * 8) * 1.5, 0, 6.283); ctx.stroke(); }
@@ -1230,7 +1264,7 @@
         ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.beginPath(); ctx.arc(bx, by, 11, 0, 6.283); ctx.fill();
         continue;
       }
-      var n = list[k], bb = P.ball(G.st, n), down = !bb.on;
+      var n = list[k], bb = P.ball(G.st, n), down = !bb || !bb.on;
       if (down) {
         ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.lineWidth = 2;
         ctx.beginPath(); ctx.arc(bx, by, 10, 0, 6.283); ctx.stroke();
@@ -1581,7 +1615,7 @@
     if (G.kind === 'cpu') {
       t.textContent = humanWon ? 'فزت!' : winTxt(win);
       t.className = humanWon ? '' : 'lose';
-      var left = G.groups[0] ? Rules.remaining(G.st, G.groups[0]) : 7;
+      var left = G.groups[0] ? Rules.remaining(G.st, G.groups[0]) : (G.mini ? 3 : 7);
       $('oSub').textContent = humanWon ? (G.opp.id === 'hard' ? 'تفوّقت على القرش نفسه!' : 'هزمت ' + G.opp.name + '!') :
         (G.loseReason ? G.loseReason + ' ' : '') + (left <= 2 ? 'كدت تفوز! مباراة أخرى؟' : 'ستفوز في المرة القادمة!');
     } else {

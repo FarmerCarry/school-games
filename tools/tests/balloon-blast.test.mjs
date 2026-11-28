@@ -231,3 +231,27 @@ test('pause freezes elapsed time, resume continues, restart resets round/freeze/
   assert.deepEqual(res.failedState, { shown: true, state: 'failed' });
   assert.equal(res.savedState, 'saved');
 });
+
+test('fresh boot defaults to easy difficulty and left-clicking an adjacent crate drops a balloon', async t => {
+  const page = await open(t);
+  const res = await page.evaluate(() => {
+    const easyActive = document.querySelector('#diffBar button[data-diff="easy"]').classList.contains('on');
+    document.getElementById('play1').click();
+    const p1 = __game.world.players[0];
+    const defaults = { shield: p1.shield, selfMercy: p1.selfMercy, roundKey: bb.stats[0][1] };
+    __game.world.freeze = 0;
+    const here = BBEngine.cellOf(p1);
+    const ac = here.c + 1, ar = here.r;
+    __game.world.grid[ar * BBData.COLS + ac] = BBData.CRATE;
+    const cv = document.getElementById('game'), rect = cv.getBoundingClientRect();
+    const ox = (1280 - BBData.COLS * BBData.TILE) / 2, oy = 96;
+    const cx = rect.left + (ox + (ac + 0.5) * BBData.TILE) * (rect.width / 1280);
+    const cy = rect.top + (oy + (ar + 0.5) * BBData.TILE) * (rect.height / 720);
+    cv.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, clientX: cx, clientY: cy }));
+    bb.step(2);
+    return { easyActive, defaults, balloons: __game.world.balloons.length };
+  });
+  assert.equal(res.easyActive, true);
+  assert.deepEqual(res.defaults, { shield: 1, selfMercy: true, roundKey: 'qb-easy' });
+  assert.equal(res.balloons, 1, 'left-clicking an adjacent crate drops a balloon');
+});

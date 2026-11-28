@@ -50,13 +50,14 @@ function mockGl({ renderer = 'ANGLE (Intel, UHD 620)', unmasked = '', hasFence =
   return gl;
 }
 
-function harness({ glFactory, dpr = 2, clock = { now: 0 } } = {}) {
+function harness({ glFactory, dpr = 2, clock = { now: 0 }, stored = {} } = {}) {
   const elements = new Map();
   const bodyChildren = [];
   const makeEl = (tag, id = '') => {
     const listeners = {}, attrs = {};
     const el = {
       tagName: tag.toUpperCase(), id, className: '', hidden: false, textContent: '', children: [],
+      width: 0, height: 0,
       setAttribute(k, v) { attrs[k] = String(v); },
       getAttribute(k) { return attrs[k]; },
       appendChild(child) { this.children.push(child); if (child.id) elements.set(child.id, child); return child; },
@@ -66,7 +67,15 @@ function harness({ glFactory, dpr = 2, clock = { now: 0 } } = {}) {
         if (list) { const i = list.indexOf(fn); if (i >= 0) list.splice(i, 1); }
       },
       emit(type, ev = {}) { for (const fn of (listeners[type] || []).slice()) fn(ev); },
-      getContext(kind) { return glFactory ? glFactory(kind) : null; }
+      getContext(kind) {
+        if (kind === '2d') {
+          return {
+            createRadialGradient: () => ({ addColorStop() {} }),
+            fillRect() {}
+          };
+        }
+        return glFactory ? glFactory(kind) : null;
+      }
     };
     if (id) elements.set(id, el);
     return el;
@@ -81,11 +90,16 @@ function harness({ glFactory, dpr = 2, clock = { now: 0 } } = {}) {
     getElementById: id => elements.get(id) || null,
     addEventListener() {}
   };
+  const values = new Map(Object.entries(stored));
   const timers = [], rafs = [];
   const window = {
     document, parent: null, devicePixelRatio: dpr,
     performance: { now: () => clock.now },
-    localStorage: { getItem: () => null, setItem() {}, removeItem() {} },
+    localStorage: {
+      getItem: k => values.get(k) ?? null,
+      setItem: (k, v) => values.set(k, String(v)),
+      removeItem: k => values.delete(k)
+    },
     addEventListener() {},
     matchMedia: () => ({ matches: false, addEventListener() {}, addListener() {} }),
     requestAnimationFrame(fn) { rafs.push(fn); return rafs.length; },
@@ -242,6 +256,99 @@ test('boot runs once via rAF + setTimeout(0) or fallback timer when rAF is block
   // Simulate test-offline.mjs where rAF never fires: fallback timer still boots once.
   h2.timers.filter(t => !t.cleared).forEach(t => t.fn());
   assert.equal(runs2, 1);
+});
+
+test('pixelRatio and createRenderer auto-protect software GPUs and respect sg:site:gfx-light', () => {
+  const softH = harness({ glFactory: () => mockGl({ renderer: 'ANGLE', unmasked: 'Google SwiftShader' }), dpr: 2 });
+  assert.equal(softH.webgl.pixelRatio(), 0.75, 'auto-detects software GPU when opts.software is omitted');
+
+  for (const val of ['1', 'true']) {
+    const h = harness({ glFactory: () => mockGl({ renderer: 'Intel UHD' }), dpr: 2, stored: { 'sg:site:gfx-light': val } });
+    assert.equal(h.webgl.pixelRatio(), 0.75, 'honors sg:site:gfx-light=' + val);
+    assert.equal(h.webgl.pixelRatio({ gfx: { light: false } }), 1.5, 'explicit gfx.light=false overrides site flag');
+    assert.equal(h.webgl.pixelRatio({ light: false }), 1.5, 'explicit opts.light=false overrides site flag');
+    let capturedParams = null, setRatio = null;
+    const gl = mockGl({ renderer: 'Intel UHD' });
+    h.window.THREE = {
+      WebGLRenderer: class {
+        constructor(p) { capturedParams = p; }
+        setPixelRatio(r) { setRatio = r; }
+        getContext() { return gl; }
+      }
+    };
+    const res = h.webgl.createRenderer(h.makeEl('canvas'));
+    assert.equal(res.software, false);
+    assert.equal(res.light, true);
+    assert.equal(res.ratio, 0.75);
+    assert.equal(setRatio, 0.75);
+    assert.equal(capturedParams.antialias, false, 'disables MSAA under sg:site:gfx-light=' + val);
+  }
+});
+
+test('uploadRange, shrinkCount, and blobShadowPool skip 0-count uploads and write compact instanced shadows', () => {
+  const h = harness();
+  const attr = { updateRanges: [], needsUpdate: false };
+  h.webgl.uploadRange(attr, 0);
+  assert.equal(attr.needsUpdate, false, 'skips GPU upload when count === 0');
+  assert.equal(attr.updateRanges.length, 0);
+  h.webgl.uploadRange(attr, 48);
+  assert.equal(attr.needsUpdate, true);
+  assert.equal(attr.updateRanges.length, 1);
+  assert.deepEqual({ ...attr.updateRanges[0] }, { start: 0, count: 48 });
+  const rngRef = attr.updateRanges[0];
+  attr.needsUpdate = false;
+  h.webgl.uploadRange(attr, 32);
+  assert.equal(attr.updateRanges[0], rngRef, 'reuses range object without allocating');
+  assert.equal(attr.updateRanges[0].count, 32);
+
+  const mesh = { count: 10, instanceMatrix: { count: 8, updateRanges: [], needsUpdate: false } };
+  assert.equal(h.webgl.shrinkCount(mesh, 0), 0);
+  assert.equal(mesh.count, 0);
+  assert.equal(mesh.instanceMatrix.needsUpdate, false, 'shrinkCount(0) skips GPU upload');
+  assert.equal(h.webgl.shrinkCount(mesh, 12), 8, 'clamps to capacity');
+  assert.equal(mesh.count, 8);
+  assert.equal(mesh.instanceMatrix.needsUpdate, true);
+  assert.equal(mesh.instanceMatrix.updateRanges[0].count, 128);
+
+  const added = [], removed = [];
+  let disposed = 0, rotated = 0, usage = null;
+  h.window.THREE = {
+    DynamicDrawUsage: 35048,
+    CanvasTexture: class { constructor(c) { this.image = c; } dispose() { disposed++; } },
+    PlaneGeometry: class { rotateX(a) { rotated = a; } dispose() { disposed++; } },
+    MeshBasicMaterial: class { constructor(o) { this.opts = o; } dispose() { disposed++; } },
+    InstancedMesh: class {
+      constructor(g, m, n) {
+        this.geometry = g; this.material = m; this.count = n;
+        this.instanceMatrix = {
+          count: n, array: new Float32Array(n * 16), updateRanges: [], needsUpdate: false,
+          setUsage(u) { usage = u; }
+        };
+      }
+    }
+  };
+  const scene = { add: m => added.push(m), remove: m => removed.push(m) };
+  const pool = h.webgl.blobShadowPool(scene, 4, { opacity: 0.5, yOffset: 0.02 });
+  assert.equal(added.length, 1);
+  assert.equal(pool.mesh.count, 0);
+  assert.equal(usage, 35048);
+  assert.ok(Math.abs(rotated + Math.PI / 2) < 1e-6);
+  assert.equal(pool.commit(), 0);
+  assert.equal(pool.mesh.instanceMatrix.needsUpdate, false);
+  assert.equal(pool.add(3, 0, -5, 2, 1.5), 0);
+  assert.equal(pool.add(1, 0, 2, 1, 1, Math.PI / 2), 1);
+  assert.equal(pool.commit(), 2);
+  assert.equal(pool.mesh.count, 2);
+  assert.equal(pool.mesh.instanceMatrix.needsUpdate, true);
+  assert.equal(pool.mesh.instanceMatrix.updateRanges[0].count, 32);
+  const a = pool.mesh.instanceMatrix.array;
+  assert.equal(a[0], 2); assert.equal(a[10], 1.5); assert.equal(a[12], 3); assert.ok(Math.abs(a[13] - 0.02) < 1e-6); assert.equal(a[14], -5);
+  assert.ok(Math.abs(a[16]) < 1e-6 && Math.abs(a[18] + 1) < 1e-6 && Math.abs(a[24] - 1) < 1e-6, 'writes Y rotation cleanly');
+  pool.clear();
+  assert.equal(pool.mesh.count, 0);
+  pool.dispose();
+  assert.equal(removed.length, 1);
+  assert.equal(disposed, 3);
 });
 
 test('minified shared/webgl.js stays compact and fits webglBytes budget', () => {

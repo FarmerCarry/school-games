@@ -302,6 +302,7 @@
 
   /* ---------------------------------------------------------- level select */
   function goSelect(idx) {
+    closeRound('quit', G.s && G.L ? pct(G.s) : 0);
     scene = 'select'; show('select');
     if (idx != null) sel = idx;
     else {
@@ -525,6 +526,7 @@
 
   /* ============================================================ GAMEPLAY */
   function startLevel(li, practice) {
+    closeRound('quit', G.s && G.L ? pct(G.s) : 0);
     scene = 'play';
     G.li = li; G.L = LEVELS[li]; G.practice = practice; G.cps = []; G.sessionAtt = 0;
     G.paused = false; G.won = false; G.winShown = false; G.tutFails = 0; G.tutAgain = false;
@@ -549,6 +551,8 @@
     // a checkpoint that is no longer safe at this try's settings is dropped, never respawned into
     while (G.cps.length && !practiceSafe(G.cps[G.cps.length - 1].s)) G.cps.pop();
     var fromCp = G.cps.length > 0;
+    // Keep a single telemetry round open across checkpoint respawns; close & reopen only when restarting from 0%.
+    if (!fromCp && G.roundOpen) closeRound(G.dead ? 'lose' : 'quit', G.s ? pct(G.s) : 0);
     if (fromCp) s = BD.clone(G.cps[G.cps.length - 1].s);
     else s = BD.newState(L);
     G.flagNext = 0; G.flagWant = false;
@@ -567,9 +571,9 @@
     // a jump key still held from the last try (or the menu) does nothing until it is let go
     G.latch = !G.auto && jumpHeld();
     setupTutorial(s);
-    // play stats: a played try is one round; it starts when the run moves (after the press a
-    // waiting run asks for), so an unattended game reports nothing. Autoplay never reports.
-    G.roundOpen = false;
+    // play stats: one round spans checkpoint respawns; a fresh run starts when it moves
+    // (after the press a waiting run asks for), so an unattended game reports nothing.
+    if (!fromCp) G.roundOpen = false;
     if (!G.wait) startRound();
     checkUnlocks().forEach(function (u) { toast(itemName(u)); });
   }
@@ -617,8 +621,11 @@
     return { text: G.L.def.tutorial[G.tutStep].text, now: s.x >= w.a };
   }
 
-  // play stats: one round per try that starts moving; the tutorial reports its start once per
-  // showing and its end when its last step is passed (tutorialProgress).
+  // play stats: one round stays open across checkpoint respawns; the tutorial reports its
+  // start once per showing and its end when its last step is passed (tutorialProgress).
+  function closeRound(outcome, score) {
+    if (!G.auto && G.roundOpen) { G.roundOpen = false; Kit.stats.end(outcome, score); }
+  }
   function startRound() {
     if (G.auto || G.roundOpen) return;
     G.roundOpen = true;
@@ -679,7 +686,8 @@
       else G.tutFails = 0;
     }
     var p = pct(s);
-    if (!G.auto && G.roundOpen) { G.roundOpen = false; Kit.stats.end('lose', p); } // score: % of the level reached
+    // Keep the round open across checkpoint respawns instead of logging a full 'lose' on every checkpoint death.
+    if (!G.cps.length) closeRound('lose', p); // score: % of the level reached
     var key = G.practice ? 'bestP' : 'best';
     if (p > (save[key][L.id] || 0)) {
       save[key][L.id] = p; persist(key);
@@ -773,7 +781,7 @@
   function winLevel() {
     var L = G.L, s = G.s;
     var nextWasLocked = G.li + 1 < LEVELS.length && !levelUnlocked(G.li + 1);
-    if (!G.auto && G.roundOpen) { G.roundOpen = false; Kit.stats.end('win', 100); }
+    closeRound('win', 100);
     G.won = true; G.wonT = 0; G.winX = s.x; G.fireT = 0;
     save.total.jumps += s.jumps - G.jumpsAtStart; G.jumpsAtStart = s.jumps; persist('total');
     reportTry(true);

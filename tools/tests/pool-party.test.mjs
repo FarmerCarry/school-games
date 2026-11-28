@@ -411,3 +411,36 @@ test('an 8 potted on the break is respotted clear of a cue ball resting on the f
   assert.deepEqual([gap.phase, gap.on, gap.cueOnSpot], ['cpu', true, true], 'the shot ended and the 8 is back on the table');
   assert.ok(gap.gap >= 2 * 12, `the 8 must not overlap the cue ball: ${gap.gap.toFixed(1)} px apart`);
 });
+
+test('easy CPU uses nerfed AI + 7-ball mini-rack (medium stays 15-ball) and short click shows pull-back cue', async t => {
+  const page = await game(t);
+  await startCpuMatch(page);
+  const easy = await page.evaluate(() => ({
+    ai: { noise: PoolAI.LEVELS.easy.noise, mistake: PoolAI.LEVELS.easy.mistake, simTop: PoolAI.LEVELS.easy.simTop },
+    balls: __game.balls().map(b => b[0]).sort((a, b) => a - b)
+  }));
+  assert.deepEqual(easy.ai, { noise: 0.11, mistake: 0.55, simTop: 1 });
+  assert.deepEqual(easy.balls, [0, 1, 2, 3, 8, 9, 10, 11], 'vs-easy uses a 7-ball mini-rack');
+
+  // Short (<7.5px) click on the table shows the pull-back visual cue instead of silently aborting
+  await page.evaluate(() => stepGame(2));
+  await page.mouse.move(640, 360);
+  await page.mouse.down();
+  await page.evaluate(() => stepGame(1));
+  await page.mouse.up();
+  const drawn = await page.evaluate(() => {
+    const texts = [], ctx = document.getElementById('game').getContext('2d'), original = ctx.fillText;
+    ctx.fillText = function (text, ...args) { texts.push(text); return original.call(this, text, ...args); };
+    try { play(2); } finally { ctx.fillText = original; }
+    return texts.join('\n');
+  });
+  assert.match(drawn, /اسحب للخلف ثم اترك/);
+
+  // Medium CPU still uses the full 15-ball rack
+  await clickControl(page, '#pauseBtn');
+  await clickControl(page, '#pMenu');
+  await page.locator('#opps .opp').nth(1).click();
+  await clickControl(page, '#btnPlay');
+  await page.evaluate(() => stepGame(2));
+  assert.equal(await page.evaluate(() => __game.balls().length), 16, 'medium keeps the full 15-ball rack');
+});

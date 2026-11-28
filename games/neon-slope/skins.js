@@ -30,10 +30,11 @@
   var BALLS = [
     { id: 'neon', name: 'قلب النيون', price: 0, glow: '#3ff0ff', draw: function (g) {
       fill(g, '#0b1236');
-      g.strokeStyle = '#3ff0ff'; g.lineWidth = 5; g.shadowColor = '#3ff0ff'; g.shadowBlur = 10;
-      for (var i = 0; i <= 8; i++) { g.beginPath(); g.moveTo(i * 32, 0); g.lineTo(i * 32, H); g.stroke(); }
-      for (var j = 1; j < 4; j++) { g.beginPath(); g.moveTo(0, j * 32); g.lineTo(W, j * 32); g.stroke(); }
-      g.shadowBlur = 0;
+      g.beginPath();
+      for (var i = 0; i <= 8; i++) { g.moveTo(i * 32, 0); g.lineTo(i * 32, H); }
+      for (var j = 1; j < 4; j++) { g.moveTo(0, j * 32); g.lineTo(W, j * 32); }
+      g.strokeStyle = 'rgba(63,240,255,0.28)'; g.lineWidth = 11; g.stroke();
+      g.strokeStyle = '#3ff0ff'; g.lineWidth = 4.5; g.stroke();
     } },
     { id: 'bubblegum', name: 'علكة', price: 25, glow: '#ff5fc8', draw: function (g) {
       fill(g, '#ff4fbf');
@@ -128,13 +129,13 @@
     { id: 'lava', name: 'صخرة الحمم', price: 380, glow: '#ff6a1a', draw: function (g) {
       fill(g, '#2a0c06');
       var r = rng(9);
-      g.strokeStyle = '#ff7a1a'; g.lineWidth = 4; g.shadowColor = '#ffcc33'; g.shadowBlur = 12; g.lineCap = 'round';
+      g.lineCap = 'round'; g.beginPath();
       for (var i = 0; i < 16; i++) {
-        var x = r() * W, y = r() * H; g.beginPath(); g.moveTo(x, y);
+        var x = r() * W, y = r() * H; g.moveTo(x, y);
         for (var s = 0; s < 5; s++) { x += (r() - 0.5) * 40; y += (r() - 0.5) * 30; g.lineTo(x, y); }
-        g.stroke();
       }
-      g.shadowBlur = 0;
+      g.strokeStyle = 'rgba(255,204,51,0.3)'; g.lineWidth = 9; g.stroke();
+      g.strokeStyle = '#ff7a1a'; g.lineWidth = 4; g.stroke();
       for (var k = 0; k < 10; k++) dot(g, r() * W, r() * H, 4, '#ffd23a');
     } },
     { id: 'planet', name: 'كوكب', price: 450, glow: '#4da6ff', draw: function (g) {
@@ -267,12 +268,11 @@
     var gr = g.createLinearGradient(size * 0.1, size * 0.85, size * 0.72, size * 0.3);
     gr.addColorStop(0, hexA(cols[cols.length - 1], 0));
     for (var i = 0; i < cols.length; i++) gr.addColorStop(0.25 + 0.75 * i / Math.max(1, cols.length - 1), hexA(cols[i], 0.95));
-    g.strokeStyle = gr; g.lineCap = 'round';
-    g.shadowColor = cols[0]; g.shadowBlur = 12;
-    g.lineWidth = size * 0.16;
+    g.lineCap = 'round';
     g.beginPath(); g.moveTo(size * 0.12, size * 0.86);
-    g.quadraticCurveTo(size * 0.3, size * 0.4, size * 0.7, size * 0.32); g.stroke();
-    g.shadowBlur = 0;
+    g.quadraticCurveTo(size * 0.3, size * 0.4, size * 0.7, size * 0.32);
+    g.strokeStyle = hexA(cols[0], 0.28); g.lineWidth = size * 0.24; g.stroke();
+    g.strokeStyle = gr; g.lineWidth = size * 0.16; g.stroke();
     var r = rng(trail.id.length * 13);
     if (trail.fx) {
       for (var k = 0; k < 10; k++) {

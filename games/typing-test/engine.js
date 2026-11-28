@@ -180,10 +180,13 @@
   TT.READY_Y = 150; TT.EDGE_Y = 292; TT.TOWN_Y = 350; TT.START_Y = -70;
   TT.plan = function (lang, w, l, tier) {
     var T = TT.TUNE, i = Math.max(0, Math.min(TT.TIERS - 1, (tier | 0) - 1)), wd = TT.WORLD[w];
+    var intro = l === 0;
     return {
       lang: lang, w: w, l: l, tier: i + 1,
-      count: wd.count[l] + T.extra[i], fall: T.fall[i] * wd.fall, live: Math.min(T.live[i], wd.live), gap: T.gap[i] * wd.gap,
-      wait: !!T.wait[i], slow: T.slow[i], mix: Math.min(0.9, T.mix[i] + l * 0.08), guide: !!T.guide[i],
+      count: wd.count[l] + T.extra[i], fall: T.fall[i] * wd.fall,
+      live: intro ? 1 : Math.min(T.live[i], wd.live), gap: T.gap[i] * wd.gap,
+      wait: !!T.wait[i], slow: T.slow[i], mix: Math.min(0.9, T.mix[i] + l * 0.08),
+      guide: intro ? true : !!T.guide[i],
       target: Math.round(T.target[i] * wd.pace * 10) / 10
     };
   };
@@ -534,11 +537,11 @@
     (lang ? [lang] : TT.LANGS).forEach(function (g) { s.stars[g].forEach(function (row) { row.forEach(function (v) { n += v; }); }); });
     return n;
   };
-  // A world opens when the one before it is finished, or straight away for a child who
-  // aced its first level with three stars (experts need not type every single letter).
+  // A world opens when the one before it is finished, or after three stars on its first
+  // level from World 2 onward (World 1's single-letter drill must finish w1-4 before words).
   TT.worldOpen = function (s, lang, w) {
     var g = s.stars[lang];
-    return w === 0 || g[w - 1][3] > 0 || g[w - 1][0] === 3 || g[w].some(Boolean);
+    return w === 0 || g[w - 1][3] > 0 || (w > 1 && g[w - 1][0] === 3) || g[w].some(Boolean);
   };
   TT.isOpen = function (s, lang, w, l) {
     if (!TT.worldOpen(s, lang, w)) return false;

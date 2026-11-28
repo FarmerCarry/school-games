@@ -56,15 +56,17 @@
 
   /* ================================================================ RENDERER */
   var canvas = $('gl'), uiEl = $('ui');
+  Kit.muteButton().setAttribute('aria-label', 'الصوت: تشغيل / إيقاف');
+  uiEl.style.fontSize = (16 * Math.min(window.innerWidth / 1280, window.innerHeight / 720)).toFixed(2) + 'px';
+  function boot3D() {
   var LQ = /[?&]lq\b/.test(location.search);
+  var soft = Kit.webgl.isSoftware();
   // anti-aliasing is fixed for the life of the context, so judge it by the widest the canvas can get:
   // the portal's fullscreen button grows this same canvas from the small frame to the whole screen
   var maxW = Math.max(window.innerWidth, (window.screen && window.screen.width) || 0);
-  var aa = save.set.qual === 'high' || (save.set.qual === 'auto' && !LQ && !save.set.aaOff && maxW * Math.min(window.devicePixelRatio || 1, 1.25) <= 1600);
-  function basePR() {
-    return Kit.webgl.pixelRatio({ software: false, low: LQ, max: save.set.qual === 'low' ? 0.8 : 1.25 });
-  }
-  var wgl = Kit.webgl.createRenderer(canvas, { software: false, antialias: aa, low: LQ, max: save.set.qual === 'low' ? 0.8 : 1.25, noGL: { hide: 'title' } });
+  var aa = !soft && (save.set.qual === 'high' || (save.set.qual === 'auto' && !LQ && !save.set.aaOff && maxW * Math.min(window.devicePixelRatio || 1, 1.25) <= 1600));
+  function basePR() { return Kit.webgl.pixelRatio({ low: LQ, max: save.set.qual === 'low' ? 0.8 : 1.25 }); }
+  var wgl = Kit.webgl.createRenderer(canvas, { antialias: aa, low: LQ, max: save.set.qual === 'low' ? 0.8 : 1.25, noGL: { hide: 'title' } });
   if (!wgl) return;
   var renderer = wgl.renderer;
   renderer.autoClear = false;
@@ -224,13 +226,11 @@
     if (now - lock.lastFail < 60) return;       // the promise and the pointerlockerror event report the same refusal
     lock.lastFail = now;
     lock.fails++; lock.on = false;
-    if (lock.fails >= 3) lock.drag = true;
+    lock.drag = true;
     if (UI.state !== 'play' || G.over) return;
     if (UI.paused) {
-      if (UI.resuming && lock.drag) finishResume();
-      else { UI.resuming = false; $('pLockMsg').hidden = false; }
-    } else if (!lock.drag) { pause(); $('pLockMsg').hidden = false; }
-    else dragHint();
+      if (UI.resuming) finishResume();
+    } else dragHint();
   }
   function dragHint() { hint('اسحب بالفأرة للنظر حولك، وانقر لتطلق', 4); }
   function releaseLock() {
@@ -275,9 +275,9 @@
   });
   canvas.addEventListener('mousedown', function (e) {
     if (UI.state !== 'play' || UI.paused) return;
-    if (!lock.on) {
+    if (!lock.on && !lock.drag) {
       requestLock();
-      if (!lock.drag) return; // this click only grabs the mouse
+      return; // this click only grabs the mouse
     }
     if (e.button === 0) { mouse.left = true; mouse.leftP = true; }
     else if (e.button === 2) mouse.right = true;
@@ -745,8 +745,8 @@
       sfx.count(3);
       streakShown = 0;
       // say once how a match is won, higher up so it clears the countdown digits (nobody can splat yet)
-      if (G.mode === 'team') callout('أول فريق يصل إلى ' + ltr(G.target) + ' لطخة يفوز!', 'أو الفريق الأعلى عند انتهاء الوقت', '#ffd23f', 3000, 'goal');
-      else callout('أول من يصل إلى ' + ltr(G.target) + ' لطخة يفوز!', 'أو صاحب أكثر اللطخات عند انتهاء الوقت', '#ffd23f', 3000, 'goal');
+      var tm = G.mode === 'team';
+      callout((tm ? 'أول فريق' : 'أول من') + ' يصل إلى ' + ltr(G.target) + ' لطخة يفوز!', tm ? 'أو الفريق الأعلى عند انتهاء الوقت' : 'أو ضمن أفضل 3 عند انتهاء الوقت', '#ffd23f', 3000, 'goal');
       if (save.matches < 3) setTimeout(function () { if (UI.state === 'play') hint('حرّك الفأرة للتصويب • W A S D للحركة • انقر لتطلق • G بالون طلاء • R تعبئة', 6); }, 1200);
     },
     countdown: function (c) {
@@ -809,7 +809,7 @@
       drip(src ? G.paint(src) : [1, 0.3, 0.6], src ? src.x - v.x : 0, src ? src.z - v.z : 1);
       if (src && src !== v) dmgDir(src);
       VM.shake = Math.max(VM.shake, Math.min(0.35, amt / 90));
-      H$.hpBox.classList.remove('hit'); void H$.hpBox.offsetWidth; H$.hpBox.classList.add('hit');
+      if (!calm) Kit.retrigger(H$.hpBox, 'hit');
     },
     splat: function (v, src, head, w, first, revenge) {
       if (G.demo) return;
@@ -819,16 +819,16 @@
       if (src && src.isPlayer && v !== src) {
         sfx.confirm(src.multi);
         toast(ltr('+1') + ' لطّخت ' + v.name + '!', '#ffd23f');
-        var m = src.multi;
-        if (m === 2) { callout('ضربة مزدوجة!', '', '#ffd23f'); sfx.callout(1); }
-        else if (m === 3) { callout('ثلاثية!', '', '#ff9f1c'); sfx.callout(2); }
-        else if (m >= 4) { callout('رباعية خارقة!', '', '#ff5f9e'); sfx.callout(3); }
-        else if (src.streak === 3 && streakShown < 3) { callout('سلسلة رائعة!', '3 لطخات متتالية', '#7dffcf'); sfx.callout(1); }
-        else if (src.streak === 5) { callout('لا يمكن إيقافك!', '5 لطخات متتالية', '#ff5f9e'); sfx.callout(3); }
-        else if (src.streak === 8) { callout('أسطورة الطلاء!', '8 لطخات متتالية', '#ffd23f'); sfx.callout(3); }
-        else if (first) { callout('أول لطخة!', '', '#7dffcf'); sfx.callout(1); }
-        else if (revenge) { callout('انتقام!', '', '#ff9f1c'); sfx.callout(1); }
-        else if (head) { callout('في الرأس!', '', '#ffd23f'); }
+        var m = src.multi, co = function (a, b, c, sv) { callout(a, b, c); if (sv) sfx.callout(sv); };
+        if (m === 2) co('ضربة مزدوجة!', '', '#ffd23f', 1);
+        else if (m === 3) co('ثلاثية!', '', '#ff9f1c', 2);
+        else if (m >= 4) co('رباعية خارقة!', '', '#ff5f9e', 3);
+        else if (src.streak === 3 && streakShown < 3) co('سلسلة رائعة!', '3 لطخات متتالية', '#7dffcf', 1);
+        else if (src.streak === 5) co('لا يمكن إيقافك!', '5 لطخات متتالية', '#ff5f9e', 3);
+        else if (src.streak === 8) co('أسطورة الطلاء!', '8 لطخات متتالية', '#ffd23f', 3);
+        else if (first) co('أول لطخة!', '', '#7dffcf', 1);
+        else if (revenge) co('انتقام!', '', '#ff9f1c', 1);
+        else if (head) co('في الرأس!', '', '#ffd23f');
         streakShown = src.streak;
       }
       if (v.isPlayer) {
@@ -1424,18 +1424,17 @@
   }
 
   /* ================================================================ BOOT */
-  Kit.muteButton().setAttribute('aria-label', 'الصوت: تشغيل / إيقاف');
   layout();
   goTitle();
-  // Compile AND draw every shader once now (hidden objects and empty instanced pools too) so nothing
-  // hitches mid-match: a program is only really finished by the driver on its first draw. The draw goes to
-  // a 1-pixel scissor of the real canvas (same program variants as the game; a render target would differ).
-  // The confetti is also drawn inside the fog-less podium scene, where it lives on the results screen.
-  (function warm() {
-    var hidden = [], empty = [], culled = [];
+  // Defer shader warm-up until after Kit.ready() so title paint is never blocked.
+  var warmed = false;
+  function warm() {
+    if (warmed || UI.state !== 'title' || UI.paused) return;
+    warmed = true;
+    var hidden = [], empty = [], culled = [], pairs = [[G.scene, camera], [vmScene, vmCam], [showScene, showCam], [podScene, podCam]];
     var tmp = new T.Mesh(new T.PlaneGeometry(0.1, 0.1), G.mats.belt); G.scene.add(tmp);
-    [G.scene, vmScene, showScene, podScene].forEach(function (sc) {
-      sc.traverse(function (o) {
+    pairs.forEach(function (pr) {
+      pr[0].traverse(function (o) {
         if (!o.visible) { hidden.push(o); o.visible = true; }
         if (o.isInstancedMesh && o.count === 0) { empty.push(o); o.count = 1; }
         if (o.frustumCulled) { culled.push(o); o.frustumCulled = false; }
@@ -1443,18 +1442,17 @@
     });
     try {
       camera.updateMatrixWorld();
-      renderer.compile(G.scene, camera); renderer.compile(vmScene, vmCam); renderer.compile(showScene, showCam); renderer.compile(podScene, podCam);
       renderer.initTexture(fx.decals.material.map);
       renderer.setScissorTest(true); renderer.setScissor(0, 0, 1, 1);
-      renderer.render(G.scene, camera); renderer.render(vmScene, vmCam); renderer.render(showScene, showCam); renderer.render(podScene, podCam);
+      pairs.forEach(function (pr) { renderer.compile(pr[0], pr[1]); renderer.render(pr[0], pr[1]); });
       moveConfetti(podScene); renderer.compile(podScene, podCam); renderer.render(podScene, podCam); moveConfetti(G.scene);
     } catch (e) { /* ignore */ }
     renderer.setScissorTest(false);
     G.scene.remove(tmp); tmp.geometry.dispose();
-    for (var i = 0; i < hidden.length; i++) hidden[i].visible = false;
-    for (var j = 0; j < empty.length; j++) empty[j].count = 0;
-    for (var k = 0; k < culled.length; k++) culled[k].frustumCulled = true;
-  })();
+    hidden.forEach(function (o) { o.visible = false; });
+    empty.forEach(function (o) { o.count = 0; });
+    culled.forEach(function (o) { o.frustumCulled = true; });
+  }
   Kit.loop(update, render);
 
   /* ================================================================ TEST HOOKS */
@@ -1507,5 +1505,9 @@
   };
   Kit.lifecycle({ pause: pause, reset: function () { mouse.left = mouse.right = false; } });
   Kit.ready();
+  if (window.requestIdleCallback) window.requestIdleCallback(warm, { timeout: 250 });
+  else setTimeout(warm, 50);
+  }
+  Kit.webgl.boot(boot3D, { fallbackMs: 60 });
 })();
 

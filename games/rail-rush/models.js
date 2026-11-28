@@ -724,12 +724,13 @@
     pts.frustumCulled = false;
     var list = [];
     for (var i = 0; i < max; i++) list.push({ on: false, x: 0, y: 0, d: 0, vx: 0, vy: 0, vd: 0, life: 0, max: 1, size: 0.3, g: 0, r: 1, gg: 1, b: 1, drag: 0, grow: 0 });
-    var cursor = 0, tmpC = new T.Color();
+    var cursor = 0, tmpC = new T.Color(), hasActive = false;
     var sys = {
       points: pts, material: mat,
       // o: {count, color|colors, speed, up, life, size, gravity, spread, vd (forward vel), drag, grow}
       burst: function (x, y, d, o) {
         var n = o.count || 10;
+        if (n > 0) hasActive = true;
         for (var k = 0; k < n; k++) {
           var p = list[cursor]; cursor = (cursor + 1) % max;
           var a = Math.random() * Math.PI * 2, e = (Math.random() - 0.3) * Math.PI;
@@ -751,20 +752,28 @@
         }
       },
       update: function (dt) {
+        if (!hasActive) return;
+        var any = false;
         for (var k = 0; k < max; k++) {
           var p = list[k];
           if (!p.on) continue;
           p.life -= dt;
           if (p.life <= 0) { p.on = false; continue; }
+          any = true;
           var dr = 1 - p.drag * dt;
           p.vx *= dr; p.vy *= dr; p.vd *= dr;
           p.vy -= p.g * dt;
           p.x += p.vx * dt; p.y += p.vy * dt; p.d += p.vd * dt;
           p.size += p.grow * dt;
         }
+        hasActive = any;
       },
       // pD = runner distance used to convert d into render z.
       render: function (pD) {
+        if (!hasActive) {
+          if (geo.drawRange.count !== 0) geo.setDrawRange(0, 0);
+          return;
+        }
         var n = 0;
         for (var k = 0; k < max; k++) {
           var p = list[k];
@@ -777,12 +786,23 @@
           n++;
         }
         geo.setDrawRange(0, n);
-        geo.attributes.position.needsUpdate = true;
-        geo.attributes.color.needsUpdate = true;
-        geo.attributes.size.needsUpdate = true;
-        geo.attributes.alpha.needsUpdate = true;
+        if (n > 0) {
+          if (window.Kit && Kit.webgl && Kit.webgl.uploadRange) {
+            Kit.webgl.uploadRange(geo.attributes.position, n * 3);
+            Kit.webgl.uploadRange(geo.attributes.color, n * 3);
+            Kit.webgl.uploadRange(geo.attributes.size, n);
+            Kit.webgl.uploadRange(geo.attributes.alpha, n);
+          } else {
+            geo.attributes.position.needsUpdate = true;
+            geo.attributes.color.needsUpdate = true;
+            geo.attributes.size.needsUpdate = true;
+            geo.attributes.alpha.needsUpdate = true;
+          }
+        } else {
+          hasActive = false;
+        }
       },
-      clear: function () { for (var k = 0; k < max; k++) list[k].on = false; }
+      clear: function () { for (var k = 0; k < max; k++) list[k].on = false; hasActive = false; geo.setDrawRange(0, 0); }
     };
     return sys;
   };

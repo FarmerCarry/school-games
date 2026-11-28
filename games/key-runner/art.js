@@ -11,6 +11,10 @@
   var SS = 2;
   var cache = {}, layerKeys = [];
   A.reset = function () { cache = {}; layerKeys = []; };
+  // Drop only font-bearing keyboard/deck canvases so parallax layers stay cached across fonts.load.
+  A.resetText = function () {
+    for (var k in cache) if (k.charAt(0) === 'K' || k.charAt(0) === 'D') delete cache[k];
+  };
 
   /* ------------------------------------------------------------- helpers */
   function cv(w, h) { var c = document.createElement('canvas'); c.width = Math.max(1, Math.ceil(w)); c.height = Math.max(1, Math.ceil(h)); return c; }

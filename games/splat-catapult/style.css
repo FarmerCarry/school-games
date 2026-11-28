@@ -97,8 +97,9 @@ body {
 .btn-main {
   background: linear-gradient(180deg, #5ef38c, #25c455);
   color: #0d2b18;
-  font-size: 25px;
-  padding: 13px 28px;
+  font-size: 27px;
+  padding: 14px 38px;
+  min-width: 270px;
 }
 .btn-duel {
   background: linear-gradient(180deg, #ff5d8f, #eb1e62);
@@ -109,8 +110,12 @@ body {
 .btn-sub {
   background: linear-gradient(180deg, #ffffff, #e4ecff);
   color: #1b1640;
-  font-size: 19px;
-  padding: 10px 18px;
+  font-size: 18px;
+  padding: 9px 16px;
+}
+.btn-sub.btn-duel-sub {
+  background: linear-gradient(180deg, #ff6b98, #e62666);
+  color: #ffffff;
 }
 .btn-sub.shop {
   background: linear-gradient(180deg, #ffe97a, #ffb703);
@@ -245,24 +250,24 @@ body {
 .diff-bar {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 2px solid rgba(255, 255, 255, 0.16);
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 2px solid rgba(255, 255, 255, 0.14);
   border-radius: 999px;
-  padding: 5px 12px;
-  margin-bottom: 16px;
+  padding: 4px 10px;
+  margin-bottom: 10px;
 }
 .diff-lbl {
-  font-size: 17px;
+  font-size: 15px;
   font-weight: 700;
   color: #cbd8ff;
-  margin-inline-end: 4px;
+  margin-inline-end: 2px;
 }
 .diff-pill {
-  font-size: 17px;
-  padding: 5px 16px;
+  font-size: 15px;
+  padding: 4px 13px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.12);
   color: #ffffff;
   box-shadow: none;
 }

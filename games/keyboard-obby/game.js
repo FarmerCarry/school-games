@@ -9,8 +9,8 @@
   const $ = id => document.getElementById(id);
   const canvas = $('scene'), hudCanvas = $('hud'), ui = $('ui'), ghostEl = $('ghost');
   const calm = () => Kit.motion.reduced();
-  let view = null, dirty = true, snap = true, contextLost = false, lastFrame = 0;
-  const hudView = Kit.fit(hudCanvas, W, HH, { maxDpr: 1.5, onResize: () => { dirty = true; } });
+  let view = null, dirty = true, snap = true, contextLost = false, lastFrame = 0, hudSig = '', hudVisible = true;
+  const hudView = Kit.fit(hudCanvas, W, HH, { maxDpr: Kit.webgl.isSoftware() ? 1 : 1.25, onResize: () => { dirty = true; hudSig = ''; } });
   const fit = Kit.fit(canvas, W, HH, { webgl: true, maxDpr: 1.5, onResize: v => {
     ui.style.left = canvas.style.left; ui.style.top = canvas.style.top; ui.style.transform = 'scale(' + v.scale + ')';
     if (view) view.resize(Math.round(W * v.scale), Math.round(HH * v.scale));
@@ -77,15 +77,20 @@
     save.lang = lang;
     persist();
     J.toggle(lang === 'en');
-    view.setLang(lang); H.reset();
-    paintLangs(); refreshMap();
+    if (view) view.setLang(lang);
+    H.reset(); hudSig = '';
+    paintLangs();
+    if (mapBuilt) refreshMap();
     say(lang === 'en' ? 'English' : 'عربي');
   }
 
   /* ---------------------------------------------------------------- map */
   const lvlButtons = [], worldKeys = [];
+  let mapBuilt = false;
   const WORLD_KEYS = [KO.codes('A S D F'), KO.codes('Q W E R'), KO.codes('Z X C V'), KO.codes('1 2 3 4'), KO.codes('J ; 0 `')];
   function buildMap() {
+    if (mapBuilt) return;
+    mapBuilt = true;
     const box = $('worlds');
     KO.WORLDS.forEach((Wd, w) => {
       const col = document.createElement('div'), color = KO.THEMES[w].jelly[0];
@@ -105,6 +110,7 @@
     });
   }
   function refreshMap() {
+    if (!mapBuilt) buildMap();
     const nx = KO.nextLevel(save);
     lvlButtons.forEach(o => {
       const open = KO.isOpen(save, o.w, o.l), st = save.stars[o.w][o.l];
@@ -123,7 +129,11 @@
     setScreen('map');
     J.whoosh(0.4);
   }
-  function wiggle(el) { el.classList.remove('wiggle'); void el.offsetWidth; el.classList.add('wiggle'); setTimeout(() => el.classList.remove('wiggle'), 500); }
+  function wiggle(el) {
+    if (Kit.retrigger) Kit.retrigger(el, 'wiggle');
+    else { el.classList.remove('wiggle'); requestAnimationFrame(() => el.classList.add('wiggle')); }
+    setTimeout(() => el.classList.remove('wiggle'), 500);
+  }
   function pickLevel(w, l, el) {
     if (!KO.isOpen(save, w, l)) { J.error(); wiggle(el); return; }
     J.select(); startLevel(w, l);
@@ -131,7 +141,10 @@
 
   /* --------------------------------------------------------------- shop */
   const tiles = [];
+  let shopBuilt = false;
   function buildShop() {
+    if (shopBuilt) return;
+    shopBuilt = true;
     [['color', KO.COLORS, 'colors'], ['hat', KO.HATS, 'hats']].forEach(([kind, list, id]) => {
       const box = $(id);
       list.forEach((it, i) => {
@@ -145,6 +158,7 @@
     });
   }
   function refreshShop() {
+    if (!shopBuilt) buildShop();
     tiles.forEach(t => {
       const list = KO.SHOP[t.kind], own = (t.kind === 'color' ? save.colors : save.hats)[t.i], worn = save[t.kind] === t.i;
       const color = t.kind === 'color' ? KO.COLORS[t.i].c : KO.COLORS[save.color].c, hat = t.kind === 'hat' ? KO.HATS[t.i].id : 'none';
@@ -451,10 +465,30 @@
   }
   function fmtTime(t) { return String(Math.floor(t)); }
   function drawHud() {
+    const show = (screen === 'play' || screen === 'pause') && !!world;
+    if (!show) {
+      if (hudVisible) {
+        hudView.ctx.clearRect(0, 0, W, HH);
+        hudCanvas.style.visibility = 'hidden';
+        hudVisible = false;
+        hudSig = '';
+      }
+      return;
+    }
+    if (!hudVisible) { hudCanvas.style.visibility = ''; hudVisible = true; hudSig = ''; }
+    const w = world, still = calm(), target = KO.target(w), rawPulse = still ? 1 : 0.5 + 0.5 * Math.sin(time * 7);
+    const pulse = Math.round(rawPulse * 10) / 10;
+    const wd = target && !ending ? wordNow(w) : null;
+    const hasAnim = floats.length > 0 || !!banner || coinBump > 0.01 || bubbleBump > 0.01 || Object.keys(hudFlash).length > 0;
+    const sig = hasAnim ? '' : [
+      cur.w, cur.l, w.coins + w.gems * 5, Math.floor(w.t), w.mistakes, w.next, w.cp,
+      Math.round(w.jelly * 200), still ? 1 : Math.round(time * 8) & 15, target, w.L.path[w.next + 1] || '',
+      wd ? wd.text + ':' + wd.at : '', ending ? 1 : 0, save.lang, save.color, pulse
+    ].join('|');
+    if (sig && sig === hudSig) return;
+    hudSig = sig;
     const g = hudView.ctx;
     g.clearRect(0, 0, W, HH);
-    if ((screen !== 'play' && screen !== 'pause') || !world) return;
-    const w = world, still = calm(), target = KO.target(w), pulse = still ? 1 : 0.5 + 0.5 * Math.sin(time * 7);
     for (const f of floats) {
       const p = view.project(f.x, f.y + (still ? 0 : f.t * 0.7), f.z);
       if (!p.behind) H.float(g, f.text, p.x, p.y, f.size, f.color, f.t < 0.9 ? 1 : 1 - (f.t - 0.9) / 0.4);
@@ -465,7 +499,7 @@
     H.text(g, (cur.w + 1) + '-' + (cur.l + 1), 880, 44, 34, '#ffffff', { stroke: 8 });
     H.progress(g, 930, 44, 220, KO.progress(w), w.L.cps, w.n, KO.COLORS[save.color].c);
     H.jar(g, 1218, 130, 40, 300, w.jelly, KO.THEMES[cur.w].jelly, time, still);
-    if (target && !ending) H.bubble(g, 640, 12, { code: target, lang: save.lang, word: wordNow(w), pulse: pulse, bump: still ? 0 : bubbleBump });
+    if (target && !ending) H.bubble(g, 640, 12, { code: target, lang: save.lang, word: wd, pulse: pulse, bump: still ? 0 : bubbleBump });
     H.keyboard(g, KB.x, KB.y, KB.u, { lang: save.lang, target: ending ? '' : target, ahead: w.L.path[w.next + 1] || '', pulse: still ? 0.5 : pulse, flash: hudFlash, ps: pixelScale() });
     if (banner) {
       const k = Math.min(1, banner.t / 0.25);
@@ -519,20 +553,21 @@
     onLost: () => { contextLost = true; pause(false); },
     onRestored: () => { contextLost = false; snap = true; dirty = true; if (view) view.rebake(); fit.resize(); }
   });
-  hudCanvas.addEventListener('contextrestored', () => { H.reset(); dirty = true; });
+  hudCanvas.addEventListener('contextrestored', () => { H.reset(); hudSig = ''; dirty = true; });
   if (document.fonts && document.fonts.load) {
-    // The legends are printed into the key atlas: print them again once the font is there.
-    Promise.all([document.fonts.load('700 40px Fredoka', 'ب'), document.fonts.load('700 40px Fredoka', 'F'), document.fonts.load('500 20px Fredoka', 'Tab ب')])
-      .then(() => { if (view) view.rebake(); H.reset(); dirty = true; if (screen === 'shop') refreshShop(); }, () => { /* fallback fonts */ });
+    // Only rebake once Fredoka finishes loading if it wasn't already ready at boot.
+    const alreadyReady = document.fonts.check && document.fonts.check('700 40px Fredoka', 'ب') && document.fonts.check('700 40px Fredoka', 'F');
+    if (!alreadyReady) {
+      Promise.all([document.fonts.load('700 40px Fredoka', 'ب'), document.fonts.load('700 40px Fredoka', 'F'), document.fonts.load('500 20px Fredoka', 'Tab ب')])
+        .then(() => { if (view) view.rebake(); H.reset(); hudSig = ''; dirty = true; if (screen === 'shop') refreshShop(); }, () => { /* fallback fonts */ });
+    }
   }
+  refreshChips(); paintLangs(); setScreen('title');
   let loop = null;
-  try {
-    view = KO.createView(canvas);
+  Kit.webgl.boot(() => {
+    view = KO.createView(canvas, { lang: save.lang, color: save.color, hat: save.hat });
     view.calm = calm();
-    view.setLang(save.lang);
-    view.setOutfit(save.color, save.hat);
     fit.resize();
-    buildMap(); buildShop();
     toTitle();
     window.__game = {
       get state() { return snapshot(); },
@@ -547,10 +582,13 @@
     render();
     loop = Kit.loop(update, render);
     Kit.ready();
-  } catch (error) {
-    if (loop) loop.stop();
-    for (const k in SCREENS) $(SCREENS[k]).hidden = true;
-    $('scrError').hidden = false;
-    Kit.fail(error);
-  }
+    requestAnimationFrame(() => { if (view) { view.buildDecor(); dirty = true; } });
+  }, {
+    onError: error => {
+      if (loop) loop.stop();
+      for (const k in SCREENS) $(SCREENS[k]).hidden = true;
+      $('scrError').hidden = false;
+      Kit.fail(error);
+    }
+  });
 })();

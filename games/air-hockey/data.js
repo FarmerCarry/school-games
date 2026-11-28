@@ -14,7 +14,7 @@
       { id: 'ninja', name: 'نينجا', color: '#8b6cff', dark: '#4a2fc0', acc: 'band', lo: 0.5, hi: 0.8, goals: 7, power: true },
       { id: 'king', name: 'الملك', color: '#ff4f5e', dark: '#b31f2e', acc: 'crown', lo: 0.68, hi: 1.0, goals: 7, power: true }
     ],
-    DUO_GOALS: 7,
+    DUO_GOALS: 5,
     // Skins unlock by the stars collected (never spent). `need` is the star count.
     MALLETS: [
       { id: 'sky', color: '#3fa9ff', dark: '#1b63c9', acc: '', need: 0 },

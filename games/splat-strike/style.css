@@ -1,8 +1,7 @@
 /* Splat Strike — page styles (HUD + menus). Sizes use em: #ui font-size is set from the window size. */
 :root {
   --navy: #1b1f4b; --navy2: #2b2f77; --pink: #ff3d8b; --yellow: #ffd23f; --blue: #3fb8ff; --green: #3ddc84; --orange: #ff8a1f; --team1: #3d8bff; --team2: #ff8a1f;
-  --ol: 0.06em 0 0 var(--navy), -0.06em 0 0 var(--navy), 0 0.06em 0 var(--navy), 0 -0.06em 0 var(--navy),
-    0.045em 0.045em 0 var(--navy), -0.045em 0.045em 0 var(--navy), 0.045em -0.045em 0 var(--navy), -0.045em -0.045em 0 var(--navy);
+  --ol: 0.06em 0 0 var(--navy), -0.06em 0 0 var(--navy), 0 0.06em 0 var(--navy), 0 -0.06em 0 var(--navy);
   --ts: 0 0.08em 0 rgba(0, 0, 0, 0.45), 0 0 0.3em rgba(0, 0, 0, 0.35);
 }
 html, body { background: #9fd4ff; overscroll-behavior: none; }

@@ -99,6 +99,7 @@
   var starsRevealed = 0;
   var idleT = 0;
   var coachStage = 0; // 0 not shown, 1 spawn hint, 2 cannon hint, 3 done
+  var coachStarted = false;
   var p1UsedCannon = false;
   var activeStageIndex = 0;
   var activeDuo = false;
@@ -373,6 +374,7 @@
     hudCache = { hp1: -1, hp2: -1, en1: -1, en2: -1, score: -1, cd1: -1, cd2: -1 };
     idleT = 0;
     coachStage = 0;
+    coachStarted = false;
     p1UsedCannon = false;
     resultMeta = null;
     starsRevealed = 0;
@@ -486,7 +488,7 @@
     }
     if (side === 0) {
       idleT = 0;
-      if (coachStage === 1) {
+      if (coachStage < 2) {
         coachStage = 2;
         $('ghostHint').hidden = true;
       }
@@ -504,10 +506,13 @@
     if (side === 0) {
       idleT = 0;
       p1UsedCannon = true;
-      if (coachStage === 2) {
+      if (coachStage < 3) {
         coachStage = 3;
         $('ghostHint').hidden = true;
-        Kit.stats.tutorial('done');
+        if (coachStarted) {
+          coachStarted = false;
+          Kit.stats.tutorial('done');
+        }
       }
     }
     J.whoosh(0.7);
@@ -750,11 +755,12 @@
           $('ghostKey').textContent = '1';
           $('ghostMsg').textContent = 'اضغط 1 أو انقر لإرسال فارس!';
           $('ghostHint').hidden = false;
-          Kit.stats.tutorial('start');
+          if (!coachStarted) { coachStarted = true; Kit.stats.tutorial('start'); }
         } else if (coachStage === 2 && !p1UsedCannon && idleT >= 3.2) {
           $('ghostKey').textContent = 'مسافة';
           $('ghostMsg').textContent = 'انقر أو اضغط مسافة لإطلاق المدفع!';
           $('ghostHint').hidden = false;
+          if (!coachStarted) { coachStarted = true; Kit.stats.tutorial('start'); }
         }
       }
       dirty = true;

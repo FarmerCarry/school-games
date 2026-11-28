@@ -6,7 +6,7 @@
   var PG = root.PG = root.PG || {};
 
   var TAU = Math.PI * 2;
-  var SELF_GRACE = 4;          // own trail cells right behind the head are ignored
+  var SELF_GRACE = 8;          // own trail cells right behind the head are ignored
   function angDiff(a, b) { var d = (a - b) % TAU; if (d > Math.PI) d -= TAU; else if (d < -Math.PI) d += TAU; return d; }
   function rnd(a, b) { return a + Math.random() * (b - a); }
   PG.angDiff = angDiff;

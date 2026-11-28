@@ -21,7 +21,7 @@
 
   var GRAVITY = 30.0;
   var MOVE_SPEED = 7.5;
-  var JUMP_V = 12.6;
+  var JUMP_V = 14.0;
   var DRUM_BOUNCE_V = 15.8;
   var COYOTE_TIME = 0.12;
   var JUMP_BUFFER = 0.14;
@@ -261,13 +261,13 @@
       actors.push(makeActor({
         id: 'p1', slot: 0, isHuman: true, humanIndex: 0,
         colorIndex: p1Color, hatIndex: p1Hat,
-        x: -3.6, y: GROUND_Y, zOff: 0.28, facing: 1
+        x: -3.6, y: GROUND_Y, zOff: 0, facing: 1
       }));
       if (duo) {
         actors.push(makeActor({
           id: 'p2', slot: 1, isHuman: true, humanIndex: 1,
           colorIndex: p2Color, hatIndex: p2Hat,
-          x: 3.8, y: GROUND_Y, zOff: -0.28, facing: -1
+          x: 3.8, y: GROUND_Y, zOff: 0, facing: -1
         }));
       }
       var botCount = duo ? 3 : 4;
@@ -556,9 +556,9 @@
         spawnMeteor(world, params);
       }
     } else if (d === 'flood') {
-      // Rise smoothly from t = 0.3 to t = 2.4, hold high until t = 8.8, then recede.
-      if (world.t < 2.4) {
-        var u = clamp((world.t - 0.2) / 2.2, 0, 1);
+      // Rise smoothly from t = 0.2 to t = 4.0 (3.8s climb warning), hold high until t = 9.0, then recede.
+      if (world.t < 4.0) {
+        var u = clamp((world.t - 0.2) / 3.8, 0, 1);
         world.lavaTargetY = lerp(-1.65, params.floodPeak, u * u * (3 - 2 * u));
       } else if (world.t < ROUND_TIME - 1.8) {
         world.lavaTargetY = params.floodPeak + Math.sin(world.t * 3.5) * 0.12;

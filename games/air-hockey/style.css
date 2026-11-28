@@ -5,7 +5,6 @@ html, body { background: #1c1240; }
 .defs { position: absolute; width: 0; height: 0; overflow: hidden; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 #game { z-index: 0; }
-body.hide-cursor, body.hide-cursor #game { cursor: none; }
 
 #ui { position: fixed; left: 0; top: 0; width: 1280px; height: 720px; transform-origin: 0 0; pointer-events: none; z-index: 5; color: var(--ink); }
 #ui button { pointer-events: auto; cursor: pointer; font-family: inherit; }

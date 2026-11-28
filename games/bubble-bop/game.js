@@ -30,6 +30,7 @@
   /* --------------------------------------------------------------- state */
   let screen = 'title', world = null, cur = { w: 0, l: 0 }, time = 0, ending = null, result = null, resultT = 0, resultLock = 0;
   let closetFrom = 'title', gripCard = 0, gripThen = '', gripAt = 0, menuIdle = 0, menuNext = 4, busyT = 0, lastMissT = -9, unlockFx = null;
+  let fastPops = 0, fastTracked = false;
   const ptr = { x: W / 2, y: H / 2, known: false, travel: 0, movedAt: -9 };
   const menuBop = { x: 640, y: 364, vx: 0, vy: 0 };
   let clicks = [], jumpPress = false, holdDir = 0, keyDir = 0, anyKey = '';
@@ -76,13 +77,16 @@
   }
   function play() {
     J.select();
-    if (!save.grip) showGrip('play');
-    else afterGrip();
+    if (!BB.total(save)) startLevel(0, 0);
+    else { const n = BB.nextLevel(save); startLevel(n.w, n.l); }
   }
-  // A child who has never played goes straight into the first bubbles; others see the map.
+  function startInstantParty() {
+    J.select();
+    startLevel(0, 'P', { minTier: 4 });
+  }
   function afterGrip() {
     if (!BB.total(save)) startLevel(0, 0);
-    else toMap(-1);
+    else { const n = BB.nextLevel(save); startLevel(n.w, n.l); }
   }
 
   /* --------------------------------------------- how to hold: two cards */
@@ -124,9 +128,11 @@
   /* ---------------------------------------------------------------- map */
   // Two pages: worlds 1-5 and worlds 6-11, turned with the big arrows (or ← →).
   const isles = [], pebbles = [];
-  let mapPage = 0;
+  let mapPage = 0, mapBuilt = false;
   function starIcons() { return '<span class="st" aria-hidden="true">' + '<svg><use href="#i-star"/></svg>'.repeat(3) + '</span>'; }
   function buildMap() {
+    if (mapBuilt) return;
+    mapBuilt = true;
     const box = $('islands');
     A.ISLANDS.forEach((p, w) => {
       const isle = document.createElement('button');
@@ -148,6 +154,7 @@
     });
   }
   function refreshMap() {
+    if (!mapBuilt) buildMap();
     const next = BB.nextLevel(save);
     $('mapNext').hidden = mapPage === 1;
     $('mapPrev').hidden = mapPage === 0;
@@ -198,7 +205,11 @@
     stopDemo(); menuIdle = 0; menuNext = 4; unlockFx = null;
     dirty = true;
   }
-  function wiggle(el) { el.classList.remove('wiggle'); void el.offsetWidth; el.classList.add('wiggle'); setTimeout(() => el.classList.remove('wiggle'), 500); }
+  function wiggle(el) {
+    if (Kit.retrigger) Kit.retrigger(el, 'wiggle');
+    else { el.classList.remove('wiggle'); requestAnimationFrame(() => el.classList.add('wiggle')); }
+    setTimeout(() => el.classList.remove('wiggle'), 500);
+  }
   function pickLevel(w, l, el) {
     if (!BB.isOpen(save, w, l)) { J.tap(); wiggle(el); return; }
     J.select(); startLevel(w, l);
@@ -213,8 +224,11 @@
 
   /* ------------------------------------------------------------- closet */
   const items = [];
+  let closetBuilt = false;
   function hasNewItem() { return BB.unlocks(save.seenStars, BB.total(save)).length > 0; }
   function buildCloset() {
+    if (closetBuilt) return;
+    closetBuilt = true;
     [['color', BB.COLORS, 'colors'], ['hat', BB.HATS, 'hats']].forEach(([type, list, id]) => {
       list.forEach((it, i) => {
         const b = document.createElement('button'), c = document.createElement('canvas');
@@ -229,6 +243,7 @@
     });
   }
   function refreshCloset() {
+    if (!closetBuilt) buildCloset();
     const total = BB.total(save);
     items.forEach(it => {
       const list = it.type === 'color' ? BB.COLORS : BB.HATS, locked = list[it.i].need > total;
@@ -262,13 +277,16 @@
   }
 
   /* -------------------------------------------------------------- levels */
-  function startLevel(w, l) {
+  function startLevel(w, l, opts) {
     // Difficulty is read at every level start.
-    const d = dda[w], tier = d.tier;
+    const d = dda[w];
+    let tier = d.tier;
+    if (opts && opts.minTier && tier < opts.minTier) tier = opts.minTier;
     const plan = BB.plan(w, l, tier);
     world = BB.create(plan, (Math.random() * 2147483647) | 0);
     if (ptr.known) { world.bop.x = BB.clamp(ptr.x, 0, W); world.bop.y = BB.clamp(ptr.y, 0, H); }
     cur = { w: w, l: l };
+    fastPops = 0; fastTracked = false;
     // Play stats: every level or party try is a round, e.g. w3L2 or w11P.
     Kit.stats.round('w' + (w + 1) + (l === 'P' ? 'P' : 'L' + (l + 1)));
     ending = null; result = null;
@@ -390,6 +408,8 @@
     el.addEventListener('click', e => { e.stopPropagation(); if (e.detail > 1) return; Kit.audio.unlock(); if (e.detail > 0) { el.blur(); focusGame(); } fn(e); });
   }
   on($('btnPlay'), play);
+  on($('btnParty'), startInstantParty);
+  on($('btnTitleMap'), () => toMap(-1));
   on($('btnCloset'), () => openCloset('title'));
   on($('btnHow'), () => { J.select(); showGrip('title'); });
   on($('gripNext'), gripNext);
@@ -761,9 +781,25 @@
     else if (k === 'clam') { anim({ kind: 'clam', x: e.x, y: e.y, r: e.r, color: e.color, gold: e.gold }); anim({ kind: 'pearl', x: e.x, y: e.y - e.r * 0.3, gold: e.gold }); }
     else if (k === 'wand') anim({ kind: 'float', x: e.x, y: e.y, r: e.br, critter: e.critter, sway: Math.random() * 6 });
     else if (k === 'kballoon') anim({ kind: 'cap', x: e.x, y: e.y + e.r * 1.4 + 26, code: e.code, size: e.cap || 70, vx: (Math.random() - 0.5) * 120, vy: -160, spin: (Math.random() - 0.5) * 6 });
-    fx.burst(e.x, e.y, { count: k === 'balloon' || k === 'kballoon' || k === 'wand' ? 18 : 12, colors: [col, '#ffffff', col], speed: k === 'balloon' || k === 'kballoon' ? 340 : 260, life: 0.55, size: 8,
+    // Auto-fast-track experienced kids: first 3 bubbles popped in <1.2s each -> boost pace + Tier 4 + rainbow bursts
+    if (!world.party && world.mode === 'touch' && !fastTracked && world.tier < 4 && world.hits <= 3 && e.age < 1.2) {
+      fastPops++;
+      if (fastPops >= 3) {
+        fastTracked = true;
+        world.tier = 4;
+        world.fastTrack = true;
+        world.spawnT = Math.min(world.spawnT, 0.12);
+        while (dda[cur.w].tier < 4) dda[cur.w].result(1);
+        if (!calm()) fx.burst(e.x, e.y, { count: 28, colors: ['#ff5d9e', '#ffd23f', '#4fd1ff', '#5be38f', '#b48cff', '#ffffff'], speed: 360, life: 0.75, size: 9, gravity: 180 });
+        float(e.x, e.y - 60, 'سريع جدًا! ⚡', '#ffd23f', 44);
+        J.streak(5);
+      }
+    }
+    const rainbow = world.fastTrack || e.combo >= 3;
+    const burstCols = rainbow ? ['#ff5d9e', '#ffd23f', '#4fd1ff', '#5be38f', '#b48cff'] : [col, '#ffffff', col];
+    fx.burst(e.x, e.y, { count: rainbow ? 20 : (k === 'balloon' || k === 'kballoon' || k === 'wand' ? 18 : 12), colors: burstCols, speed: k === 'balloon' || k === 'kballoon' || rainbow ? 340 : 260, life: 0.55, size: 8,
       gravity: k === 'bubble' || k === 'wand' ? 60 : k === 'turtle' ? 200 : 380 });
-    rings.push({ x: e.x, y: e.y, r0: r * 0.8, r1: r * 1.6, t: 0, life: 0.3, color: '255,255,255', lw: 7 });
+    rings.push({ x: e.x, y: e.y, r0: r * 0.8, r1: r * (rainbow ? 1.85 : 1.6), t: 0, life: 0.3, color: rainbow ? '255,210,63' : '255,255,255', lw: 7 });
     if (world.party) float(e.x, e.y - r - 10, '+' + e.points, e.gold ? '#ffd23f' : '#ffffff', e.points > 1 ? 40 : 32);
     if (e.combo >= 5 && e.combo % 5 === 0) float(e.x, e.y - r - 54, PRAISE[Math.min(3, e.combo / 5 - 1)], '#ffd23f', 44);
     if (world.party && e.mult > 1 && e.combo % 5 === 0) multBump = 1;
@@ -1160,7 +1196,7 @@
         pools: w ? w.pools.map(p => ({ x: Math.round(p.x), y: Math.round(p.y), r: p.r, color: p.color })) : [],
         held: w ? w.held || w.carry : 0, slips: w ? w.escapes : 0,
         sub: w ? { x: Math.round(w.sub.x), y: Math.round(w.sub.y) } : null, walls: w ? w.walls.length : 0,
-        mapPage: mapPage, button: btnDown,
+        mapPage: mapPage, button: btnDown, fastTrack: !!(w && w.fastTrack),
         travel: Math.round(ptr.travel), shake: shake.power, ghost: ghost.on, grip: gripCard, ripples: ripples
       };
     },
@@ -1174,8 +1210,6 @@
     poolPoint: color => { const p = world && world.pools.find(o => o.color === color); return p ? page(p.x, p.y) : null; }
   };
 
-  buildMap();
-  buildCloset();
   Kit.muteButton();
   Kit.lifecycle({ pause: () => pause(false), reset: () => { clicks = []; jumpPress = false; letGo(); } });
   toTitle();

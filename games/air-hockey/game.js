@@ -133,7 +133,6 @@
     for (var k in SCREENS) $(SCREENS[k]).hidden = k !== name;
     $('hud').hidden = !(name === 'play' || name === 'pause');
     if (name !== 'play') { ghostEl.hidden = true; $('vs').hidden = true; countEl.textContent = ''; }
-    document.body.classList.toggle('hide-cursor', name === 'play' && mouseOn);
   }
 
   function buildLadder() {
@@ -179,7 +178,7 @@
   function startMatch(m, k) {
     mode = m; opp = k == null ? save.pick : k;
     var L = D.LADDER[opp], target = m === 'duo' ? D.DUO_GOALS : L.goals;
-    world = E.create({ target: target, powerUps: m === 'duo' || L.power, seed: (Math.random() * 1e9) | 0, firstServe: 2.6, serveSide: Math.random() < 0.5 ? 0 : 1, firstItem: 9 });
+    world = E.create({ target: target, powerUps: m === 'duo' || L.power, seed: (Math.random() * 1e9) | 0, firstServe: 0.9, serveSide: Math.random() < 0.5 ? 0 : 1, firstItem: 9 });
     brains = [null, null];
     if (m === 'cpu') {
       var skill = Kit.lerp(L.lo, L.hi, dda.level);
@@ -352,10 +351,11 @@
     if (a.dx || a.dy) {
       var l = Math.sqrt(a.dx * a.dx + a.dy * a.dy);
       out.x = m.x + a.dx / l * 400; out.y = m.y + a.dy / l * 400;
-      if (s === 0) { keyMode = true; noteMove(); }
+      if (s === 0) keyMode = true;
+      noteMove();
       return;
     }
-    if (s === 0 && mouseOn && !keyMode && view && view.pick(ptr.x, ptr.y, tmpPick)) {
+    if (s === 0 && !duo() && mouseOn && !keyMode && view && view.pick(ptr.x, ptr.y, tmpPick)) {
       out.x = tmpPick.x; out.y = tmpPick.y; out.spd = 3000;
     }
   }
@@ -365,8 +365,8 @@
     if (!ghostEl.hidden) { ghostEl.hidden = true; Kit.stats.tutorial('done'); ghostDone = true; }
   }
   window.addEventListener('pointermove', function () {
-    if (screen !== 'play') return;
-    if (!mouseOn || keyMode) { mouseOn = true; keyMode = false; document.body.classList.add('hide-cursor'); }
+    if (screen !== 'play' || duo()) return;
+    if (!mouseOn || keyMode) { mouseOn = true; keyMode = false; }
     noteMove();
   });
   window.addEventListener('keydown', function (e) {
@@ -461,8 +461,8 @@
 
     // Intro: the VS banner, then 3-2-1.
     if (introFirst && w.phase === 'serve') {
-      var left = w.phaseT, n = left > 1.5 ? 0 : left > 1.0 ? 3 : left > 0.5 ? 2 : 1;
-      $('vs').hidden = left <= 1.5;
+      var left = w.phaseT, n = left > 0.6 ? 0 : left > 0.4 ? 3 : left > 0.2 ? 2 : 1;
+      $('vs').hidden = left <= 0.6;
       if (n && n !== countShown) {
         countShown = n; countEl.textContent = n;
         countEl.classList.remove('tick'); void countEl.offsetWidth; countEl.classList.add('tick');
