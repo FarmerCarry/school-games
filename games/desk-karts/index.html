@@ -16,7 +16,7 @@
       <div class="hud-stats">
         <button id="btnPause" class="icon-btn" type="button" aria-label="استراحة" title="استراحة (P / Esc)">⏸</button>
         <div class="pill place-pill" id="hudPlaceWrap"><span class="ico">🏆</span><b id="hudPlace" dir="ltr">1/4</b></div>
-        <div class="pill lap-pill"><span>لفة</span><b id="hudLap" dir="ltr">1/3</b></div>
+        <div class="pill lap-pill"><span>لفة</span><b id="hudLap" dir="ltr">1/2</b></div>
         <div class="pill coin-pill"><span class="ico">🪙</span><b id="hudCoins">0</b></div>
         <div class="pill track-pill"><span id="hudTrackId" dir="ltr">1-1</span> <span id="hudTrackName">مكتب الحساب</span></div>
       </div>
@@ -25,7 +25,7 @@
         <div class="item-slot" id="p1ItemSlot" aria-label="سلاح اللاعب 1">
           <span class="item-tag" id="p1ItemTag">1P</span>
           <span class="item-ico" id="p1ItemIco">?</span>
-          <span class="item-key" id="p1ItemKey">مسافة</span>
+          <span class="item-key" id="p1ItemKey">مسافة / E</span>
         </div>
         <div class="item-slot p2-slot" id="p2ItemSlot" hidden aria-label="سلاح اللاعب 2">
           <span class="item-tag">2P</span>
@@ -35,6 +35,7 @@
       </div>
     </div>
 
+    <div id="splitline" class="splitline" hidden aria-hidden="true"></div>
     <div id="banner" class="banner" hidden role="status"></div>
 
     <div id="ghostHint" class="ghost-hint" hidden>

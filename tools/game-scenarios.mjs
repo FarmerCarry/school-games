@@ -142,12 +142,10 @@ export const scenarios = {
     await page.mouse.move(point.x, point.y, { steps: 6 });
     await page.mouse.click(point.x, point.y);
   }, '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.p1.casts === 0 && ${g}.state.trip === 0`),
-  // Cake Guards: click a pad beside the road like a player, then pick popcorn from its menu.
+  // Cake Guards: click popcorn in the bottom turret bar like a player (places 2nd turret on best glowing pad).
   'cake-guards': defaults(['#btnPlay'], `${g}.state.screen === 'play'`, `[${g}.state.coins,${g}.state.towers,${g}.state.time,${g}.state.wave]`, async page => {
-    const pad = await page.evaluate(() => window.__game.padPoint(0));
-    await page.mouse.click(pad.x, pad.y);
-    await clickControl(page, '#panel .cg-card[data-type="pop"]');
-  }, '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.towers === 0 && ${g}.state.wave === 0`),
+    await clickControl(page, '#bar .cg-card[data-type="pop"]');
+  }, '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.towers === 1 && ${g}.state.wave === 0`),
   'block-burst': defaults(['#btnClassic'], `${g}.state === 'play'`, `[${g}.run.cells,${g}.run.score]`, async page => {
     // A dealt piece can be grabbed only once it has slid into the tray. After Start or a new
     // deal that takes several frames, and a software-rendered frame can take hundreds of ms.

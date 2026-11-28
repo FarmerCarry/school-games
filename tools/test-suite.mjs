@@ -24,6 +24,7 @@ export const SHARED_TESTS = new Set([
   'ball-storm-engine.test.mjs',
   'balloon-blast-engine.test.mjs',
   'beat-dash-engine.test.mjs',
+  'block-world-engine.test.mjs',
   'board-rules.test.mjs',
   'bonk-garden-engine.test.mjs',
   'bubble-bop-rules.test.mjs',

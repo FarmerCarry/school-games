@@ -47,12 +47,11 @@
   var tutorialStarted = false;
   var tutorialDone = false;
 
-  var prevP1Item = false;
-  var prevP2Item = false;
+  var pointerFire = false;
 
   var hudCache = { place: -1, lap: -1, coins: -1, speed: -1, boost: false, p1Item: '-', p2Item: '-', trackId: '' };
   var BODY_ICONS = ['🏎️', '🚀', '🚌', '🚙'];
-  var ITEM_ICONS = { rocket: '🚀', shield: '🛡️', ink: '💧' };
+  var ITEM_ICONS = { plane: '✈️', shell: '💥', rocket: '🚀', shield: '🛡️', ink: '💧' };
 
   function say(txt) { $('live').textContent = txt; }
   function focusCanvas() { try { canvas.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }
@@ -84,8 +83,8 @@
     btnDuo.setAttribute('aria-pressed', String(duo));
     btnDuo.textContent = duo ? '👥 لاعبان (محلي)' : '👤 لاعب واحد';
     $('controlsBar').innerHTML = duo
-      ? 'اللاعب 1: <span dir="ltr"><span class="sg-key">W</span><span class="sg-key">A</span><span class="sg-key">S</span><span class="sg-key">D</span> + <span class="sg-key">مسافة</span></span> <span class="sep">·</span> اللاعب 2: <span dir="ltr"><span class="sg-key">↑</span><span class="sg-key">←</span><span class="sg-key">↓</span><span class="sg-key">→</span> + <span class="sg-key">Enter</span></span>'
-      : '<span dir="ltr"><span class="sg-key">↑</span><span class="sg-key">↓</span><span class="sg-key">←</span><span class="sg-key">→</span> / <span class="sg-key">WASD</span></span> قيادة <span class="sep">·</span> <span dir="ltr"><span class="sg-key">مسافة</span> / <span class="sg-key">Shift</span></span> دريفت وسلاح';
+      ? '1P: <span dir="ltr"><span class="sg-key">A</span><span class="sg-key">D</span></span> توجيه · <span class="sg-key">S</span> دريفت · <span class="sg-key">مسافة</span> سلاح <span class="sep">|</span> 2P: <span dir="ltr"><span class="sg-key">←</span><span class="sg-key">→</span></span> · <span class="sg-key">↓</span> دريفت · <span class="sg-key">Enter</span> سلاح'
+      : '<span dir="ltr"><span class="sg-key">←</span><span class="sg-key">→</span> / <span class="sg-key">AD</span></span> توجيه تلقائي <span class="sep">·</span> <span dir="ltr"><span class="sg-key">Shift</span> / <span class="sg-key">S</span></span> دريفت <span class="sep">·</span> <span dir="ltr"><span class="sg-key">مسافة</span> / <span class="sg-key">E</span> / 🖱️</span> سلاح';
   }
 
   function buildTracksUI() {
@@ -218,18 +217,20 @@
     });
 
     Kit.keys.reset();
-    prevP1Item = false;
-    prevP2Item = false;
+    Kit.hitstop.reset();
+    pointerFire = false;
     resultData = null;
     resultLock = 0;
     idleT = 0;
     bannerT = 0;
     $('banner').hidden = true;
     $('p2ItemSlot').hidden = !duo;
+    $('splitline').hidden = !duo;
     $('p1ItemTag').textContent = duo ? '1P' : 'سلاح';
+    $('p1ItemKey').textContent = duo ? 'مسافة / Q' : 'مسافة / E';
     $('ghostKeys').innerHTML = duo
-      ? '<span class="sg-key">W</span><span class="sg-key">A</span><span class="sg-key">S</span><span class="sg-key">D</span> / <span class="sg-key">↑</span><span class="sg-key">←</span><span class="sg-key">→</span>'
-      : '<span class="sg-key">↑</span><span class="sg-key">←</span><span class="sg-key">→</span> <span class="sg-key">مسافة</span>';
+      ? '<span class="sg-key">A</span><span class="sg-key">D</span> / <span class="sg-key">←</span><span class="sg-key">→</span>'
+      : '<span class="sg-key">←</span><span class="sg-key">→</span> <span class="sg-key">Shift</span> <span class="sg-key">مسافة</span>';
 
     hudCache.place = -1;
     hudCache.lap = -1;
@@ -321,37 +322,42 @@
   }
 
   /* --------------------------------------------------------------- Input Reading */
+  // Strict separation: Drift = Shift / S (never fires items!), Item = Space / E / Click (never triggers drift!).
+  // Auto-Gas drives automatically once launched; W / ↑ still gives extra manual boost feel!
   function readInputs() {
     var K = Kit.keys;
     if (!duo) {
-      var gas = (K.down('ArrowUp') || K.down('KeyW')) ? 1 : 0;
-      var brake = (K.down('ArrowDown') || K.down('KeyS')) ? 1 : 0;
+      var gas = (K.down('ArrowUp') || K.down('KeyW')) ? 1.04 : 0;
       var left = K.down('ArrowLeft') || K.down('KeyA');
       var right = K.down('ArrowRight') || K.down('KeyD');
       var steer = (right ? 1 : 0) - (left ? 1 : 0);
-      var drift = K.down('Space') || K.down('ShiftLeft') || K.down('ShiftRight');
-      var itemDown = K.down('Space') || K.down('KeyE') || K.down('Enter');
-      var itemEdge = itemDown && !prevP1Item;
-      prevP1Item = itemDown;
+      var shiftDrift = K.down('ShiftLeft') || K.down('ShiftRight');
+      var sDown = K.down('KeyS') || K.down('ArrowDown');
+      var p1Spd = world && world.karts[0] ? world.karts[0].speed : 0;
+      var drift = shiftDrift || (sDown && (Math.abs(steer) > 0.1 || (world && world.karts[0] && world.karts[0].drifting)) && p1Spd > 10);
+      var brake = (sDown && !drift) ? 1 : 0;
+      var itemEdge = K.anyPressed(['Space', 'KeyE', 'Enter']) || pointerFire;
+      pointerFire = false;
       return [{ gas: gas, brake: brake, steer: steer, drift: drift, item: itemEdge }];
     }
 
-    // 2P Local on one keyboard: P1 = WASD + Space/Q/ShiftLeft, P2 = Arrows + Enter / Slash / ShiftRight
-    var p1Gas = K.down('KeyW') ? 1 : 0;
-    var p1Brake = K.down('KeyS') ? 1 : 0;
+    // 2P Local Split-Screen: P1 = A/D steer, W boost-gas, S/ShiftLeft drift, Space/E/Q item
+    //                        P2 = ←/→ steer, ↑ boost-gas, ↓/ShiftRight drift, Enter/Slash item
+    var p1Gas = K.down('KeyW') ? 1.04 : 0;
     var p1Steer = (K.down('KeyD') ? 1 : 0) - (K.down('KeyA') ? 1 : 0);
-    var p1Drift = K.down('Space') || K.down('ShiftLeft') || K.down('KeyQ');
-    var p1ItemDown = K.down('Space') || K.down('KeyQ');
-    var p1ItemEdge = p1ItemDown && !prevP1Item;
-    prevP1Item = p1ItemDown;
+    var p1S = K.down('KeyS');
+    var p1Spd2 = world && world.karts[0] ? world.karts[0].speed : 0;
+    var p1Drift = K.down('ShiftLeft') || (p1S && (Math.abs(p1Steer) > 0.1 || (world && world.karts[0] && world.karts[0].drifting)) && p1Spd2 > 10);
+    var p1Brake = (p1S && !p1Drift) ? 1 : 0;
+    var p1ItemEdge = K.anyPressed(['Space', 'KeyE', 'KeyQ']);
 
-    var p2Gas = K.down('ArrowUp') ? 1 : 0;
-    var p2Brake = K.down('ArrowDown') ? 1 : 0;
+    var p2Gas = K.down('ArrowUp') ? 1.04 : 0;
     var p2Steer = (K.down('ArrowRight') ? 1 : 0) - (K.down('ArrowLeft') ? 1 : 0);
-    var p2Drift = K.down('Enter') || K.down('Slash') || K.down('ShiftRight');
-    var p2ItemDown = K.down('Enter') || K.down('Slash');
-    var p2ItemEdge = p2ItemDown && !prevP2Item;
-    prevP2Item = p2ItemDown;
+    var p2S = K.down('ArrowDown');
+    var p2Spd = world && world.karts[1] ? world.karts[1].speed : 0;
+    var p2Drift = K.down('ShiftRight') || (p2S && (Math.abs(p2Steer) > 0.1 || (world && world.karts[1] && world.karts[1].drifting)) && p2Spd > 10);
+    var p2Brake = (p2S && !p2Drift) ? 1 : 0;
+    var p2ItemEdge = K.anyPressed(['Enter', 'NumpadEnter', 'Slash']);
 
     return [
       { gas: p1Gas, brake: p1Brake, steer: p1Steer, drift: p1Drift, item: p1ItemEdge },
@@ -406,6 +412,34 @@
         var itemDef = E.ITEMS[ev.item];
         if (itemDef) showBanner(itemDef.icon + ' ' + itemDef.name, 1.05);
         if (view) view.burst(ev.x, 1.4, ev.z, 10, [0xffcf2b, 0xffffff, itemDef ? itemDef.color : 0xffffff], 7, 5, 0.26, 0.45);
+      } else if (ev.type === 'planeFire') {
+        if (isHuman) { J.whoosh(0.95); showBanner('طائرة موجّهة! ✈️', 0.9); if (view) view.shake(0.35); }
+        if (view) view.burst(ev.x, 1.2, ev.z, 10, [0xff3d7f, 0xffffff, 0xffd54f], 8, 5, 0.25, 0.42);
+      } else if (ev.type === 'shellFire') {
+        if (isHuman) { J.pop(0.85); showBanner('ممحاة قاذفة! 💥', 0.9); if (view) view.shake(0.32); }
+        if (view) view.burst(ev.x, 0.8, ev.z, 10, [0x29e3ff, 0xff5a9c, 0xffffff], 8, 4, 0.25, 0.4);
+      } else if (ev.type === 'shellBounce') {
+        J.tap();
+        if (view) view.burst(ev.x, 0.6, ev.z, 8, [0x29e3ff, 0xffffff], 6, 4, 0.22, 0.32);
+      } else if (ev.type === 'shieldBlock') {
+        if (isHuman || ev.attacker === 0 || (w.duo && ev.attacker === 1)) J.chime(2);
+        if (view) view.burst(ev.x, 1.2, ev.z, 14, [0x38e890, 0xffffff, 0xffe066], 9, 6, 0.28, 0.48);
+      } else if (ev.type === 'missileHit') {
+        var humanHit = isHuman, humanAtk = ev.attacker === 0 || (w.duo && ev.attacker === 1);
+        if (humanHit || humanAtk) {
+          Kit.hitstop(0.055);
+          if (view) view.shake(0.95);
+          J.impact(0.95);
+          if (humanAtk && !humanHit) {
+            J.streak(3);
+            Kit.track.hit();
+            showBanner('إصابة مباشرة! 🎯', 1.1);
+          } else if (humanHit) {
+            Kit.track.miss();
+            showBanner('مفاجأة! 💥', 0.95);
+          }
+        }
+        if (view) view.burst(ev.x, 1.4, ev.z, 26, [0xff3d7f, 0xffe066, 0x29e3ff, 0x2ee06c, 0xffffff], 13, 10, 0.34, 0.78);
       } else if (ev.type === 'rocket') {
         if (isHuman) { J.whoosh(1.0); showBanner('صاروخ التيربو! 🚀', 1.0); if (view) view.shake(0.7); }
         if (view) view.burst(ev.x, 0.8, ev.z, 14, [0xff5a36, 0xffe066, 0xffffff], 9, 5, 0.32, 0.5);
@@ -539,21 +573,23 @@
     if (resultLock > 0) resultLock = Math.max(0, resultLock - dt);
 
     if (mode === 'play' && world) {
-      var inputs = readInputs();
-      E.step(world, dt, inputs);
-      handleEvents(world);
+      if (!Kit.hitstop.tick(dt)) {
+        var inputs = readInputs();
+        E.step(world, dt, inputs);
+        handleEvents(world);
+      }
 
       if (bannerT > 0) {
         bannerT -= dt;
         if (bannerT <= 0) $('banner').hidden = true;
       }
 
-      // First-10-seconds gentle ghost keycap hint if P1 hasn't moved yet or is idle
-      if (!world.started || world.karts[0].speed < 1.2) {
+      // Gentle ghost hint only if player sits idle after start
+      if (world.started && world.karts[0].speed < 1.2) {
         idleT += dt;
-        if ((!world.started && idleT > 0.65) || idleT > 2.4) {
+        if (idleT > 2.4) {
           $('ghostHint').hidden = false;
-          $('ghostText').textContent = !world.started ? 'اضغط للانطلاق!' : 'اضغط ↑ للقيادة!';
+          $('ghostText').textContent = 'وجّه بـ ← → واضغط مسافة للسلاح!';
         }
       } else {
         idleT = 0;
@@ -607,6 +643,10 @@
     startRace(Math.min(E.TRACKS.length - 1, selectedTrack + 1));
   });
   $('btnResHome').addEventListener('click', goHome);
+  canvas.addEventListener('pointerdown', function (e) {
+    focusCanvas();
+    if (mode === 'play' && world && !duo && e.button === 0) pointerFire = true;
+  });
 
   window.addEventListener('keydown', function (e) {
     if (e.repeat || !Kit.isGameKeyEvent(e)) return;
@@ -645,7 +685,7 @@
   Kit.muteButton();
   Kit.lifecycle({
     pause: function () { if (mode === 'play') pauseGame(); },
-    reset: function () { prevP1Item = false; prevP2Item = false; }
+    reset: function () { pointerFire = false; }
   });
 
   Kit.webgl.watchContext(canvas, {
@@ -669,13 +709,16 @@
       started: w ? w.started : false,
       finished: w ? w.finished : false,
       p1Dist: w ? w.p1Dist : 0,
+      laps: E.LAPS,
+      projectiles: w && w.projectiles ? w.projectiles.length : 0,
+      cam: view && view.camInfo ? view.camInfo() : null,
       draws: drawCount,
       karts: w ? w.karts.map(function (k) {
         return {
           id: k.id, x: Math.round(k.x * 100) / 100, y: Math.round(k.y * 100) / 100, z: Math.round(k.z * 100) / 100,
           ang: Math.round(k.ang * 1000) / 1000, speed: Math.round(k.speed * 100) / 100,
-          lap: k.lap, place: k.place, coins: k.coins, item: k.item,
-          drifting: k.drifting, driftStage: k.driftStage, boostT: k.boostT, shieldT: k.shieldT, finished: k.finished
+          lap: k.lap, place: k.place, coins: k.coins, item: k.item, hitsLanded: k.hitsLanded || 0,
+          drifting: k.drifting, driftStage: k.driftStage, boostT: k.boostT, shieldT: k.shieldT, spinT: k.spinT, finished: k.finished
         };
       }) : [],
       aim: aim ? { x: aim.x, z: aim.z } : null,
@@ -689,7 +732,7 @@
     setDuo: function (on) { duo = !!on; refreshTitleUI(); }
   };
 
-  /* --------------------------------------------------------------- Boot */
+  /* --------------------------------------------------------------- Non-Blocking Fast Boot */
   refreshTitleUI();
   initDemo();
 
@@ -698,16 +741,9 @@
     view.calm = Kit.motion.reduced();
     resize();
     view.sync(demo, E.FIXED_DT, true, true);
-    view.prepare(function () {
-      view.render();
-      drawCount++;
-      dirty = false;
-      view.whenDrawn(function () {
-        live = true;
-        loop = Kit.loop(update, render);
-        Kit.ready();
-      });
-    });
+    live = true;
+    loop = Kit.loop(update, render);
+    Kit.ready();
   } catch (err) {
     $('scrTitle').hidden = true;
     $('scrError').hidden = false;

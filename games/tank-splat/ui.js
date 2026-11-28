@@ -33,13 +33,14 @@
     hats: store.get('hats', [0]),
     splats: store.get('splats', [0]),
     equip: store.get('equip', [{ hat: 0, splat: 0 }, { hat: 0, splat: 0 }, { hat: 0, splat: 0 }]),
-    free: store.get('free', { humans: 2, bots: 0, diff: 'medium', target: 5 }),
+    free: store.get('free', { humans: 2, bots: 0, diff: 'medium', target: 5, chaos: 0 }),
     stats: store.get('stats', { matches: 0, wins: 0, splats: 0 })
   };
   if (!Array.isArray(save.stars) || save.stars.length !== 8) save.stars = [0, 0, 0, 0, 0, 0, 0, 0];
   if (!Array.isArray(save.hats)) save.hats = [0];
   if (!Array.isArray(save.splats)) save.splats = [0];
   if (!Array.isArray(save.equip) || save.equip.length !== 3) save.equip = [{ hat: 0, splat: 0 }, { hat: 0, splat: 0 }, { hat: 0, splat: 0 }];
+  if (save.free && save.free.chaos == null) save.free.chaos = 0;
   // Stops at the first failed write and saves coins last, so a half-saved
   // purchase can never keep the price but lose the item. Retry writes everything.
   function persist() {
@@ -77,7 +78,26 @@
     frameDirty = true;
   });
   Kit.muteButton({ key: false });
-  cv.addEventListener('pointerdown', function () { cv.focus(); });
+  function resetMouse() {
+    TG.mouse.active = false; TG.mouse.down = false; TG.mouse.pressed = false;
+  }
+  cv.addEventListener('pointermove', function (e) {
+    if (app.screen !== 'game' || !app.game || app.game.humans !== 1) return;
+    var pt = view.toLogical(e.clientX, e.clientY);
+    TG.mouse.x = pt.x; TG.mouse.y = pt.y; TG.mouse.active = true;
+  });
+  cv.addEventListener('pointerdown', function (e) {
+    cv.focus();
+    if (app.screen !== 'game' || !app.game || app.game.humans !== 1 || e.button === 2) return;
+    var pt = view.toLogical(e.clientX, e.clientY);
+    TG.mouse.x = pt.x; TG.mouse.y = pt.y; TG.mouse.active = true;
+    TG.mouse.down = true; TG.mouse.pressed = true;
+  });
+  window.addEventListener('pointerup', function (e) {
+    if (e.button === 2) return;
+    TG.mouse.down = false;
+  });
+  window.addEventListener('pointercancel', resetMouse);
 
   function $(id) { return document.getElementById(id); }
   function qa(sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); }
@@ -125,7 +145,10 @@
       var bd = BOTS[b[1]];
       players.push({ bot: b[0], slot: k + 1, name: bd.name, hat: bd.hat, splat: k % 3 });
     });
-    app.match = { kind: 'camp', stage: i, players: players, target: st.target, guide: !!st.guide };
+    app.match = {
+      kind: 'camp', stage: i, players: players, target: st.target, guide: !!st.guide,
+      playerHp: i <= 2 ? 2 : 1, chaosRicochet: false
+    };
     beginMatch();
   }
   function freePlayers() {
@@ -140,16 +163,25 @@
     return players;
   }
   function startFree() {
-    app.match = { kind: 'free', players: freePlayers(), target: save.free.target };
+    var f = save.free;
+    app.match = {
+      kind: 'free', players: freePlayers(), target: f.target,
+      playerHp: (f.humans === 1 && f.diff === 'easy') ? 2 : 1,
+      chaosRicochet: !!f.chaos
+    };
     beginMatch();
   }
   function beginMatch() {
     var mt = app.match;
+    resetMouse();
     // Play stats: every match start (first play, retry, restart, next stage) is one round;
     // the aim guide of the first stages is the tutorial until stage 1 is won.
     Kit.stats.round(mt.kind === 'camp' ? 'stage' + (mt.stage + 1) : 'free');
     if (mt.stage === 0 && !save.stars[0]) Kit.stats.tutorial('start');
-    app.game = TG.create({ players: mt.players, target: mt.target, stage: mt.stage, guide: mt.guide, onEnd: onMatchEnd });
+    app.game = TG.create({
+      players: mt.players, target: mt.target, stage: mt.stage, guide: mt.guide,
+      playerHp: mt.playerHp, chaosRicochet: !!mt.chaosRicochet, onEnd: onMatchEnd
+    });
     S.click();
     show('game');
   }
@@ -233,7 +265,7 @@
     if (won || !solo) S.fanfare(); else S.lose();
     app.resT = 0;
     show('result');
-    app.lock = performance.now() + 1000;
+    app.lock = performance.now() + 450;
   }
 
   function resMain() {
@@ -387,13 +419,12 @@
   }
   qa('#slotTabs button').forEach(function (b) { b.addEventListener('click', function () { app.shopSlot = +b.getAttribute('data-slot'); S.click(); buildShop(); }); });
   qa('#kindTabs button').forEach(function (b) { b.addEventListener('click', function () { app.shopKind = b.getAttribute('data-kind'); S.click(); buildShop(); }); });
-  function mulberry(seed) {
-    return function () { seed |= 0; seed = seed + 0x6D2B79F5 | 0; var t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
-  }
+  var mulberry = A.seedRand;
 
   /* ------------------------------------------------------------ actions */
   var ACTS = {
     title: function () { S.click(); show('title'); },
+    quickPlay: function () { startCampaign(unlockedStage()); },
     camp: function () { S.click(); app.campSel = unlockedStage(); show('camp'); },
     free: function () { S.click(); show('free'); },
     shop: function () { S.click(); show('shop'); },
@@ -413,7 +444,7 @@
   ui.addEventListener('mouseover', function (e) { var b = e.target.closest('.btn'); if (b && b !== app.hoverEl) { app.hoverEl = b; S.hover(); } });
   $('pauseBtn').addEventListener('click', function (e) { e.stopPropagation(); pause(); if (e.detail > 0) this.blur(); });
 
-  function pause() { if (app.screen === 'game') { S.click(); show('pause'); } }
+  function pause() { if (app.screen === 'game') { resetMouse(); S.click(); show('pause'); } }
 
   window.addEventListener('keydown', function (e) {
     if (!Kit.isGameKeyEvent(e)) return;
@@ -430,7 +461,7 @@
       if (k === 'KeyP' || k === 'Escape') ACTS.resume();
       else if (k === 'KeyR') ACTS.restart();
     } else if (sc === 'title') {
-      if (enter) ACTS.camp();
+      if (enter) ACTS.quickPlay();
     } else if (sc === 'camp') {
       if (enter) startCampaign(app.campSel);
       else if (k === 'Escape' || k === 'Backspace') ACTS.title();
@@ -513,7 +544,7 @@
       };
     },
     start: function (i) { startCampaign(i || 0); },
-    startFree: function (h, b, d, tgt) { save.free = { humans: h, bots: b, diff: d || 'medium', target: tgt || 3 }; startFree(); },
+    startFree: function (h, b, d, tgt, chaos) { save.free = { humans: h, bots: b, diff: d || 'medium', target: tgt || 3, chaos: chaos ? 1 : 0 }; startFree(); },
     // Replace every human with a bot of the given difficulty (for automatic test matches).
     autoplay: function (diff) {
       if (!app.game) return false;
@@ -536,7 +567,7 @@
     sim: function (sec) { for (var i = 0; i < sec * 60; i++) update(1 / 60); return this.state(); },
     reset: function () { ['coins', 'stars', 'hats', 'splats', 'equip', 'free', 'stats'].forEach(function (k) { store.remove(k); }); }
   };
-  Kit.lifecycle({ pause: pause });
+  Kit.lifecycle({ pause: pause, reset: resetMouse });
   Kit.ready();
 })();
 

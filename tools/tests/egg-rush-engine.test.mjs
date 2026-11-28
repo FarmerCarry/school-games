@@ -12,15 +12,19 @@ function race(i = 0, opts = {}) { return ER.create(i, Object.assign({ tune: calm
 function toRace(r) { while (r.phase !== 'race') ER.step(r, DT, [{}]); return r; }
 function run(r, secs, input = {}) { const n = Math.round(secs / DT); for (let k = 0; k < n; k++) ER.step(r, DT, [typeof input === 'function' ? input(r) : input, {}]); }
 
-test('nine tracks in three worlds, built the same way every time', () => {
+test('nine tracks in three worlds, snappy 220m+ lengths with pads, ramps and coin arcs', () => {
   assert.equal(ER.TRACK_COUNT, 9);
   assert.equal(ER.WORLDS.length, 3);
+  assert.equal(ER.track(0).len, 220);
   for (let i = 0; i < 9; i++) {
     const t = ER.track(i);
     assert.equal(t.id, ER.trackId(i));
     assert.equal(t.world, Math.floor(i / 3));
-    assert.ok(t.len >= 300 && t.len <= 700, 'track length ' + t.len);
-    assert.ok(t.items.length > 4, 'track ' + i + ' has obstacles');
+    assert.ok(t.len >= 220 && t.len <= 380, 'snappy track length ' + t.len);
+    assert.ok(t.items.length > 5, 'track ' + i + ' has dense obstacles/pads/ramps');
+    assert.ok(t.items.some((it) => it.k === 'pad'), 'track ' + i + ' has turbo speed pads');
+    assert.ok(t.items.some((it) => it.k === 'ramp'), 'track ' + i + ' has jump ramps');
+    assert.ok(t.coins.length >= 10, 'track ' + i + ' has coin arcs');
     assert.equal(t.gold.length, 3, 'three golden eggs on track ' + i);
     assert.equal(t.cps[0], 0);
     for (let k = 1; k < t.items.length; k++) assert.ok(t.items[k].s >= t.items[k - 1].s, 'items sorted');
@@ -38,20 +42,21 @@ test('later tracks are busier than the first one', () => {
   const first = ER.track(0), last = ER.track(8);
   assert.ok(last.items.length / last.len > first.items.length / first.len);
   const kinds = new Set(ER.track(8).items.map((it) => it.k));
-  assert.ok(kinds.size >= 3, 'mixed obstacles late on');
+  assert.ok(kinds.size >= 4, 'mixed obstacles, pads and ramps late on');
 });
 
-test('countdown first, then the race starts and the runner jogs forward', () => {
+test('snappy 0.8s countdown first, then the race starts and the runner jogs forward', () => {
+  assert.equal(ER.COUNTDOWN, 0.8);
   const r = race();
   ER.step(r, DT, [{ up: true }]);
   assert.equal(r.phase, 'count');
-  run(r, 1.5, { up: true });
-  assert.equal(r.runners[0].s, 0, 'no running during the countdown');
-  toRace(r);
-  assert.equal(r.phase, 'race');
+  run(r, 0.4, { up: true });
+  assert.equal(r.runners[0].s, 0, 'no running during the 0.8s countdown');
+  run(r, 0.5, { up: true });
+  assert.equal(r.phase, 'race', 'snappy countdown finishes under 1s');
   assert.ok(r.ev.some((e) => e.t === 'count' && e.n === 0), 'GO event');
   run(r, 2);
-  assert.ok(r.runners[0].s > 10, 'jogging by itself');
+  assert.ok(r.runners[0].s > 15, 'jogging briskly by itself');
 });
 
 test('sprint is faster than jogging, slowing is slower', () => {
@@ -88,24 +93,40 @@ test('the egg wobbles more when sprinting, and leaning toward it brings it back'
   assert.ok(r.runners[0].e < 0.6, 'steering toward the egg recentres it');
 });
 
-test('egg past the rim splats, then respawns at the checkpoint with a fresh egg', () => {
-  const r = toRace(race());
-  run(r, 1);
+test('wall deadlock fixed: counter-lean uses inp.steer and wall contact bounces runner inward', () => {
+  const r = toRace(race(0, { tune: calm() }));
   const me = r.runners[0];
+  me.x = ER.HALF;
+  me.vx = 2.0;
+  me.e = 0.72;
+  me.ev = 0.15;
+  me.ghost = 5;
+  // Hold steer toward the right wall to save the right-leaning egg!
+  run(r, 0.35, { steer: 1 });
+  assert.ok(me.lean > 0.7, 'counter-lean driven by inp.steer even at track edge (lean=' + me.lean + ')');
+  assert.equal(me.drops, 0, 'egg saved at wall — zero deadlock');
+  assert.ok(me.e < 0.65, 'egg recovered inward from wall (e=' + me.e + ')');
+});
+
+test('egg past the rim splats briefly and recovers in place (no 75m rollback!)', () => {
+  const r = toRace(race());
+  const me = r.runners[0];
+  me.s = 95;
+  me.cp = 0; // checkpoint 0 is at 0m — old code rolled back 95m!
   me.e = 1.2; me.ev = 3;
   run(r, DT);
   assert.equal(me.state, 'splat');
   assert.equal(me.drops, 1);
   assert.ok(r.ev.some((e) => e.t === 'drop' && e.human));
   r.ev.length = 0;
-  run(r, 2);
-  assert.equal(me.state, 'run');
-  assert.equal(me.s > 0 && me.s < 30, true, 'back near the last checkpoint');
+  run(r, 0.8);
+  assert.equal(me.state, 'run', 'fast 0.55s recovery');
+  assert.ok(me.s >= 90, 'recovered in place near 95m, never teleported back to 0m (s=' + me.s + ')');
   assert.equal(me.e, me.e); // finite
   assert.ok(Math.abs(me.e) < 0.5, 'fresh egg');
 });
 
-test('jumping clears the first-track hurdle; running into it drops the egg', () => {
+test('jumping clears the first-track hurdle; hitting it bounces with 2 shield-cracks instead of instant splat', () => {
   const tr = ER.track(0);
   const h = tr.items.find((it) => it.k === 'hurdle' && it.full);
   assert.ok(h, 'track 1 teaches a full-width hurdle');
@@ -115,7 +136,7 @@ test('jumping clears the first-track hurdle; running into it drops the egg', () 
   me.s = h.s - 3; me.x = 0;
   let jumped = false;
   for (let k = 0; k < 120; k++) {
-    const jump = !jumped && me.s > h.s - 1.6;
+    const jump = !jumped && me.s > h.s - 1.8;
     if (jump) jumped = true;
     ER.step(a, DT, [{ jump }]);
   }
@@ -123,25 +144,57 @@ test('jumping clears the first-track hurdle; running into it drops the egg', () 
   assert.equal(me.hits, 0);
   assert.ok(me.cleared >= 1, 'counted as cleared');
   assert.ok(me.s > h.s);
-  // No jump.
+  // First hurdle hit: funny bounce + crack 1, NO instant drop!
   const b = toRace(race());
   const you = b.runners[0];
   you.s = h.s - 3; you.x = 0;
-  run(b, 1);
-  assert.equal(you.drops, 1, 'tripping on a hurdle drops the egg');
-  assert.ok(b.ev.some((e) => e.t === 'hit' && e.k === 'hurdle'));
+  let sawBounce = false;
+  for (let k = 0; k < 45; k++) {
+    ER.step(b, DT, [{}]);
+    if (you.hits >= 1 && you.y > 0.05) sawBounce = true;
+  }
+  assert.equal(you.cracks, 1, '1st hurdle hit uses 1 of 2 shield-cracks');
+  assert.equal(you.drops, 0, 'no instant splat on 1st hurdle hit');
+  assert.ok(sawBounce, 'funny cartoon bounce on hurdle hit');
+  assert.ok(b.ev.some((e) => e.t === 'hit' && e.k === 'hurdle' && e.crack === 1));
+  // 2nd hurdle hit while already cracked drops the egg, then recovers in place!
+  you.s = h.s - 2.5; you.hitCd = 0; you.y = 0; you.air = false; you.vy = 0; you.ghost = 0;
+  run(b, 0.6);
+  assert.equal(you.drops, 1, '2nd shield-crack breaks the egg');
+});
+
+test('turbo speed pads, jump ramps, and coin arcs boost and reward players', () => {
+  const tr = ER.track(0);
+  const pad = tr.items.find((it) => it.k === 'pad');
+  const ramp = tr.items.find((it) => it.k === 'ramp');
+  assert.ok(pad && ramp, 'track 1 includes pad and ramp');
+
+  const r = toRace(race(0));
+  const me = r.runners[0];
+  me.s = pad.s - 2; me.x = pad.x;
+  run(r, 0.35);
+  assert.ok(me.boost > 0.5 && me.v > ER.V_SPRINT, 'turbo pad grants super speed');
+  assert.ok(r.ev.some((e) => e.t === 'pad'));
+
+  r.ev.length = 0;
+  me.s = ramp.s - 2; me.x = ramp.x; me.air = false; me.y = 0; me.hitCd = 0;
+  let peakY = 0;
+  for (let k = 0; k < 45; k++) { ER.step(r, DT, [{}]); peakY = Math.max(peakY, me.y); }
+  assert.ok(peakY > 1.8, 'jump ramp launches runner sky-high (peakY=' + peakY.toFixed(2) + ')');
+  assert.ok(r.ev.some((e) => e.t === 'ramp'));
+  assert.ok(me.coins >= 2, 'collects coin arc over jump ramp (coins=' + me.coins + ')');
 });
 
 test('after two trips on the same hurdle the runner hops it alone (nobody gets stuck)', () => {
   const r = toRace(race());
   const me = r.runners[0];
   const h = r.track.items.find((it) => it.k === 'hurdle' && it.full);
-  me.s = h.s - 8;
-  me.cp = 0;
+  me.trips = { [h.i]: 2 };
+  me.s = h.s - 5;
   let guard = 0;
-  while (me.s < h.s + 2 && guard++ < 60 * 60) ER.step(r, DT, [{}]);
+  while (me.s < h.s + 2 && guard++ < 60 * 10) ER.step(r, DT, [{}]);
   assert.ok(me.s > h.s, 'passed the hurdle without pressing anything');
-  assert.ok(me.drops <= 2);
+  assert.equal(me.drops, 0);
   assert.ok(me.helped);
 });
 

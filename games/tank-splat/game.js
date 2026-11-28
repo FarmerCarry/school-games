@@ -4,14 +4,16 @@
   'use strict';
   var A = window.TS_ART, M = window.TS_MAZE, S = window.TS_SND;
   var W = 1280, H = 720, TOP = 70;
+  var m = Math, HY = m.hypot, CS = m.cos, SN = m.sin, MN = m.min, MX = m.max, AB = m.abs, FL = m.floor, RD = m.random, PI = m.PI;
+  var mulberry = A.seedRand;
 
-  var TANK_SPEED = 165, TANK_ROT = 3.4, BALL_SPEED = 330, BALL_R = 7;
+  var TANK_SPEED = 175, TANK_ROT = 3.5, BALL_SPEED = 335, BALL_R = 7;
   var MAX_BALLS = 5, FIRE_CD = 0.13, BALL_LIFE = 7, BALL_BOUNCES = 6;
   var GIANT_R = 15, GIANT_SPEED = 245;
-  var HIT_R = 17;
-  var OWN_GRACE = 0.3; // s: a brand-new ball can't splat its own tank (point-blank wall shots)
-  var CORNERS = [[15, 15], [15, -15], [-15, 15], [-15, -15]];
+  var HIT_R = 17, TANK_R = 15, BARREL_R = 16, PAD_R = 22;
+  var OWN_GRACE = 0.3; // s: a brand-new ball can't bounce/hit its own tank right at muzzle
   var LASER_AIM = { r: BALL_R, bounces: 3, len: 1000 }, GUIDE_AIM = { r: BALL_R, bounces: 1, len: 300 };
+  var MOUSE = { x: W / 2, y: H / 2, active: false, down: false, pressed: false };
 
   var CONTROLS = [
     { fwd: ['KeyW'], back: ['KeyS'], left: ['KeyA'], right: ['KeyD'], fire: ['KeyQ', 'Space'] },
@@ -30,15 +32,7 @@
   var SELF_MSG = 'كرتك ارتدّت عليك!';
 
   /* ------------------------------------------------------------ helpers */
-  function mulberry(seed) {
-    return function () {
-      seed |= 0; seed = seed + 0x6D2B79F5 | 0;
-      var t = Math.imul(seed ^ seed >>> 15, 1 | seed);
-      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
-      return ((t ^ t >>> 14) >>> 0) / 4294967296;
-    };
-  }
-  function angDiff(a, b) { var d = b - a; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2; return d; }
+  function angDiff(a, b) { var d = b - a; while (d > PI) d -= PI * 2; while (d < -PI) d += PI * 2; return d; }
 
   /* ------------------------------------------------------------ layers */
   // Floor, paint and walls are pre-rendered into offscreen canvases and
@@ -51,22 +45,26 @@
   function create(opts) {
     var G = {
       demo: !!opts.demo, target: opts.target || 3, stage: opts.stage == null ? -1 : opts.stage,
-      tanks: [], balls: [], crates: [], parts: [], pops: [], splats: [], dots: [],
+      tanks: [], balls: [], crates: [], barrels: [], pads: [], parts: [], pops: [], splats: [], dots: [],
       maze: null, theme: null, themeIdx: Math.floor(Math.random() * A.THEMES.length),
-      round: 0, state: 'ready', timer: 0, time: 0, shakeP: 0, shx: 0, shy: 0,
+      round: 0, state: 'ready', timer: 0, time: 0,
       slow: 0, spectate: 0, over: false, winner: null, coins: 0, onEnd: opts.onEnd || null,
       humans: 0, firstRound: true, banner: null, laserPts: [], lastSplatBy: null,
-      guide: !!opts.guide, selfOut: false
+      guide: !!opts.guide, selfOut: false,
+      chaosRicochet: !!opts.chaosRicochet,
+      playerHp: opts.playerHp > 1 ? opts.playerHp : 1
     };
     var humanCount = 0;
     opts.players.forEach(function (p) { if (p.human) humanCount++; });
     G.humans = humanCount;
     opts.players.forEach(function (p, i) {
+      var hp = p.human && !opts.demo ? G.playerHp : 1;
       var t = {
         id: i, slot: p.slot, pal: A.PAL[p.slot], name: p.name, human: !!p.human, hat: p.hat || 0, splat: p.splat || 0,
         ctrl: p.human ? (humanCount === 1 ? SOLO : CONTROLS[p.ctrl]) : null, ctrlIdx: p.ctrl || 0,
         bot: p.bot ? window.TS_BOT.create(p.bot) : null,
-        score: 0, x: 0, y: 0, a: 0, alive: true, dead: 0, cool: 0, active: 0,
+        score: 0, x: 0, y: 0, a: 0, bodyA: 0, alive: true, dead: 0, cool: 0, active: 0,
+        hp: hp, maxHp: hp, invuln: 0, boingCd: 0,
         weapon: null, ammo: 0, laser: 0, speed: 0, shield: 0,
         sq: 0, recoil: 0, tread: 0, blinkT: 1 + Math.random() * 3, blink: 0, flash: 0, muzzle: 0, scale: 0, popHud: 0,
         paint: '#000', blobs: null, splats: 0, lastKill: -9, moving: 0, dispScore: 0
@@ -90,16 +88,44 @@
       var n = G.tanks.length, cols, rows;
       if (n <= 2) { cols = 9 + Math.floor(Math.random() * 4); rows = 6 + Math.floor(Math.random() * 2); }
       else { cols = 11 + Math.floor(Math.random() * 4); rows = 6 + Math.floor(Math.random() * 2); }
-      var cs = Math.min(90, Math.floor(1180 / cols), Math.floor((H - TOP - 44) / rows));
+      var cs = Math.min(96, Math.floor(1180 / cols), Math.floor((H - TOP - 44) / rows));
       var ox = Math.round((W - cols * cs) / 2), oy = Math.round(TOP + 8 + (H - TOP - 8 - rows * cs) / 2);
-      G.maze = M.generate(cols, rows, cs, ox, oy, 0.22 + Math.random() * 0.12);
-      G.balls.length = 0; G.crates.length = 0; G.pops.length = 0; G.splats.length = 0; G.dots.length = 0;
-      G.crateT = 3 + Math.random() * 2;
+      G.maze = M.generate(cols, rows, cs, ox, oy, 0.28 + Math.random() * 0.12);
+      G.balls.length = 0; G.crates.length = 0; G.barrels.length = 0; G.pads.length = 0;
+      G.pops.length = 0; G.splats.length = 0; G.dots.length = 0;
+      G.crateT = 2.6 + Math.random() * 1.8;
       G.spectate = 0; G.skipSpectate = false; G.slow = 0; G.endT = 0; G.banner = null; G.selfOut = false;
       placeTanks();
-      G.state = 'ready'; G.timer = G.demo ? 0.6 : (G.round === 1 ? 2.2 : 1.5);
+      placeArenaToys();
+      G.state = 'ready'; G.timer = 0.5;
       if (!G.demo) S.beep();
       buildLayers(G);
+    }
+
+    function placeArenaToys() {
+      var m = G.maze, N = m.cols * m.rows, used = [];
+      G.tanks.forEach(function (t) { used.push(M.cellOf(m, t.x, t.y)); });
+      function pickFreeCell(minTankDist) {
+        for (var tries = 0; tries < 40; tries++) {
+          var c = Math.floor(Math.random() * N);
+          if (used.indexOf(c) >= 0) continue;
+          var cc = M.cellCenter(m, c), ok = true;
+          for (var i = 0; i < G.tanks.length; i++) {
+            if (Math.hypot(G.tanks[i].x - cc.x, G.tanks[i].y - cc.y) < minTankDist) { ok = false; break; }
+          }
+          if (ok) { used.push(c); return cc; }
+        }
+        return null;
+      }
+      var barrelCount = G.tanks.length > 2 ? 3 : 2;
+      for (var bi = 0; bi < barrelCount; bi++) {
+        var bp = pickFreeCell(135);
+        if (bp) G.barrels.push({ x: bp.x, y: bp.y, r: BARREL_R, alive: true });
+      }
+      for (var pi = 0; pi < 2; pi++) {
+        var pp = pickFreeCell(105);
+        if (pp) G.pads.push({ x: pp.x, y: pp.y, r: PAD_R, cd: 0 });
+      }
     }
 
     function placeTanks() {
@@ -124,7 +150,9 @@
         for (var d = 0; d < 4; d++) if (M.canPass(m, cx, cy, d)) open.push(d);
         var dd = open.length ? open[Math.floor(Math.random() * open.length)] : 0;
         t.a = [0, Math.PI / 2, Math.PI, -Math.PI / 2][dd];
-        t.alive = true; t.dead = 0; t.cool = 0.2; t.active = 0; t.weapon = null; t.ammo = 0;
+        t.bodyA = t.a;
+        t.alive = true; t.dead = 0; t.cool = 0.18; t.active = 0; t.weapon = null; t.ammo = 0;
+        t.hp = t.human && !G.demo ? G.playerHp : 1; t.maxHp = t.hp; t.invuln = 0; t.boingCd = 0;
         t.laser = 0; t.speed = 0; t.shield = 0; t.sq = 0; t.recoil = 0; t.flash = 0; t.muzzle = 0; t.scale = 0; t.blobs = null;
         if (t.spring) { t.spring.sx = 1; t.spring.sy = 1; t.spring.v = 0; }
         if (t.bot) window.TS_BOT.reset(t.bot);
@@ -134,14 +162,14 @@
     function finishRound(winner) {
       if (G.state !== 'play') return;
       G.state = 'roundEnd';
-      G.timer = G.demo ? 1.2 : 2.3;
+      G.timer = G.demo ? 1.0 : 1.45;
       G.slow = 0; G.spectate = 0;
       G.winner = winner;
       if (winner) {
         winner.score++;
         winner.popHud = 1;
         if (winner.human && !G.demo) G.coins += 10;
-        if (!G.demo) { S.roundWin(); setTimeout(function () { S.point(); }, 380); }
+        if (!G.demo) { S.roundWin(); setTimeout(function () { S.point(); }, 280); }
         burst(winner.x, winner.y, 30, [winner.pal.paint, '#fff', '#ffe14d'], 260, 5, 0.9);
       } else if (!G.demo) S.roundDraw();
       G.banner = { t: 0, winner: winner, draw: !winner };
@@ -150,7 +178,7 @@
       if (winner && winner.score >= G.target && !G.demo) {
         G.over = true;
         if (winner.human) G.coins += 30;
-        G.timer = 2.6;
+        G.timer = 1.6;
       }
     }
 
@@ -161,22 +189,15 @@
       if (G.slow > 0) { G.slow -= dt; sdt = dt * 0.3; }
       if (G.state === 'play' && G.spectate > 0) sdt = dt * 2.2;
 
-      // Same two Math.random calls as before, so bots and crates keep their stream.
-      // The picture uses Kit.art.shake (its own RNG, trauma at most 0.6).
-      if (Kit.motion.reduced()) { G.shakeP = 0; G.shx = 0; G.shy = 0; }
-      else {
-        G.shakeP = Math.max(0, G.shakeP - dt * 38);
-        G.shx = (Math.random() - 0.5) * 2 * G.shakeP; G.shy = (Math.random() - 0.5) * 2 * G.shakeP;
-      }
       Kit.art.shake.update(dt);
 
       if (G.state === 'ready') {
         G.timer -= dt;
-        G.tanks.forEach(function (t) { t.scale = Math.min(1, t.scale + dt * 3.2); animTank(t, dt); });
+        G.tanks.forEach(function (t) { t.scale = Math.min(1, t.scale + dt * 5.5); animTank(t, dt); });
         if (G.timer <= 0) {
           G.state = 'play';
-          if (!G.demo) { S.go(); pop(W / 2, H / 2 + 10, 'انطلق!', '#ffffff', 78, 0.9, true); }
-          G.tanks.forEach(function (t) { t.scale = 1; });
+          if (!G.demo) { S.go(); pop(W / 2, H / 2 + 10, 'انطلق!', '#ffffff', 72, 0.65, true); }
+          G.tanks.forEach(function (t) { t.scale = 1; t.cool = 0; });
         }
       } else if (G.state === 'play') {
         playStep(sdt, dt);
@@ -224,6 +245,14 @@
 
     function readInput(t) {
       var k = Kit.keys, c = t.ctrl;
+      if (G.humans === 1) {
+        var mx = (k.anyDown(c.right) ? 1 : 0) - (k.anyDown(c.left) ? 1 : 0);
+        var my = (k.anyDown(c.back) ? 1 : 0) - (k.anyDown(c.fwd) ? 1 : 0);
+        return {
+          direct: true, mx: mx, my: my,
+          fire: k.anyPressed(c.fire) || MOUSE.pressed || (MOUSE.down && t.cool <= 0)
+        };
+      }
       return {
         fwd: (k.anyDown(c.fwd) ? 1 : 0) - (k.anyDown(c.back) ? 1 : 0),
         turn: (k.anyDown(c.right) ? 1 : 0) - (k.anyDown(c.left) ? 1 : 0),
@@ -239,32 +268,53 @@
         if (!t.alive) continue;
         var inp = t.human && !t.bot ? readInput(t) : window.TS_BOT.think(t.bot, t, G, dt);
         t.cool -= dt;
+        if (t.invuln > 0) t.invuln = Math.max(0, t.invuln - dt);
+        if (t.boingCd > 0) t.boingCd = Math.max(0, t.boingCd - dt);
         if (t.laser > 0) t.laser -= dt;
         if (t.speed > 0) t.speed -= dt;
         if (t.shield > 0) t.shield -= dt;
         var spd = TANK_SPEED * (t.speed > 0 ? 1.55 : 1);
         var rot = TANK_ROT * (t.speed > 0 ? 1.25 : 1);
-        t.a += inp.turn * rot * dt;
-        var mv = inp.fwd * spd * (inp.fwd < 0 ? 0.72 : 1) * dt;
         var ox = t.x, oy = t.y;
-        t.x += Math.cos(t.a) * mv; t.y += Math.sin(t.a) * mv;
-        resolveTank(t);
-        var moved = Math.hypot(t.x - ox, t.y - oy);
-        t.tread += (inp.fwd >= 0 ? 1 : -1) * moved + Math.abs(inp.turn) * dt * 30;
-        t.moving = moved / Math.max(dt, 1e-4);
-        if (t.speed > 0 && moved > 0.5 && Math.random() < 0.5) {
-          burst(t.x - Math.cos(t.a) * 22, t.y - Math.sin(t.a) * 22, 1, ['#ffe14d', '#fff'], 40, 4, 0.35);
+        if (inp.direct) {
+          var len = Math.hypot(inp.mx, inp.my);
+          if (len > 0) {
+            var ux = inp.mx / len, uy = inp.my / len;
+            var dspd = spd * 1.12;
+            t.x += ux * dspd * dt; t.y += uy * dspd * dt;
+            var moveAng = Math.atan2(uy, ux);
+            t.bodyA += angDiff(t.bodyA, moveAng) * Math.min(1, dt * 15);
+            if (!MOUSE.active) t.a += angDiff(t.a, moveAng) * Math.min(1, dt * 15);
+          }
+          if (MOUSE.active) t.a = Math.atan2(MOUSE.y - t.y, MOUSE.x - t.x);
+          resolveTank(t);
+          var dmoved = Math.hypot(t.x - ox, t.y - oy);
+          t.tread += dmoved;
+          t.moving = dmoved / Math.max(dt, 1e-4);
+        } else {
+          t.a += inp.turn * rot * dt;
+          t.bodyA = t.a;
+          var mv = inp.fwd * spd * (inp.fwd < 0 ? 0.72 : 1) * dt;
+          t.x += Math.cos(t.a) * mv; t.y += Math.sin(t.a) * mv;
+          resolveTank(t);
+          var moved = Math.hypot(t.x - ox, t.y - oy);
+          t.tread += (inp.fwd >= 0 ? 1 : -1) * moved + Math.abs(inp.turn) * dt * 30;
+          t.moving = moved / Math.max(dt, 1e-4);
+        }
+        if (t.speed > 0 && t.moving > 25 && Math.random() < 0.5) {
+          burst(t.x - Math.cos(t.bodyA) * 20, t.y - Math.sin(t.bodyA) * 20, 1, ['#ffe14d', '#fff'], 40, 4, 0.35);
         }
         if (inp.fire) fire(t);
       }
+      MOUSE.pressed = false;
       // tank vs tank
       for (i = 0; i < G.tanks.length; i++) {
         var a = G.tanks[i]; if (!a.alive) continue;
         for (var j = i + 1; j < G.tanks.length; j++) {
           var b = G.tanks[j]; if (!b.alive) continue;
           var dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy);
-          if (d < 36 && d > 0.01) {
-            var push = (36 - d) / 2; dx /= d; dy /= d;
+          if (d < 34 && d > 0.01) {
+            var push = (34 - d) / 2; dx /= d; dy /= d;
             a.x -= dx * push; a.y -= dy * push; b.x += dx * push; b.y += dy * push;
             resolveTank(a); resolveTank(b);
           }
@@ -272,6 +322,7 @@
       }
       stepBalls(dt, false);
       stepCrates(dt);
+      stepPads(dt);
 
       // round end?
       var alive = 0, last = null, humansAlive = 0;
@@ -310,22 +361,23 @@
       finishRound(last);
     }
 
-    // Tank collision: one centre circle plus four corner circles.
+    // Smooth snag-free circular tank collision against walls & intact paint barrels.
     function resolveTank(t) {
       var m = G.maze;
       for (var it = 0; it < 3; it++) {
-        var o = M.collideCircle(m, t.x, t.y, 16);
+        var o = M.collideCircle(m, t.x, t.y, TANK_R);
         t.x = o.x; t.y = o.y;
-        var ca = Math.cos(t.a), sa = Math.sin(t.a);
-        for (var k = 0; k < 4; k++) {
-          var lx = CORNERS[k][0], ly = CORNERS[k][1];
-          var wx = t.x + lx * ca - ly * sa, wy = t.y + lx * sa + ly * ca;
-          var o2 = M.collideCircle(m, wx, wy, 6);
-          t.x += o2.x - wx; t.y += o2.y - wy;
+        for (var bi = 0; bi < G.barrels.length; bi++) {
+          var br = G.barrels[bi];
+          if (!br.alive) continue;
+          var dx = t.x - br.x, dy = t.y - br.y, d = Math.hypot(dx, dy), minD = TANK_R + br.r;
+          if (d < minD && d > 0.001) {
+            t.x = br.x + (dx / d) * minD;
+            t.y = br.y + (dy / d) * minD;
+          }
         }
       }
-      // keep inside maze bounds (safety)
-      var x1 = m.ox + 16, x2 = m.ox + m.cols * m.cs - 16, y1 = m.oy + 16, y2 = m.oy + m.rows * m.cs - 16;
+      var x1 = m.ox + TANK_R, x2 = m.ox + m.cols * m.cs - TANK_R, y1 = m.oy + TANK_R, y2 = m.oy + m.rows * m.cs - TANK_R;
       if (t.x < x1) t.x = x1; if (t.x > x2) t.x = x2; if (t.y < y1) t.y = y1; if (t.y > y2) t.y = y2;
     }
 
@@ -379,16 +431,89 @@
               if (!spawning) {
                 if (!G.demo) S.bounce(Math.min(b.bounces, 6));
                 addDot(b.x - nx * b.r * 0.6, b.y - ny * b.r * 0.6, b.giant ? 7 : 3.2, b.color);
-                if (b.giant) { G.shakeP = Math.max(G.shakeP, 3); Kit.art.shake.add(0.12); }
+                if (b.giant) Kit.art.shake.add(0.12);
               }
             }
           }
         }
         if (b.safe && b.dist > 30 && Math.hypot(b.x - b.owner.x, b.y - b.owner.y) > HIT_R + b.r + 4) b.safe = false;
+        if (!spawning && hitBarrels(b)) return true;
         if (!spawning && hitTanks(b)) return true;
         if (b.bounces > b.maxB) { b.life = 0; return true; }
       }
       return false;
+    }
+
+    function hitBarrels(b) {
+      for (var i = 0; i < G.barrels.length; i++) {
+        var br = G.barrels[i];
+        if (!br.alive) continue;
+        if (Math.hypot(b.x - br.x, b.y - br.y) < br.r + b.r) {
+          b.life = 0;
+          explodeBarrel(br, b.owner);
+          return true;
+        }
+      }
+      return false;
+    }
+
+    function explodeBarrel(br, killer) {
+      if (!br.alive) return;
+      br.alive = false;
+      var paintCol = killer ? killer.pal.paint : '#ff6b00';
+      addSplat(br.x, br.y, 74, paintCol, killer ? killer.splat : 0);
+      burst(br.x, br.y, 34, ['#ff6b00', '#ffe14d', paintCol, '#fff'], 350, 7, 0.72);
+      Kit.art.shake.add(G.demo ? 0.25 : 0.52);
+      Kit.art.hitstop(G.demo ? 35 : 65);
+      Kit.art.flash('#ff9d00', 80);
+      if (!G.demo) { S.boom(); pop(br.x, br.y - 28, 'بوووم! 💥', '#ffe14d', 38, 1.0); }
+      // Spawn 6 energetic paint droplets flying radially
+      for (var k = 0; k < 6; k++) {
+        var a = (k / 6) * Math.PI * 2 + 0.25;
+        G.balls.push({
+          x: br.x + Math.cos(a) * 14, y: br.y + Math.sin(a) * 14,
+          vx: Math.cos(a) * 290, vy: Math.sin(a) * 290,
+          r: 6.5, owner: killer || G.tanks[0], life: 1.4, age: 0.4,
+          bounces: 0, maxB: 2, safe: false, dist: 40, color: paintCol, sq: 0.5, sqA: a, giant: false
+        });
+        if (killer) killer.active++;
+      }
+      // Chain-detonate adjacent barrels & blast tanks in blast radius
+      for (var j = 0; j < G.barrels.length; j++) {
+        var ob = G.barrels[j];
+        if (ob.alive && Math.hypot(ob.x - br.x, ob.y - br.y) < 120) explodeBarrel(ob, killer);
+      }
+      for (var ti = 0; ti < G.tanks.length; ti++) {
+        var t = G.tanks[ti];
+        if (!t.alive) continue;
+        var dx = t.x - br.x, dy = t.y - br.y, d = Math.hypot(dx, dy);
+        if (d < 105) {
+          if (t === killer && !G.chaosRicochet) {
+            var nx = dx / (d || 1), ny = dy / (d || 1);
+            t.x += nx * 16; t.y += ny * 16; resolveTank(t);
+            t.sq = 0.6; t.flash = 0.35;
+          } else {
+            damageTank(t, killer || t, null);
+          }
+        }
+      }
+    }
+
+    function damageTank(t, killer, b) {
+      if (!t.alive || t.invuln > 0) return;
+      if (t.hp > 1) {
+        t.hp--;
+        t.invuln = 0.85;
+        t.flash = 0.75;
+        t.sq = 0.7;
+        if (t.spring) t.spring.kick(9);
+        burst(t.x, t.y, 20, ['#ffe14d', '#7dd3fc', '#fff'], 240, 5.5, 0.55);
+        Kit.art.shake.add(0.28);
+        Kit.art.hitstop(45);
+        if (!G.demo) { S.shield(); pop(t.x, t.y - 34, 'درع الطلاء! 🛡️', '#ffe14d', 30, 1.1); }
+        return;
+      }
+      splatTank(t, killer, b);
     }
 
     function hitTanks(b) {
@@ -397,25 +522,62 @@
         if (!t.alive) continue;
         if (t === b.owner && (b.safe || b.age < OWN_GRACE)) continue;
         var dx = b.x - t.x, dy = b.y - t.y, d = Math.hypot(dx, dy);
-        if (t.shield > 0 && d < 30 + b.r) {
+        // Safe playful bounce off your own tank in Solo/Campaign (zero frustrating self-splat!)
+        if (t === b.owner && !G.chaosRicochet) {
+          if (d < HIT_R + b.r + 2) {
+            var bnx = dx / (d || 1), bny = dy / (d || 1), bdot = b.vx * bnx + b.vy * bny;
+            if (bdot < 0) {
+              b.vx -= 2 * bdot * bnx; b.vy -= 2 * bdot * bny;
+              b.bounces++; b.sq = 1; b.sqA = Math.atan2(bny, bnx);
+            }
+            b.x = t.x + bnx * (HIT_R + b.r + 4); b.y = t.y + bny * (HIT_R + b.r + 4);
+            t.x -= bnx * 4; t.y -= bny * 4; resolveTank(t);
+            t.sq = 0.55; t.flash = 0.28;
+            if (t.spring) t.spring.kick(5);
+            burst(t.x + bnx * 16, t.y + bny * 16, 7, ['#ffe14d', '#fff', t.pal.light], 120, 4, 0.3);
+            if (!G.demo) {
+              S.boing();
+              if (t.boingCd <= 0) { t.boingCd = 0.9; pop(t.x, t.y - 30, 'بوينج!', '#ffe14d', 28, 0.75); }
+            }
+          }
+          continue;
+        }
+        if (t.shield > 0 && d < 28 + b.r) {
           // bounce off the shield bubble
           var nx = dx / (d || 1), ny = dy / (d || 1), dot = b.vx * nx + b.vy * ny;
           if (dot < 0) {
             b.vx -= 2 * dot * nx; b.vy -= 2 * dot * ny; b.bounces++; b.safe = false; b.sq = 1; b.sqA = Math.atan2(ny, nx);
             t.flash = 0.4;
             if (!G.demo) S.shield();
-            burst(t.x + nx * 30, t.y + ny * 30, 6, ['#bff0ff', '#fff'], 120, 4, 0.3);
+            burst(t.x + nx * 28, t.y + ny * 28, 6, ['#bff0ff', '#fff'], 120, 4, 0.3);
           }
-          b.x = t.x + nx * (31 + b.r); b.y = t.y + ny * (31 + b.r);
+          b.x = t.x + nx * (29 + b.r); b.y = t.y + ny * (29 + b.r);
           continue;
         }
         if (d < HIT_R + b.r) {
-          splatTank(t, b.owner, b);
+          damageTank(t, b.owner, b);
           b.life = 0;
           return true;
         }
       }
       return false;
+    }
+
+    function stepPads(dt) {
+      for (var i = 0; i < G.pads.length; i++) {
+        var pad = G.pads[i];
+        if (pad.cd > 0) { pad.cd = Math.max(0, pad.cd - dt); continue; }
+        for (var j = 0; j < G.tanks.length; j++) {
+          var t = G.tanks[j];
+          if (!t.alive || Math.hypot(t.x - pad.x, t.y - pad.y) > pad.r + 10) continue;
+          pad.cd = 3.5;
+          t.speed = Math.max(t.speed, 2.8);
+          t.sq = 0.5; t.flash = 0.4;
+          burst(pad.x, pad.y, 14, ['#ffe14d', '#ff9d00', '#fff'], 180, 4.5, 0.4);
+          if (!G.demo) { S.speed(); pop(pad.x, pad.y - 26, 'انطلاق! ⚡', '#ffe14d', 28, 0.85); }
+          break;
+        }
+      }
     }
 
     function stepBalls(dt, frozen) {
@@ -441,7 +603,6 @@
       t.blobs = blobs;
       addSplat(t.x, t.y, b && b.giant ? 62 : 46, killer.pal.paint, killer.splat);
       burst(t.x, t.y, 34, [killer.pal.paint, killer.pal.light, t.pal.main, '#fff'], 340, 7, 0.75);
-      G.shakeP = Math.max(G.shakeP, G.demo ? 4 : 13);
       Kit.art.shake.add(G.demo ? 0.22 : 0.45);
       Kit.art.hitstop(G.demo ? 40 : 80);
       Kit.art.flash(killer.pal.paint, 90);
@@ -519,17 +680,8 @@
     }
 
     /* -------------------------------------------------------- effects */
-    // Same Math.random calls as the old particle burst, in the same order, so bots
-    // and crates keep their stream. The pixels come from the pooled kit emitter.
     function burst(x, y, n, colors, speed, size, life, grav) {
       if (Kit.motion.reduced()) n = Math.ceil(n / 3);
-      for (var i = 0; i < n; i++) {
-        var a = Math.random() * Math.PI * 2, s = speed * (0.3 + Math.random() * 0.7);
-        var r = size * (0.5 + Math.random() * 0.7);
-        var lf = life * (0.6 + Math.random() * 0.4);
-        var col = colors[Math.floor(Math.random() * colors.length)];
-        void a; void s; void r; void lf; void col;
-      }
       var tier = Kit.art.quality.tier;
       var vn = tier === 0 ? Math.min(6, n) : Math.min(tier === 1 ? 12 : 16, n);
       if (vn > 0) fx.burst(x, y, {
@@ -637,6 +789,10 @@
     if (layers.paint) c.drawImage(layers.paint, 0, 0, W, H);
     if (layers.walls && layers.walls.canvas) c.drawImage(layers.walls.canvas, 0, 0, W, H);
     var i, t;
+    // boost pads on floor (under tanks & barrels)
+    for (i = 0; i < G.pads.length; i++) A.drawPad(c, G.pads[i], G.time);
+    // explosive paint barrels
+    for (i = 0; i < G.barrels.length; i++) if (G.barrels[i].alive) A.drawBarrel(c, G.barrels[i], G.time);
     // crates
     for (i = 0; i < G.crates.length; i++) { var k = G.crates[i]; A.drawCrate(c, k.x, k.y, k.pw, k.t, easeBack(k.pop)); }
     // laser aim lines (and the beginner guide, which the laser replaces)
@@ -676,13 +832,26 @@
         t = G.tanks[i];
         if ((pass === 0) === t.alive) continue;
         A.drawTank(c, {
-          x: t.x, y: t.y, a: t.a, pal: t.pal, hat: t.hat, sq: t.sq, recoil: t.recoil, tread: t.tread, t: G.time,
-          blink: t.blink > 0 && !Kit.motion.reduced(), dead: t.alive ? 0 : t.dead, paint: t.paint, blobs: t.blobs, shield: t.alive ? t.shield : 0,
+          x: t.x, y: t.y, a: t.a, bodyA: t.bodyA, pal: t.pal, hat: t.hat, sq: t.sq, tread: t.tread, t: G.time,
+          blink: t.blink > 0 && !Kit.motion.reduced(), dead: t.alive ? 0 : t.dead, paint: t.paint, blobs: t.blobs,
+          shield: t.alive ? t.shield : 0, hp: t.alive ? t.hp : 0, invuln: t.alive ? t.invuln : 0,
           flash: t.flash, muzzle: t.muzzle, recoil: Math.max(t.recoil, t.spring ? Math.min(1, Math.abs(1 - t.spring.sy) * 3.2) : 0), scale: easeBack(t.scale)
         });
       }
     }
     if (mk) A.drawBounce(c, mx, my, mux, muy);
+    // Crisp 1P mouse aim crosshair
+    if (!G.demo && G.state === 'play' && G.humans === 1 && MOUSE.active && G.tanks[0] && G.tanks[0].alive) {
+      c.save();
+      c.translate(MOUSE.x, MOUSE.y);
+      c.strokeStyle = '#1b1640'; c.lineWidth = 4;
+      A.circle(c, 0, 0, 10); c.stroke();
+      c.strokeStyle = G.tanks[0].pal.light; c.lineWidth = 2.2;
+      A.circle(c, 0, 0, 10); c.stroke();
+      c.beginPath(); c.moveTo(-14, 0); c.lineTo(-6, 0); c.moveTo(6, 0); c.lineTo(14, 0);
+      c.moveTo(0, -14); c.lineTo(0, -6); c.moveTo(0, 6); c.lineTo(0, 14); c.stroke();
+      c.restore();
+    }
     // balls
     for (i = 0; i < G.balls.length; i++) {
       var b = G.balls[i], sp = Math.hypot(b.vx, b.vy);
@@ -703,7 +872,7 @@
         c.fillStyle = t.pal.dark;
         c.beginPath(); c.moveTo(t.x - 7, t.y - 31 + bob); c.lineTo(t.x + 7, t.y - 31 + bob); c.lineTo(t.x, t.y - 23 + bob); c.closePath(); c.fill();
         if (t.human && G.firstRound) {
-          var hint = G.humans === 1 ? 'W A S D  +  Q' : KEY_HINT[t.ctrlIdx];
+          var hint = G.humans === 1 ? 'WASD / ↑←↓→ + 🖱️' : KEY_HINT[t.ctrlIdx];
           c.font = '700 17px Fredoka'; c.direction = 'ltr';
           var tw = c.measureText(hint).width + 20;
           var hx = Math.max(G.maze.ox + tw / 2, Math.min(G.maze.ox + G.maze.cols * G.maze.cs - tw / 2, t.x));
@@ -773,16 +942,17 @@
         if (filled) { A.circle(c, cx, cy, pr * easeBack(popIn)); c.fillStyle = t.pal.main; c.fill(); }
         A.circle(c, cx, cy, pr); c.lineWidth = 2; c.strokeStyle = t.pal.dark; c.stroke();
       }
-      // power icon at the left end
+      // power icon or 2-HP paint-shield badge at the left end
       var ic = t.weapon || (t.laser > 0 ? 'laser' : t.shield > 0 ? 'shield' : t.speed > 0 ? 'speed' : null);
       if (ic && t.alive) A.drawPowerIcon(c, ic, x + 20, y + bh / 2, 0.85, G.time);
+      else if (t.alive && t.hp > 1) text(c, '🛡️', x + 22, y + bh / 2 + 1, 22, '#ffe14d', 'center');
       c.restore();
     }
 
     // round banner / states
     if (G.state === 'ready') {
-      var bt = 1 - Math.max(0, G.timer - (G.round === 1 ? 1.2 : 0.5));
-      var sc = easeBack(Math.min(1, bt * 3));
+      var bt = 1 - Math.max(0, G.timer * 2);
+      var sc = easeBack(Math.min(1, bt * 2.5 + 0.35));
       c.save(); c.translate(W / 2, H / 2); c.scale(sc, sc);
       ribbon(c, 0, 0, 420, 96, G.theme.wall);
       text(c, 'الجولة ' + G.round, 0, -8, 50, '#fff', 'center', '#1b1640', 9);
@@ -836,6 +1006,6 @@
 
   window.TS_GAME = {
     W: W, H: H, create: create, setQuality: setQuality, text: text, ribbon: ribbon, easeBack: easeBack,
-    CONTROLS: CONTROLS, BALL_R: BALL_R, BALL_SPEED: BALL_SPEED, HIT_R: HIT_R, angDiff: angDiff
+    CONTROLS: CONTROLS, BALL_R: BALL_R, BALL_SPEED: BALL_SPEED, HIT_R: HIT_R, angDiff: angDiff, mouse: MOUSE
   };
 })();

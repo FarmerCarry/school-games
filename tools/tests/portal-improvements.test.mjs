@@ -131,7 +131,7 @@ test('storefront shelves, conditional starter, bento hero, hover hearts, roulett
   // Returning PC (has recent history): starter banner hides; recent & favorites shelves appear cleanly.
   const page = await pageFor(t);
   await page.addInitScript(() => {
-    localStorage.setItem('sg:site:recent', '["pool-party","cake-guards"]');
+    localStorage.setItem('sg:site:recent', '["pool-party","recess-kitchen"]');
     localStorage.setItem('sg:site:favs', '["drift-king","critter-mart"]');
   });
   await page.goto(origin);

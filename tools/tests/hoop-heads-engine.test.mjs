@@ -187,3 +187,72 @@ test('save schema ignores legacy shapes, tracks stars/coins/unlocks, and handles
   assert.equal(clean.head, 'cap');
   assert.equal(clean.coins, 10);
 });
+
+test('all 5 mid-court power-ups work, quick taps sink generously, and intro/goal pauses are snappy (0.45s)', () => {
+  assert.equal(E.POWERS.length, 5);
+  assert.deepEqual(E.POWERS.map(p => p.id), ['mega', 'ice', 'rocket', 'magnet', 'bigrim']);
+
+  // Snappy 0.45s intro
+  const m0 = E.createMatch({ mode: 'duo', seed: 601 });
+  assert.equal(m0.phase, 'intro');
+  for (let i = 0; i < 30; i++) E.stepMatch(m0, E.FIXED_DT, [idle(), idle()]);
+  assert.equal(m0.phase, 'play', '0.45s intro transitions to play within 0.5s');
+
+  // Test each of the 5 mid-court power-ups picked up by P0
+  for (const pw of E.POWERS) {
+    const m = E.createMatch({ mode: 'duo', seed: 602 });
+    m.phase = 'play';
+    const p0 = m.players[0];
+    p0.x = 640; p0.y = E.FLOOR_Y;
+    m.powerup = { ...pw, x: 640, y: E.FLOOR_Y - 54, t: 0, life: 10 };
+    const evs = E.stepMatch(m, E.FIXED_DT, [idle(), idle()]);
+    assert.ok(evs.some(e => e.type === 'powerup' && e.id === pw.id && e.player === 0), `picks up ${pw.id}`);
+    assert.equal(m.powerup, null);
+
+    if (pw.id === 'mega') {
+      assert.ok(p0.megaT > 5);
+      // Giant Ball adds +2 bonus points on top of 2pt basket (= 4 pts)!
+      const h = m.hoops[1];
+      Object.assign(m.ball, { holder: null, shooter: p0, state: 'shot', pts: 2, isMega: true, x: h.x, y: h.y - 2, prevX: h.x, prevY: h.y - 10, vx: 0, vy: 360, scoredT: 0 });
+      E.stepMatch(m, E.FIXED_DT, [idle(), idle()]);
+      assert.equal(p0.score, 4, 'Giant Ball scores +2 bonus points');
+    } else if (pw.id === 'ice') {
+      assert.ok(m.hoops[0].frozenT > 5, 'freezes own hoop against enemy shots');
+      const h = m.hoops[0];
+      Object.assign(m.ball, { holder: null, shooter: m.players[1], state: 'shot', pts: 2, x: h.x, y: h.y - 16, prevX: h.x, prevY: h.y - 24, vx: 0, vy: 360, scoredT: 0 });
+      const bEvs = E.stepMatch(m, E.FIXED_DT, [idle(), idle()]);
+      assert.ok(bEvs.some(e => e.type === 'ice_block'), 'frozen hoop bounces enemy shot');
+      assert.equal(m.players[1].score, 0);
+    } else if (pw.id === 'rocket') {
+      assert.ok(p0.rocketT > 5);
+      E.stepMatch(m, E.FIXED_DT, [{ ...idle(), j: true, jPressed: true }, idle()]);
+      assert.ok(p0.vy < -900, 'Rocket Boots super-boosts jump velocity');
+    } else if (pw.id === 'magnet') {
+      assert.ok(p0.magnetT > 5);
+      Object.assign(m.ball, { holder: null, state: 'loose', x: 760, y: 500, prevX: 760, prevY: 500, vx: 0, vy: 0, pickupCd: 0, scoredT: 0 });
+      E.stepMatch(m, E.FIXED_DT, [idle(), idle()]);
+      assert.ok(m.ball.vx < -5, 'Ball Magnet pulls nearby loose ball toward player');
+    } else if (pw.id === 'bigrim') {
+      assert.ok(m.hoops[1].bigRimT > 5);
+      assert.ok(m.hoops[1].rimR >= 60, 'Big Rim widens target hoop rim');
+    }
+  }
+
+  // Generous quick-tap shot magnetism (no harsh forced-miss airball!)
+  const mq = E.createMatch({ mode: 'duo', seed: 603 });
+  mq.phase = 'play';
+  const p0 = mq.players[0];
+  p0.x = 840; p0.y = E.FLOOR_Y; p0.onGround = true;
+  mq.players[1].x = 200;
+  mq.ball.holder = p0; mq.ball.state = 'held';
+  E.stepMatch(mq, E.FIXED_DT, [{ ...idle(), s: true, sPressed: true }, idle()]);
+  E.stepMatch(mq, E.FIXED_DT, [{ ...idle(), s: false, sReleased: true }, idle()]);
+  assert.equal(mq.ball.state, 'shot');
+  assert.equal(mq.ball.swishAim, true, 'quick tap enables generous swish magnetism');
+  let scored = false;
+  for (let i = 0; i < 120 && !scored; i++) {
+    const evs = E.stepMatch(mq, E.FIXED_DT, [idle(), idle()]);
+    if (evs.some(e => e.type === 'score')) scored = true;
+  }
+  assert.equal(scored, true, 'quick tap shot sinks cleanly');
+});

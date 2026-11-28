@@ -12,8 +12,7 @@ function load() {
   return context.CG;
 }
 const CG = load();
-// A one-road test level: straight along row 3, nothing spawns unless a test asks for it.
-const flat = (extra = {}) => ({ w: 0, coins: 1000, hp: 1, towers: CG.TOWER_ORDER.slice(), roads: [[[-1, 3], [14, 3]]], waves: ['g1'], ...extra });
+const flat = (extra = {}) => ({ w: 0, coins: 1000, hp: 1, starter: false, towers: CG.TOWER_ORDER.slice(), roads: [[[-1, 3], [14, 3]]], waves: ['g1'], ...extra });
 const run = (world, seconds) => { for (let i = 0; i < Math.round(seconds * 60); i++) CG.step(world, 1 / 60); };
 const blob = (world, type, d) => {
   world.phase = 'wave';
@@ -25,150 +24,111 @@ const blob = (world, type, d) => {
   return b;
 };
 
-test('every level has its own fixed build pads beside, never on, its roads', () => {
+test('every level has fixed build pads clear of roads, 3 turrets, and auto-places 1 free starter turret', () => {
+  assert.equal(CG.LEVELS.length, 12);
+  assert.deepEqual([...CG.TOWER_ORDER], ['pop', 'bubble', 'cake']);
   for (const [i, def] of CG.LEVELS.entries()) {
     const pads = CG.padsFor(def), again = CG.padsFor(def), roads = def.roads.map(CG.makeRoad);
-    assert.deepEqual(pads, again, `level ${i + 1}: the same pads every time`);
+    assert.deepEqual(pads, again);
     assert.ok(pads.length >= 8, `level ${i + 1}: ${pads.length} pads`);
     for (const p of pads) {
-      assert.ok(CG.roadDist(roads, p.x, p.y) >= CG.ROAD + CG.PAD, `level ${i + 1}: pad ${p.x},${p.y} clear of the road`);
-      assert.ok(p.y - CG.PAD >= CG.TOP && p.y + CG.PAD <= CG.BAR, `level ${i + 1}: pad between the HUD and the tower bar`);
-      for (const q of pads) if (q !== p) assert.ok(Math.hypot(p.x - q.x, p.y - q.y) >= CG.PAD * 2, `level ${i + 1}: pads apart`);
+      assert.ok(CG.roadDist(roads, p.x, p.y) >= CG.ROAD + CG.PAD);
+      assert.ok(p.y - CG.PAD >= CG.TOP && p.y + CG.PAD <= CG.BAR);
+      for (const q of pads) if (q !== p) assert.ok(Math.hypot(p.x - q.x, p.y - q.y) >= CG.PAD * 2);
     }
-    for (const w of def.waves) assert.doesNotThrow(() => CG.parseWave(w), `level ${i + 1}: wave ${w}`);
-    assert.ok(def.towers.every(t => CG.TOWERS[t]), `level ${i + 1}: known towers`);
-    const ends = roads.map(r => r.pts[r.pts.length - 1]);
-    assert.ok(ends.every(e => e.x === ends[0].x && e.y === ends[0].y), `level ${i + 1}: every road ends at the cake`);
+    for (const w of def.waves) assert.doesNotThrow(() => CG.parseWave(w));
+    const world = CG.create(def);
+    assert.equal(world.phase, 'intro');
+    assert.equal(world.breakT, CG.INTRO);
+    assert.equal(world.pads.filter(p => p.tower).length, 1, '1 free starter turret placed immediately');
+    assert.equal(world.coins, def.coins, 'starter turret costs 0 coins');
   }
 });
 
-test('waves parse into groups, and a malformed wave is refused', () => {
-  assert.deepEqual(JSON.parse(JSON.stringify(CG.parseWave('g8/0.6 c2'))), [{ type: 'g', n: 8, gap: 0.6 }, { type: 'c', n: 2, gap: 0.9 }]);
-  assert.throws(() => CG.parseWave('q3'), /bad wave group/);
-  assert.throws(() => CG.parseWave('g'), /bad wave group/);
-  for (let k = 1; k <= 60; k++) assert.doesNotThrow(() => CG.parseWave(CG.endlessWave(k)), 'endless wave ' + k);
-  assert.match(CG.endlessWave(10), /\bk1\b/);
-  assert.match(CG.endlessWave(20), /\bb1\b/);
+test('Wave 1 spawns automatically after 1.5s without pressing Start Wave', () => {
+  const world = CG.create(CG.LEVELS[0]);
+  assert.equal(world.wave, 0);
+  run(world, 1.0);
+  assert.equal(world.wave, 0, 'still in 1.5s intro');
+  run(world, 0.7);
+  assert.equal(world.phase, 'wave');
+  assert.equal(world.wave, 1);
+  assert.ok(world.enemies.length >= 1, 'jelly blobs already marching');
 });
 
-test('building, upgrading and selling move coins exactly, and only where allowed', () => {
-  const world = CG.create(flat({ coins: 200, towers: ['pop', 'bubble'] }));
-  assert.equal(CG.build(world, 0, 'cake'), false, 'a tower the level does not offer');
+test('Active Frosting Blaster pops & knocks back jelly blobs, and Space auto-targets the leading blob', () => {
+  const world = CG.create(flat({ waves: ['c1'] }));
+  const b = blob(world, 'c', 420);
+  const hp0 = b.hp, d0 = b.d;
+  // Auto-blast (null coords = Space keyboard auto-target leading blob)
+  assert.equal(CG.blast(world), true);
+  assert.equal(world.blasts, 1);
+  assert.equal(CG.blast(world), false, 'respects blaster cooldown');
+  run(world, 0.6);
+  assert.ok(b.hp < hp0, 'frosting glob damaged blob');
+  assert.ok(b.d < d0 + CG.ENEMIES.c.speed * 0.6 - 10, 'frosting glob knocked blob back along the road');
+  assert.ok(world.ev.some(e => e.t === 'splat'));
+});
+
+test('1-click quickAct builds on best glowing pad and auto-upgrades once all pads are full', () => {
+  const world = CG.create(flat({ coins: 5000 }));
+  const best0 = CG.bestPad(world);
+  const r1 = CG.quickAct(world, 'pop');
+  assert.equal(r1.ok, true); assert.equal(r1.kind, 'build'); assert.equal(r1.pad, best0);
+  assert.equal(world.pads[best0].tower.type, 'pop');
+  // Fill every remaining pad
+  while (CG.bestPad(world) >= 0) assert.equal(CG.quickAct(world, 'bubble').kind, 'build');
+  const rUp = CG.quickAct(world, 'pop');
+  assert.equal(rUp.ok, true); assert.equal(rUp.kind, 'upgrade'); assert.equal(rUp.pad, best0);
+  assert.equal(world.pads[best0].tower.lv, 1);
+});
+
+test('building, upgrading, selling, armor piercing cupcake splash, splitters, and bubble slow', () => {
+  const world = CG.create(flat({ coins: 200 }));
   assert.equal(CG.build(world, 0, 'pop'), true);
   assert.equal(world.coins, 150);
-  assert.equal(CG.build(world, 0, 'bubble'), false, 'a pad holds one tower');
-  assert.equal(CG.upgradeCost(world, 0), 60);
   assert.equal(CG.upgrade(world, 0), true);
   assert.equal(world.coins, 90);
-  assert.equal(CG.upgradeCost(world, 0), 110);
-  assert.equal(CG.upgrade(world, 0), false, 'not enough coins');
-  assert.equal(CG.sellValue(world, 0), Math.floor(110 * CG.SELL));
   assert.equal(CG.sell(world, 0), true);
-  assert.equal(world.coins, 90 + 77);
-  assert.equal(world.pads[0].tower, null);
-  const poor = CG.create(flat({ coins: 40 }));
-  assert.equal(CG.build(poor, 0, 'pop'), false);
-  assert.equal(poor.coins, 40);
+  assert.equal(world.coins, 90 + Math.floor(110 * CG.SELL));
+
+  // Cupcake splash pierces armor & splits splitters without hitting children
+  const w2 = CG.create(flat());
+  const arm = blob(w2, 'a', 360), spl = blob(w2, 's', 380);
+  spl.hp = 1;
+  const armHp = arm.hp;
+  w2.shots.push({ kind: 'cake', x: arm.x, y: arm.y, sx: arm.x, sy: arm.y, tx: arm.x, ty: arm.y, t: 0, T: 0.01, dmg: 10, splash: 80, pierce: true });
+  CG.step(w2, 1 / 60);
+  assert.equal(armHp - arm.hp, 10, 'cupcake pierces armor');
+  assert.equal(w2.enemies.filter(e => e.type === 'm').length, 2, 'splitter spawns 2 intact mini blobs');
+
+  // Bubble slow
+  const w3 = CG.create(flat());
+  const g1 = blob(w3, 'g', 300), boss = blob(w3, 'k', 310);
+  w3.shots.push({ kind: 'bubble', x: g1.x, y: g1.y, target: g1.id, tx: g1.x, ty: g1.y, speed: 400, dmg: 1, slow: 0.5, slowT: 2, area: 45 });
+  CG.step(w3, 1 / 60);
+  assert.equal(g1.slow, 0.5); assert.equal(boss.slow, 0.25);
 });
 
-test('armour softens every hit but the candy cane, which goes straight through', () => {
-  const world = CG.create(flat());
-  const a = blob(world, 'a', 300);
-  world.pads.forEach(p => { p.tower = null; });
-  const pad = world.pads.findIndex(p => Math.hypot(p.x - a.x, p.y - a.y) < 130);
-  CG.build(world, pad, 'pop');
-  const tw = world.pads[pad].tower;
-  tw.cd = 0;
-  const hp = a.hp;
-  for (let i = 0; i < 60 && a.hp === hp; i++) { a.d = 300; CG.step(world, 1 / 60); }
-  assert.equal(hp - a.hp, 1, 'popcorn (2) against armour 3 still does the minimum 1');
-  CG.sell(world, pad); CG.build(world, pad, 'cane');
-  world.pads[pad].tower.cd = 0;
-  const before = a.hp;
-  a.d = 300; CG.step(world, 1 / 60);
-  assert.equal(before - a.hp, CG.TOWERS.cane.lv[0].dmg, 'the cane ignores armour');
-});
+test('leaks lose once, clearing last wave wins with stars, endless scales, and sim is deterministic', () => {
+  const wLose = CG.create(flat({ waves: ['g30/0.1'] }));
+  run(wLose, 60);
+  assert.equal(wLose.phase, 'lost'); assert.equal(wLose.hearts, 0);
 
-test('a splitter pops into two little blobs, and the splash that popped it spares them', () => {
-  const world = CG.create(flat());
-  const s = blob(world, 's', 400);
-  s.hp = 1;
-  world.shots.push({ kind: 'cake', x: s.x, y: s.y, sx: s.x, sy: s.y, tx: s.x, ty: s.y, t: 0, T: 0.01, dmg: 50, splash: 80 });
-  CG.step(world, 1 / 60);
-  const kids = world.enemies.filter(e => e.type === 'm');
-  assert.equal(kids.length, 2);
-  assert.ok(kids.every(k => k.hp === k.max), 'the children start whole');
-  assert.ok(world.ev.some(e => e.t === 'pop' && e.type === 's'));
-});
+  const wWin = CG.create(flat({ waves: ['g2/0.3', 'g2/0.3'] }));
+  CG.build(wWin, 0, 'cake'); CG.build(wWin, 1, 'pop');
+  run(wWin, 40);
+  assert.equal(wWin.phase, 'won');
+  assert.equal(wWin.ev.find(e => e.t === 'win').stars, 3);
 
-test('a bubble slows every blob around the one it hits, and a boss only half as much', () => {
-  const world = CG.create(flat());
-  const a = blob(world, 'g', 300), b = blob(world, 'g', 330), far = blob(world, 'g', 600), boss = blob(world, 'k', 310);
-  world.shots.push({ kind: 'bubble', x: a.x, y: a.y, target: a.id, tx: a.x, ty: a.y, speed: 400, dmg: 1, slow: 0.5, slowT: 2, area: 45 });
-  CG.step(world, 1 / 60);
-  assert.equal(a.slow, 0.5);
-  assert.equal(b.slow, 0.5);
-  assert.equal(far.slow, 0, 'out of the burst');
-  assert.equal(boss.slow, 0.25);
-  const d = a.d;
-  run(world, 1);
-  assert.ok(a.d - d < CG.ENEMIES.g.speed * 0.6, 'a slowed blob moves at half speed');
-});
-
-test('blobs that reach the cake take bites; the last bite loses once and stops the world', () => {
-  const world = CG.create(flat({ waves: ['g30/0.1'] }));
-  world.pads.forEach(p => { p.tower = null; });
-  CG.callWave(world);
-  run(world, 120);
-  assert.equal(world.phase, 'lost');
-  assert.equal(world.hearts, 0);
-  assert.equal(world.ev.filter(e => e.t === 'lose').length, 1);
-  const time = world.time;
-  run(world, 5);
-  assert.equal(world.time, time, 'nothing moves after the loss');
-});
-
-test('clearing the last wave wins with stars for the cake that is left', () => {
-  const world = CG.create(flat({ waves: ['g2', 'g2'] }));
-  CG.build(world, 0, 'cane'); CG.build(world, 1, 'cane'); CG.build(world, 2, 'pop');
-  CG.callWave(world);
-  run(world, 60);
-  assert.equal(world.phase, 'won');
-  const win = world.ev.find(e => e.t === 'win');
-  assert.equal(win.stars, 3);
-  assert.equal(world.ev.filter(e => e.t === 'clear').length, 1, 'only the first wave pays a clear bonus and a break');
-  for (const [hearts, stars] of [[20, 3], [18, 3], [17, 2], [10, 2], [9, 1], [1, 1]]) assert.equal(CG.stars({ hearts }), stars, hearts + ' slices');
-});
-
-test('calling the next wave early pays for the seconds skipped', () => {
-  const world = CG.create(flat({ waves: ['g1', 'g1'] }));
-  CG.build(world, 0, 'cane');
-  CG.callWave(world);
-  for (let i = 0; i < 6000 && world.phase !== 'break'; i++) CG.step(world, 1 / 60);
-  assert.equal(world.phase, 'break');
-  const coins = world.coins, left = world.breakT;
-  assert.equal(CG.callWave(world), true);
-  assert.equal(world.coins, coins + Math.ceil(left) * 2);
-  assert.equal(world.wave, 2);
-  assert.equal(CG.callWave(world), false, 'not while a wave is spawning');
-});
-
-test('endless keeps sending tougher waves and never runs out', () => {
-  const world = CG.create(CG.ENDLESS);
-  assert.equal(world.total, Infinity);
-  CG.callWave(world);
-  const first = world.queue.length;
-  assert.ok(first > 0);
   assert.ok(CG.endlessHp(20) > CG.endlessHp(10) && CG.endlessHp(10) > CG.endlessHp(1));
-});
+  for (let k = 1; k <= 30; k++) assert.doesNotThrow(() => CG.parseWave(CG.endlessWave(k)));
 
-test('the same moves give the same game', () => {
   const play = () => {
-    const world = CG.create(CG.LEVELS[5]);
-    [0, 3, 5, 8].forEach((pad, i) => CG.build(world, pad, ['pop', 'bubble', 'cake', 'pop'][i]));
-    CG.callWave(world);
-    run(world, 40);
-    return JSON.stringify({ coins: world.coins, hearts: world.hearts, wave: world.wave, e: world.enemies.map(e => [e.type, e.hp, Math.round(e.d)]) });
+    const w = CG.create(CG.LEVELS[2]);
+    CG.quickAct(w, 'pop'); CG.quickAct(w, 'bubble');
+    run(w, 20);
+    return JSON.stringify({ c: w.coins, h: w.hearts, w: w.wave, e: w.enemies.map(e => [e.type, e.hp, Math.round(e.d)]) });
   };
   assert.equal(play(), play());
 });

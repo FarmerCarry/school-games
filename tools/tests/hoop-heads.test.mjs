@@ -232,3 +232,63 @@ test('Hoop Heads 3D result screen blocks mashed keys during lock, warns & retrie
     restarted: 'play'
   });
 });
+
+test('Hoop Heads 3D unlocks all 5 arenas upfront, floats shot gauge beside player, and supports 1-hand mouse play', async t => {
+  const page = await openHoop(t, { interceptLoop: true });
+  const res = await page.evaluate(() => {
+    // 1. All 5 arenas selectable upfront on fresh save!
+    const nextDisabled0 = document.getElementById('stageNext').disabled;
+    const dots = document.querySelectorAll('#stageDots .stage-dot');
+    dots[4].click();
+    const stage5Text = document.getElementById('stageText').textContent;
+    document.querySelector('[data-act="cpu"]').click();
+    const startedStage = window.__game.match.stage;
+
+    // 2. World-space shot power gauge tracks player position (not fixed bottom edge)
+    window.__game.skipIntro();
+    window.__game.give(0, 420);
+    hh.down('Space');
+    hh.step(12);
+    const gauge = document.getElementById('shotGauge');
+    const gaugeShown = !gauge.hidden;
+    const gTop = parseFloat(gauge.style.top || '0');
+    hh.up('Space');
+    hh.step(2);
+
+    // 3. 1-hand pointer click on upper court jumps & acts!
+    window.__game.give(0, 460);
+    const cv = document.getElementById('game');
+    const r = cv.getBoundingClientRect();
+    cv.dispatchEvent(new PointerEvent('pointerdown', { clientX: r.left + r.width * 0.65, clientY: r.top + r.height * 0.25, button: 0, bubbles: true }));
+    hh.step(2);
+    const pointerJumped = !window.__game.match.players[0].onGround;
+    const pointerCharging = window.__game.match.players[0].charging;
+    window.dispatchEvent(new PointerEvent('pointerup', { clientX: r.left + r.width * 0.65, clientY: r.top + r.height * 0.25, button: 0, bubbles: true }));
+    hh.step(2);
+    const pointerShot = window.__game.match.ball.state === 'shot';
+
+    return {
+      nextDisabled0,
+      dotCount: dots.length,
+      stage5Open: stage5Text.includes('5/5'),
+      startedStage,
+      gaugeShown,
+      gaugeNotBottom: gTop > 50 && gTop < window.innerHeight - 100,
+      pointerJumped,
+      pointerCharging,
+      pointerShot
+    };
+  });
+
+  assert.deepEqual(res, {
+    nextDisabled0: false,
+    dotCount: 5,
+    stage5Open: true,
+    startedStage: 4,
+    gaugeShown: true,
+    gaugeNotBottom: true,
+    pointerJumped: true,
+    pointerCharging: true,
+    pointerShot: true
+  });
+});

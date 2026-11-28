@@ -1,3 +1,6 @@
+// Block World — TNT Mine Dash browser input & gameplay loop tests in real Chromium:
+// 1-click launch over live mine, Auto-Drill + Jetpack movement, Space & button TNT 3x3 crater,
+// 3-Relic + Escape Portal Victory Card + 1-click Upgrades, and Free Sandbox toggle!
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import path from 'node:path';
@@ -19,214 +22,125 @@ after(async () => {
   await server?.close();
 });
 
-// Deterministic Block World with a fixed-step loop (stepGame) and a fresh adventure world.
-async function adventure(t) {
-  const context = await browser.newContext();
+async function openMine(t) {
+  const context = await browser.newContext({ viewport: { width: 1100, height: 620 } });
   const page = await context.newPage(), errors = [];
   page.on('pageerror', e => errors.push(e.message));
   t.after(async () => { await context.close(); assert.deepEqual(errors, []); });
   await page.addInitScript(() => {
-    let seed = 123456789;
-    Math.random = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 4294967296; };
     let kit;
-    Object.defineProperty(window, 'Kit', { configurable: true, get: () => kit, set(value) {
-      kit = value;
-      kit.loop = update => { window.stepGame = (n = 1) => { for (let i = 0; i < n; i++) update(1 / 60); }; return { stop() {} }; };
-    } });
+    Object.defineProperty(window, 'Kit', {
+      configurable: true,
+      get: () => kit,
+      set(value) {
+        kit = value;
+        kit.loop = (u, r) => {
+          window.stepGame = (n = 1) => { for (let i = 0; i < n; i++) u(1 / 60); if (r) r(0); };
+          return { stop() {} };
+        };
+      }
+    });
   });
   await page.goto(`${origin}/games/block-world/`);
   await page.waitForFunction(() => window.__game && window.stepGame);
-  await page.evaluate(() => { document.getElementById('playBtn').click(); document.getElementById('modeSurv').click(); });
-  await page.waitForFunction(() => __game.G.mode === 'play');
-  await page.evaluate(() => {
-    // Mouse helper: aim at a world point (re-aimed every step, since the camera eases) and press.
-    window.clickAt = (wx, wy, button, steps) => {
-      const M = __game.input, G = __game.G;
-      for (let i = 0; i < steps; i++) {
-        M.x = (wx - G.cam.x) * BW.TS; M.y = (wy - G.cam.y) * BW.TS;
-        if (i === 0) { if (button === 2) { M.right = M.rp = true; } else { M.left = M.lp = true; } }
-        stepGame();
-      }
-      M.left = M.right = false;
-      stepGame();
-    };
-  });
   return page;
 }
 
-test('Block World chops a guided trunk with an animal in front, and still pets animals', async t => {
-  const page = await adventure(t);
-  const result = await page.evaluate(() => {
-    const G = __game.G, P = __game.player, B = BW.B;
-    stepGame(90);
-    const g = __game.guide;
-    // Stand two tiles left of the guided tree and let the camera settle.
-    const px = g.x - 2;
-    __game.tp(px, __game.surfaceY(px) - P.h - 0.01);
-    stepGame(240);
-    // Park an animal right in front of the trunk base the guide arrow points at.
-    const a = G.animals[0];
-    const park = (x, y) => { a.x = x + 0.5 - a.w / 2; a.y = y + 1 - a.h; a.vx = a.vy = 0; a.dir = 0; a.timer = 999; a.petCD = 0; };
-    park(g.x, g.y);
-    const tile = [g.x + 0.5, g.y + 0.5];
-    // Right-click still pets (or shears) the animal and leaves the tree alone.
-    clickAt(tile[0], tile[1], 2, 2);
-    const afterRight = { pets: G.stats.pets, trunk: G.world.get(g.x, g.y) === B.TRUNK };
-    park(g.x, g.y);
-    // Holding the left button on the trunk chops it instead of petting.
-    clickAt(tile[0], tile[1], 0, 150);
-    const afterLeft = { pets: G.stats.pets, mined: G.stats.mined[B.TRUNK] || 0 };
-    // Left-click on an animal standing on open grass still pets it.
-    let gx = px - 2;
-    while (G.world.get(gx, __game.surfaceY(gx) - 1) !== 0) gx--;
-    park(gx, __game.surfaceY(gx) - 1);
-    clickAt(gx + 0.5, __game.surfaceY(gx) - 0.5, 0, 2);
-    return { afterRight, afterLeft, grassPets: G.stats.pets };
+test('1-click Play drops immediately underground; Auto-Drill + Jetpack + TNT blast work cleanly', async t => {
+  const page = await openMine(t);
+  assert.equal(await page.evaluate(() => __game.G.mode), 'title');
+  assert.ok(await page.locator('#playBtn').isVisible());
+
+  // Single click launches straight into active play (zero 2nd modal!)
+  await page.locator('#playBtn').click();
+  await page.evaluate(() => stepGame(4));
+  assert.equal(await page.evaluate(() => __game.G.mode), 'play');
+  assert.ok(await page.locator('#tntBtn').isVisible());
+
+  // Place gold right beside miner and hold ArrowRight to auto-drill through it!
+  const beforeX = await page.evaluate(() => {
+    const w = __game.G.world, p = w.p;
+    stepGame(20); // let miner settle cleanly on starter floor
+    const tx = Math.floor(p.x) + 1, ty = Math.floor(p.y);
+    w.set(tx, ty, BW.T.GOLD);
+    window.__testGold = [tx, ty];
+    return p.x;
   });
-  assert.deepEqual(result.afterRight, { pets: 1, trunk: true });
-  assert.equal(result.afterLeft.pets, 1);
-  assert.ok(result.afterLeft.mined > 0, 'the trunk should be chopped');
-  assert.equal(result.grassPets, 2);
+  await page.keyboard.down('ArrowRight');
+  await page.evaluate(() => stepGame(80));
+  await page.keyboard.up('ArrowRight');
+  const drillRes = await page.evaluate(() => {
+    const [tx, ty] = window.__testGold;
+    return { x: __game.player.x, y: __game.player.y, tx, ty, tile: __game.G.world.get(tx, ty), dmg: __game.G.world.dmg[ty * BW.W + tx], gems: __game.G.world.gemsRun };
+  });
+  assert.equal(drillRes.tile, 0, 'ArrowRight auto-drills right through gold block: ' + JSON.stringify(drillRes));
+  assert.ok(drillRes.x > beforeX + 0.4, 'miner advances right');
+  assert.ok(drillRes.gems > 0, 'magnetized gems collected');
+
+  // Press Space to plant TNT and blast a 3x3 crater!
+  const blastRes = await page.evaluate(() => {
+    const w = __game.G.world, p = w.p;
+    const cx = Math.floor(p.x), cy = Math.floor(p.y);
+    w.set(cx, cy + 1, BW.T.DIAMOND);
+    w.set(cx + 1, cy + 1, BW.T.RUBY);
+    window.__blastSpot = [cx, cy + 1];
+    return w.blasts;
+  });
+  await page.keyboard.press('Space');
+  await page.evaluate(() => stepGame(85));
+  const afterBlast = await page.evaluate(() => {
+    const [bx, by] = window.__blastSpot;
+    return { blasts: __game.G.world.blasts, crater: __game.G.world.get(bx, by) === 0, gems: __game.G.world.gemsRun };
+  });
+  assert.equal(afterBlast.blasts, blastRes + 1, 'Space plants & detonates TNT');
+  assert.equal(afterBlast.crater, true, 'TNT blasts 3x3 diamond/ruby crater');
+  assert.ok(afterBlast.gems > drillRes.gems, 'blasted ore gems magnetize into miner');
 });
 
-test('Block World tells the player which hotbar slot holds the item a place quest needs', async t => {
-  const page = await adventure(t);
-  const result = await page.evaluate(() => {
-    const G = __game.G, P = __game.player, B = BW.B;
-    const press = code => { window.dispatchEvent(new KeyboardEvent('keydown', { code })); stepGame(); window.dispatchEvent(new KeyboardEvent('keyup', { code })); };
-    const slotDown = (el, shiftKey = false) => el.dispatchEvent(new MouseEvent('mousedown', { button: 0, shiftKey, bubbles: true }));
-    const slotUp = el => el.dispatchEvent(new MouseEvent('mouseup', { button: 0, bubbles: true }));
-    const state = () => ({ cursor: G.cursor && G.cursor.id, table: G.inv[1] && G.inv[1].id === B.TABLE, marks: document.querySelectorAll('.qslot').length, drop: hot.classList.contains('qdrop'), tip: hotTip.textContent });
-    const bag = document.getElementById('bag'), hot = document.getElementById('hot'), hotTip = document.getElementById('hotTip');
-    ['logs', 'planks', 'table'].forEach(id => { G.done[id] = true; });
-    // A full hotbar sends the crafted table to the backpack (slot 10).
-    G.inv.fill(null);
-    for (let i = 0; i < 9; i++) G.inv[i] = { id: B.LOG, n: 1 };
-    __game.give(B.TABLE, 1);
-    G.sel = 0;
-    stepGame(30);
-    const px = Math.floor(P.x + P.w / 2), ground = __game.surfaceY(px + 2);
-    // Right-clicking a spot where the selected logs cannot go points to the backpack.
-    clickAt(px + 2.5, ground + 0.5, 2, 2);
-    const bagHint = G.hint && G.hint.s;
-    // The backpack marks the table and says to move it to the hotbar, until it is there.
-    press('KeyE');
-    const inBag = { mode: G.mode, marked: bag.children[0].classList.contains('qslot'), tip: hotTip.textContent };
-    // Click, click: while the table is held (a press and release on its own slot keeps it held),
-    // the note stays and the hotbar is marked (dashed, but the selected slot 1 keeps its solid
-    // border); clicking hotbar slot 2 swaps it with the logs there.
-    slotDown(bag.children[0]); slotUp(bag.children[0]);
-    const borders = [0, 1].map(i => getComputedStyle(hot.children[i]).borderTopStyle);
-    const held = state();
-    slotDown(hot.children[1]); slotUp(hot.children[1]);
-    const moved = state();
-    // Put the logs down, send the table back to the backpack (Shift+click) and drag it instead:
-    // a press on its slot released over hotbar slot 2 puts it there.
-    slotDown(bag.children[0]); slotUp(bag.children[0]);
-    slotDown(hot.children[1], true);
-    const backInBag = { marked: bag.children[1].classList.contains('qslot'), tip: hotTip.textContent };
-    slotDown(bag.children[1]); slotUp(hot.children[1]);
-    const dragged = state();
-    press('KeyE');
-    G.hint = null;
-    // Right-clicking a spot where the selected logs cannot go names the slot to press.
-    clickAt(px + 2.5, ground + 0.5, 2, 2);
-    const hint = G.hint && G.hint.s;
-    press('Digit2');
-    clickAt(px + 2.5, ground - 0.5, 2, 2);
-    return { ids: { table: B.TABLE, log: B.LOG }, bagHint, inBag, held, borders, moved, backInBag, dragged, hint, sel: G.sel, placed: G.stats.placed[B.TABLE] || 0 };
-  });
-  assert.match(result.bagHint, /الحقيبة/);
-  assert.match(result.bagHint, /طاولة الصنع/);
-  assert.equal(result.inBag.mode, 'inv');
-  assert.equal(result.inBag.marked, true);
-  assert.match(result.inBag.tip, /انقر على طاولة الصنع ثم/);
-  assert.equal(result.held.cursor, result.ids.table);
-  assert.equal(result.held.marks, 0);
-  assert.equal(result.held.drop, true);
-  assert.deepEqual(result.borders, ['solid', 'dashed']);
-  assert.match(result.held.tip, /انقر على خانة هنا لتضع طاولة الصنع/);
-  assert.deepEqual(result.moved, { cursor: result.ids.log, table: true, marks: 0, drop: false, tip: '' });
-  assert.equal(result.backInBag.marked, true);
-  assert.match(result.backInBag.tip, /طاولة الصنع/);
-  assert.deepEqual(result.dragged, { cursor: null, table: true, marks: 0, drop: false, tip: '' });
-  assert.match(result.hint, /طاولة الصنع/);
-  assert.match(result.hint, /2/);
-  assert.equal(result.sel, 1);
-  assert.equal(result.placed, 1);
-});
-
-test('Block World keeps the recipe list still while the backpack is open, so a double-click crafts one recipe', async t => {
-  const page = await adventure(t);
+test('collecting 3 Relics & escaping shows Result Card with 1-click Upgrades that persist', async t => {
+  const page = await openMine(t);
+  await page.locator('#playBtn').click();
   await page.evaluate(() => {
-    ['logs', 'planks', 'table', 'tableplace', 'pickwood'].forEach(id => { __game.G.done[id] = true; });
-    __game.G.inv = __game.G.inv.map(() => null);
-    __game.give(BW.B.LOG, 1);
+    const w = __game.G.world;
+    w.gemsRun = 150;
+    for (const r of w.relics) {
+      w.p.x = r.x; w.p.y = r.y;
+      stepGame(8); // advance past joyful 55ms relic hitstop!
+    }
+    const pt = w.portals.find(p => p.active);
+    w.p.x = pt.x; w.p.y = pt.y;
+    stepGame(8);
   });
-  await page.keyboard.press('KeyE');
-  await page.evaluate(() => stepGame(2));
-  assert.equal(await page.evaluate(() => __game.G.mode), 'inv');
-  const first = page.locator('#craftList .crow').first();
-  const box = await first.boundingBox();
-  await page.mouse.dblclick(box.x + box.width / 2, box.y + box.height / 2);
-  const inv = await page.evaluate(() => __game.G.inv.filter(Boolean).map(s => [s.id === BW.B.PLANKS ? 'planks' : s.id, s.n]));
-  assert.deepEqual(inv, [['planks', 4]], 'one log made 4 planks and nothing else');
-});
+  assert.equal(await page.evaluate(() => __game.G.mode), 'result');
+  assert.ok(await page.locator('#result').isVisible());
+  assert.ok(await page.locator('#upgradeGrid .up-card[data-upgrade="tnt"]').isVisible());
 
-test('Auto-Best-Tool mines diamond ore while holding planks, and right-clicking TNT blasts a 3x3 ore crater', async t => {
-  const page = await adventure(t);
-  const res = await page.evaluate(() => {
-    const G = __game.G, P = __game.player, B = BW.B, I = BW.I;
-    G.inv.fill(null);
-    G.inv[0] = { id: B.PLANKS, n: 10 };
-    G.inv[20] = { id: I.PICK_DIAMOND, n: 1 };
-    G.sel = 0; // Holding planks in hand!
-    const tx = Math.floor(P.x + P.w / 2) + 2, ty = __game.surfaceY(tx) - 1;
-    G.world.set(tx, ty, B.DIAMOND_ORE);
-    stepGame(20);
-    clickAt(tx + 0.5, ty + 0.5, 0, 28);
-    const afterAutoTool = {
-      broken: G.world.get(tx, ty) === B.AIR,
-      droppedDiamond: G.items.some(it => it.id === I.DIAMOND)
-    };
-    // Place TNT next to Ruby & Gold Ore and right-click to detonate!
-    const bx = tx + 2, by = __game.surfaceY(bx) - 1;
-    G.world.set(bx, by, B.TNT);
-    G.world.set(bx + 1, by, B.RUBY_ORE);
-    G.world.set(bx, by + 1, B.GOLD_ORE);
-    clickAt(bx + 0.5, by + 0.5, 2, 2);
-    stepGame(85);
-    return {
-      afterAutoTool,
-      blasts: G.stats.blasts,
-      craterAir: G.world.get(bx + 1, by) === B.AIR && G.world.get(bx, by + 1) === B.AIR,
-      rubyDrop: G.items.some(it => it.id === I.RUBY) || (G.stats.got[I.RUBY] || 0) > 0
-    };
-  });
-  assert.deepEqual(res.afterAutoTool, { broken: true, droppedDiamond: true });
-  assert.equal(res.blasts, 1);
-  assert.equal(res.craterAir, true);
-  assert.equal(res.rubyDrop, true);
-});
-
-test('1-Click HUD Quick-Craft strip crafts directly on the play screen without opening backpack', async t => {
-  const page = await adventure(t);
-  const pt = await page.evaluate(() => {
-    __game.G.inv.fill(null);
-    __game.give(BW.B.LOG, 2);
-    stepGame(30);
-    __game.render();
-    const cv = document.getElementById('game'), r = cv.getBoundingClientRect();
-    const scale = r.width / 1280;
-    // First Quick-Craft pill is drawn at logical (24 + 26, 720 - 66 + 26) = (50, 680)
-    return { x: r.left + 50 * scale, y: r.top + 680 * scale };
-  });
-  await page.mouse.click(pt.x, pt.y);
-  await page.evaluate(() => stepGame(2));
-  const after = await page.evaluate(() => ({
-    mode: __game.G.mode,
-    craftedPlanks: __game.G.stats.craft[BW.B.PLANKS] || 0
+  const beforeLv = await page.evaluate(() => __game.saveData.upgrades.tnt);
+  await page.locator('#upgradeGrid .up-card[data-upgrade="tnt"]').click();
+  const afterUp = await page.evaluate(() => ({
+    lv: __game.saveData.upgrades.tnt,
+    stored: JSON.parse(localStorage.getItem('sg:block-world:save')).upgrades.tnt
   }));
-  assert.deepEqual(after, { mode: 'play', craftedPlanks: 4 });
+  assert.equal(afterUp.lv, beforeLv + 1, '1-click upgrade on Result Card levels up Mega-TNT');
+  assert.equal(afterUp.stored, beforeLv + 1, 'upgrade saved to localStorage');
+
+  // 1-click Play Again launches immediately!
+  await page.locator('#againBtn').click();
+  await page.evaluate(() => stepGame(2));
+  assert.equal(await page.evaluate(() => __game.G.mode), 'play');
+  assert.equal(await page.evaluate(() => __game.G.world.stats.tntMax), 4, 'upgraded Mega-TNT applies immediately');
 });
 
+test('optional Free Sandbox mode (#modeFree) toggles infinite time and quick-build bar', async t => {
+  const page = await openMine(t);
+  await page.locator('#modeFree').click();
+  await page.locator('#playBtn').click();
+  await page.evaluate(() => stepGame(2));
+  assert.equal(await page.evaluate(() => __game.G.gm), 'free');
+  assert.equal(await page.evaluate(() => __game.G.world.freeMode), true);
+  assert.ok(await page.locator('#sandboxBar').isVisible(), '4-block quick-build bar visible in Free Sandbox');
+
+  await page.keyboard.press('Digit3');
+  await page.evaluate(() => stepGame(2));
+  assert.equal(await page.evaluate(() => __game.G.world.selBlock), 2, 'Digit3 selects Crystal block');
+});

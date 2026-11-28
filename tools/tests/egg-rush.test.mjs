@@ -46,6 +46,17 @@ test('Egg Rush 3D browser: start, race steering, pause/resume/restart, 2P and wa
     await page.waitForFunction(oldX => window.__game.state.p1.x > oldX + 0.15, x0, { timeout: 15000 });
     await page.keyboard.up('ArrowRight');
 
+    // Mouse-X steering moves p1 smoothly and left-click hops
+    const pLeft = await page.evaluate(() => window.__game.point(220, 360));
+    const pMid = await page.evaluate(() => window.__game.point(640, 360));
+    await page.mouse.move(pMid.x, pMid.y);
+    await page.mouse.move(pLeft.x, pLeft.y, { steps: 6 });
+    const xBeforeMouse = await page.evaluate(() => window.__game.state.p1.x);
+    await page.waitForFunction(oldX => window.__game.state.p1.x < oldX - 0.15, xBeforeMouse, { timeout: 15000 });
+    const jumpsBefore = await page.evaluate(() => window.__game.state.p1.jumps);
+    await page.mouse.click(pLeft.x, pLeft.y);
+    await page.waitForFunction(j0 => window.__game.state.p1.jumps > j0, jumpsBefore, { timeout: 10000 });
+
     // Pause freezes race time, resume continues, restart resets distance
     await page.click('#btnPause');
     await page.waitForFunction(() => window.__game.state.screen === 'pause');

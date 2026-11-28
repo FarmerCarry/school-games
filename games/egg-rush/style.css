@@ -140,11 +140,16 @@ kbd.wide { min-width: 96px; font-size: 24px; }
 .meter .kc { position: absolute; bottom: 4px; width: 52px; height: 52px; border-radius: 12px; background: #fff; color: #1c2250; font-size: 34px; font-weight: 800; line-height: 50px; text-align: center; box-shadow: 0 5px 0 #9aa3c7; opacity: 0; transition: opacity .15s; }
 .meter .kc.l { left: -48px; } .meter .kc.r { right: -48px; }
 .meter .kc.on { opacity: 1; background: #ffd23f; box-shadow: 0 5px 0 #1c2250; animation: er-pulse .5s ease-in-out infinite; }
+.meter .shields { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); display: flex; gap: 10px; }
+.meter .shields .sh { display: block; width: 20px; height: 26px; border-radius: 50% 50% 45% 45%; background: #fffaf0; border: 3px solid #1c2250; box-shadow: 0 3px 0 #1c2250; transition: transform .2s, opacity .2s, background .2s; }
+.meter[data-cracks="1"] .shields .sh:last-child { background: #ff9f1c; opacity: .38; transform: scale(.8) rotate(14deg); }
+.meter[data-cracks="2"] .shields .sh { background: #ff4d4d; opacity: .28; transform: scale(.75); }
 @keyframes er-shake { 0%, 100% { margin-left: 0; } 25% { margin-left: -4px; } 75% { margin-left: 4px; } }
 .tag { position: absolute; top: 96px; width: 52px; height: 52px; border-radius: 50%; color: #fff; font-size: 30px; font-weight: 800; display: flex; align-items: center; justify-content: center; outline: 4px solid #1c2250; }
 .tag.t0 { left: 120px; } .tag.t1 { right: 120px; }
 .splitline { position: absolute; left: 637px; top: 0; width: 6px; height: 720px; background: #1c2250; }
-.count { position: absolute; left: 0; right: 0; top: 200px; text-align: center; font-size: 220px; font-weight: 800; color: #fff; -webkit-text-stroke: 16px #1c2250; paint-order: stroke fill; text-shadow: 0 14px 0 #1c2250; animation: er-count .9s ease-out; }
+.count { position: absolute; left: 0; right: 0; top: 200px; text-align: center; font-size: 220px; font-weight: 800; color: #fff; -webkit-text-stroke: 16px #1c2250; paint-order: stroke fill; text-shadow: 0 14px 0 #1c2250; }
+.count.er-pop { animation: er-count .55s ease-out; }
 .count.go { color: #5ee36a; font-size: 180px; }
 @keyframes er-count { from { transform: scale(1.8); opacity: 0; } 25% { transform: scale(1); opacity: 1; } to { transform: scale(.9); opacity: 1; } }
 .hint { position: absolute; left: 0; top: 0; display: flex; align-items: center; gap: 6px; padding: 10px 14px; border-radius: 22px; background: #fff; outline: 4px solid #1c2250; box-shadow: 0 6px 0 #1c2250; transform: translate(-50%, -100%); animation: er-hint .7s ease-in-out infinite; }

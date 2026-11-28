@@ -43,10 +43,20 @@
   var tutorialStarted = false;
   var tutorialDone = false;
 
-  // Track edge-triggered shoot release & jump taps across frames
+  // Track edge-triggered shoot release & jump taps across frames + 1-hand Mouse/Pointer play!
   var prevS = [false, false];
   var prevJ = [false, false];
-  var hudCache = { s1: -1, s2: -1, sup1: -1, sup2: -1, clock: '', ot: false, urgent: false };
+  var ptr = { follow: false, courtX: 640, down: false, pressed: false, released: false, jumpPressed: false };
+  var hudCache = { s1: -1, s2: -1, sup1: -1, sup2: -1, clock: '', ot: false, urgent: false, pw1: '', pw2: '' };
+
+  function resetPtr() {
+    ptr.follow = false; ptr.down = false; ptr.pressed = false; ptr.released = false; ptr.jumpPressed = false;
+  }
+  function clientToCourt(cx, cy) {
+    var r = canvas.getBoundingClientRect();
+    var w = Math.max(1, r.width), h = Math.max(1, r.height);
+    return { x: ((cx - r.left) / w) * E.COURT_W, y: ((cy - r.top) / h) * E.COURT_H };
+  }
 
   function say(txt) { $('live').textContent = txt; }
   function focusCanvas() { try { canvas.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }
@@ -60,6 +70,7 @@
     $('hud').hidden = !(next === 'play' || next === 'pause');
     if (next !== 'play') {
       $('shotGauge').hidden = true;
+      $('orbTag').hidden = true;
       $('ghostHint').hidden = true;
       $('callout').hidden = true;
     }
@@ -72,26 +83,36 @@
     el.textContent = text;
     el.className = kind || '';
     el.hidden = false;
-    calloutT = dur || 1.3;
+    calloutT = dur || 1.15;
   }
 
   function refreshTitleUI() {
-    selectedStage = E.clamp(selectedStage, 0, save.unlocked);
+    selectedStage = E.clamp(selectedStage, 0, E.OPPONENTS.length - 1);
     $('titleStars').querySelector('b').textContent = E.totalStars(save) + '/' + (E.OPPONENTS.length * 3);
     $('titleCoins').querySelector('b').textContent = Kit.fmt(save.coins);
     $('titleBest').querySelector('b').textContent = Kit.fmt(save.bestScore);
 
     var opp = E.OPPONENTS[selectedStage];
-    $('stageText').textContent = (selectedStage + 1) + '/' + E.OPPONENTS.length + ' · ' + opp.name;
+    $('stageText').textContent = (selectedStage + 1) + '/' + E.OPPONENTS.length + ' · ' + opp.title + ' — ' + opp.name;
     var dots = $('stageDots');
     dots.innerHTML = '';
     for (var i = 0; i < E.OPPONENTS.length; i++) {
-      var dot = document.createElement('span');
-      dot.className = 'stage-dot' + (i <= save.unlocked ? ' unlocked' : '') + (i === selectedStage ? ' active' : '');
+      var dot = document.createElement('button');
+      dot.type = 'button';
+      dot.className = 'stage-dot unlocked' + (save.stars[i] > 0 ? ' beaten' : '') + (i === selectedStage ? ' active' : '');
+      dot.setAttribute('aria-label', E.OPPONENTS[i].title);
+      dot.addEventListener('click', (function (idx) {
+        return function () {
+          selectedStage = idx;
+          J.tap();
+          refreshTitleUI();
+          initDemo();
+        };
+      })(i));
       dots.appendChild(dot);
     }
     $('stagePrev').disabled = selectedStage <= 0;
-    $('stageNext').disabled = selectedStage >= save.unlocked;
+    $('stageNext').disabled = selectedStage >= E.OPPONENTS.length - 1;
   }
 
   function buildShopUI() {
@@ -171,6 +192,7 @@
     });
     demo.phase = 'play';
     demo.time = 9999;
+    demo.powerSpawnT = 1.6;
     demo.players[0].x = 290;
     demo.players[1].x = 990;
     demo.ball.holder = demo.players[0];
@@ -209,10 +231,14 @@
 
     prevS[0] = prevS[1] = false;
     prevJ[0] = prevJ[1] = false;
+    resetPtr();
+    Kit.hitstop.reset();
     Kit.keys.reset();
 
     hudCache.s1 = hudCache.s2 = hudCache.sup1 = hudCache.sup2 = -1;
-    hudCache.clock = '';
+    hudCache.clock = ''; hudCache.pw1 = ''; hudCache.pw2 = '';
+    $('hudPw1').hidden = true; $('hudPw2').hidden = true;
+    $('orbTag').hidden = true;
     $('hudP1Name').textContent = match.players[0].name;
     $('hudP2Name').textContent = match.players[1].name;
 
@@ -242,6 +268,7 @@
     if (state !== 'pause') return;
     prevS[0] = prevS[1] = false;
     prevJ[0] = prevJ[1] = false;
+    resetPtr();
     Kit.keys.reset();
     setState('play');
     say('متابعة اللعب');
@@ -310,6 +337,25 @@
     var hasNext = m.mode === 'cpu' && rew.won && m.stage < E.OPPONENTS.length - 1;
     $('rNext').hidden = !hasNext;
 
+    // Next-unlock "Almost!" motivator bar
+    var nu = $('resNextUnlock');
+    var nextItem = null;
+    for (var bi = 0; bi < E.BALLS.length; bi++) {
+      if (!save.ownedBalls[E.BALLS[bi].id] && (!nextItem || E.BALLS[bi].cost < nextItem.cost)) nextItem = E.BALLS[bi];
+    }
+    for (var hi = 0; hi < E.HEADS.length; hi++) {
+      if (!save.ownedHeads[E.HEADS[hi].id] && (!nextItem || E.HEADS[hi].cost < nextItem.cost)) nextItem = E.HEADS[hi];
+    }
+    if (m.mode === 'cpu' && nextItem) {
+      var need = Math.max(0, nextItem.cost - save.coins);
+      nu.textContent = need === 0
+        ? ('🎉 يمكنك فتح ' + nextItem.icon + ' ' + nextItem.name + ' في الخزانة!')
+        : ('قريب! ينقصك ' + need + ' 🪙 لفتح ' + nextItem.icon + ' ' + nextItem.name);
+      nu.hidden = false;
+    } else {
+      nu.hidden = true;
+    }
+
     if (rew.won || m.mode === 'duo') {
       J.levelUp();
       if (rew.stars >= 1) J.star(rew.stars);
@@ -318,27 +364,40 @@
       J.fail();
     }
 
-    resultLock = 0.55;
+    resultLock = 0.40;
     setState('result');
     refreshTitleUI();
     say(banner.textContent);
   }
 
-  /* --------------------------------------------------------------- Input Reading */
+  /* --------------------------------------------------------------- Input Reading (Keyboard + 1-Hand Mouse) */
   function readPlayerInputs(m) {
     var k = Kit.keys;
     var isDuo = m.mode === 'duo';
 
-    var p0L = k.down('KeyA') || (!isDuo && k.down('ArrowLeft'));
-    var p0R = k.down('KeyD') || (!isDuo && k.down('ArrowRight'));
-    var p0J = k.down('KeyW') || (!isDuo && k.down('ArrowUp'));
-    var p0S = k.down('KeyS') || k.down('Space') || (!isDuo && k.down('ArrowDown'));
+    var kbL = k.down('KeyA') || (!isDuo && k.down('ArrowLeft'));
+    var kbR = k.down('KeyD') || (!isDuo && k.down('ArrowRight'));
+    if (kbL || kbR) ptr.follow = false;
 
-    var j0Pressed = (p0J && !prevJ[0]) || k.pressed('KeyW') || (!isDuo && k.pressed('ArrowUp'));
-    var s0Pressed = (p0S && !prevS[0]) || k.pressed('KeyS') || k.pressed('Space') || (!isDuo && k.pressed('ArrowDown'));
-    var s0Released = !p0S && prevS[0];
+    var p0L = kbL;
+    var p0R = kbR;
+    if (!isDuo && ptr.follow && !kbL && !kbR) {
+      var diffX = ptr.courtX - m.players[0].x;
+      if (diffX < -28) p0L = true;
+      else if (diffX > 28) p0R = true;
+    }
+
+    var p0J = k.down('KeyW') || (!isDuo && k.down('ArrowUp'));
+    var p0S = k.down('KeyS') || k.down('Space') || (!isDuo && (k.down('ArrowDown') || ptr.down));
+
+    var j0Pressed = (p0J && !prevJ[0]) || k.pressed('KeyW') || (!isDuo && (k.pressed('ArrowUp') || ptr.jumpPressed));
+    var s0Pressed = (p0S && !prevS[0]) || k.pressed('KeyS') || k.pressed('Space') || (!isDuo && (k.pressed('ArrowDown') || ptr.pressed));
+    var s0Released = (!p0S && prevS[0]) || (!isDuo && ptr.released);
     prevJ[0] = p0J;
     prevS[0] = p0S;
+    ptr.pressed = false;
+    ptr.released = false;
+    ptr.jumpPressed = false;
 
     if (p0L || p0R || p0J || p0S || j0Pressed || s0Pressed) {
       hasPlayerActed = true;
@@ -392,32 +451,54 @@
       } else if (ev.type === 'dunk_launch') {
         J.whoosh(0.95);
         if (view) view.burst(ev.x, ev.y, 14, [0x38bdf8, 0xffe066, 0xffffff], 5.5, 3.5);
+      } else if (ev.type === 'powerup_spawn') {
+        J.pop(0.75);
+        if (view) view.burst(ev.x, ev.y, 12, [0xffe066, 0xffffff, 0x38bdf8], 5, 2.5);
+      } else if (ev.type === 'powerup') {
+        Kit.hitstop(0.03);
+        J.coin(3);
+        J.chime(2);
+        showCallout(ev.icon + ' ' + ev.name, ev.player === 0 ? 'blue' : 'fire', 1.25);
+        if (view) {
+          view.shake(0.20);
+          view.burst(ev.x, ev.y, 24, [ev.color, 0xffe066, 0xffffff], 7.5, 3.8);
+        }
+      } else if (ev.type === 'ice_block') {
+        J.chime(3);
+        J.impact(0.7);
+        showCallout('❄️ السلة مجمّدة!', 'blue', 0.9);
+        if (view) {
+          view.shake(0.22);
+          view.burst(ev.x, ev.y, 20, [0x7dd3fc, 0x38bdf8, 0xffffff], 7, 3.2);
+        }
       } else if (ev.type === 'super_dunk') {
         J.whoosh(1.0);
         J.chime(3);
-        showCallout('☄️ دانك النيزك الناري!', 'fire', 1.35);
+        showCallout('☄️ دانك النيزك الناري!', 'fire', 1.25);
         if (view) {
-          view.shake(0.35, 0.25);
+          view.shake(0.38);
           view.burst(ev.x, ev.y, 26, [0xff6b00, 0xffe066, 0xff2a55, 0xffffff], 8, 4.5);
         }
       } else if (ev.type === 'lunge') {
         J.whoosh(0.45);
       } else if (ev.type === 'steal') {
+        Kit.hitstop(0.03);
         J.pop(0.85);
         J.impact(0.6);
         if (ev.player === 0) Kit.track.hit(); else Kit.track.miss();
-        showCallout('⚡ خطف ذكي!', 'blue', 0.95);
+        showCallout('⚡ خطف ذكي!', 'blue', 0.85);
         if (view) {
-          view.shake(0.20, 0.16);
+          view.shake(0.22);
           view.burst(ev.x, ev.y, 16, [0x38bdf8, 0xffe066, 0xffffff], 6, 3.2);
         }
       } else if (ev.type === 'block') {
+        Kit.hitstop(0.04);
         J.impact(0.9);
         J.pop(0.9);
         if (ev.player === 0) Kit.track.hit();
-        showCallout('🛡️ صدّ رائع!', 'blue', 1.0);
+        showCallout('🛡️ صدّ رائع!', 'blue', 0.9);
         if (view) {
-          view.shake(0.28, 0.20);
+          view.shake(0.30);
           view.burst(ev.x, ev.y, 20, [0x22d3ee, 0xffffff, 0xffe066], 7, 3.8);
         }
       } else if (ev.type === 'miss') {
@@ -425,33 +506,41 @@
       } else if (ev.type === 'score') {
         if (ev.scorer === 0) Kit.track.hit();
         if (ev.isSuper) {
+          Kit.hitstop(0.065);
           J.impact(1.0);
           J.chime(3);
-          showCallout('🔥 +3 دانك النيزك!', 'fire', 1.3);
+          showCallout('🔥 +' + ev.pts + ' دانك النيزك!', 'fire', 1.15);
           if (view) {
-            view.shake(0.55, 0.35);
-            view.burst(ev.x, ev.y, 38, [0xff6b00, 0xffe066, 0xff3d00, 0xffffff], 10, 5);
+            view.shake(0.60);
+            view.burst(ev.x, ev.y, 40, [0xff6b00, 0xffe066, 0xff3d00, 0xffffff], 10, 5);
           }
         } else if (ev.dunk) {
+          Kit.hitstop(0.05);
           J.impact(0.95);
           J.chime(2);
-          showCallout('💥 سلام دانك! +' + ev.pts, '', 1.15);
+          showCallout('💥 سلام دانك! +' + ev.pts, '', 1.0);
           if (view) {
-            view.shake(0.40, 0.26);
-            view.burst(ev.x, ev.y, 28, [0xffcf26, 0x38bdf8, 0x4ade80, 0xffffff], 8.5, 4.2);
+            view.shake(0.42);
+            view.burst(ev.x, ev.y, 30, [0xffcf26, 0x38bdf8, 0x4ade80, 0xffffff], 8.5, 4.2);
           }
         } else if (ev.swish) {
-          J.chime(ev.pts === 3 ? 3 : 2);
-          J.streak(ev.pts === 3 ? 5 : 3);
-          showCallout(ev.pts === 3 ? '✨ ثلاثية مثالية! +3' : '✨ تسديدة مثالية! +2', '', 1.2);
+          Kit.hitstop(0.035);
+          J.whoosh(0.9);
+          J.chime(ev.pts >= 3 ? 3 : 2);
+          J.streak(ev.pts >= 3 ? 5 : 3);
+          showCallout(ev.isMega ? ('🏀 عملاقة مثالية! +' + ev.pts) : (ev.pts >= 3 ? '✨ ثلاثية مثالية! +' + ev.pts : '✨ سويش مثالي! +' + ev.pts), '', 1.05);
           if (view) {
-            view.shake(0.22, 0.16);
-            view.burst(ev.x, ev.y, 26, [0x4ade80, 0xffe066, 0xffffff], 7.5, 4.0);
+            view.shake(0.24);
+            view.burst(ev.x, ev.y, 28, [0x4ade80, 0xffe066, 0xffffff], 7.5, 4.0);
           }
         } else {
+          J.whoosh(0.65);
           J.chime(1);
-          showCallout(ev.pts === 3 ? '🔥 ثلاثية! +3' : '🏀 سلة! +2', ev.scorer === 0 ? 'blue' : '', 1.0);
-          if (view) view.burst(ev.x, ev.y, 18, [0xffe066, 0x38bdf8, 0xff7a18], 6.5, 3.2);
+          showCallout((ev.isMega ? '🏀 كرة عملاقة! +' : (ev.pts >= 3 ? '🔥 ثلاثية! +' : '🏀 سلة! +')) + ev.pts, ev.scorer === 0 ? 'blue' : '', 0.9);
+          if (view) {
+            view.shake(0.14);
+            view.burst(ev.x, ev.y, 20, [0xffe066, 0x38bdf8, 0xff7a18], 6.5, 3.2);
+          }
         }
       } else if (ev.type === 'overtime') {
         J.countdown(0);
@@ -499,7 +588,32 @@
       cw.classList.toggle('urgent', isUrgent);
     }
 
-    // Live Shot Timing Sweet-Spot Gauge
+    // Active Power-Up pills for P1 and P2
+    function pwText(pl, myHoop, targetHoop) {
+      var parts = [];
+      if (pl.megaT > 0) parts.push('🏀 ' + Math.ceil(pl.megaT) + 's');
+      if (pl.rocketT > 0) parts.push('🚀 ' + Math.ceil(pl.rocketT) + 's');
+      if (pl.magnetT > 0) parts.push('🧲 ' + Math.ceil(pl.magnetT) + 's');
+      if (myHoop.frozenT > 0) parts.push('❄️ ' + Math.ceil(myHoop.frozenT) + 's');
+      if (targetHoop.bigRimT > 0) parts.push('⭕ ' + Math.ceil(targetHoop.bigRimT) + 's');
+      return parts.join(' ');
+    }
+    var pw1 = pwText(p0, match.hoops[0], match.hoops[1]);
+    if (hudCache.pw1 !== pw1) {
+      hudCache.pw1 = pw1;
+      var e1 = $('hudPw1');
+      e1.hidden = !pw1;
+      if (pw1) e1.textContent = pw1;
+    }
+    var pw2 = pwText(p1, match.hoops[1], match.hoops[0]);
+    if (hudCache.pw2 !== pw2) {
+      hudCache.pw2 = pw2;
+      var e2 = $('hudPw2');
+      e2.hidden = !pw2;
+      if (pw2) e2.textContent = pw2;
+    }
+
+    // World-Space Shot Power Arc right beside the charging player!
     var charger = null;
     if (state === 'play' && match.phase === 'play') {
       if (p0.ctrl === 'human' && p0.charging) charger = p0;
@@ -509,12 +623,35 @@
     if (charger) {
       gauge.hidden = false;
       var pct = Math.round(charger.charge * 100);
-      $('gaugeFill').style.width = pct + '%';
-      $('gaugePin').style.left = pct + '%';
+      $('gaugeFill').style.height = pct + '%';
+      $('gaugePin').style.bottom = pct + '%';
       var inSweet = charger.charge >= E.SWEET_MIN && charger.charge <= E.SWEET_MAX;
-      $('gaugeLbl').textContent = inSweet ? '✨ أطلق الآن — مثالية!' : 'اضغط ثم أطلق في المنطقة الذهبية!';
+      gauge.classList.toggle('sweet', inSweet);
+      $('gaugeLbl').textContent = inSweet ? '✨ مثالية!' : 'أطلق!';
+      if (view && view.project) {
+        var gp = view.project(charger.x - charger.dir * 66, charger.y - 84);
+        var gx = E.clamp(gp.x, 48, Math.max(48, window.innerWidth - 48));
+        var gy = E.clamp(gp.y, 92, Math.max(92, window.innerHeight - 64));
+        gauge.style.left = Math.round(gx) + 'px';
+        gauge.style.top = Math.round(gy) + 'px';
+      }
     } else {
       gauge.hidden = true;
+    }
+
+    // World-Space Floating Power-Up Orb Icon
+    var orbEl = $('orbTag');
+    if (state === 'play' && match.powerup && view && view.project) {
+      var pw = match.powerup;
+      var bobY = pw.y + Math.sin(pw.t * 4.2) * 14;
+      var op = view.project(pw.x, bobY - 46);
+      orbEl.textContent = pw.icon + ' ' + pw.name;
+      orbEl.style.borderColor = pw.hex;
+      orbEl.style.left = Math.round(E.clamp(op.x, 80, Math.max(80, window.innerWidth - 80))) + 'px';
+      orbEl.style.top = Math.round(E.clamp(op.y, 82, Math.max(82, window.innerHeight - 40))) + 'px';
+      orbEl.hidden = false;
+    } else {
+      orbEl.hidden = true;
     }
   }
 
@@ -532,6 +669,11 @@
       if (demo.done || demo.time < 50) { demo.time = 9999; demo.done = false; }
       dirty = true;
     } else if (state === 'play' && match) {
+      if (Kit.hitstop.tick(dt)) {
+        dirty = true;
+        Kit.keys.endFrame();
+        return;
+      }
       var inputs = readPlayerInputs(match);
       var evs = E.stepMatch(match, dt, inputs);
       handleEvents(match, evs);
@@ -596,13 +738,42 @@
     }
   });
   $('stageNext').addEventListener('click', function () {
-    if (selectedStage < save.unlocked) {
+    if (selectedStage < E.OPPONENTS.length - 1) {
       selectedStage++;
       J.tap();
       refreshTitleUI();
       initDemo();
     }
   });
+
+  // 1-Hand Mouse / Pointer Play on canvas (in 1P CPU mode)
+  canvas.addEventListener('pointermove', function (e) {
+    if (state !== 'play' || !match || match.mode === 'duo') return;
+    var pt = clientToCourt(e.clientX, e.clientY);
+    ptr.courtX = pt.x;
+    ptr.follow = true;
+  });
+  canvas.addEventListener('pointerdown', function (e) {
+    if (state !== 'play' || !match || match.mode === 'duo') return;
+    var pt = clientToCourt(e.clientX, e.clientY);
+    ptr.courtX = pt.x;
+    ptr.follow = true;
+    if (e.button === 2) {
+      ptr.jumpPressed = true;
+      return;
+    }
+    if (pt.y < 370) ptr.jumpPressed = true;
+    ptr.down = true;
+    ptr.pressed = true;
+  });
+  window.addEventListener('pointerup', function (e) {
+    if (e.button === 2) return;
+    if (ptr.down) {
+      ptr.down = false;
+      ptr.released = true;
+    }
+  });
+  window.addEventListener('pointercancel', resetPtr);
 
   $('pauseBtn').addEventListener('click', function () { J.tap(); pauseGame(); });
   $('pResume').addEventListener('click', function () { J.select(); resumeGame(); });
@@ -678,7 +849,7 @@
   Kit.muteButton();
   Kit.lifecycle({
     pause: function () { if (state === 'play') pauseGame(); },
-    reset: function () { prevS[0] = prevS[1] = false; prevJ[0] = prevJ[1] = false; }
+    reset: function () { prevS[0] = prevS[1] = false; prevJ[0] = prevJ[1] = false; resetPtr(); }
   });
 
   Kit.webgl.watchContext(canvas, {
@@ -748,27 +919,27 @@
     stepMatch: E.stepMatch
   };
 
-  /* --------------------------------------------------------------- Boot */
+  /* --------------------------------------------------------------- Fast Non-Blocking Boot via Kit.webgl.boot */
   refreshTitleUI();
   initDemo();
 
-  try {
-    view = A.createView(canvas);
-    view.calm = Kit.motion.reduced();
-    resize();
-    view.sync(demo, E.FIXED_DT, true);
-    view.prepare(function () {
-      view.render();
-      drawCount++;
-      dirty = false;
-      view.whenDrawn(function () {
-        loop = Kit.loop(update, render);
-        Kit.ready();
-      });
-    });
-  } catch (err) {
+  function failBoot() {
     $('scrTitle').hidden = true;
     $('scrError').hidden = false;
     Kit.ready();
   }
+
+  Kit.webgl.boot(function () {
+    view = A.createView(canvas);
+    view.calm = Kit.motion.reduced();
+    resize();
+    view.sync(match || demo, E.FIXED_DT, true);
+    view.render();
+    drawCount++;
+    dirty = false;
+    view.whenDrawn(function () {
+      loop = Kit.loop(update, render);
+      Kit.ready();
+    }, 5000);
+  }, { fallbackMs: 50, onError: failBoot });
 })();

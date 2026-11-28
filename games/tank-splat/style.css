@@ -1,6 +1,9 @@
 /* Paint Tanks — menu styles. The #ui layer is 1280x720 logical px, scaled with the canvas. */
 html, body { background: #2e2160; }
-:root { --ink: #1b1640; }
+:root {
+  --ink: #1b1640;
+  --ts: 0 -4px 0 var(--ink), 0 4px 0 var(--ink), 4px 0 0 var(--ink), -4px 0 0 var(--ink), 3px 3px 0 var(--ink), -3px 3px 0 var(--ink), 3px -3px 0 var(--ink), -3px -3px 0 var(--ink);
+}
 
 #ui {
   position: absolute; left: 0; top: 0; width: 1280px; height: 720px;
@@ -28,6 +31,7 @@ html, body { background: #2e2160; }
 .btn:hover { transform: translateY(-3px) scale(1.03); filter: brightness(1.08); }
 .btn:active { transform: translateY(4px); box-shadow: 0 2px 0 var(--ink); }
 .btn.green { background: linear-gradient(180deg, rgba(255,255,255,0.35), rgba(255,255,255,0) 42%), #3fd15d; }
+.btn.blue { background: linear-gradient(180deg, rgba(255,255,255,0.38), rgba(255,255,255,0) 42%), #3b8cff; }
 .btn.orange { background: linear-gradient(180deg, rgba(255,255,255,0.38), rgba(255,255,255,0) 42%), #ff9d1f; }
 .btn.pink { background: linear-gradient(180deg, rgba(255,255,255,0.38), rgba(255,255,255,0) 42%), #ff5fa8; }
 .btn.white { background: linear-gradient(180deg, #fff, #f3f0fa 70%); color: var(--ink); text-shadow: none; }
@@ -72,10 +76,7 @@ html, body { background: #2e2160; }
 .logo {
   position: absolute; left: 0; right: 0; top: 34px; margin: 0; text-align: center;
   font-size: 118px; font-weight: 700; line-height: 1.1; color: #fff;
-  text-shadow:
-    0 -5px 0 var(--ink), 0 5px 0 var(--ink), 5px 0 0 var(--ink), -5px 0 0 var(--ink),
-    4px 4px 0 var(--ink), -4px 4px 0 var(--ink), 4px -4px 0 var(--ink), -4px -4px 0 var(--ink),
-    0 13px 0 var(--ink), 5px 11px 0 var(--ink), -5px 11px 0 var(--ink), 0 20px 24px rgba(0, 0, 0, 0.4);
+  text-shadow: var(--ts), 0 13px 0 var(--ink), 5px 11px 0 var(--ink), -5px 11px 0 var(--ink), 0 20px 24px rgba(0, 0, 0, 0.4);
   animation: logoIn 0.7s cubic-bezier(.2, 1.6, .4, 1) both;
 }
 .logo .w1 { color: #7dff8f; display: inline-block; animation: bob 2.6s ease-in-out infinite; }
@@ -87,8 +88,8 @@ html, body { background: #2e2160; }
   font-size: 26px; font-weight: 700; text-shadow: 0 3px 0 var(--ink), 0 0 12px rgba(0, 0, 0, 0.5);
 }
 .menu { position: absolute; left: 0; right: 0; top: 262px; display: flex; flex-direction: column; align-items: center; gap: 18px; }
-.menu-row { display: flex; gap: 18px; justify-content: center; }
-.menu-row .btn { min-width: 250px; }
+.menu-row { display: flex; gap: 14px; justify-content: center; }
+.menu-row .btn { min-width: 215px; }
 .howto {
   position: absolute; left: 110px; right: 110px; bottom: 22px; background: rgba(255, 255, 255, 0.94);
   border: 4px solid var(--ink); border-radius: 24px; box-shadow: 0 6px 0 var(--ink);
@@ -105,7 +106,7 @@ html, body { background: #2e2160; }
 .topbar { position: absolute; left: 20px; right: 20px; top: 14px; display: flex; align-items: center; justify-content: space-between; }
 .topbar h2 {
   margin: 0; font-size: 56px; color: #fff; position: absolute; left: 0; right: 0; text-align: center; pointer-events: none;
-  text-shadow: 0 -4px 0 var(--ink), 0 4px 0 var(--ink), 4px 0 0 var(--ink), -4px 0 0 var(--ink), 3px 3px 0 var(--ink), -3px 3px 0 var(--ink), 3px -3px 0 var(--ink), -3px -3px 0 var(--ink), 0 9px 0 var(--ink);
+  text-shadow: var(--ts), 0 9px 0 var(--ink);
 }
 .topbar .btn { z-index: 1; margin-right: 60px; }
 .topbar .chips { z-index: 1; }
@@ -117,7 +118,7 @@ html, body { background: #2e2160; }
 .hint { position: absolute; left: 0; right: 0; bottom: 18px; text-align: center; color: #fff; font-size: 20px; margin: 0; text-shadow: 0 2px 0 var(--ink); }
 .hint .sg-key { font-size: 15px; }
 .hint.small { position: static; color: var(--ink); text-shadow: none; font-size: 18px; margin-top: 10px; }
-.big-h { margin: 0 0 6px; font-size: 54px; line-height: 1.15; color: #ffcc1f; text-shadow: 0 -3px 0 var(--ink), 0 3px 0 var(--ink), 3px 0 0 var(--ink), -3px 0 0 var(--ink), 3px 3px 0 var(--ink), -3px 3px 0 var(--ink), 3px -3px 0 var(--ink), -3px -3px 0 var(--ink), 0 7px 0 var(--ink); }
+.big-h { margin: 0 0 6px; font-size: 54px; line-height: 1.15; color: #ffcc1f; text-shadow: var(--ts), 0 7px 0 var(--ink); }
 .col { display: flex; flex-direction: column; align-items: center; gap: 12px; }
 .col .btn { min-width: 300px; }
 
@@ -152,8 +153,8 @@ html, body { background: #2e2160; }
 .stage.won .num { background: #3fd15d; }
 
 /* ---------- free play ---------- */
-.free-card { position: absolute; left: 190px; right: 190px; top: 100px; padding: 20px 36px 24px; text-align: center; }
-.opt { display: flex; align-items: center; justify-content: space-between; margin: 0 0 12px; }
+.free-card { position: absolute; left: 190px; right: 190px; top: 88px; padding: 14px 36px 18px; text-align: center; }
+.opt { display: flex; align-items: center; justify-content: space-between; margin: 0 0 8px; }
 .opt label { font-size: 26px; font-weight: 700; }
 .pills { display: flex; gap: 8px; }
 .pills button {
@@ -230,17 +231,5 @@ html, body { background: #2e2160; }
 .result-card .menu-row { gap: 12px; }
 .result-card .menu-row .btn { min-width: 0; width: 230px; }
 
-/* <kbd> defaults to a monospace font that can't join Arabic letters ("مسافة"). */
 #ui kbd.sg-key { font-family: inherit; }
-@media (prefers-reduced-motion: reduce) {
-  .pulse, .logo, .logo .w1, .logo .w2, .card, .stage, .item, .res-stars .star.pop, .res-note.bump { animation: none; }
-}
-html[data-sg-motion="reduce"] .pulse,
-html[data-sg-motion="reduce"] .logo,
-html[data-sg-motion="reduce"] .logo .w1,
-html[data-sg-motion="reduce"] .logo .w2,
-html[data-sg-motion="reduce"] .card,
-html[data-sg-motion="reduce"] .stage,
-html[data-sg-motion="reduce"] .item,
-html[data-sg-motion="reduce"] .res-stars .star.pop,
-html[data-sg-motion="reduce"] .res-note.bump { animation: none; }
+html[data-sg-motion="reduce"] :is(.pulse, .logo, .logo .w1, .logo .w2, .card, .stage, .item, .res-stars .star.pop, .res-note.bump) { animation: none; }

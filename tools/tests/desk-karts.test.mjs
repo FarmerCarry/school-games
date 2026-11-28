@@ -133,7 +133,7 @@ async function driveRace1P(page, maxChunks = 620) {
   }
 }
 
-test('title demo, idle P1 stationary guarantee, ArrowUp launch, drift boost, pause freeze (0 redraws), and restart', async t => {
+test('low chase cam, auto-gas, separate Shift drift vs Space/E item, pause freeze (0 redraws), and restart', async t => {
   const page = await openGame(t, { size: [1100, 620] });
 
   // Clean title & responsive 1100x620 fit (no scrollbars)
@@ -145,38 +145,69 @@ test('title demo, idle P1 stationary guarantee, ArrowUp launch, drift boost, pau
   assert.equal(fit.screen, 'title');
   assert.equal(fit.scrollX && fit.scrollY, true, 'fits 1100x620 cleanly with zero scrollbars');
 
-  // Start track 1-1 -> stays stationary until player presses gas
+  // Start track 1-1 -> brief grid window keeps p1Dist===0, then Auto-Gas launches automatically!
   await page.click('#btnPlay');
-  await step(page, 30);
+  await step(page, 15);
   let st = await state(page);
   assert.equal(st.screen, 'play');
   assert.equal(st.id, '1-1');
-  assert.equal(st.p1Dist, 0, 'P1 remains stationary with no input');
-  assert.equal(st.time, 0, 'clock stays 0 until launch');
+  assert.equal(st.laps, 2, '2-lap sprint mode');
+  assert.equal(st.p1Dist, 0, 'grid window keeps p1Dist === 0 cleanly');
+  assert.equal(st.time, 0, 'clock stays 0 during grid window');
+  assert.ok(st.cam && st.cam.height < 8 && st.cam.fov >= 58, `low chase cam active (h=${st.cam?.height}, fov=${st.cam?.fov})`);
 
-  // Hold ArrowUp -> accelerates cleanly
-  await page.keyboard.down('ArrowUp');
-  await run(page, 40);
+  // Auto-Gas kicks in automatically with ZERO gas key held!
+  await run(page, 60);
   st = await state(page);
-  assert.ok(st.p1Dist > 6, `ArrowUp moves kart forward (${st.p1Dist.toFixed(1)})`);
+  assert.ok(st.p1Dist > 6, `Auto-Gas accelerates kart without pressing W/↑ (${st.p1Dist.toFixed(1)})`);
   assert.ok(st.time > 0.5);
 
-  // Hold drift + turn -> charges drift sparks & releases mini-turbo
+  // Hold ShiftLeft + turn -> charges drift sparks & releases mini-turbo + FOV kick (and NEVER fires Space items!)
+  const fovBeforeBoost = st.cam.fov;
   await page.keyboard.down('ArrowLeft');
-  await page.keyboard.down('Space');
+  await page.keyboard.down('ShiftLeft');
   await run(page, 50);
   const midDrift = await state(page);
-  assert.equal(midDrift.karts[0].drifting, true, 'drift engaged');
+  assert.equal(midDrift.karts[0].drifting, true, 'ShiftLeft engages drift cleanly');
   assert.ok(midDrift.karts[0].driftStage >= 1, 'drift sparks charged');
-  await page.keyboard.up('Space');
+  await page.keyboard.up('ShiftLeft');
   await page.keyboard.up('ArrowLeft');
-  await page.keyboard.up('ArrowUp');
-  await step(page, 2);
+  await run(page, 10);
   st = await state(page);
   assert.ok(st.karts[0].boostT > 0.3, 'drift release grants mini-turbo');
+  assert.ok(st.cam.fov > fovBeforeBoost + 2, `dynamic boost FOV kick active (${fovBeforeBoost} -> ${st.cam.fov})`);
 
-  // Pause freezes simulation AND stops redraws. With software WebGL the one paused frame
-  // waits for the GPU fence and its pacing in real time (art.js mayDraw), so let it land first.
+  // Drive until P1 collects a mystery item box, then prove ShiftLeft drift NEVER wastes the item,
+  // while KeyE / Space fires it cleanly!
+  let heldItem = null;
+  for (let c = 0; c < 180; c++) {
+    const dec = await page.evaluate(() => {
+      const s = __game.state, p = s.karts[0];
+      if (p.item) return { got: p.item };
+      let d = Math.atan2(s.aim.z - p.z, s.aim.x - p.x) - p.ang;
+      while (d > Math.PI) d -= Math.PI * 2;
+      while (d < -Math.PI) d += Math.PI * 2;
+      return { got: null, steer: d > 0.12 ? 'ArrowRight' : (d < -0.12 ? 'ArrowLeft' : '') };
+    });
+    if (dec.got) { heldItem = dec.got; break; }
+    if (dec.steer) await page.keyboard.down(dec.steer);
+    await run(page, 6);
+    if (dec.steer) await page.keyboard.up(dec.steer);
+  }
+  assert.ok(heldItem, 'collected a mystery pickup item box');
+  await page.keyboard.down('ShiftLeft');
+  await page.keyboard.down('ArrowRight');
+  await run(page, 18);
+  await page.keyboard.up('ShiftLeft');
+  await page.keyboard.up('ArrowRight');
+  st = await state(page);
+  assert.equal(st.karts[0].item, heldItem, 'drifting with ShiftLeft NEVER wastes a held item');
+  await page.keyboard.press('KeyE');
+  await run(page, 4);
+  st = await state(page);
+  assert.equal(st.karts[0].item, null, 'pressing KeyE fires the held item cleanly');
+
+  // Pause freezes simulation AND stops redraws.
   const drawsBeforePause = (await state(page)).draws;
   await page.click('#btnPause');
   await step(page, 2);
@@ -203,14 +234,14 @@ test('title demo, idle P1 stationary guarantee, ArrowUp launch, drift boost, pau
   assert.equal(reset.time, 0);
 });
 
-test('full 3-lap race finish records stars, coins, DDA result, and persists across reload', async t => {
+test('full 2-lap race finish records stars, coins, DDA result, and persists across reload', async t => {
   const page = await openGame(t, { save: SAVE({ coins: 20 }), dda: 0.20 });
   await page.click('#btnPlay');
   await driveRace1P(page);
   await step(page, 4);
 
   const st = await state(page);
-  assert.equal(st.screen, 'result', 'reached result overlay after 3 laps');
+  assert.equal(st.screen, 'result', 'reached result overlay after 2 laps');
   assert.equal(st.finished, true);
   assert.ok(st.save.coins > 20, 'earned race coins');
   assert.ok(st.save.tracks[0].stars >= 1, 'earned track stars');
@@ -230,7 +261,7 @@ test('full 3-lap race finish records stars, coins, DDA result, and persists acro
   assert.equal(afterReload.save.bestScore, savedBeforeReload.bestScore);
 });
 
-test('circuits modal opens all 6 tracks (Cup 2-3), 2P local controls move both karts, and garage quota retry recovers', async t => {
+test('circuits modal opens all 6 tracks (Cup 2-3), 2P split-screen chase cam moves both karts, and garage quota retry recovers', async t => {
   const page = await openGame(t, { save: SAVE({ coins: 120 }) });
 
   // Open Circuits modal -> 6 cards across 2 cups -> launch 2-3 (Principal's Mega Desk)
@@ -257,7 +288,7 @@ test('circuits modal opens all 6 tracks (Cup 2-3), 2P local controls move both k
   assert.equal(savedAfterRetry.coins, 60);
   await page.click('#btnGarageBack');
 
-  // 2P local mode: W moves P1, ArrowUp moves P2
+  // 2P split-screen chase mode: both karts launch cleanly with dedicated split cameras!
   await page.click('#btnDuo');
   await page.click('#btnPlay');
   await page.keyboard.down('KeyW');
@@ -267,6 +298,7 @@ test('circuits modal opens all 6 tracks (Cup 2-3), 2P local controls move both k
   await page.keyboard.up('ArrowUp');
   st = await state(page);
   assert.equal(st.duo, true);
+  assert.equal(st.cam.split, true, '2P uses true split-screen chase cameras');
   assert.ok(st.karts[0].speed > 10, 'P1 accelerates with W in 2P mode');
   assert.ok(st.karts[1].speed > 10, 'P2 accelerates with ArrowUp in 2P mode');
 });

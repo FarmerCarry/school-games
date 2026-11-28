@@ -208,6 +208,7 @@ body {
   z-index: 9;
 }
 .banner-warn { background: #ff6b6b; color: #fff; }
+.splitline { position: fixed; top: 0; bottom: 0; left: 50%; width: 4px; margin-left: -2px; background: var(--dk-ink); box-shadow: 0 0 0 2px rgba(255, 253, 245, 0.75); z-index: 5; pointer-events: none; }
 
 .ghost-hint {
   position: fixed;

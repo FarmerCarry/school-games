@@ -24,9 +24,9 @@
     scene.background = skyColor;
     scene.fog = new T.Fog(fogColor, 34, 88);
 
-    var camera = new T.PerspectiveCamera(37, 16 / 9, 0.5, 140);
-    camera.position.set(0, 5.1, 22.8);
-    camera.lookAt(0, 3.3, 0);
+    var camera = new T.PerspectiveCamera(40, 16 / 9, 0.5, 140);
+    camera.position.set(0, 4.35, 16.8);
+    camera.lookAt(0, 3.0, 0);
 
     // Warm sunlit lighting: sky/ground hemisphere + bright sunlight + gentle back fill
     var hemi = new T.HemisphereLight(0xfffdf0, 0x5d8aa8, 1.38);
@@ -113,12 +113,13 @@
     var MAT_LIT = new T.MeshLambertMaterial({ vertexColors: true });
     var MAT_GLOW = new T.MeshBasicMaterial({ vertexColors: true });
 
-    /* ---------------------------------------------------- Procedural Court Texture */
+    /* ---------------------------------------------------- Procedural Court Texture (fast 512x256) */
     function makeCourtTexture(floorHex, keyLHex, keyRHex) {
       var cv = document.createElement('canvas');
-      cv.width = 1024;
-      cv.height = 512;
+      cv.width = 512;
+      cv.height = 256;
       var ctx = cv.getContext('2d');
+      ctx.scale(0.5, 0.5);
 
       // Outer vibrant court apron
       ctx.fillStyle = '#1e3a6e';
@@ -452,10 +453,8 @@
       neck.position.set(offsetX * 0.32, 0, 0);
       rimPivot.add(neck);
 
-      var rimMesh = new T.Mesh(
-        new T.TorusGeometry(rimR, 0.085, 10, 24),
-        new T.MeshPhongMaterial({ color: 0xff5a00, specular: 0xffd199, shininess: 85 })
-      );
+      var rimMat = new T.MeshPhongMaterial({ color: 0xff5a00, specular: 0xffd199, shininess: 85 });
+      var rimMesh = new T.Mesh(new T.TorusGeometry(rimR, 0.085, 10, 24), rimMat);
       rimMesh.rotation.x = Math.PI * 0.5;
       rimMesh.position.set(offsetX, 0, 0);
       rimPivot.add(rimMesh);
@@ -468,6 +467,13 @@
       netMesh.position.set(offsetX, -0.60, 0);
       rimPivot.add(netMesh);
 
+      // Frozen Hoop crystalline ice lid!
+      var iceMat = new T.MeshPhongMaterial({ color: 0x7dd3fc, emissive: 0x0284c7, emissiveIntensity: 0.5, transparent: true, opacity: 0.78, shininess: 120 });
+      var iceCap = new T.Mesh(new T.CylinderGeometry(rimR * 1.12, rimR * 1.05, 0.24, 16), iceMat);
+      iceCap.position.set(offsetX, 0.14, 0);
+      iceCap.visible = false;
+      rimPivot.add(iceCap);
+
       g.add(rimPivot);
       scene.add(g);
 
@@ -475,10 +481,15 @@
         group: g,
         sideSign: sideSign,
         rimPivot: rimPivot,
+        rimMesh: rimMesh,
+        rimMat: rimMat,
+        netMesh: netMesh,
         netGeo: netGeo,
         netBasePos: netBasePos,
+        iceCap: iceCap,
         glassMat: glassMat,
-        frameMat: frameMat
+        frameMat: frameMat,
+        baseRimR: spec.rimR
       };
     }
 
@@ -546,12 +557,14 @@
     }
 
     var ballTextures = {};
-    for (var bi2 = 0; bi2 < E.BALLS.length; bi2++) {
-      ballTextures[E.BALLS[bi2].id] = makeBallTexture(E.BALLS[bi2]);
+    function getBallTexture(id) {
+      var key = id || 'classic';
+      if (!ballTextures[key]) ballTextures[key] = makeBallTexture(E.ballById(key));
+      return ballTextures[key];
     }
 
     var ballMat = new T.MeshPhongMaterial({
-      map: ballTextures.classic,
+      map: getBallTexture('classic'),
       specular: 0xffe4c4,
       shininess: 55
     });
@@ -563,6 +576,16 @@
     var ballFireHalo = new T.Mesh(new T.SphereGeometry(E.BALL_R * SCALE * 1.38, 12, 10), ballFireMat);
     ballFireHalo.visible = false;
     scene.add(ballFireHalo);
+
+    // Mid-Court 3D Power-Up Orb (spinning glowing octahedron + beacon rings)
+    var powerGroup = new T.Group();
+    var powerCoreMat = new T.MeshPhongMaterial({ color: 0xff7b00, emissive: 0xff7b00, emissiveIntensity: 0.55, shininess: 100 });
+    var powerCore = new T.Mesh(new T.OctahedronGeometry(0.56, 0), powerCoreMat);
+    var powerRingMat = new T.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85, side: T.DoubleSide });
+    var powerRing = new T.Mesh(new T.TorusGeometry(0.84, 0.08, 8, 22), powerRingMat);
+    powerGroup.add(powerCore, powerRing);
+    powerGroup.visible = false;
+    scene.add(powerGroup);
 
     /* ---------------------------------------------------- Expressive 3D Big-Head Players */
     var sharedHeadGeo = new T.SphereGeometry(0.68, 18, 14);
@@ -691,19 +714,29 @@
       var trimMat = new T.MeshLambertMaterial({ color: 0xffe066 });
       var shoeMat = new T.MeshLambertMaterial({ color: idx === 0 ? 0x1d4ed8 : 0xdc2626 });
 
-      // Oversized Shoes (left & right pivot from hip)
+      // Oversized Shoes (left & right pivot from hip) + Rocket Boots flames
+      var flameGeo = new T.ConeGeometry(0.16, 0.44, 6);
+      var flameMat = new T.MeshBasicMaterial({ color: 0xfb7185 });
       var shoeL = new T.Group();
       var shLM = new T.Mesh(sharedShoeGeo, shoeMat);
       var slLM = new T.Mesh(sharedSoleGeo, MAT_WHITE);
       slLM.position.y = -0.14;
-      shoeL.add(shLM, slLM);
+      var flameL = new T.Mesh(flameGeo, flameMat);
+      flameL.rotation.x = Math.PI;
+      flameL.position.set(0, -0.36, -0.05);
+      flameL.visible = false;
+      shoeL.add(shLM, slLM, flameL);
       shoeL.position.set(-0.24, 0.18, 0.12);
 
       var shoeR = new T.Group();
       var shRM = new T.Mesh(sharedShoeGeo, shoeMat);
       var slRM = new T.Mesh(sharedSoleGeo, MAT_WHITE);
       slRM.position.y = -0.14;
-      shoeR.add(shRM, slRM);
+      var flameR = new T.Mesh(flameGeo, flameMat);
+      flameR.rotation.x = Math.PI;
+      flameR.position.set(0, -0.36, -0.05);
+      flameR.visible = false;
+      shoeR.add(shRM, slRM, flameR);
       shoeR.position.set(0.24, 0.18, -0.12);
       bodyScale.add(shoeL, shoeR);
 
@@ -803,13 +836,21 @@
       var accessories = buildHeadAccessories(headGroup);
       bodyScale.add(headGroup);
 
-      // Super-Ready Glowing Fire Aura Ring
+      // Super-Ready Glowing Fire Aura Ring & Ball Magnet Purple Aura Ring
       var superRingMat = new T.MeshBasicMaterial({ color: 0xffcf26, transparent: true, opacity: 0.75, side: T.DoubleSide });
       var superRing = new T.Mesh(new T.RingGeometry(0.74, 1.05, 20), superRingMat);
       superRing.rotation.x = -Math.PI * 0.5;
       superRing.position.y = 0.06;
       superRing.visible = false;
       root.add(superRing);
+
+      var magnetRing = new T.Mesh(
+        new T.TorusGeometry(0.95, 0.07, 8, 22),
+        new T.MeshBasicMaterial({ color: 0xc084fc, transparent: true, opacity: 0.78 })
+      );
+      magnetRing.position.y = 1.05;
+      magnetRing.visible = false;
+      root.add(magnetRing);
 
       // Dizzy Stars Ring (when bumped/stunned)
       var dizzyGroup = new T.Group();
@@ -832,6 +873,8 @@
         headGroup: headGroup,
         shoeL: shoeL,
         shoeR: shoeR,
+        flameL: flameL,
+        flameR: flameR,
         armL: armL,
         armR: armR,
         pupilL: pupilL,
@@ -847,6 +890,7 @@
         accessories: accessories,
         superRing: superRing,
         superRingMat: superRingMat,
+        magnetRing: magnetRing,
         dizzyGroup: dizzyGroup,
         curHead: ''
       };
@@ -909,12 +953,10 @@
       }
     }
 
-    var shakeT = 0;
-    var shakeMag = 0;
-    function addShake(mag, dur) {
+    var camShake = Kit.shake({ decay: 3.4 });
+    function addShake(mag) {
       if (view.calm) return;
-      shakeMag = Math.max(shakeMag, mag || 0.25);
-      shakeT = Math.max(shakeT, dur || 0.22);
+      camShake.add(mag || 0.25);
     }
 
     /* ---------------------------------------------------- Arena Theme Sync */
@@ -931,28 +973,36 @@
       }
       if (match.ballSkin && match.ballSkin !== curBallSkin) {
         curBallSkin = match.ballSkin;
-        ballMat.map = ballTextures[curBallSkin] || ballTextures.classic;
+        ballMat.map = getBallTexture(curBallSkin);
         ballMat.needsUpdate = true;
       }
     }
 
     /* ---------------------------------------------------- Frame Sync */
     var camX = 0;
-    var camY = 5.1;
-    var camZ = 22.8;
+    var camY = 4.35;
+    var camZ = 16.8;
 
     function sync(match, dt, snapCam) {
       syncTheme(match);
       var t = match.elapsed;
       var b = match.ball;
 
-      // 1. Update Hoops (Rim Flex, Backboard Glow, Swaying 3D Net)
+      // 1. Update Hoops (Rim Flex, Backboard Glow, Big Rim, Frozen Ice Lid, Swaying 3D Net)
       for (var hi = 0; hi < 2; hi++) {
         var hp = match.hoops[hi];
         var h3 = hoops3D[hi];
+        var rimScale = hp.rimR / h3.baseRimR;
+        h3.rimMesh.scale.set(rimScale, rimScale, 1);
+        h3.netMesh.scale.set(rimScale, 1, rimScale);
+        h3.rimMat.color.setHex(hp.bigRimT > 0 ? 0x22d36b : 0xff5a00);
+        h3.iceCap.visible = hp.frozenT > 0;
+        if (hp.frozenT > 0) {
+          h3.iceCap.scale.set(rimScale, 1 + Math.sin(t * 9) * 0.08, rimScale);
+        }
         h3.rimPivot.rotation.z = h3.sideSign * hp.rimBend * 0.26;
-        h3.glassMat.emissiveIntensity = 0.16 + hp.glowT * 0.65;
-        h3.frameMat.color.setHex(hp.glowT > 0.1 ? 0xffe066 : 0xffffff);
+        h3.glassMat.emissiveIntensity = hp.frozenT > 0 ? 0.55 : (0.16 + hp.glowT * 0.65);
+        h3.frameMat.color.setHex(hp.frozenT > 0 ? 0x7dd3fc : (hp.glowT > 0.1 ? 0xffe066 : 0xffffff));
 
         var posAttr = h3.netGeo.attributes.position;
         var base = h3.netBasePos;
@@ -1073,7 +1123,22 @@
           p3.mouth.scale.set(1, 0.85, 1);
         }
 
-        // Super-Ready Fire Ring & Dizzy Stars
+        // Rocket Boots flames, Magnet aura, Super-Ready Fire Ring & Dizzy Stars
+        var hasRocket = pl.rocketT > 0;
+        p3.flameL.visible = hasRocket;
+        p3.flameR.visible = hasRocket;
+        if (hasRocket) {
+          var fls = 0.85 + Math.sin(t * 28 + pi) * 0.35;
+          p3.flameL.scale.set(1, fls, 1);
+          p3.flameR.scale.set(1, fls, 1);
+        }
+        p3.magnetRing.visible = pl.magnetT > 0;
+        if (pl.magnetT > 0) {
+          p3.magnetRing.rotation.y = t * 5.2;
+          p3.magnetRing.rotation.x = Math.sin(t * 3.5) * 0.4;
+          var ms = 1 + Math.sin(t * 10) * 0.08;
+          p3.magnetRing.scale.set(ms, ms, ms);
+        }
         var superReady = pl.super >= 100 || (pl.dunk && pl.dunk.isSuper);
         p3.superRing.visible = superReady;
         if (superReady) {
@@ -1086,17 +1151,35 @@
         if (pl.stunT > 0) p3.dizzyGroup.rotation.y = t * 7.5;
       }
 
-      // 5. 3D Basketball & Fireball Halo
+      // 5. 3D Basketball, Giant Ball scale, Fireball Halo & Mid-Court Power-Up Orb
       ballMesh.position.set(bxW, byW, 0);
       ballMesh.rotation.z = -b.angle;
       ballMesh.rotation.x = t * 1.4;
-      var onFire = b.fireT > 0 || b.isSuper;
+      var bScale = b.isMega ? 1.55 : 1;
+      ballMesh.scale.set(bScale, bScale, bScale);
+      var onFire = b.fireT > 0 || b.isSuper || b.isMega;
       ballFireHalo.visible = onFire;
       if (onFire) {
         ballFireHalo.position.set(bxW, byW, 0);
-        var fs = 1 + Math.sin(t * 22) * 0.16;
+        var fs = bScale * (1 + Math.sin(t * 22) * 0.16);
         ballFireHalo.scale.set(fs, fs, fs);
-        ballFireMat.color.setHex(Math.floor(t * 18) % 2 === 0 ? 0xff7a00 : 0xffe066);
+        ballFireMat.color.setHex(b.isMega ? 0xff7b00 : (Math.floor(t * 18) % 2 === 0 ? 0xff7a00 : 0xffe066));
+      }
+
+      var pw = match.powerup;
+      powerGroup.visible = !!pw;
+      if (pw) {
+        var bobY = pw.y + Math.sin(pw.t * 4.2) * 14;
+        powerGroup.position.set(wx(pw.x), wy(bobY), 0.15);
+        powerCore.rotation.y = t * 3.4;
+        powerCore.rotation.x = t * 1.8;
+        powerRing.rotation.x = Math.PI * 0.35 + Math.sin(t * 3) * 0.35;
+        powerRing.rotation.y = t * 2.4;
+        powerCoreMat.color.setHex(pw.color);
+        powerCoreMat.emissive.setHex(pw.color);
+        powerRingMat.color.setHex(pw.color);
+        var ps = (pw.life < 2.2 ? (0.85 + Math.sin(t * 18) * 0.18) : 1) * (1 + Math.sin(t * 6) * 0.08);
+        powerGroup.scale.set(ps, ps, ps);
       }
 
       // 6. Blob Shadows (P1, P2, Ball)
@@ -1167,31 +1250,37 @@
       partMesh.instanceMatrix.needsUpdate = true;
       if (partMesh.instanceColor) partMesh.instanceColor.needsUpdate = true;
 
-      // 9. Smooth Side-View Camera with Subtle Depth Pan & Screen Shake
-      var wantX = E.clamp(bxW * 0.14, -1.6, 1.6);
-      var wantY = 4.65 + E.clamp((byW - 3.0) * 0.08, -0.25, 0.55);
-      var wantZ = 20.4;
+      // 9. Closer Dynamic Side-View Camera (z ≈ 15.5–16.8) with Kit.shake
+      var dunking = !!(match.players[0].dunk || match.players[1].dunk);
+      var nearRim = Math.abs(bxW) > 5.8 && byW > 3.2;
+      var wantX = E.clamp(bxW * 0.24, -2.3, 2.3);
+      var wantY = 4.2 + E.clamp((byW - 2.6) * 0.09, -0.2, 0.55);
+      var wantZ = dunking ? 15.5 : (nearRim ? 16.0 : 16.8);
       if (snapCam || view.calm) {
         camX = wantX; camY = wantY; camZ = wantZ;
       } else {
-        var f = Math.min(1, dt * 5.2);
+        var f = Math.min(1, dt * 6.0);
         camX += (wantX - camX) * f;
         camY += (wantY - camY) * f;
         camZ += (wantZ - camZ) * f;
       }
 
-      var shX = 0, shY = 0;
-      if (shakeT > 0 && !view.calm) {
-        shakeT = Math.max(0, shakeT - dt);
-        var amp = shakeMag * (shakeT / 0.25);
-        shX = (Math.random() - 0.5) * amp;
-        shY = (Math.random() - 0.5) * amp;
-      } else {
-        shakeMag = 0;
-      }
+      camShake.update(dt);
+      var shX = view.calm ? 0 : camShake.x;
+      var shY = view.calm ? 0 : camShake.y;
 
       camera.position.set(camX + shX, camY + shY, camZ);
-      camera.lookAt(camX * 0.5, 3.05, 0);
+      camera.lookAt(camX * 0.62, 2.95, 0);
+    }
+
+    var viewW = 1280, viewH = 720;
+    function projectCourt(px, py) {
+      V1.set(wx(px), wy(py), 0.15);
+      V1.project(camera);
+      return {
+        x: (V1.x * 0.5 + 0.5) * viewW,
+        y: (-V1.y * 0.5 + 0.5) * viewH
+      };
     }
 
     /* ---------------------------------------------------- Software WebGL Fence Pacing */
@@ -1205,6 +1294,7 @@
       calm: false,
       burst: burst,
       shake: addShake,
+      project: projectCourt,
       sync: sync,
       mayDraw: pace.mayDraw,
       render: function () {
@@ -1212,12 +1302,12 @@
         pace.markDrawn();
       },
       resize: function (w, h) {
+        viewW = w; viewH = h;
         renderer.setSize(w, h, false);
         camera.aspect = w / Math.max(1, h);
         camera.updateProjectionMatrix();
       },
       prepare: function (done) {
-        try { renderer.compile(scene, camera); } catch (e) { /* ignore */ }
         done();
       },
       whenDrawn: pace.whenDrawn,

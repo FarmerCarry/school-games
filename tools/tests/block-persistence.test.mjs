@@ -1,3 +1,4 @@
+// Block World — TNT Mine Dash persistence & Kit.saveStatus retry tests in real Chromium.
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import path from 'node:path';
@@ -25,28 +26,25 @@ async function game(t, init) {
   page.on('pageerror', e => errors.push(e.message));
   t.after(async () => { await context.close(); assert.deepEqual(errors, []); });
   await page.addInitScript(() => {
-    let seed = 123456789;
-    Math.random = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 4294967296; };
     let kit;
-    Object.defineProperty(window, 'Kit', { configurable: true, get: () => kit, set(value) {
-      kit = value;
-      kit.loop = update => { window.stepGame = (n = 1) => { for (let i = 0; i < n; i++) update(1 / 60); }; return { stop() {} }; };
-    } });
+    Object.defineProperty(window, 'Kit', {
+      configurable: true,
+      get: () => kit,
+      set(value) {
+        kit = value;
+        kit.loop = (u, r) => {
+          window.stepGame = (n = 1) => { for (let i = 0; i < n; i++) u(1 / 60); if (r) r(0); };
+          return { stop() {} };
+        };
+      }
+    });
   });
   if (init) await page.addInitScript(init);
   await page.goto(`${origin}/games/block-world/`);
   await page.waitForFunction(() => window.__game && window.stepGame);
   return page;
 }
-async function create(page) {
-  await page.evaluate(() => { document.getElementById('playBtn').click(); document.getElementById('modeSurv').click(); });
-  await page.waitForFunction(() => __game.G.mode === 'play');
-}
-async function restore(page) {
-  await page.reload();
-  await page.evaluate(() => document.getElementById('playBtn').click());
-  await page.waitForFunction(() => __game.G.mode === 'play' || __game.G.mode === 'inv');
-}
+
 async function exhaustStorage(page, reserve = 0) {
   return page.evaluate(slack => {
     let lo = 0, hi = 10 * 1024 * 1024;
@@ -59,310 +57,78 @@ async function exhaustStorage(page, reserve = 0) {
   }, reserve);
 }
 
-test('real quota failure never advertises a saved world and Save & Quit retains the session', async t => {
+test('real quota failure shows Kit.saveStatus failed banner, preserves prior save, and retry succeeds', async t => {
   const page = await game(t);
-  await exhaustStorage(page, 2048);
-  await create(page);
-  assert.deepEqual(await page.evaluate(() => ({
-    error: __game.G.saveError, flash: __game.G.savedFlash,
-    world: Kit.store('block-world').get('slot1', null), slot: __game.meta.slots[0]
-  })), { error: 'world', flash: 0, world: null, slot: null });
+  await page.locator('#playBtn').click();
+  await page.evaluate(() => { __game.saveData.gems = 120; __game.save(); });
+  const before = await page.evaluate(() => localStorage.getItem('sg:block-world:save'));
+  assert.ok(before && before.length < 4096, 'compact RLE save < 4 KB');
+
+  await exhaustStorage(page);
+  const failedSave = await page.evaluate(() => {
+    __game.saveData.gems = 340123456;
+    // Also alter alternating tiles so the serialized RLE grows past the full quota.
+    const w = __game.G.world;
+    for (let x = 2; x < 30; x += 2) w.set(x, 6, BW.T.DIAMOND);
+    return { ok: __game.save(), error: __game.G.saveError, flash: __game.G.savedFlash };
+  });
+  assert.deepEqual(failedSave, { ok: false, error: 'save', flash: 0 });
   assert.equal(await page.locator('.sg-save-status[data-state="failed"]').isVisible(), true);
-  await page.locator('#pausebtn').click();
-  await page.locator('#quitBtn').click();
-  assert.equal(await page.evaluate(() => __game.G.mode), 'pause');
-  assert.equal(await page.evaluate(() => __game.G.slot), 1);
+  assert.equal(await page.evaluate(() => localStorage.getItem('sg:block-world:save')), before, 'prior stored save preserved on quota failure');
+
   await page.evaluate(() => localStorage.removeItem('quota-fixture'));
   await page.locator('.sg-save-status button').click();
   assert.equal(await page.evaluate(() => __game.G.saveError), null);
   assert.equal(await page.locator('.sg-save-status[data-state="saved"]').isVisible(), true);
-  await page.locator('#quitBtn').click();
-  assert.equal(await page.evaluate(() => __game.G.mode), 'title');
-  await restore(page);
-  assert.equal(await page.evaluate(() => __game.G.slot), 1);
+  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('sg:block-world:save')).gems), 340123456);
 });
 
-test('failed overwrite preserves the previous world and metadata until retry succeeds', async t => {
-  const page = await game(t);
-  await create(page);
-  await page.evaluate(() => { __game.give(BW.I.DIAMOND, 7); __game.save(); });
-  const previous = await page.evaluate(() => ({ world: localStorage.getItem('sg:block-world:slot1'), meta: localStorage.getItem('sg:block-world:meta') }));
-  await exhaustStorage(page);
-  assert.equal(await page.evaluate(() => {
-    __game.give(BW.I.DIAMOND, 9);
-    __game.G.stats.got[BW.I.DIAMOND] = 12345;
-    return __game.save();
-  }), false);
-  assert.deepEqual(await page.evaluate(() => ({ world: localStorage.getItem('sg:block-world:slot1'), meta: localStorage.getItem('sg:block-world:meta') })), previous);
-  await page.evaluate(() => localStorage.removeItem('quota-fixture'));
-  assert.equal(await page.evaluate(() => __game.save()), true);
-  await restore(page);
-  assert.equal(await page.evaluate(() => __game.G.inv.filter(s => s?.id === BW.I.DIAMOND).reduce((n, s) => n + s.n, 0)), 16);
-});
-
-test('world records recover missing slot metadata while retaining global unlocks', async t => {
-  const page = await game(t);
-  await page.evaluate(() => {
-    __game.meta.totalStars = 99; __game.meta.skin = 3;
-    Kit.store('block-world').set('meta', __game.meta);
-    const original = Storage.prototype.setItem;
-    Storage.prototype.setItem = function (key, value) {
-      if (key === 'sg:block-world:meta') throw new DOMException('fixture', 'QuotaExceededError');
-      return original.call(this, key, value);
-    };
-  });
-  await create(page);
-  assert.equal(await page.evaluate(() => __game.G.saveError), 'meta');
-  assert.equal(await page.evaluate(() => !!Kit.store('block-world').get('slot1')), true);
-  assert.equal(await page.evaluate(() => Kit.store('block-world').get('meta').slots[0]), null);
-  await page.reload();
-  assert.deepEqual(await page.evaluate(() => ({ slot: !!__game.meta.slots[0], stars: __game.meta.totalStars, skin: __game.meta.skin })), { slot: true, stars: 99, skin: 3 });
-  await page.evaluate(() => document.getElementById('playBtn').click());
-  await page.waitForFunction(() => __game.G.mode === 'play');
-});
-
-test('denied storage and serialization failures return false instead of claiming success', async t => {
+test('a failed pointer retry returns keyboard control to gameplay while keyboard retry retains focus', async t => {
   const page = await game(t, () => {
     Storage.prototype.setItem = function () { throw new DOMException('blocked', 'SecurityError'); };
   });
-  await create(page);
-  assert.deepEqual(await page.evaluate(() => ({ error: __game.G.saveError, flash: __game.G.savedFlash, result: __game.save() })), { error: 'world', flash: 0, result: false });
-  const clean = await game(t);
-  assert.deepEqual(await clean.evaluate(() => {
-    const store = Kit.store('fixture'), circular = {}; circular.self = circular;
-    return { normal: store.set('normal', { n: 1 }), circular: store.set('circular', circular), missing: store.get('circular', null) };
-  }), { normal: true, circular: false, missing: null });
-});
-
-test('a failed pointer retry returns control to gameplay while keyboard retries retain focus', async t => {
-  const page = await game(t, () => {
-    Storage.prototype.setItem = function () { throw new DOMException('blocked', 'SecurityError'); };
-  });
-  await create(page);
+  await page.locator('#playBtn').click();
+  await page.evaluate(() => __game.save());
   const retryBtn = page.locator('.sg-save-status button');
+  assert.equal(await retryBtn.isVisible(), true);
+
   await retryBtn.click();
-  assert.equal(await page.evaluate(() => __game.G.saveError), 'world');
+  assert.equal(await page.evaluate(() => __game.G.saveError), 'save');
   await page.keyboard.down('KeyD');
   assert.equal(await page.evaluate(() => Kit.keys.down('KeyD')), true);
   await page.keyboard.up('KeyD');
+
   await retryBtn.focus();
   await page.keyboard.press('Space');
   assert.equal(await page.evaluate(() => document.activeElement === document.querySelector('.sg-save-status button')), true);
+
   await retryBtn.click();
   await page.keyboard.press('Escape');
   await page.evaluate(() => stepGame());
   assert.equal(await page.evaluate(() => __game.G.mode), 'pause');
 });
 
-test('quests earned during metadata failure recover global stars exactly once', async t => {
-  const page = await game(t);
-  await create(page);
-  const completed = await page.evaluate(() => {
-    const original = Storage.prototype.setItem;
-    Storage.prototype.setItem = function (key, value) {
-      if (key === 'sg:block-world:meta') throw new DOMException('fixture', 'QuotaExceededError');
-      return original.call(this, key, value);
-    };
-    __game.completeAll(); __game.save();
-    return { earned: __game.meta.totalStars, stored: Kit.store('block-world').get('meta').totalStars };
-  });
-  assert.ok(completed.earned > 0);
-  assert.equal(completed.stored, 0);
-  await restore(page);
-  assert.equal(await page.evaluate(() => __game.meta.totalStars), completed.earned);
-  await page.evaluate(() => { __game.completeAll(); __game.save(); });
-  await restore(page);
-  assert.equal(await page.evaluate(() => __game.meta.totalStars), completed.earned);
-});
-
-test('crafted overflow survives repeated save/load and is collected exactly once', async t => {
-  const page = await game(t);
-  await create(page);
-  await page.evaluate(() => {
-    __game.give(BW.B.DIRT, 35 * BW.maxStack(BW.B.DIRT)); __game.give(BW.B.LOG, 10);
-    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyE' })); stepGame();
-    window.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyE' }));
-    document.querySelector('.crow[data-r="0"]').dispatchEvent(new MouseEvent('mousedown', { button: 0 }));
-    __game.save();
-  });
-  for (let i = 0; i < 3; i++) {
-    await restore(page);
-    assert.deepEqual(await page.evaluate(() => ({
-      logs: __game.G.inv.filter(s => s?.id === BW.B.LOG).reduce((n, s) => n + s.n, 0),
-      planks: __game.G.inv.filter(s => s?.id === BW.B.PLANKS).reduce((n, s) => n + s.n, 0),
-      drops: __game.G.items.map(it => ({ id: it.id, n: it.n })), crafted: __game.G.stats.craft[BW.B.PLANKS]
-    })), { logs: 9, planks: 0, drops: [{ id: 8, n: 4 }], crafted: 4 });
-    await page.evaluate(() => __game.save());
+test('gems, wins, stars, and upgrades survive full reload; corrupt or legacy storage loads safely', async t => {
+  for (const raw of ['5', '{"bad":true}', JSON.stringify({ totalStars: 14, slots: 'corrupt' })]) {
+    const page = await game(t, `localStorage.setItem('sg:block-world:save', ${JSON.stringify(raw)})`);
+    assert.equal(await page.evaluate(() => __game.G.mode), 'title');
+    await page.locator('#playBtn').click();
+    assert.equal(await page.evaluate(() => __game.save()), true);
   }
-  await page.evaluate(() => { __game.G.inv[0] = null; stepGame(120); __game.save(); });
-  await restore(page);
-  assert.deepEqual(await page.evaluate(() => ({ planks: __game.G.inv.filter(s => s?.id === BW.B.PLANKS).reduce((n, s) => n + s.n, 0), drops: __game.G.items.length })), { planks: 4, drops: 0 });
-});
 
-test('mined drops retain their position, motion, and remaining lifetime', async t => {
   const page = await game(t);
-  await create(page);
-  const before = await page.evaluate(() => {
-    const x = Math.floor(__game.player.x) + 10, y = Math.floor(__game.surfaceY(x));
-    __game.breakAt(x, y);
-    const it = __game.G.items[0]; it.age = 299.99; it.delay = 0.12;
-    __game.save(); return structuredClone(__game.G.items);
-  });
-  assert.ok(before.length > 0);
-  await restore(page);
-  assert.deepEqual(await page.evaluate(() => structuredClone(__game.G.items)), before);
-  await page.evaluate(() => stepGame(2));
-  assert.equal(await page.evaluate(() => __game.G.items.length), 0);
-});
-
-test('partial pickups preserve the remaining drop and do not duplicate items across reloads', async t => {
-  const page = await game(t);
-  await create(page);
-  const capacity = await page.evaluate(() => BW.maxStack(BW.B.PLANKS));
+  await page.locator('#playBtn').click();
   await page.evaluate(() => {
-    __game.give(BW.B.DIRT, 35 * BW.maxStack(BW.B.DIRT)); __game.give(BW.B.PLANKS, BW.maxStack(BW.B.PLANKS) - 1);
-    const p = __game.player;
-    __game.G.items.push({ id: BW.B.PLANKS, n: 3, x: p.x + p.w / 2 + 0.2, y: p.y + p.h / 2, vx: 0, vy: 0, age: 40, delay: 0, bob: 1 });
-    stepGame(); __game.save();
+    __game.saveData.gems = 300;
+    __game.buyUpgrade('drill');
+    __game.buyUpgrade('jetpack');
   });
-  for (let i = 0; i < 2; i++) {
-    await restore(page);
-    assert.deepEqual(await page.evaluate(() => ({ held: __game.G.inv[35].n, dropped: __game.G.items[0].n, age: __game.G.items[0].age })), { held: capacity, dropped: 2, age: 40 + 1 / 60 });
-    await page.evaluate(() => __game.save());
-  }
+  await page.reload();
+  await page.waitForFunction(() => window.__game);
+  const loaded = await page.evaluate(() => ({
+    drill: __game.saveData.upgrades.drill,
+    jetpack: __game.saveData.upgrades.jetpack,
+    gems: __game.saveData.gems
+  }));
+  assert.deepEqual(loaded, { drill: 2, jetpack: 2, gems: 155 });
 });
-
-test('legacy saves without drops still load and malformed optional drops are ignored', async t => {
-  const page = await game(t);
-  await create(page);
-  await page.evaluate(() => {
-    document.getElementById('quitBtn').click();
-    const store = Kit.store('block-world'), data = store.get('slot1');
-    data.v = 1; delete data.items; delete data.cursor; store.set('slot1', data);
-  });
-  await restore(page);
-  assert.equal(await page.evaluate(() => __game.G.items.length), 0);
-  await page.evaluate(() => {
-    document.getElementById('quitBtn').click();
-    const store = Kit.store('block-world'), data = store.get('slot1');
-    data.items = [null, { id: 8, n: 4, x: null, y: 20, vx: 0, vy: 0, age: 1, delay: 0, bob: 0 }, { id: 8, n: 4, x: 1, y: 20, vx: 0, vy: 0, age: 301, delay: 0, bob: 0 }];
-    store.set('slot1', data);
-  });
-  await restore(page);
-  assert.equal(await page.evaluate(() => __game.G.items.length), 0);
-});
-
-test('final quests remain pending across reloads until the celebration is acknowledged', async t => {
-  const page = await game(t, () => {
-    const original = window.setTimeout;
-    window.masterDelays = [];
-    window.setTimeout = function (fn, ms, ...args) {
-      if (ms === 1800) { window.masterDelays.push(fn); return 999999; }
-      return original(fn, ms, ...args);
-    };
-    window.runMasterDelay = () => { const pending = window.masterDelays.splice(0); pending.forEach(fn => fn()); };
-  });
-  await create(page);
-  await page.evaluate(() => { __game.completeAll(); stepGame(61); __game.save(); });
-  assert.deepEqual(await page.evaluate(() => {
-    const save = Kit.store('block-world').get('slot1');
-    return { mode: __game.G.mode, pending: save.masterPending, acknowledged: save.master };
-  }), { mode: 'play', pending: true, acknowledged: false });
-  for (let cycle = 0; cycle < 2; cycle++) {
-    await restore(page);
-    await page.evaluate(() => { stepGame(61); runMasterDelay(); });
-    assert.equal(await page.evaluate(() => __game.G.mode), 'master');
-    assert.equal(await page.locator('#master').isVisible(), true);
-    await page.evaluate(() => __game.save());
-  }
-  await page.evaluate(() => document.getElementById('masterKeep').click());
-  assert.deepEqual(await page.evaluate(() => {
-    const save = Kit.store('block-world').get('slot1');
-    return { pending: save.masterPending, acknowledged: save.master };
-  }), { pending: false, acknowledged: true });
-  await restore(page);
-  await page.evaluate(() => { stepGame(120); runMasterDelay(); });
-  assert.equal(await page.evaluate(() => __game.G.mode), 'play');
-  assert.equal(await page.locator('#master').isVisible(), false);
-});
-
-test('leaving an open backpack pauses world time and resumes the backpack explicitly', async t => {
-  const page = await game(t);
-  await create(page);
-  const before = await page.evaluate(() => {
-    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyE' })); stepGame();
-    window.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyE' }));
-    window.dispatchEvent(new Event('blur'));
-    return { play: __game.G.play, tod: __game.G.tod };
-  });
-  assert.equal(await page.evaluate(() => __game.G.mode), 'pause');
-  await page.evaluate(() => stepGame(120));
-  assert.deepEqual(await page.evaluate(() => ({ play: __game.G.play, tod: __game.G.tod })), before);
-  await page.evaluate(() => document.getElementById('resumeBtn').click());
-  assert.equal(await page.evaluate(() => __game.G.mode), 'inv');
-  assert.equal(await page.locator('#inv').isVisible(), true);
-});
-
-test('a quest whose world save is lost is redone after a reload without a second star', async t => {
-  const page = await game(t);
-  await create(page);
-  const quest = () => page.evaluate(() => {
-    __game.G.stats.got[BW.B.LOG] = 4;
-    stepGame(90); // quests are checked a second after play starts
-    return { done: !!__game.G.done.logs, stars: __game.meta.totalStars, error: __game.G.saveError };
-  });
-  // The world record cannot be written (a full quota), and the page is closed before a retry.
-  await page.evaluate(() => {
-    const original = Storage.prototype.setItem;
-    Storage.prototype.setItem = function (key, value) {
-      if (key === 'sg:block-world:slot1') throw new DOMException('fixture', 'QuotaExceededError');
-      return original.call(this, key, value);
-    };
-  });
-  assert.deepEqual(await quest(), { done: true, stars: 1, error: 'world' }, 'the failed save is reported');
-  await restore(page);
-  assert.equal(await page.evaluate(() => !!__game.G.done.logs), false, 'the stored world does not have the quest');
-  assert.deepEqual(await quest(), { done: true, stars: 1, error: null }, 'redoing the quest earns its star once');
-  await restore(page);
-  assert.deepEqual(await page.evaluate(() => ({ done: !!__game.G.done.logs, stars: __game.meta.totalStars })), { done: true, stars: 1 });
-});
-
-test('world metadata saved as a number, or with slots that are not a list, loads empty and a new world saves', async t => {
-  for (const raw of ['5', '{"slots":"abc","totalStars":2}']) {
-    const page = await game(t, `localStorage.setItem('sg:block-world:meta', '${raw}')`);
-    assert.deepEqual(await page.evaluate(() => __game.meta.slots), [null, null, null], raw);
-    await create(page);
-    const meta = await page.evaluate(() => JSON.parse(localStorage.getItem('sg:block-world:meta')));
-    assert.equal(meta.slots[0].gm, 'survival', raw);
-    assert.deepEqual(meta.slots.slice(1), [null, null], raw);
-  }
-});
-
-test('RLE-compressed world save stays under 8 KB and persists difficulty, TNT crates, and treasure vaults', async t => {
-  const page = await game(t);
-  await page.evaluate(() => {
-    document.getElementById('playBtn').click();
-    document.querySelector('#newDiffBar [data-d="hero"]').click();
-    document.getElementById('modeSurv').click();
-  });
-  await page.waitForFunction(() => __game.G.mode === 'play');
-  const savedInfo = await page.evaluate(() => {
-    const px = Math.floor(__game.player.x + 2), py = __game.surfaceY(px) - 1;
-    __game.give(BW.B.TNT, 2);
-    __game.G.sel = 0;
-    __game.placeAt(px, py);
-    __game.save();
-    const raw = localStorage.getItem('sg:block-world:slot1') || '';
-    return { bytes: raw.length, px, py, vaults: __game.G.world.vaults.length, diff: __game.G.diff };
-  });
-  assert.ok(savedInfo.bytes > 2048 && savedInfo.bytes < 8192, `expected RLE save < 8 KB, got ${savedInfo.bytes} bytes`);
-  assert.equal(savedInfo.diff, 'hero');
-  assert.ok(savedInfo.vaults >= 8);
-  await restore(page);
-  assert.deepEqual(await page.evaluate(({ px, py }) => ({
-    diff: __game.G.diff,
-    tile: __game.G.world.get(px, py),
-    vaults: __game.G.world.vaults.length
-  }), savedInfo), { diff: 'hero', tile: 46, vaults: savedInfo.vaults });
-});
-

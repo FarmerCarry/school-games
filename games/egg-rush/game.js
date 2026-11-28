@@ -48,11 +48,16 @@
   function setText(el, t) { if (el.textContent !== t) el.textContent = t; }
 
   /* --------------------------------------------------------- demo scene */
-  // Behind the menus: the runners wait at the start line of the next track, egg wobbling.
-  function showDemo(i) {
+  // Behind the title: live runners race down the track! In skins: hero poses close-up.
+  function showDemo(i, stationary) {
     view.setTrack(i);
-    demo = ER.create(i, { humans: save.duo ? 2 : 1, skins: [preview.r, 2] });
+    demo = ER.create(i, stationary ? { humans: save.duo ? 2 : 1, skins: [preview.r, 2] } : { demo: true, seed: 42 + i, skins: [preview.r, 2] });
+    if (!stationary) {
+      for (var k = 0; k < 30; k++) ER.step(demo, 1 / 60, []);
+      demo.ev.length = 0;
+    }
     view.setRunners(runnerList(demo, true));
+    view.snap();
   }
   function runnerList(r, menu) {
     return r.runners.map(function (q, i) {
@@ -73,12 +78,14 @@
   function toTitle() {
     leaveRace();
     preview.r = save.runner; preview.e = save.egg;
-    showDemo(ER.nextTrack(save));
+    showDemo(ER.nextTrack(save), false);
     refreshChips();
     setScreen('title');
   }
-  var lvlButtons = [];
+  var lvlButtons = [], mapBuilt = false;
   function buildMap() {
+    if (mapBuilt) return;
+    mapBuilt = true;
     var box = $('worlds');
     ER.WORLDS.forEach(function (wd, w) {
       var col = document.createElement('div');
@@ -97,6 +104,7 @@
     });
   }
   function refreshMap() {
+    buildMap();
     var nx = ER.nextTrack(save);
     lvlButtons.forEach(function (b, i) {
       var open = ER.isOpen(save, i);
@@ -111,7 +119,7 @@
   function toMap() {
     leaveRace();
     preview.r = save.runner; preview.e = save.egg;
-    if (!demo || race) showDemo(ER.nextTrack(save));
+    if (!demo || race) showDemo(ER.nextTrack(save), false);
     race = null;
     refreshMap();
     setScreen('map');
@@ -130,12 +138,12 @@
     save.duo = !save.duo; persist();
     J.toggle(save.duo);
     refreshChips();
-    showDemo(ER.nextTrack(save));
+    showDemo(ER.nextTrack(save), false);
     say(save.duo ? 'لاعبان' : 'لاعب واحد');
   }
 
   /* ------------------------------------------------------------ skins */
-  function openSkins() { J.select(); preview.r = save.runner; preview.e = save.egg; preview.row = 0; refreshSkins(); setScreen('skins'); showDemo(ER.nextTrack(save)); }
+  function openSkins() { J.select(); preview.r = save.runner; preview.e = save.egg; preview.row = 0; refreshSkins(); setScreen('skins'); showDemo(ER.nextTrack(save), true); }
   function refreshSkins() {
     [['pickRunner', ER.RUNNERS, preview.r, save.ownR], ['pickEgg', ER.EGGS, preview.e, save.ownE]].forEach(function (row, k) {
       var el = $(row[0]), item = row[1][row[2]], owned = row[3].indexOf(row[2]) >= 0, buy = el.querySelector('.buy');
@@ -188,6 +196,8 @@
     roundOpen = true;
     if (!save.coach && i === 0 && !duo && !coachStarted) { coachStarted = true; Kit.stats.tutorial('start'); }
     Kit.keys.reset();
+    Kit.hitstop.reset();
+    resetMouse();
     buildHud();
     setScreen('play');
     say(ER.WORLDS[race.track.world].name + ' ' + (i % 3 + 1));
@@ -196,25 +206,48 @@
   function leaveRace() {
     if (race && roundOpen) Kit.stats.end('quit');
     roundOpen = false;
+    Kit.hitstop.reset();
+    resetMouse();
     hidePops();
   }
   function pause() {
     if (screen !== 'play') return;
     J.back();
+    resetMouse();
     setScreen('pause');
   }
-  function resume() { J.select(); Kit.keys.reset(); setScreen('play'); }
+  function resume() { J.select(); Kit.keys.reset(); resetMouse(); setScreen('play'); }
   function restart() { J.select(); startRace(cur); }
 
   /* ------------------------------------------------------------ input */
   var K = Kit.keys;
+  var mouse = { on: false, x: W / 2, lastX: null, moved: 0, hop: false };
+  function resetMouse() { mouse.on = false; mouse.lastX = null; mouse.moved = 0; mouse.hop = false; }
+  canvas.addEventListener('pointermove', function (e) {
+    if (screen !== 'play' || !race || race.humans !== 1 || race.phase !== 'race') return;
+    var p = fit.toLogical(e.clientX, e.clientY);
+    if (mouse.lastX != null) mouse.moved += M.abs(p.x - mouse.lastX);
+    mouse.lastX = p.x;
+    mouse.x = p.x;
+    if (mouse.moved > 18) mouse.on = true;
+  });
   function inputs() {
     var a = [], duo = race.humans === 2;
     if (!duo) {
+      var kbSteer = (K.anyDown(['ArrowRight', 'KeyD']) ? 1 : 0) - (K.anyDown(['ArrowLeft', 'KeyA']) ? 1 : 0);
+      if (kbSteer !== 0) { mouse.on = false; mouse.moved = 0; }
+      var steer = kbSteer;
+      if (kbSteer === 0 && mouse.on && race.runners[0]) {
+        var targetX = ER.clamp((mouse.x / W - 0.5) * 2.15, -1, 1) * ER.HALF;
+        var diffX = targetX - race.runners[0].x;
+        steer = M.abs(diffX) < 0.08 ? 0 : ER.clamp(diffX * 1.25, -1, 1);
+      }
+      var hop = mouse.hop;
+      mouse.hop = false;
       a.push({
-        steer: (K.anyDown(['ArrowRight', 'KeyD']) ? 1 : 0) - (K.anyDown(['ArrowLeft', 'KeyA']) ? 1 : 0),
+        steer: steer,
         up: K.anyDown(['ArrowUp', 'KeyW']), down: K.anyDown(['ArrowDown', 'KeyS']),
-        jump: K.anyPressed(['Space', 'Enter', 'NumpadEnter'])
+        jump: K.anyPressed(['Space', 'Enter', 'NumpadEnter']) || hop
       });
     } else {
       a.push({ steer: (K.down('KeyD') ? 1 : 0) - (K.down('KeyA') ? 1 : 0), up: K.down('KeyW'), down: K.down('KeyS'), jump: K.anyPressed(['Space', 'KeyF', 'KeyG']) });
@@ -297,6 +330,8 @@
       }
       var m = $('meter' + h), e = r.state === 'splat' ? (r.e > 0 ? 1.1 : -1.1) : ER.clamp(r.e, -1.1, 1.1);
       m.querySelector('.needle').style.transform = 'rotate(' + (e * 62).toFixed(1) + 'deg)';
+      var crk = r.state === 'splat' ? 2 : (r.cracks || 0);
+      if (hudCache['c' + h] !== crk) { hudCache['c' + h] = crk; m.dataset.cracks = String(crk); }
       var warn = M.abs(r.e) > 0.65 && r.state === 'run';
       if (hudCache['w' + h] !== warn) { hudCache['w' + h] = warn; m.classList.toggle('warn', warn); }
       // Light the key that brings the egg back (run under it).
@@ -316,9 +351,9 @@
     el.hidden = false;
     el.className = 'count' + (n === 0 ? ' go' : '');
     el.textContent = n === 0 ? 'انطلق!' : String(n);
-    void el.offsetWidth; // restart the animation
+    Kit.retrigger(el, 'er-pop');
     clearTimeout(showCount.t);
-    if (n === 0) showCount.t = setTimeout(function () { el.hidden = true; }, 800);
+    if (n === 0) showCount.t = setTimeout(function () { el.hidden = true; }, 650);
   }
   // Floating words over a runner's head.
   function pop(text, r, big, color) {
@@ -392,18 +427,23 @@
         case 'count': J.countdown(e.n); showCount(e.n); break;
         case 'jump': if (me) J.jump(0.5); break;
         case 'land': if (me) J.land(0.3); break;
+        case 'pad': if (me) { Kit.track.hit(); J.whoosh(0.85); pop('تيربو! ⚡', e.r, false, '#4df5ff'); } break;
+        case 'ramp': if (me) { Kit.track.hit(); J.jump(0.9); pop('طيران! 🚀', e.r, false, '#ffd23f'); } break;
+        case 'coin': if (me) { Kit.track.hit(); J.coin(M.min(5, e.combo || 1)); } break;
+        case 'heal': if (me) { J.chime(2); pop('درع جديد! 🥚', e.r, false, '#5ee36a'); } break;
         case 'clear': if (me) { Kit.track.hit(); J.streak(M.min(8, r.cleared)); if (r.cleared % 2 === 1) pop(PRAISE[r.cleared % PRAISE.length], e.r); } break;
         case 'hit':
           if (me) {
             Kit.track.miss();
-            J.impact(0.55);
+            J.impact(0.6);
+            Kit.hitstop(0.04);
             if (e.k === 'critter') cluck(); else if (e.k === 'ball') boing(); else if (e.k === 'sprinkler') splash();
-            pop(e.k === 'critter' ? 'كاك!' : e.k === 'ball' ? 'بونغ!' : 'أوه!', e.r, false, '#ffffff');
+            pop(e.crack === 1 ? 'شق! 🥚' : e.k === 'critter' ? 'كاك!' : e.k === 'ball' ? 'بونغ!' : 'بوينغ!', e.r, false, e.crack === 1 ? '#ffe066' : '#ffffff');
           }
           break;
         case 'splash': if (me) { splash(); pop('بلوب!', e.r, false, '#bdf0ff'); } break;
         case 'wobble': if (me) wobble(); break;
-        case 'drop': if (me) { Kit.track.miss(); J.whoosh(0.5); ohNo(); pop('أوه لا!', e.r, true, '#ffffff'); say('سقطت البيضة'); } break;
+        case 'drop': if (me) { Kit.track.miss(); Kit.hitstop(0.05); J.whoosh(0.5); ohNo(); pop('أوه لا!', e.r, true, '#ffffff'); say('سقطت البيضة'); } break;
         case 'respawn': if (me) { J.pop(0.4); pop('بيضة جديدة!', e.r, false, '#fffaf0'); } break;
         case 'gold': if (me) { Kit.track.hit(); J.coin(1); pop('+1', e.r, true); } break;
         case 'cp': if (me) J.chime(1); break;
@@ -470,12 +510,23 @@
     if (screen !== 'pause') time += dt;
     handleKeys();
     if (screen === 'play' && race) {
-      var inp = inputs();
-      if (inp.some(function (x) { return x.steer || x.up || x.down || x.jump; })) idle = 0; else idle += dt;
-      lastInput = inp;
-      ER.step(race, dt, inp);
-      handleEvents();
-      if (race.over && race.overT > 1.8 && screen === 'play') finishRace();
+      if (!Kit.hitstop.tick(dt)) {
+        var inp = inputs();
+        if (inp.some(function (x) { return x.steer || x.up || x.down || x.jump; })) idle = 0; else idle += dt;
+        lastInput = inp;
+        ER.step(race, dt, inp);
+        handleEvents();
+        if (race.over && race.overT > 1.4 && screen === 'play') finishRace();
+      }
+    } else if ((screen === 'title' || screen === 'map') && demo && demo.demo) {
+      ER.step(demo, dt, []);
+      demo.ev.length = 0;
+      if (demo.runners[0] && demo.runners[0].s > demo.track.len - 26) {
+        demo.runners.forEach(function (q, idx) { q.s = 6 + idx * 1.2; q.finished = false; q.state = 'run'; q.e = 0; q.ev = 0; q.cp = 0; });
+        demo.coinsTaken = demo.track.coins.map(function () { return -1; });
+        demo.goldTaken = demo.track.gold.map(function () { return -1; });
+        view.snap();
+      }
     } else if (screen === 'result') {
       resultT += dt; lock -= dt;
       if (race) { ER.step(race, dt, [{}, {}]); race.ev.length = 0; }
@@ -521,13 +572,16 @@
     $(id).querySelectorAll('.er-arrow').forEach(function (b) { on(b, function () { cycle(row, +b.dataset.dir); }); });
     on($(id).querySelector('.buy'), function () { preview.row = row; buy(row); });
   });
-  canvas.addEventListener('pointerdown', focusGame);
+  canvas.addEventListener('pointerdown', function (e) {
+    focusGame();
+    if (screen === 'play' && race && race.humans === 1 && race.phase === 'race' && e.button === 0) mouse.hop = true;
+  });
 
   /* --------------------------------------------------- test and debug hook */
   var r3 = function (v) { return M.round(v * 1000) / 1000; };
   function runnerInfo(q) {
-    return q ? { s: r3(q.s), x: r3(q.x), y: r3(q.y), v: r3(q.v), e: r3(q.e), lean: r3(q.lean), state: q.state, drops: q.drops, gold: q.gold, hits: q.hits, jumps: q.jumps,
-      place: q.place, rank: q.rank || 0, finished: q.finished, cp: q.cp } : null;
+    return q ? { s: r3(q.s), x: r3(q.x), y: r3(q.y), v: r3(q.v), e: r3(q.e), lean: r3(q.lean), state: q.state, cracks: q.cracks || 0, coins: q.coins || 0, boost: r3(q.boost || 0),
+      drops: q.drops, gold: q.gold, hits: q.hits, jumps: q.jumps, place: q.place, rank: q.rank || 0, finished: q.finished, cp: q.cp } : null;
   }
   function snapshot() {
     return {
@@ -555,9 +609,7 @@
     view = ER.createView(canvas, { software: software });
     view.onSplat = function (i) { if (race && race.runners[i] && race.runners[i].human) { crack(); } };
     fit.resize();
-    buildMap();
     toTitle();
-    render();
     window.__game = {
       get state() { return snapshot(); },
       get save() { return JSON.parse(JSON.stringify(save)); },
@@ -566,8 +618,7 @@
       drawCalls: function () { return view.info().calls; }
     };
     loop = Kit.loop(update, render);
-    // Tell the portal only once the first frame is really drawn (software WebGL can lag behind).
-    Kit.webgl.whenDrawn(view.gl, function () { Kit.ready(); }, 3000);
+    Kit.ready();
   } catch (error) {
     if (loop) loop.stop();
     for (var k in SCREENS) $(SCREENS[k]).hidden = true;

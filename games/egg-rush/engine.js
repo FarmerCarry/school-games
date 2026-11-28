@@ -10,14 +10,16 @@
   /* ------------------------------------------------------------ constants */
   ER.HALF = 3.5;          // furthest a runner's centre may go from the middle of the track
   ER.TRACK_W = 4.3;       // half width of the running surface
-  ER.V_JOG = 8.5;         // automatic jog (m/s)
-  ER.V_SPRINT = 12;       // ↑ / W
-  ER.V_SLOW = 5;          // ↓ / S
-  ER.VX_MAX = 5.2;        // sideways speed
-  ER.JUMP_V = 7.2;
+  ER.V_JOG = 10.5;        // automatic jog (m/s)
+  ER.V_SPRINT = 14.2;     // ↑ / W
+  ER.V_SLOW = 6.5;        // ↓ / S
+  ER.V_TURBO = 18.2;      // turbo speed pad boost
+  ER.VX_MAX = 6.2;        // sideways speed
+  ER.JUMP_V = 8.4;
+  ER.RAMP_V = 11.4;
   ER.GRAVITY = 24;
-  ER.COUNTDOWN = 3;
-  var K_LEAN = 2.4, K_AX = 0.04, K_TURN = 0.3, RIM = 0.6, RIM_PUSH = 1.8;
+  ER.COUNTDOWN = 0.8;
+  var K_LEAN = 2.75, K_AX = 0.022, K_TURN = 0.24, RIM = 0.65, RIM_PUSH = 1.55;
 
   /* ------------------------------------------------------------ worlds */
   ER.WORLDS = [
@@ -26,7 +28,7 @@
     { name: 'الشاطئ', kinds: ['ball', 'critters', 'sprinkler', 'hurdleFull', 'slalom', 'puddle', 'hurdleHalf'] }
   ];
   ER.TRACK_COUNT = 9;
-  var LENGTHS = [380, 420, 460, 460, 500, 540, 540, 580, 620];
+  var LENGTHS = [220, 240, 260, 260, 280, 300, 300, 320, 350];
   ER.trackId = function (i) { return 'w' + (M.floor(i / 3) + 1) + '-' + (i % 3 + 1); };
 
   /* ------------------------------------------------------------ helpers */
@@ -53,12 +55,12 @@
     var world = M.floor(i / 3), local = i % 3, d = i / 8, len = LENGTHS[i];
     var R = rng(1000 + i * 7919);
     // Curvature, one value per metre: straight start and finish, alternating bends between.
-    var n = len + 1, kap = new Float32Array(n), pieces = [], s = 40, sign = R() < 0.5 ? -1 : 1;
-    while (s < len - 50) {
-      var straight = lerp(40, 22, d) * (0.7 + R() * 0.6);
+    var n = len + 1, kap = new Float32Array(n), pieces = [], s = 28, sign = R() < 0.5 ? -1 : 1;
+    while (s < len - 38) {
+      var straight = lerp(26, 16, d) * (0.7 + R() * 0.5);
       s += straight;
-      var bend = lerp(40, 70, R()), k = sign * lerp(0.008, 0.014 + 0.012 * d, R());
-      if (s + bend > len - 45) break;
+      var bend = lerp(28, 46, R()), k = sign * lerp(0.007, 0.012 + 0.01 * d, R());
+      if (s + bend > len - 32) break;
       pieces.push([s, s + bend, k]);
       s += bend; sign = -sign;
     }
@@ -78,42 +80,61 @@
       px[m] = px[m - 1] + M.sin(h);
       pz[m] = pz[m - 1] - M.cos(h);
     }
-    // Checkpoints: arches roughly every 75 m.
-    var cps = [0], nc = M.max(3, M.round(len / 75));
+    // Checkpoints: joyful healing/boost arches roughly every 58 m.
+    var cps = [0], nc = M.max(3, M.round(len / 58));
     for (var c = 1; c < nc; c++) cps.push(M.round(len * c / nc));
-    // Obstacles from the world's patterns, more and closer on later tracks.
+    // Obstacles + turbo speed pads + jump ramps: dense arcade rhythm!
     var kinds = ER.WORLDS[world].kinds.slice(0, M.min(7, 3 + local * 2 + (world > 0 ? 1 : 0)));
-    var items = [], last = '', gap = lerp(34, 19, d);
-    function nearCp(at) { for (var q = 1; q < cps.length; q++) if (M.abs(cps[q] - at) < 9) return true; return false; }
-    var script = i === 0 ? [['cone1', 0], ['cones2', 1], ['hurdleFull', 0]] : [];
-    s = 48;
-    while (s < len - 32) {
-      if (nearCp(s)) { s += 6; continue; }
+    var items = [], last = '', gap = lerp(21, 13, d), stepIdx = 0;
+    function nearCp(at) { for (var q = 1; q < cps.length; q++) if (M.abs(cps[q] - at) < 7) return true; return false; }
+    var script = i === 0 ? [['pad', 1], ['cone1', 0], ['ramp', 2], ['cones2', 1], ['hurdleFull', 0], ['pad', 2]] : [['pad', R() < 0.5 ? 1 : 2]];
+    s = 25;
+    while (s < len - 24) {
+      if (nearCp(s)) { s += 5; continue; }
       var kind, lane = R();
       if (script.length) { var sc = script.shift(); kind = sc[0]; lane = sc[1]; }
+      else if (stepIdx % 3 === 2 && last !== 'pad' && last !== 'ramp') { kind = (stepIdx % 6 === 2) ? 'ramp' : 'pad'; }
       else { do { kind = kinds[M.floor(R() * kinds.length)]; } while (kind === last && kinds.length > 1); }
       last = kind;
+      stepIdx++;
       s = addPattern(items, kind, s, lane, R, d, len);
-      s += gap * (0.85 + R() * 0.35);
+      s += gap * (0.82 + R() * 0.32);
     }
+    items = items.filter(function (it) { return it.s > 20 && it.s < len - 20; });
     items.sort(function (x, y) { return x.s - y.s; });
     items.forEach(function (it, idx) { it.i = idx; });
-    // Golden eggs: three per track, over a hurdle (jump for it) or out at the edge.
+    // Coin arcs: opening line, soaring arcs over jump ramps, and streaks after turbo pads!
+    var coins = [];
+    for (var c0 = 0; c0 < 4; c0++) coins.push({ s: 10 + c0 * 2.8, x: 0, y: 0.9 });
+    items.forEach(function (it) {
+      if (it.k === 'ramp') {
+        for (var q = 0; q < 5; q++) {
+          var cs = it.s + 2.0 + q * 2.1;
+          if (cs < len - 12) coins.push({ s: cs, x: it.x, y: 0.9 + M.sin((q + 0.5) / 5 * M.PI) * 2.0 });
+        }
+      } else if (it.k === 'pad') {
+        for (var q2 = 0; q2 < 3; q2++) {
+          var cs2 = it.s + 2.8 + q2 * 2.4;
+          if (cs2 < len - 12) coins.push({ s: cs2, x: it.x, y: 0.9 });
+        }
+      }
+    });
+    // Golden eggs: three per track, over a hurdle/ramp (jump for it) or out at the edge.
     var gold = [];
-    [0.28, 0.58, 0.86].forEach(function (f) {
+    [0.28, 0.58, 0.85].forEach(function (f) {
       var want = len * f, best = null;
       items.forEach(function (it) {
-        if (it.k === 'hurdle' && M.abs(it.s - want) < 45 && (!best || M.abs(it.s - want) < M.abs(best.s - want))) best = it;
+        if ((it.k === 'hurdle' || it.k === 'ramp') && M.abs(it.s - want) < 34 && (!best || M.abs(it.s - want) < M.abs(best.s - want))) best = it;
       });
       if (best && !gold.some(function (g) { return g.s === best.s; })) {
-        gold.push({ s: best.s, x: clamp(best.x + (R() - 0.5) * best.hw, -2.6, 2.6), need: 0.3 });
+        gold.push({ s: best.s + (best.k === 'ramp' ? 4 : 0), x: clamp(best.x + (R() - 0.5) * best.hw * 0.6, -2.5, 2.5), need: 0.3 });
       } else {
         var at = want;
         for (var tries = 0; tries < 30 && items.some(function (it) { return M.abs(it.s - at) < 5; }); tries++) at += 3;
-        gold.push({ s: M.round(at), x: R() < 0.5 ? -3.0 : 3.0, need: 0 });
+        gold.push({ s: M.round(clamp(at, 22, len - 18)), x: R() < 0.5 ? -2.6 : 2.6, need: 0 });
       }
     });
-    var t = { i: i, id: ER.trackId(i), world: world, len: len, kap: kap, px: px, pz: pz, th: th, cps: cps, items: items, gold: gold };
+    var t = { i: i, id: ER.trackId(i), world: world, len: len, kap: kap, px: px, pz: pz, th: th, cps: cps, items: items, gold: gold, coins: coins };
     cache[i] = t;
     return t;
   };
@@ -156,6 +177,16 @@
         items.push(item('sprinkler', s, sx, 0.85, 0.85, 3, { per: 2.6, on: 1.3, ph: R() * 2.6 }));
         if (d > 0.4) items.push(item('sprinkler', s + 9, -sx, 0.85, 0.85, 3, { per: 2.6, on: 1.3, ph: R() * 2.6 }));
         return s + 9;
+      }
+      case 'pad': {
+        var px2 = clamp(L * 0.75, -2.1, 2.1);
+        items.push(item('pad', s, px2, 1.35, 1.6, 0.05));
+        return s + 3;
+      }
+      case 'ramp': {
+        var rx2 = clamp(L * 0.65, -1.8, 1.8);
+        items.push(item('ramp', s, rx2, 1.5, 1.4, 0.5));
+        return s + 7;
       }
     }
     return s;
@@ -200,11 +231,11 @@
   ER.tuning = function (level) {
     var l = clamp(level || 0, 0, 1);
     return {
-      cpuSpeed: lerp(0.84, 1.1, l),     // CPU jog speed relative to the player's
-      sens: lerp(0.5, 1.15, l),         // how strongly running shakes the egg
-      cradle: lerp(3.0, 0.8, l),        // how much the spoon pulls the egg back to the middle
-      damp: lerp(1.8, 1.0, l),
-      hurdleH: lerp(0.35, 0.55, l),
+      cpuSpeed: lerp(0.84, 1.08, l),    // CPU jog speed relative to the player's
+      sens: lerp(0.42, 0.98, l),        // how strongly running shakes the egg
+      cradle: lerp(3.4, 1.1, l),        // how much the spoon pulls the egg back to the middle
+      damp: lerp(2.1, 1.2, l),
+      hurdleH: lerp(0.35, 0.52, l),
       cpuSkill: lerp(0.55, 0.92, l)     // how often CPUs see an obstacle in time
     };
   };
@@ -213,11 +244,12 @@
   ER.CPU = [
     { name: 'زوزو', skin: 2 }, { name: 'لولو', skin: 4 }, { name: 'سوسو', skin: 3 }
   ];
-  // opts: { humans: 1|2, cpus, tune (ER.tuning), seed, skins: [p1, p2] }
+  // opts: { humans: 1|2, cpus, tune (ER.tuning), seed, skins: [p1, p2], demo }
   ER.create = function (trackIndex, opts) {
     opts = opts || {};
-    var tr = ER.track(trackIndex), humans = opts.humans === 2 ? 2 : 1;
-    var cpus = opts.cpus == null ? (humans === 2 ? 2 : 3) : opts.cpus;
+    var tr = ER.track(trackIndex), demo = !!opts.demo;
+    var humans = demo ? 0 : (opts.humans === 2 ? 2 : 1);
+    var cpus = opts.cpus == null ? (demo ? 4 : (humans === 2 ? 2 : 3)) : opts.cpus;
     var tune = opts.tune || ER.tuning(0.35), R = rng(opts.seed == null ? 77 : opts.seed);
     var count = humans + cpus, runners = [];
     var lanes = count === 4 ? [-2.4, -0.8, 0.8, 2.4] : [-1.6, 0, 1.6];
@@ -225,22 +257,26 @@
     var order = count === 4 ? (humans === 2 ? [1, 2, 0, 3] : [1, 0, 2, 3]) : [1, 0, 2];
     // CPU looks: never the same outfit as a player.
     var taken = [], cpuSkins = [];
-    for (var h = 0; h < humans; h++) taken.push((opts.skins && opts.skins[h]) || 0);
-    [2, 4, 3, 1, 5, 6, 0].forEach(function (sk) { if (taken.indexOf(sk) < 0 && cpuSkins.length < 3) cpuSkins.push(sk); });
+    for (var h = 0; h < M.max(1, humans); h++) taken.push((opts.skins && opts.skins[h]) || 0);
+    [2, 4, 3, 1, 5, 6, 0].forEach(function (sk) { if (taken.indexOf(sk) < 0 && cpuSkins.length < 4) cpuSkins.push(sk); });
     for (var i = 0; i < count; i++) {
-      var human = i < humans, cpu = human ? null : ER.CPU[i - humans];
+      var human = i < humans, cpu = human ? null : ER.CPU[(i - humans) % ER.CPU.length];
+      var sk = human ? taken[i] : (demo && i === 0 ? taken[0] : cpuSkins[(i - humans) % cpuSkins.length]);
       runners.push({
-        i: i, human: human, name: human ? '' : cpu.name, skin: human ? taken[i] : cpuSkins[i - humans],
+        i: i, human: human, name: human ? '' : cpu.name, skin: sk,
         s: 0, x: lanes[order[i]], v: 0, vx: 0, y: 0, vy: 0, air: false, lean: 0,
-        e: 0, ev: 0, ph: R() * 6.28, state: 'run', timer: 0, stun: 0, ghost: 0, slow: 0, splash: 0, jumpBuf: 0,
+        e: 0, ev: 0, ph: R() * 6.28, state: 'run', timer: 0, stun: 0, ghost: 0, slow: 0, splash: 0, boost: 0, jumpBuf: 0,
+        cracks: 0, coins: 0, combo: 0, comboT: 0,
         cp: 0, drops: 0, gold: 0, hits: 0, jumps: 0, cleared: 0, finished: false, finishT: 0, place: 0, warn: false,
         lastHit: -1, hitCd: 0, phase: 0,
         ai: human ? null : { speed: tune.cpuSpeed * (0.97 + 0.06 * R()), tx: lanes[order[i]], seen: {}, react: {}, think: 0, jumpAt: -1 }
       });
     }
     return {
-      track: tr, tune: tune, humans: humans, runners: runners, rng: R,
-      phase: 'count', clock: 0, t: 0, goldTaken: tr.gold.map(function () { return -1; }),
+      track: tr, tune: tune, humans: humans, demo: demo, runners: runners, rng: R,
+      phase: demo ? 'race' : 'count', clock: 0, t: 0,
+      goldTaken: tr.gold.map(function () { return -1; }),
+      coinsTaken: tr.coins.map(function () { return -1; }),
       finishers: 0, over: false, overT: 0, ev: [], lastCount: 4
     };
   };
@@ -251,12 +287,13 @@
   ER.step = function (race, dt, inputs) {
     race.clock += dt;
     if (race.phase === 'count') {
-      var left = ER.COUNTDOWN - race.clock, n = M.ceil(left);
+      var left = ER.COUNTDOWN - race.clock;
+      var n = left > ER.COUNTDOWN * 0.66 ? 3 : left > ER.COUNTDOWN * 0.33 ? 2 : left > 0 ? 1 : 0;
       if (n < race.lastCount && n > 0) { race.lastCount = n; emit(race, { t: 'count', n: n }); }
       // Wiggle in place while waiting: steering only, no running.
       for (var w = 0; w < race.humans; w++) {
         var rr = race.runners[w], inp0 = (inputs && inputs[w]) || {};
-        rr.lean = approach(rr.lean, (inp0.steer || 0) * 0.5, dt * 6);
+        rr.lean = approach(rr.lean, (inp0.steer || 0) * 0.5, dt * 8);
       }
       if (left <= 0) { race.phase = 'race'; race.t = 0; emit(race, { t: 'count', n: 0 }); }
       return;
@@ -292,6 +329,10 @@
       for (var k = 0; k < tr.items.length; k++) {
         var it = tr.items[k], ds = it.s - r.s;
         if (ds < 0.5 || ds > 16) continue;
+        if (it.k === 'pad' || it.k === 'ramp') {
+          if (M.abs(it.x - want) < 2.2 && ds > 3) want = it.x;
+          continue;
+        }
         if (a.react[k] == null) a.react[k] = race.rng() < race.tune.cpuSkill;
         if (!a.react[k]) continue;
         var arrive = t + ds / M.max(1, r.v), ix = ER.itemX(it, arrive);
@@ -338,31 +379,46 @@
     r.stun = M.max(0, r.stun - dt);
     r.slow = M.max(0, r.slow - dt);
     r.splash = M.max(0, r.splash - dt);
+    r.boost = M.max(0, r.boost - dt);
+    r.comboT = M.max(0, r.comboT - dt);
+    if (r.comboT <= 0) r.combo = 0;
     // Forward speed.
     var vt;
-    if (r.finished) vt = 3;
-    else if (r.human) vt = inp.up ? ER.V_SPRINT : inp.down ? ER.V_SLOW : ER.V_JOG;
-    else vt = r.ai.vt;
-    if (r.slow > 0) vt *= 0.6;
-    if (stunned) vt *= 0.25;
-    r.v = approach(r.v, vt, (vt > r.v ? 7 : 14) * dt);
-    // Sideways.
+    if (r.finished) vt = 3.5;
+    else if (r.human) vt = r.boost > 0 ? ER.V_TURBO : (inp.up ? ER.V_SPRINT : inp.down ? ER.V_SLOW : ER.V_JOG);
+    else vt = r.boost > 0 ? ER.V_TURBO * 0.92 : r.ai.vt;
+    if (r.slow > 0) vt *= 0.65;
+    if (stunned) vt *= 0.45;
+    r.v = approach(r.v, vt, (vt > r.v ? (r.boost > 0 ? 18 : 10) : 14) * dt);
+    // Sideways: smooth steering + gentle inward cushion bounce on wall contact (never deadlocks!).
     var steer = stunned || r.finished ? 0 : clamp(inp.steer || 0, -1, 1);
-    var vxPrev = r.vx;
-    r.vx = approach(r.vx, steer * ER.VX_MAX, 28 * dt);
+    var vxPrev = r.vx, wallBounce = 0;
+    r.vx = approach(r.vx, steer * ER.VX_MAX, 34 * dt);
     r.x += r.vx * dt;
-    if (r.x > ER.HALF) { r.x = ER.HALF; r.vx = M.min(0, r.vx); }
-    if (r.x < -ER.HALF) { r.x = -ER.HALF; r.vx = M.max(0, r.vx); }
-    var ax = (r.vx - vxPrev) / dt;
+    if (r.x > ER.HALF) {
+      r.x = ER.HALF;
+      r.vx = -M.max(1.8, M.abs(r.vx) * 0.45);
+      wallBounce = 1;
+    } else if (r.x < -ER.HALF) {
+      r.x = -ER.HALF;
+      r.vx = M.max(1.8, M.abs(r.vx) * 0.45);
+      wallBounce = -1;
+    }
+    var ax = wallBounce ? 0 : (r.vx - vxPrev) / dt;
+    if (wallBounce && r.e * wallBounce > 0.2) {
+      // Soft curb cushion nudges egg inward off the wall instead of trapping it.
+      r.ev -= wallBounce * 1.45;
+      r.e = clamp(r.e, -0.82, 0.82);
+    }
     // Jump (with a short buffer so an early press still counts).
     // Helper: after two trips on the same hurdle the runner hops it by itself (nobody gets stuck).
     if (r.human && !r.air && r.trips) {
       for (var hk in r.trips) {
         var hi = tr.items[hk], dh = hi.s - r.s;
-        if (r.trips[hk] >= 2 && dh > 0 && dh < 1.6 + r.v * 0.1 && M.abs(hi.x - r.x) < hi.hw + 0.4) { inp = { steer: inp.steer, up: inp.up, down: inp.down, jump: true }; r.helped = true; }
+        if (r.trips[hk] >= 2 && dh > 0 && dh < 1.8 + r.v * 0.12 && M.abs(hi.x - r.x) < hi.hw + 0.4) { inp = { steer: inp.steer, up: inp.up, down: inp.down, jump: true }; r.helped = true; }
       }
     }
-    if (inp.jump) r.jumpBuf = 0.16;
+    if (inp.jump) r.jumpBuf = 0.2;
     else r.jumpBuf = M.max(0, r.jumpBuf - dt);
     if (r.jumpBuf > 0 && !r.air && !stunned && !r.finished) {
       r.air = true; r.vy = ER.JUMP_V; r.jumpBuf = 0; r.jumps++;
@@ -373,22 +429,27 @@
       r.y += r.vy * dt;
       if (r.y <= 0) {
         r.y = 0; r.air = false; r.vy = 0;
-        if (!r.finished) r.ev += (race.rng() - 0.5) * 1.1 * tune.sens;
+        if (!r.finished) r.ev += (race.rng() - 0.5) * 0.75 * tune.sens;
         emit(race, { t: 'land', r: r.i });
       }
     }
     var s0 = r.s;
     r.s += r.v * dt;
     r.phase += r.v * dt * 1.35;
-    // The egg on the spoon.
-    if (!r.finished) egg(race, r, dt, ax);
+    // The egg on the spoon (counter-lean driven directly by player steer input!).
+    if (!r.finished) egg(race, r, dt, ax, steer);
     if (r.state !== 'run') return;
     if (!r.finished) {
       collide(race, r, s0);
       if (r.state !== 'run') return;
       if (r.human) collect(race, r);
       for (var c = r.cp + 1; c < tr.cps.length; c++) {
-        if (r.s >= tr.cps[c]) { r.cp = c; emit(race, { t: 'cp', r: r.i, i: c }); }
+        if (r.s >= tr.cps[c]) {
+          r.cp = c;
+          r.boost = M.max(r.boost, 0.55);
+          if (r.cracks > 0) { r.cracks = 0; emit(race, { t: 'heal', r: r.i }); }
+          emit(race, { t: 'cp', r: r.i, i: c });
+        }
       }
       if (r.s >= tr.len) {
         r.finished = true; r.finishT = race.t; race.finishers++;
@@ -400,16 +461,18 @@
     }
   }
 
-  function egg(race, r, dt, ax) {
+  function egg(race, r, dt, ax, steer) {
     var tune = race.tune, t = race.t;
     var target;
-    if (r.human) target = r.vx / ER.VX_MAX;
+    // Drive counter-lean from player input (inp.steer), NEVER from clamped r.vx!
+    if (r.human) target = steer;
     else target = clamp(1.6 * r.e + 0.5 * r.ev, -1, 1) * (0.35 + 0.5 * race.tune.cpuSkill) + (r.vx / ER.VX_MAX) * 0.2;
-    r.lean = approach(r.lean, target, dt * 9);
-    var v = r.v / ER.V_SPRINT;
+    r.lean = approach(r.lean, target, dt * 11);
+    var v = M.min(1.15, r.v / ER.V_SPRINT);
     var noise = 0.55 * M.sin(4.3 * t + r.ph) + 0.35 * M.sin(9.1 * t + 1.7 * r.ph) + 0.3 * M.sin(1.9 * t + 2.3 * r.ph);
-    var amp = tune.sens * (0.35 + 1.9 * v * v);
-    if (r.splash > 0) amp *= 2.2;
+    var amp = tune.sens * (0.28 + 1.05 * v * v);
+    if (r.boost > 0) amp *= 0.55;
+    if (r.splash > 0) amp *= 1.75;
     var acc = -r.lean * K_LEAN - ax * K_AX - ER.kappa(race.track, r.s) * r.v * r.v * K_TURN + noise * amp;
     var ae = M.abs(r.e);
     acc += -tune.cradle * r.e + (ae > RIM ? RIM_PUSH * (ae - RIM) * (r.e > 0 ? 1 : -1) : 0);
@@ -423,21 +486,20 @@
   }
 
   function drop(race, r) {
-    r.state = 'splat'; r.timer = 1.5; r.drops++;
+    r.state = 'splat'; r.timer = 0.55; r.drops++; r.cracks = 0;
     emit(race, { t: 'drop', r: r.i, side: r.e > 0 ? 1 : -1, s: r.s, x: r.x, human: r.human });
   }
 
   function respawn(race, r) {
-    var tr = race.track;
-    r.s = tr.cps[r.cp]; r.x = 0; r.v = 0; r.vx = 0; r.y = 0; r.vy = 0; r.air = false;
-    r.e = 0; r.ev = 0; r.lean = 0; r.state = 'run'; r.ghost = 1.4; r.stun = 0; r.slow = 0; r.splash = 0; r.warn = false;
+    // Quick in-place recovery (at most 2 m step-back — ZERO rage-quit 75 m rollbacks!).
+    r.s = M.max(0, r.s - 2); r.x = clamp(r.x, -2.5, 2.5); r.v = ER.V_JOG * 0.55; r.vx = 0; r.y = 0; r.vy = 0; r.air = false;
+    r.e = 0; r.ev = 0; r.lean = 0; r.cracks = 0; r.state = 'run'; r.ghost = 1.6; r.stun = 0; r.slow = 0; r.splash = 0; r.warn = false;
     if (r.ai) { r.ai.tx = 0; r.ai.jumpAt = -1; r.ai.react = {}; }
     emit(race, { t: 'respawn', r: r.i });
   }
 
-  var IMPULSE = { cone: 1.3, hurdle: 2.6, ball: 2.0, critter: 1.6, sprinkler: 1.8 };
+  var IMPULSE = { cone: 1.15, hurdle: 1.45, ball: 1.75, critter: 1.4, sprinkler: 1.55 };
   function collide(race, r, s0) {
-    if (r.ghost > 0) return;
     var tr = race.track, t = race.t, items = tr.items, tune = race.tune;
     for (var k = 0; k < items.length; k++) {
       var it = items[k];
@@ -445,6 +507,29 @@
       if (it.s + it.hd + 0.3 < s0) continue;
       var ix = ER.itemX(it, t);
       if (M.abs(r.x - ix) > it.hw + 0.35) continue;
+      // Helpful pads and jump ramps always trigger even while ghost-protected!
+      if (it.k === 'pad') {
+        if (r.y < 0.6 && !(r.lastHit === k && r.hitCd > 0)) {
+          r.lastHit = k; r.hitCd = 0.5;
+          r.boost = M.max(r.boost, 1.55);
+          r.v = M.max(r.v, ER.V_TURBO * 0.92);
+          r.e *= 0.6; r.ev *= 0.4;
+          emit(race, { t: 'pad', r: r.i, s: it.s, x: ix });
+        }
+        continue;
+      }
+      if (it.k === 'ramp') {
+        if (!r.air && !(r.lastHit === k && r.hitCd > 0)) {
+          r.lastHit = k; r.hitCd = 0.6;
+          r.air = true; r.vy = ER.RAMP_V; r.jumps++;
+          r.boost = M.max(r.boost, 0.95);
+          r.v = M.max(r.v, ER.V_SPRINT);
+          r.e *= 0.65; r.ev *= 0.45;
+          emit(race, { t: 'ramp', r: r.i, s: it.s, x: ix });
+        }
+        continue;
+      }
+      if (r.ghost > 0) continue;
       var h = it.k === 'hurdle' ? tune.hurdleH : it.h;
       if (it.k === 'sprinkler' && !ER.sprinklerOn(it, t)) continue;
       if (r.y > h) {
@@ -452,21 +537,30 @@
         continue;
       }
       if (r.lastHit === k && r.hitCd > 0) continue;
-      r.lastHit = k; r.hitCd = 0.8;
+      r.lastHit = k; r.hitCd = 0.7;
       if (it.k === 'puddle') {
-        r.slow = 0.7; r.splash = 0.7;
+        r.slow = 0.55; r.splash = 0.55;
         emit(race, { t: 'splash', r: r.i, s: it.s, x: ix });
         continue;
       }
       var side = r.x === ix ? (race.rng() < 0.5 ? -1 : 1) : (r.x > ix ? 1 : -1);
-      r.ev += side * IMPULSE[it.k] * (0.8 + 0.4 * race.rng());
-      r.stun = it.k === 'hurdle' ? 0.6 : 0.35;
-      r.v *= it.k === 'hurdle' ? 0.3 : 0.5;
+      r.ev += side * IMPULSE[it.k] * (0.8 + 0.35 * race.rng());
       r.hits++;
-      if (it.k === 'sprinkler' || it.k === 'ball') r.vx = side * 4;
+      if (it.k === 'hurdle') {
+        // Funny bounce + brief wobble + 2-crack egg shield instead of instant 75 m rollback!
+        r.trips = r.trips || {}; r.trips[k] = (r.trips[k] || 0) + 1;
+        r.cracks++;
+        r.stun = 0.25;
+        r.v *= 0.58;
+        r.air = true; r.vy = 4.6;
+        emit(race, { t: 'hit', r: r.i, k: it.k, i: k, s: it.s, x: ix, human: r.human, crack: r.cracks });
+        if (r.cracks >= 2) { r.e = side * 1.01; drop(race, r); return; }
+        continue;
+      }
+      r.stun = 0.28;
+      r.v *= 0.62;
+      if (it.k === 'sprinkler' || it.k === 'ball') r.vx = side * 3.6;
       emit(race, { t: 'hit', r: r.i, k: it.k, i: k, s: it.s, x: ix, human: r.human });
-      // Tripping over a hurdle always throws the egg off the spoon.
-      if (it.k === 'hurdle') { r.trips = r.trips || {}; r.trips[k] = (r.trips[k] || 0) + 1; r.e = side * 1.01; drop(race, r); return; }
     }
   }
 
@@ -474,9 +568,19 @@
     var g = race.track.gold;
     for (var k = 0; k < g.length; k++) {
       if (race.goldTaken[k] >= 0) continue;
-      if (M.abs(g[k].s - r.s) < 1.1 && M.abs(g[k].x - r.x) < 1.0 && r.y >= g[k].need) {
+      if (M.abs(g[k].s - r.s) < 1.25 && M.abs(g[k].x - r.x) < 1.15 && r.y >= g[k].need) {
         race.goldTaken[k] = r.i; r.gold++;
         emit(race, { t: 'gold', r: r.i, i: k });
+      }
+    }
+    var cs = race.track.coins;
+    for (k = 0; k < cs.length; k++) {
+      if (race.coinsTaken[k] >= 0) continue;
+      if (M.abs(cs[k].s - r.s) < 1.3 && M.abs(cs[k].x - r.x) < 1.25 && M.abs(cs[k].y - (r.y + 0.85)) < 1.5) {
+        race.coinsTaken[k] = r.i; r.coins++;
+        r.combo = r.comboT > 0 ? r.combo + 1 : 1;
+        r.comboT = 2.2;
+        emit(race, { t: 'coin', r: r.i, i: k, combo: r.combo });
       }
     }
   }
@@ -505,7 +609,7 @@
     var p = [1, 0.7, 0.4, 0.15][clamp(r.place - 1, 0, 3)];
     return clamp(p * 0.75 + M.max(0, 0.25 - r.drops * 0.1), 0, 1);
   };
-  ER.reward = function (r) { return r.gold + [3, 2, 1, 1][clamp(r.place - 1, 0, 3)]; };
+  ER.reward = function (r) { return (r.gold || 0) + M.floor((r.coins || 0) / 8) + [3, 2, 1, 1][clamp(r.place - 1, 0, 3)]; };
 
   /* ------------------------------------------------------------ skins + save */
   // Runner looks: shirt, shorts, hair, extra (hat kind), price in golden eggs.

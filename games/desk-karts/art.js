@@ -17,11 +17,12 @@
     var scene = new T.Scene();
     var skyColor = new T.Color(0x8ad6ff);
     scene.background = skyColor;
-    scene.fog = new T.Fog(0x9be0ff, 68, 175);
+    scene.fog = new T.Fog(0x9be0ff, 88, 225);
 
-    var camera = new T.PerspectiveCamera(42, 16 / 9, 0.5, 240);
-    camera.position.set(0, 24, 42);
-    camera.lookAt(0, 0, 12);
+    var camera = new T.PerspectiveCamera(60, 16 / 9, 0.5, 260);
+    var camera2 = new T.PerspectiveCamera(66, 8 / 9, 0.5, 260);
+    camera.position.set(0, 6.2, 12);
+    camera.lookAt(0, 1.5, 0);
 
     // Bright sunny classroom lighting (warm sunlight + sky hemisphere + crisp rim)
     var hemi = new T.HemisphereLight(0xfffbe8, 0x6ea3c2, 1.38);
@@ -118,9 +119,10 @@
     /* ---------------------------------------------------- Procedural Desk Texture */
     function makeDeskTexture(L) {
       var c = document.createElement('canvas');
-      c.width = 512;
-      c.height = 512;
+      c.width = 256;
+      c.height = 256;
       var ctx = c.getContext('2d');
+      ctx.scale(0.5, 0.5);
 
       // Warm woodgrain desk background
       C.setHex(L.deskColor);
@@ -305,27 +307,27 @@
       for (var p = 0; p < 2; p++) {
         var px = pillars[p][0], pz = pillars[p][1], pc = pillars[p][2];
         boxes.push([px, 0.35, pz, 1.9, 0.7, 1.9, ry0, 0, 0x3b425c, 0]);
-        boxes.push([px, 4.1, pz, 1.35, 6.8, 1.35, ry0, 0, pc, 0]);
-        boxes.push([px, 7.8, pz, 1.42, 0.65, 1.42, ry0, 0, 0xd8dfe8, 0]);
-        boxes.push([px, 8.45, pz, 1.32, 0.75, 1.32, ry0, 0, 0xff85ad, 0]);
+        boxes.push([px, 5.2, pz, 1.35, 9.0, 1.35, ry0, 0, pc, 0]);
+        boxes.push([px, 10.0, pz, 1.42, 0.65, 1.42, ry0, 0, 0xd8dfe8, 0]);
+        boxes.push([px, 10.65, pz, 1.32, 0.75, 1.32, ry0, 0, 0xff85ad, 0]);
       }
-      // Overhead checkered beam (strictly non-overlapping tiles + 3 glowing race lights!)
+      // Overhead checkered beam raised high so low chase camera sweeps cleanly underneath!
       var innerSpan = span - 0.85;
       var tiles = 10;
       var tileW = (innerSpan * 2) / tiles;
       for (var ti = 0; ti < tiles; ti++) {
         var off = -innerSpan + (ti + 0.5) * tileW;
         var tx = sp0.x + sp0.nx * off, tz = sp0.z + sp0.nz * off;
-        boxes.push([tx, 7.28, tz, 1.38, 0.56, tileW * 0.99, ry0, 0, ti % 2 === 0 ? 0xffffff : 0x1e2235, 0]);
-        boxes.push([tx, 6.72, tz, 1.38, 0.56, tileW * 0.99, ry0, 0, ti % 2 === 1 ? 0xffffff : 0x1e2235, 0]);
+        boxes.push([tx, 9.48, tz, 1.38, 0.56, tileW * 0.99, ry0, 0, ti % 2 === 0 ? 0xffffff : 0x1e2235, 0]);
+        boxes.push([tx, 8.92, tz, 1.38, 0.56, tileW * 0.99, ry0, 0, ti % 2 === 1 ? 0xffffff : 0x1e2235, 0]);
       }
-      boxes.push([sp0.x, 7.64, sp0.z, 1.50, 0.18, innerSpan * 2 + 0.2, ry0, 0, 0xffca28, 0]);
-      boxes.push([sp0.x, 6.36, sp0.z, 1.50, 0.18, innerSpan * 2 + 0.2, ry0, 0, 0xffca28, 0]);
+      boxes.push([sp0.x, 9.84, sp0.z, 1.50, 0.18, innerSpan * 2 + 0.2, ry0, 0, 0xffca28, 0]);
+      boxes.push([sp0.x, 8.56, sp0.z, 1.50, 0.18, innerSpan * 2 + 0.2, ry0, 0, 0xffca28, 0]);
       // Glowing green start lamps on gantry
       for (var li = -1; li <= 1; li++) {
         var lx2 = sp0.x + sp0.nx * (li * 2.2), lz2 = sp0.z + sp0.nz * (li * 2.2);
-        boxes.push([lx2, 8.05, lz2, 0.85, 0.65, 0.85, ry0, 0, 0x22283d, 0]);
-        boxes.push([lx2, 8.05, lz2, 0.96, 0.42, 0.55, ry0, 0, 0x38ff7a, 1]);
+        boxes.push([lx2, 10.25, lz2, 0.85, 0.65, 0.85, ry0, 0, 0x22283d, 0]);
+        boxes.push([lx2, 10.25, lz2, 0.96, 0.42, 0.55, ry0, 0, 0x38ff7a, 1]);
       }
 
       // 2) Stacked Textbooks Jump Ramps along L.ramps
@@ -485,21 +487,21 @@
     var GEO_INK_DROP = new T.CylinderGeometry(0.42, 0.44, 0.055, 10);
 
     // Pooled InstancedMeshes: Coins, Blob Shadows, Particles
-    var MAX_COINS = 32;
+    var MAX_COINS = 40;
     var coinMat = new T.MeshLambertMaterial({ color: 0xffd52b, emissive: 0x553b00 });
     var coinInst = new T.InstancedMesh(GEO_COIN, coinMat, MAX_COINS);
     coinInst.instanceMatrix.setUsage(T.DynamicDrawUsage);
     coinInst.frustumCulled = false;
     scene.add(coinInst);
 
-    var MAX_SHADOWS = 64;
+    var MAX_SHADOWS = 72;
     var shadowMat = new T.MeshBasicMaterial({ color: 0x161c2e, transparent: true, opacity: 0.32, depthWrite: false });
     var shadowInst = new T.InstancedMesh(GEO_SHADOW, shadowMat, MAX_SHADOWS);
     shadowInst.instanceMatrix.setUsage(T.DynamicDrawUsage);
     shadowInst.frustumCulled = false;
     scene.add(shadowInst);
 
-    var MAX_PARTS = 150;
+    var MAX_PARTS = 180;
     var partMat = new T.MeshBasicMaterial({ color: 0xffffff });
     var partInst = new T.InstancedMesh(GEO_PART, partMat, MAX_PARTS);
     partInst.instanceMatrix.setUsage(T.DynamicDrawUsage);
@@ -558,6 +560,41 @@
       inkPool.push(ig);
     }
 
+    // Pooled Homing Paper-Plane Missiles & Bouncing Eraser Shells (zero per-frame allocs!)
+    var MAX_PROJ = 10;
+    var planePool = [], shellPool = [];
+    var MAT_PAPER = new T.MeshLambertMaterial({ color: 0xffffff, emissive: 0x3a2038 });
+    var MAT_PLANE_ACC = new T.MeshBasicMaterial({ color: 0xff3d7f });
+    var MAT_SHELL_CY = new T.MeshBasicMaterial({ color: 0x29e3ff });
+    var MAT_SHELL_PK = new T.MeshLambertMaterial({ color: 0xff5a9c, emissive: 0x451228 });
+    var GEO_PLANE_BODY = new T.ConeGeometry(0.45, 2.2, 4);
+    GEO_PLANE_BODY.rotateZ(-Math.PI * 0.5);
+    var GEO_PLANE_WING = new T.BoxGeometry(1.4, 0.08, 2.1);
+    var GEO_PLANE_FIN = new T.BoxGeometry(0.9, 0.52, 0.1);
+    var GEO_SHELL_CORE = new T.CylinderGeometry(0.9, 0.9, 0.52, 12);
+    var GEO_SHELL_RING = new T.TorusGeometry(0.94, 0.14, 6, 14);
+    GEO_SHELL_RING.rotateX(Math.PI * 0.5);
+    for (var pj = 0; pj < MAX_PROJ; pj++) {
+      var pg = new T.Group();
+      var pb = new T.Mesh(GEO_PLANE_BODY, MAT_PAPER);
+      var pw = new T.Mesh(GEO_PLANE_WING, MAT_PAPER); pw.position.set(-0.25, 0.02, 0);
+      var ps = new T.Mesh(new T.BoxGeometry(0.42, 0.11, 2.16), MAT_PLANE_ACC); ps.position.set(-0.25, 0.04, 0);
+      var pf = new T.Mesh(GEO_PLANE_FIN, MAT_PLANE_ACC); pf.position.set(-0.45, -0.18, 0);
+      pg.add(pb, pw, ps, pf);
+      pg.visible = false;
+      scene.add(pg);
+      planePool.push(pg);
+
+      var sg = new T.Group();
+      var sc = new T.Mesh(GEO_SHELL_CORE, MAT_SHELL_PK);
+      var sr = new T.Mesh(GEO_SHELL_RING, MAT_SHELL_CY);
+      var sb = new T.Mesh(new T.BoxGeometry(1.15, 0.58, 0.42), MAT_SHELL_CY);
+      sg.add(sc, sr, sb);
+      sg.visible = false;
+      scene.add(sg);
+      shellPool.push(sg);
+    }
+
     function makeEraserMesh() {
       var g = new T.Group();
       var pinkMat = new T.MeshLambertMaterial({ color: 0xff77a9 });
@@ -575,19 +612,21 @@
 
     function makeBoostPadMesh() {
       var g = new T.Group();
-      var baseMat = new T.MeshBasicMaterial({ color: 0x1d3557 });
-      var chevMat = new T.MeshBasicMaterial({ color: 0xffdf2b });
-      var glowMat = new T.MeshBasicMaterial({ color: 0x4df5ff });
-      var base = new T.Mesh(new T.BoxGeometry(4.4, 0.06, 3.2), baseMat);
-      base.position.y = 0.085;
-      g.add(base);
+      var baseMat = new T.MeshBasicMaterial({ color: 0x16294a });
+      var chevMat = new T.MeshBasicMaterial({ color: 0xffe433 });
+      var glowMat = new T.MeshBasicMaterial({ color: 0x3ef7ff });
+      var base = new T.Mesh(new T.BoxGeometry(5.4, 0.07, 4.0), baseMat);
+      base.position.y = 0.09;
+      var railL = new T.Mesh(new T.BoxGeometry(5.5, 0.12, 0.24), glowMat); railL.position.set(0, 0.11, -1.92);
+      var railR = railL.clone(); railR.position.z = 1.92;
+      g.add(base, railL, railR);
       var chevrons = [];
       for (var i = 0; i < 3; i++) {
-        var cx = -1.25 + i * 1.25;
-        var a1 = new T.Mesh(new T.BoxGeometry(0.36, 0.08, 1.45), i === 2 ? glowMat : chevMat);
-        a1.position.set(cx, 0.10, -0.52); a1.rotation.y = 0.52;
-        var a2 = new T.Mesh(new T.BoxGeometry(0.36, 0.08, 1.45), i === 2 ? glowMat : chevMat);
-        a2.position.set(cx, 0.10, 0.52); a2.rotation.y = -0.52;
+        var cx = -1.55 + i * 1.55;
+        var a1 = new T.Mesh(new T.BoxGeometry(0.45, 0.1, 1.78), i === 2 ? glowMat : chevMat);
+        a1.position.set(cx, 0.115, -0.62); a1.rotation.y = 0.52;
+        var a2 = new T.Mesh(new T.BoxGeometry(0.45, 0.1, 1.78), i === 2 ? glowMat : chevMat);
+        a2.position.set(cx, 0.115, 0.62); a2.rotation.y = -0.52;
         g.add(a1, a2);
         chevrons.push(a1, a2);
       }
@@ -850,14 +889,66 @@
       }
     }
 
-    /* ---------------------------------------------------- Camera & Shake */
-    var camPos = new T.Vector3(0, 22, 42);
-    var camLook = new T.Vector3(0, 0, 18);
-    var camYaw = 0;
-    var shakePower = 0;
+    /* ---------------------------------------------------- Low Chase Cameras & Shake */
+    var camPos = [new T.Vector3(0, 6.2, 12), new T.Vector3(0, 6.2, 12)];
+    var camLook = [new T.Vector3(0, 1.5, 0), new T.Vector3(0, 1.5, 0)];
+    var camYaw = [0, 0];
+    var camFov = [60, 66];
+    var lastAspect = [0, 0], lastFov = [0, 0];
+    var isSplit = false, viewW = 1280, viewH = 720;
+    var shaker = Kit.shake({ decay: 3.4 });
 
     function addShake(p) {
-      if (!view.calm) shakePower = Math.max(shakePower, p);
+      if (!view.calm) shaker.add(p);
+    }
+
+    function syncCamProj(cam, idx, aspect) {
+      var fov = camFov[idx];
+      if (Math.abs(lastAspect[idx] - aspect) > 1e-4 || Math.abs(lastFov[idx] - fov) > 0.05) {
+        cam.aspect = aspect;
+        cam.fov = fov;
+        cam.updateProjectionMatrix();
+        lastAspect[idx] = aspect;
+        lastFov[idx] = fov;
+      }
+    }
+
+    function updateChaseCam(idx, w, pk, dt, snapCam, splitMode) {
+      var spCam = E.sampleAt(w.L, pk.s + 5.5);
+      var trackAng = Math.atan2(spCam.tz, spCam.tx);
+      var desiredYaw = pk.ang + E.wrapAngle(trackAng - pk.ang) * 0.30;
+      if (snapCam) camYaw[idx] = desiredYaw;
+      else camYaw[idx] = E.wrapAngle(camYaw[idx] + E.wrapAngle(desiredYaw - camYaw[idx]) * E.clamp(dt * 6.5, 0, 1));
+
+      var boostKick = pk.boostT > 0 ? 1.4 : 0;
+      var backDist = (splitMode ? 9.8 : 9.4) + boostKick;
+      var camHeight = (splitMode ? 6.3 : 6.0) + pk.y * 0.48;
+      var ahead = 9.2;
+
+      var tx = pk.x - Math.cos(camYaw[idx]) * backDist;
+      var ty = camHeight;
+      var tz = pk.z - Math.sin(camYaw[idx]) * backDist;
+      var lx = pk.x + Math.cos(camYaw[idx]) * ahead;
+      var ly = 1.6 + pk.y * 0.32;
+      var lz = pk.z + Math.sin(camYaw[idx]) * ahead;
+
+      if (snapCam) {
+        camPos[idx].set(tx, ty, tz);
+        camLook[idx].set(lx, ly, lz);
+      } else {
+        var sm = E.clamp(dt * 9.5, 0, 1);
+        camPos[idx].x = E.lerp(camPos[idx].x, tx, sm);
+        camPos[idx].y = E.lerp(camPos[idx].y, ty, sm);
+        camPos[idx].z = E.lerp(camPos[idx].z, tz, sm);
+        camLook[idx].x = E.lerp(camLook[idx].x, lx, sm);
+        camLook[idx].y = E.lerp(camLook[idx].y, ly, sm);
+        camLook[idx].z = E.lerp(camLook[idx].z, lz, sm);
+      }
+
+      var baseFov = splitMode ? 66 : 60;
+      var speedBonus = pk.boostT > 0 ? 12 : E.clamp((pk.speed - 18) * 0.36, 0, 5);
+      var wantFov = baseFov + speedBonus;
+      camFov[idx] = snapCam ? wantFov : E.lerp(camFov[idx], wantFov, E.clamp(dt * 7.5, 0, 1));
     }
 
     function setInst(inst, idx, x, y, z, sx, sy, sz, rx, ry, rz) {
@@ -904,7 +995,7 @@
         }
       }
 
-      // 4) Sync spinning gold coins (1 InstancedMesh draw!)
+      // 4) Sync spinning gold coins (1 InstancedMesh draw, shrunk upload!)
       var cnIdx = 0;
       for (i = 0; i < w.coins.length && cnIdx < MAX_COINS; i++) {
         var cn = w.coins[i];
@@ -914,8 +1005,7 @@
           setInst(shadowInst, shIdx++, cn.x, 0.09, cn.z, 0.55, 1, 0.55, 0, 0, 0);
         }
       }
-      coinInst.count = cnIdx;
-      coinInst.instanceMatrix.needsUpdate = true;
+      Kit.webgl.shrinkCount(coinInst, cnIdx);
 
       // 5) Sync glossy ink puddles (static + player-dropped)
       for (i = 0; i < MAX_INKS; i++) {
@@ -930,6 +1020,34 @@
           ig.visible = false;
         }
       }
+
+      // 5b) Sync Homing Paper-Plane Missiles & Bouncing Eraser Shells
+      var plCount = 0, shCount = 0;
+      var projs = w.projectiles || [];
+      for (i = 0; i < projs.length; i++) {
+        var pr = projs[i];
+        if (pr.kind === 'plane' && plCount < MAX_PROJ) {
+          var pm = planePool[plCount++];
+          pm.visible = true;
+          pm.position.set(pr.x, pr.y + Math.sin(t * 14 + pr.id) * 0.14, pr.z);
+          pm.rotation.set(Math.sin(t * 10 + pr.id) * 0.18, -pr.ang, 0);
+          if (shIdx < MAX_SHADOWS) setInst(shadowInst, shIdx++, pr.x, 0.1, pr.z, 0.85, 1, 0.65, 0, -pr.ang, 0);
+          if (!view.calm && Math.sin(t * 50 + i) > 0) {
+            spawnPart(pr.x, pr.y, pr.z, -pr.vx * 0.12, 1.0, -pr.vz * 0.12, 0xff5fa2, 0.24, 0.26, 3);
+          }
+        } else if (pr.kind === 'shell' && shCount < MAX_PROJ) {
+          var sm = shellPool[shCount++];
+          sm.visible = true;
+          sm.position.set(pr.x, pr.y, pr.z);
+          sm.rotation.set(0, t * 14 + pr.id, 0);
+          if (shIdx < MAX_SHADOWS) setInst(shadowInst, shIdx++, pr.x, 0.1, pr.z, 0.95, 1, 0.95, 0, 0, 0);
+          if (!view.calm && Math.sin(t * 50 + i) > 0) {
+            spawnPart(pr.x, pr.y + 0.1, pr.z, -pr.vx * 0.1, 1.4, -pr.vz * 0.1, 0x29e3ff, 0.22, 0.22, 6);
+          }
+        }
+      }
+      for (i = plCount; i < MAX_PROJ; i++) planePool[i].visible = false;
+      for (i = shCount; i < MAX_PROJ; i++) shellPool[i].visible = false;
 
       // 6) Sync all 4 toy karts + drift sparks + turbo flames + shadows
       for (i = 0; i < w.karts.length; i++) {
@@ -1013,10 +1131,9 @@
         }
       }
 
-      shadowInst.count = shIdx;
-      shadowInst.instanceMatrix.needsUpdate = true;
+      Kit.webgl.shrinkCount(shadowInst, shIdx);
 
-      // 7) Step & draw pooled 3D particles
+      // 7) Step & draw pooled 3D particles (skip upload when 0 live!)
       var ptIdx = 0;
       for (i = 0; i < MAX_PARTS; i++) {
         var pt = parts[i];
@@ -1033,83 +1150,32 @@
         partInst.setColorAt(ptIdx, C.setHex(pt.color));
         ptIdx++;
       }
-      partInst.count = ptIdx;
-      partInst.instanceMatrix.needsUpdate = true;
-      if (partInst.instanceColor) partInst.instanceColor.needsUpdate = true;
+      Kit.webgl.shrinkCount(partInst, ptIdx);
+      if (ptIdx > 0 && partInst.instanceColor) Kit.webgl.uploadRange(partInst.instanceColor, ptIdx * 3);
 
-      // 8) Elevated Micro-Machines Camera (1P smooth overhead chase; 2P smooth framing zoom; Title scenic follow)
-      var targetPosX, targetPosY, targetPosZ, lookX, lookY, lookZ;
+      // 8) Exhilarating Low Chase Camera (1P & true 2P split-screen chase — zero inverted steering!)
+      shaker.update(dt);
+      isSplit = !isTitleDemo && !!w.duo;
       if (isTitleDemo) {
-        var lead = w.karts[0];
-        var orbitA = t * 0.18 + 0.55;
-        lookX = lead.x * 0.55;
-        lookY = 0.8;
-        lookZ = lead.z * 0.55;
-        targetPosX = lookX + Math.cos(orbitA) * 38;
-        targetPosY = 26;
-        targetPosZ = lookZ + Math.sin(orbitA) * 34;
-      } else if (w.duo) {
-        // 2P Micro-Machines framing camera: smoothly encompasses both players with dynamic zoom!
-        var p1 = w.karts[0], p2 = w.karts[1];
-        var mx2 = (p1.x + p2.x) * 0.5;
-        var mz2 = (p1.z + p2.z) * 0.5;
-        var sep = Math.hypot(p1.x - p2.x, p1.z - p2.z);
-        var zoom = E.clamp((sep - 8) / 28, 0, 1);
-        var camH = E.lerp(24, 44, zoom);
-        var camB = E.lerp(18, 32, zoom);
-        lookX = mx2;
-        lookY = 0.4;
-        lookZ = mz2;
-        targetPosX = mx2;
-        targetPosY = camH;
-        targetPosZ = mz2 + camB;
+        updateChaseCam(0, w, w.karts[0], dt, snapCam, false);
+      } else if (isSplit) {
+        updateChaseCam(0, w, w.karts[0], dt, snapCam, true);
+        updateChaseCam(1, w, w.karts[1], dt, snapCam, true);
       } else {
-        // 1P Elevated Overhead Chase Camera: smooth yaw follows kart + track so ↑ is always forward up-screen!
-        var pk = w.karts[0];
-        var spCam = E.sampleAt(w.L, pk.s + 4.0);
-        var trackAng = Math.atan2(spCam.tz, spCam.tx);
-        var desiredYaw = pk.ang + E.wrapAngle(trackAng - pk.ang) * 0.26;
-        if (snapCam) camYaw = desiredYaw;
-        else camYaw = E.wrapAngle(camYaw + E.wrapAngle(desiredYaw - camYaw) * E.clamp(dt * 4.2, 0, 1));
-
-        var boostZoom = pk.boostT > 0 ? 2.6 : 0;
-        var backDist = 17.5 + boostZoom;
-        var camHeight = 16.5 + (pk.y * 0.45);
-        var ahead = 6.2;
-
-        targetPosX = pk.x - Math.cos(camYaw) * backDist;
-        targetPosY = camHeight;
-        targetPosZ = pk.z - Math.sin(camYaw) * backDist;
-        lookX = pk.x + Math.cos(camYaw) * ahead;
-        lookY = 0.9 + pk.y * 0.25;
-        lookZ = pk.z + Math.sin(camYaw) * ahead;
+        updateChaseCam(0, w, w.karts[0], dt, snapCam, false);
       }
 
-      if (snapCam) {
-        camPos.set(targetPosX, targetPosY, targetPosZ);
-        camLook.set(lookX, lookY, lookZ);
-      } else {
-        var camSmooth = E.clamp(dt * 6.5, 0, 1);
-        camPos.x = E.lerp(camPos.x, targetPosX, camSmooth);
-        camPos.y = E.lerp(camPos.y, targetPosY, camSmooth);
-        camPos.z = E.lerp(camPos.z, targetPosZ, camSmooth);
-        camLook.x = E.lerp(camLook.x, lookX, camSmooth);
-        camLook.y = E.lerp(camLook.y, lookY, camSmooth);
-        camLook.z = E.lerp(camLook.z, lookZ, camSmooth);
-      }
+      var sx = (!view.calm && shaker.power > 0.005) ? shaker.x * 0.42 : 0;
+      var sy = (!view.calm && shaker.power > 0.005) ? shaker.y * 0.36 : 0;
+      camera.position.set(camPos[0].x + sx, camPos[0].y + sy, camPos[0].z);
+      camera.lookAt(camLook[0].x, camLook[0].y, camLook[0].z);
+      if (!view.calm && shaker.rot) camera.rotation.z += shaker.rot * 1.4;
 
-      // Subtle screen shake (respects reduced motion via view.calm)
-      var sx = 0, sy = 0;
-      if (shakePower > 0.01 && !view.calm) {
-        shakePower = Math.max(0, shakePower - dt * 3.8);
-        sx = Math.sin(t * 73) * shakePower * 0.45;
-        sy = Math.cos(t * 61) * shakePower * 0.35;
-      } else {
-        shakePower = 0;
+      if (isSplit) {
+        camera2.position.set(camPos[1].x + sx, camPos[1].y + sy, camPos[1].z);
+        camera2.lookAt(camLook[1].x, camLook[1].y, camLook[1].z);
+        if (!view.calm && shaker.rot) camera2.rotation.z += shaker.rot * 1.4;
       }
-
-      camera.position.set(camPos.x + sx, camPos.y + sy, camPos.z);
-      camera.lookAt(camLook.x, camLook.y, camLook.z);
     }
 
     /* ---------------------------------------------------- Software WebGL Fence Pacing */
@@ -1126,19 +1192,38 @@
       sync: sync,
       loadTrack: loadTrack,
       mayDraw: pace.mayDraw,
+      camInfo: function () {
+        return { fov: Math.round(camFov[0] * 10) / 10, height: Math.round(camPos[0].y * 10) / 10, split: isSplit };
+      },
       render: function () {
-        renderer.render(scene, camera);
+        if (!isSplit) {
+          renderer.setScissorTest(false);
+          renderer.setViewport(0, 0, viewW, viewH);
+          syncCamProj(camera, 0, viewW / Math.max(1, viewH));
+          renderer.render(scene, camera);
+        } else {
+          var hw = Math.floor(viewW / 2);
+          renderer.setScissorTest(true);
+          renderer.setViewport(0, 0, hw, viewH);
+          renderer.setScissor(0, 0, hw, viewH);
+          syncCamProj(camera, 0, hw / Math.max(1, viewH));
+          renderer.render(scene, camera);
+          renderer.setViewport(hw, 0, viewW - hw, viewH);
+          renderer.setScissor(hw, 0, viewW - hw, viewH);
+          syncCamProj(camera2, 1, (viewW - hw) / Math.max(1, viewH));
+          renderer.render(scene, camera2);
+          renderer.setScissorTest(false);
+        }
         pace.markDrawn();
       },
       resize: function (w, h) {
-        renderer.setSize(w, h, false);
-        camera.aspect = w / Math.max(1, h);
-        camera.updateProjectionMatrix();
+        viewW = Math.max(1, w);
+        viewH = Math.max(1, h);
+        renderer.setSize(viewW, viewH, false);
+        lastAspect[0] = 0;
+        lastAspect[1] = 0;
       },
-      prepare: function (done) {
-        try { renderer.compile(scene, camera); } catch (e) { /* ignore */ }
-        done();
-      },
+      prepare: function (done) { if (done) done(); },
       whenDrawn: pace.whenDrawn,
       dispose: function () {
         pace.dispose();

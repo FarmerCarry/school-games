@@ -20,13 +20,22 @@
   var MAX_SPEED = 450;
   var THREE_PT_DIST = 385;
 
-  var SWEET_MIN = 0.50;
-  var SWEET_MAX = 0.80;
+  var SWEET_MIN = 0.45;
+  var SWEET_MAX = 0.82;
   var SWEET_MID = 0.65;
   var CHARGE_RATE = 1.28;
   var MATCH_SECONDS = 60;
-  var INTRO_TIME = 1.05;
-  var GOAL_TIME = 1.15;
+  var INTRO_TIME = 0.45;
+  var GOAL_TIME = 0.45;
+  var BIG_RIM_R = 64;
+
+  var POWERS = [
+    { id: 'mega', name: 'كرة عملاقة! +2', icon: '🏀', color: 0xff7b00, hex: '#ff7b00', dur: 10 },
+    { id: 'ice', name: 'تجميد السلة!', icon: '❄️', color: 0x38bdf8, hex: '#38bdf8', dur: 7 },
+    { id: 'rocket', name: 'أحذية الصاروخ!', icon: '🚀', color: 0xfb7185, hex: '#fb7185', dur: 8 },
+    { id: 'magnet', name: 'مغناطيس الكرة!', icon: '🧲', color: 0xc084fc, hex: '#c084fc', dur: 8 },
+    { id: 'bigrim', name: 'سلة واسعة!', icon: '⭕', color: 0x22d36b, hex: '#22d36b', dur: 9 }
+  ];
 
   var HOOPS_SPEC = [
     { side: 0, x: 152, y: 326, rimR: 42, boardX: 96, boardTop: 212, boardBot: 362 },
@@ -288,6 +297,9 @@
       stealCd: 0,
       protect: 0,
       stunT: 0,
+      megaT: 0,
+      rocketT: 0,
+      magnetT: 0,
       squashX: 1,
       squashY: 1,
       runPhase: 0,
@@ -353,12 +365,12 @@
       {
         side: 0, x: HOOPS_SPEC[0].x, y: HOOPS_SPEC[0].y, rimR: HOOPS_SPEC[0].rimR,
         boardX: HOOPS_SPEC[0].boardX, boardTop: HOOPS_SPEC[0].boardTop, boardBot: HOOPS_SPEC[0].boardBot,
-        netSway: 0, netVel: 0, rimBend: 0, glowT: 0
+        netSway: 0, netVel: 0, rimBend: 0, glowT: 0, frozenT: 0, bigRimT: 0
       },
       {
         side: 1, x: HOOPS_SPEC[1].x, y: HOOPS_SPEC[1].y, rimR: HOOPS_SPEC[1].rimR,
         boardX: HOOPS_SPEC[1].boardX, boardTop: HOOPS_SPEC[1].boardTop, boardBot: HOOPS_SPEC[1].boardBot,
-        netSway: 0, netVel: 0, rimBend: 0, glowT: 0
+        netSway: 0, netVel: 0, rimBend: 0, glowT: 0, frozenT: 0, bigRimT: 0
       }
     ];
 
@@ -382,6 +394,8 @@
       flashT: 0,
       flashSide: -1,
       crowdExcite: 0,
+      powerup: null,
+      powerSpawnT: 4.5,
       seed: (opts.seed >>> 0) || (1337 + stage * 97),
       rng: makeRng((opts.seed >>> 0) || (1337 + stage * 97)),
       players: [p0, p1],
@@ -402,6 +416,7 @@
         targetSide: 1,
         pts: 2,
         isSuper: false,
+        isMega: false,
         swishAim: false,
         touchedRim: false,
         touchedBoard: false,
@@ -439,19 +454,18 @@
 
     if (inSweet) {
       // Pure dead-center swish trajectory!
-      aimOffsetX = (charge - SWEET_MID) * 14;
+      aimOffsetX = (charge - SWEET_MID) * 10;
     } else if (isQuickTap) {
-      // Kid-friendly quick-tap release: accurate enough to sink often, slight gentle spread
-      var spread = (match.rng() - 0.5) * 44;
-      aimOffsetX = spread + p.dir * 6;
+      // Generous quick-tap swish magnetism toward hoop center!
+      aimOffsetX = (match.rng() - 0.5) * 14;
     } else if (charge < SWEET_MIN) {
-      // Undercharged: falls short toward front rim
+      // Gentle front-rim arc (no harsh forced-miss airball!)
       var under = (SWEET_MIN - charge) / SWEET_MIN;
-      aimOffsetX = -p.dir * (34 + under * 150);
+      aimOffsetX = -p.dir * (under * 26);
     } else {
-      // Overcharged: flies deep toward backboard (can bank in!)
+      // High arc kissing the glass backboard (banks in!)
       var over = (charge - SWEET_MAX) / (1 - SWEET_MAX);
-      aimOffsetX = p.dir * (30 + over * 135);
+      aimOffsetX = p.dir * (over * 34);
     }
 
     var tx = hoop.x + aimOffsetX;
@@ -562,6 +576,8 @@
     b.shooter = p;
     b.targetSide = hoop.side;
     b.isSuper = !!isSuper;
+    b.isMega = p.megaT > 0;
+    b.r = b.isMega ? 25 : BALL_R;
     b.pts = isSuper ? 3 : 2;
     b.touchedRim = false;
     b.touchedBoard = false;
@@ -587,13 +603,15 @@
     b.vy = sol.vy;
     b.spin = -p.dir * 13;
     b.pts = sol.pts;
-    b.swishAim = sol.inSweet;
+    b.swishAim = sol.inSweet || isQuickTap || p.magnetT > 0;
     b.isSuper = false;
+    b.isMega = p.megaT > 0;
+    b.r = b.isMega ? 25 : BALL_R;
     b.touchedRim = false;
     b.touchedBoard = false;
     b.scoredT = 0;
     b.pickupCd = 0.24;
-    if (sol.inSweet) b.fireT = Math.max(b.fireT, 1.3);
+    if (sol.inSweet || b.isMega) b.fireT = Math.max(b.fireT, 1.3);
 
     p.charging = false;
     p.charge = 0;
@@ -648,13 +666,12 @@
 
         opp.charging = false;
         opp.charge = 0;
-        opp.stunT = 0.42;
+        opp.stunT = 0.28;
         opp.vx = towardOpp * 240;
         opp.vy = -210;
         opp.onGround = false;
         opp.expr = 'dizzy';
-        opp.exprT = 0.65;
-        match.hitstop = 0.04;
+        opp.exprT = 0.55;
         match.events.push({ type: 'steal', player: p.id, victim: opp.id, x: (p.x + opp.x) * 0.5, y: p.y - 54 });
       }
     }
@@ -819,9 +836,73 @@
     b.vy = 0;
     b.shooter = null;
     b.isSuper = false;
+    b.isMega = rec.megaT > 0;
+    b.r = b.isMega ? 25 : BALL_R;
     b.scoredT = 0;
     b.pickupCd = 0;
     b.fireT = 0;
+  }
+
+  function applyPowerup(match, p, pw) {
+    if (pw.id === 'mega') {
+      p.megaT = pw.dur;
+      if (match.ball.holder === p) { match.ball.isMega = true; match.ball.r = 25; }
+    } else if (pw.id === 'ice') {
+      // Freeze the hoop the enemy shoots at (player's own hoop!)
+      match.hoops[p.id].frozenT = pw.dur;
+    } else if (pw.id === 'rocket') {
+      p.rocketT = pw.dur;
+    } else if (pw.id === 'magnet') {
+      p.magnetT = pw.dur;
+    } else if (pw.id === 'bigrim') {
+      var th = targetHoopOf(match, p);
+      th.bigRimT = pw.dur;
+      th.rimR = BIG_RIM_R;
+    }
+    p.expr = 'happy';
+    p.exprT = 0.85;
+    p.super = Math.min(100, p.super + 15);
+    match.events.push({ type: 'powerup', player: p.id, id: pw.id, name: pw.name, icon: pw.icon, color: pw.color, x: p.x, y: p.y - 60 });
+  }
+
+  function stepPowerups(match, dt) {
+    if (match.phase !== 'play') return;
+    if (!match.powerup) {
+      match.powerSpawnT -= dt;
+      if (match.powerSpawnT <= 0) {
+        var pw = POWERS[Math.floor(match.rng() * POWERS.length)];
+        var px = 420 + match.rng() * 440;
+        var py = 365 + match.rng() * 125;
+        match.powerup = { id: pw.id, name: pw.name, icon: pw.icon, color: pw.color, hex: pw.hex, dur: pw.dur, x: px, y: py, t: 0, life: 13 };
+        match.powerSpawnT = 7.5 + match.rng() * 3.0;
+        match.events.push({ type: 'powerup_spawn', id: pw.id, name: pw.name, icon: pw.icon, x: px, y: py });
+      }
+      return;
+    }
+    var orb = match.powerup;
+    orb.t += dt;
+    orb.life -= dt;
+    if (orb.life <= 0) { match.powerup = null; return; }
+    var oy = orb.y + Math.sin(orb.t * 4.2) * 14;
+    // Either player touching the orb grabs it!
+    for (var i = 0; i < 2; i++) {
+      var pl = match.players[i];
+      var dx = pl.x - orb.x, dy = (pl.y - 54) - oy;
+      if (dx * dx + dy * dy <= 76 * 76) {
+        match.powerup = null;
+        applyPowerup(match, pl, orb);
+        return;
+      }
+    }
+    // Or hitting the orb with a thrown ball activates it for the shooter!
+    var b = match.ball;
+    if (!b.holder && b.shooter && b.state === 'shot') {
+      var bdx = b.x - orb.x, bdy = b.y - oy;
+      if (bdx * bdx + bdy * bdy <= (b.r + 36) * (b.r + 36)) {
+        match.powerup = null;
+        applyPowerup(match, b.shooter, orb);
+      }
+    }
   }
 
   function startOvertimeTipOff(match) {
@@ -851,7 +932,9 @@
     var b = match.ball;
     var scorerIdx = 1 - hoop.side;
     var scorer = match.players[scorerIdx];
-    var pts = b.pts === 3 ? 3 : 2;
+    var basePts = b.pts === 3 ? 3 : 2;
+    var isMega = !!(b.isMega || scorer.megaT > 0);
+    var pts = basePts + (isMega ? 2 : 0);
     var isDunk = !!forcedDunk || b.state === 'dunk' || (b.shooter === scorer && b.isSuper);
     var isSwish = !isDunk && !b.touchedRim && !b.touchedBoard;
 
@@ -859,7 +942,7 @@
     scorer.st.baskets++;
     if (isDunk) scorer.st.dunks++;
     if (isSwish) scorer.st.swishes++;
-    if (pts === 3 && !b.isSuper) scorer.st.threes++;
+    if (basePts === 3 && !b.isSuper) scorer.st.threes++;
 
     // Super meter refill (not when this basket itself was a Super Dunk)
     if (!b.isSuper) {
@@ -875,15 +958,14 @@
     b.scoredT = 0.85;
     b.vx *= 0.32;
     b.vy = Math.max(b.vy * 0.55, 190);
-    hoop.netVel = (b.vx >= 0 ? 1 : -1) * 14 + (isSwish ? 9 : 5);
-    hoop.glowT = 1.15;
-    if (isDunk) hoop.rimBend = b.isSuper ? 1.0 : 0.65;
+    hoop.netVel = (b.vx >= 0 ? 1 : -1) * (isSwish ? 20 : 15) + (isSwish ? 10 : 5);
+    hoop.glowT = 1.25;
+    if (isDunk) hoop.rimBend = b.isSuper ? 1.15 : 0.85;
 
     match.lastScorer = scorerIdx;
     match.flashT = 0.45;
     match.flashSide = scorerIdx;
     match.crowdExcite = 1.0;
-    match.hitstop = b.isSuper ? 0.08 : isDunk ? 0.05 : 0.03;
 
     match.events.push({
       type: 'score',
@@ -892,6 +974,7 @@
       swish: isSwish,
       dunk: isDunk,
       isSuper: !!b.isSuper,
+      isMega: isMega,
       x: hoop.x,
       y: hoop.y,
       buzzer: !!match.timeUp
@@ -957,6 +1040,35 @@
     b.prevX = b.x;
     b.prevY = b.y;
     b.vy += BALL_G * dt;
+
+    // Generous descending swish magnetism + Ball Magnet power-up homing!
+    if (b.state === 'shot' && b.scoredT <= 0 && b.shooter && b.vy > 40) {
+      var th = match.hoops[b.targetSide];
+      if (th && th.frozenT <= 0) {
+        var mdx = th.x - b.x;
+        var mdy = th.y - b.y;
+        var hasMag = b.shooter.magnetT > 0;
+        var radX = hasMag ? 210 : (th.rimR * 1.45);
+        var radY = hasMag ? 230 : 125;
+        if (Math.abs(mdx) < radX && mdy > -15 && mdy < radY) {
+          var pull = hasMag ? 780 : (b.swishAim ? 260 : 130);
+          b.vx += clamp(mdx * 4.5, -pull, pull) * dt;
+        }
+      }
+    } else if (b.state === 'loose' && b.pickupCd <= 0 && b.scoredT <= 0) {
+      for (var mi = 0; mi < 2; mi++) {
+        var mpl = match.players[mi];
+        if (mpl.magnetT > 0 && mpl.stunT <= 0) {
+          var ldx = mpl.x - b.x, ldy = (mpl.y - 54) - b.y;
+          var ld = Math.sqrt(ldx * ldx + ldy * ldy);
+          if (ld > 8 && ld < 320) {
+            b.vx += (ldx / ld) * 820 * dt;
+            b.vy += (ldy / ld) * 520 * dt;
+          }
+        }
+      }
+    }
+
     b.x += b.vx * dt;
     b.y += b.vy * dt;
     b.angle += b.spin * dt;
@@ -1026,16 +1138,27 @@
         }
       }
 
+      // Frozen Hoop ice shield bounces incoming shots!
+      if (h.frozenT > 0 && b.scoredT <= 0 && b.vy > 0 && b.y + b.r >= h.y - 12 && b.prevY + b.r <= h.y + 12 && Math.abs(b.x - h.x) <= h.rimR + 10) {
+        b.y = h.y - 12 - b.r;
+        b.vy = -Math.max(360, Math.abs(b.vy) * 0.8);
+        b.vx += (b.x >= h.x ? 1 : -1) * 140;
+        b.touchedRim = true;
+        match.events.push({ type: 'ice_block', x: h.x, y: h.y });
+        continue;
+      }
+
       // Left & Right rim pin collisions (skip while ball is cleanly inside scoring funnel post-score)
       if (b.scoredT <= 0) {
-        collideRimPin(b, h.x - h.rimR, h.y, 5.5, h, match);
-        collideRimPin(b, h.x + h.rimR, h.y, 5.5, h, match);
+        var pinR = b.isMega ? 3.5 : 5.5;
+        collideRimPin(b, h.x - h.rimR, h.y, pinR, h, match);
+        collideRimPin(b, h.x + h.rimR, h.y, pinR, h, match);
       }
 
       // Basket Detection: ball crosses rim plane downward inside rim opening
-      if (b.scoredT <= 0 && match.phase === 'play' && b.vy > 0) {
+      if (b.scoredT <= 0 && match.phase === 'play' && b.vy > 0 && h.frozenT <= 0) {
         var scoreY = h.y + 4;
-        if (b.prevY <= scoreY && b.y >= scoreY && Math.abs(b.x - h.x) <= h.rimR - 4) {
+        if (b.prevY <= scoreY && b.y >= scoreY && Math.abs(b.x - h.x) <= h.rimR - 2) {
           registerBasket(match, h);
         }
       }
@@ -1052,6 +1175,9 @@
     p.shootAnimT = Math.max(0, p.shootAnimT - dt);
     p.protect = Math.max(0, p.protect - dt);
     p.stunT = Math.max(0, p.stunT - dt);
+    p.megaT = Math.max(0, p.megaT - dt);
+    p.rocketT = Math.max(0, p.rocketT - dt);
+    p.magnetT = Math.max(0, p.magnetT - dt);
     p.exprT = Math.max(0, p.exprT - dt);
     if (p.exprT <= 0) p.expr = 'normal';
 
@@ -1097,6 +1223,7 @@
         b.vx = p.dir * 25;
         b.vy = 540;
         b.isSuper = dk.isSuper;
+        b.isMega = p.megaT > 0;
         b.pts = dk.isSuper ? 3 : 2;
         b.touchedRim = true;
         p.dunk = null;
@@ -1105,7 +1232,14 @@
         p.onGround = false;
         p.squashX = 1.24;
         p.squashY = 0.78;
-        registerBasket(match, hoop, true);
+        if (hoop.frozenT > 0) {
+          b.vy = -420;
+          b.vx = -p.dir * 260;
+          b.state = 'loose';
+          match.events.push({ type: 'ice_block', x: hoop.x, y: hoop.y });
+        } else {
+          registerBasket(match, hoop, true);
+        }
       }
       return;
     }
@@ -1114,7 +1248,7 @@
     var moveDir = (inp.r ? 1 : 0) - (inp.l ? 1 : 0);
     if (p.stunT > 0) moveDir = 0;
 
-    var maxSpd = MAX_SPEED * p.speedMul;
+    var maxSpd = MAX_SPEED * p.speedMul * (p.rocketT > 0 ? 1.28 : 1);
     if (moveDir !== 0) {
       var accel = p.onGround ? 3200 : 2100;
       p.vx = clamp(p.vx + moveDir * accel * dt, -maxSpd, maxSpd);
@@ -1134,7 +1268,7 @@
     else p.jumpBuf = Math.max(0, p.jumpBuf - dt);
 
     if (p.jumpBuf > 0 && p.coyoteT > 0 && match.phase === 'play') {
-      p.vy = JUMP_VY * p.jumpMul;
+      p.vy = JUMP_VY * p.jumpMul * (p.rocketT > 0 ? 1.24 : 1);
       p.onGround = false;
       p.coyoteT = 0;
       p.jumpBuf = 0;
@@ -1271,7 +1405,6 @@
           pl.st.blocks++;
           pl.expr = 'happy';
           pl.exprT = 0.7;
-          match.hitstop = 0.05;
           match.events.push({ type: 'block', player: pl.id, x: b.x, y: b.y });
           return;
         }
@@ -1282,6 +1415,8 @@
         b.holder = pl;
         b.state = 'held';
         b.fireT = 0;
+        b.isMega = pl.megaT > 0;
+        b.r = b.isMega ? 25 : BALL_R;
         pl.protect = 0.55;
         match.events.push({ type: 'pickup', player: pl.id, x: b.x, y: b.y });
         return;
@@ -1310,7 +1445,7 @@
     match.ball.pickupCd = Math.max(0, match.ball.pickupCd - dt);
     match.ball.fireT = Math.max(0, match.ball.fireT - dt);
 
-    // Update net sway spring & rim flex on both hoops
+    // Update net sway spring, rim flex & power-up timers on both hoops
     for (var hi = 0; hi < 2; hi++) {
       var hp = match.hoops[hi];
       var acc = -hp.netSway * 55 - hp.netVel * 5.2;
@@ -1318,6 +1453,15 @@
       hp.netSway = clamp(hp.netSway + hp.netVel * dt, -1.6, 1.6);
       hp.rimBend = Math.max(0, hp.rimBend - dt * 3.8);
       hp.glowT = Math.max(0, hp.glowT - dt);
+      hp.frozenT = Math.max(0, hp.frozenT - dt);
+      if (hp.bigRimT > 0) {
+        hp.bigRimT = Math.max(0, hp.bigRimT - dt);
+        hp.rimR = hp.bigRimT > 0 ? BIG_RIM_R : HOOPS_SPEC[hi].rimR;
+      }
+    }
+    if (match.ball.holder) {
+      match.ball.isMega = match.ball.holder.megaT > 0;
+      match.ball.r = match.ball.isMega ? 25 : BALL_R;
     }
 
     // Intro tip-off countdown
@@ -1388,6 +1532,7 @@
     stepPlayer(match, match.players[0], dt);
     stepPlayer(match, match.players[1], dt);
     resolvePlayerCollisions(match);
+    stepPowerups(match, dt);
 
     // Sub-stepped ball physics (2 substeps prevent rim/backboard tunneling!)
     if (!match.ball.holder) {
@@ -1434,6 +1579,7 @@
     OPPONENTS: OPPONENTS,
     HEADS: HEADS,
     BALLS: BALLS,
+    POWERS: POWERS,
     clamp: clamp,
     lerp: lerp,
     headById: headById,

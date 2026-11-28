@@ -7,21 +7,22 @@
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this), function () {
   'use strict';
 
-  var LAPS = 3;
+  var LAPS = 2;
   var KART_R = 1.18;
   var KART_W = 2.1;
   var KART_L = 3.1;
   var FIXED_DT = 1 / 60;
   var SAMPLES = 220;
+  var COUNTDOWN = 0.65;
 
-  var MAX_SPEED = 27.5;
-  var BOOST_SPEED = 39.0;
-  var ACCEL = 38.0;
+  var MAX_SPEED = 30.5;
+  var BOOST_SPEED = 44.0;
+  var ACCEL = 42.0;
   var BRAKE_DECEL = 42.0;
   var REVERSE_MAX = -9.5;
   var DRAG = 1.32;
-  var STEER_RATE = 2.65;
-  var DRIFT_STEER = 3.25;
+  var STEER_RATE = 2.75;
+  var DRIFT_STEER = 3.40;
   var GRAVITY = 28.0;
 
   function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
@@ -58,9 +59,11 @@
   ];
 
   var ITEMS = {
+    plane:  { id: 'plane',  name: 'طائرة ورقية',  icon: '✈️', color: 0xff3d7f },
+    shell:  { id: 'shell',  name: 'ممحاة قاذفة',  icon: '💥', color: 0x29e3ff },
     rocket: { id: 'rocket', name: 'صاروخ التيربو', icon: '🚀', color: 0xff5a36 },
-    shield: { id: 'shield', name: 'درع المطاط', icon: '🛡️', color: 0x38e890 },
-    ink:    { id: 'ink',    name: 'بقعة حبر', icon: '💧', color: 0x4b38b3 }
+    shield: { id: 'shield', name: 'درع المطاط',   icon: '🛡️', color: 0x38e890 },
+    ink:    { id: 'ink',    name: 'بقعة حبر',     icon: '💧', color: 0x4b38b3 }
   };
 
   var BODIES = [
@@ -97,7 +100,7 @@
         [-22, 22], [0, 22], [22, 22], [38, 14], [38, -8],
         [24, -22], [4, -18], [-16, -22], [-36, -14], [-38, 8]
       ],
-      boosts: [0.11, 0.56],
+      boosts: [0.09, 0.30, 0.56, 0.80],
       ramps: [0.34],
       erasers: [
         { u: 0.25, off: -3.2 },
@@ -122,7 +125,7 @@
         [-24, 24], [2, 24], [28, 22], [42, 8], [38, -14],
         [20, -24], [2, -10], [-16, -24], [-36, -18], [-42, 2], [-38, 17]
       ],
-      boosts: [0.09, 0.42, 0.74],
+      boosts: [0.09, 0.32, 0.56, 0.78],
       ramps: [0.27, 0.63],
       erasers: [
         { u: 0.20, off: 3.0 },
@@ -149,7 +152,7 @@
         [-26, 25], [2, 25], [30, 24], [46, 12], [44, -10],
         [26, -24], [8, -12], [-8, -26], [-32, -24], [-46, -8], [-42, 16]
       ],
-      boosts: [0.10, 0.38, 0.68],
+      boosts: [0.10, 0.34, 0.55, 0.72, 0.90],
       ramps: [0.24, 0.58],
       erasers: [
         { u: 0.18, off: -2.9 },
@@ -177,7 +180,7 @@
         [-28, 26], [0, 26], [30, 26], [48, 14], [46, -10],
         [30, -26], [12, -22], [0, -6], [-14, -24], [-36, -22], [-48, -4], [-44, 18]
       ],
-      boosts: [0.08, 0.32, 0.57, 0.84],
+      boosts: [0.08, 0.30, 0.54, 0.78, 0.92],
       ramps: [0.22, 0.67],
       erasers: [
         { u: 0.16, off: 2.8 },
@@ -373,7 +376,7 @@
     for (i = 0; i < def.boosts.length; i++) {
       var bs = def.boosts[i] * totalLen;
       var bp = sampleAt(L, bs);
-      L.boosts.push({ s: bs, off: 0, x: bp.x, z: bp.z, tx: bp.tx, tz: bp.tz, ang: Math.atan2(bp.tz, bp.tx), r: 2.3 });
+      L.boosts.push({ s: bs, off: 0, x: bp.x, z: bp.z, tx: bp.tx, tz: bp.tz, ang: Math.atan2(bp.tz, bp.tx), r: 2.8 });
     }
     for (i = 0; i < def.ramps.length; i++) {
       var rs = def.ramps[i] * totalLen;
@@ -661,6 +664,7 @@
         rampCD: 0,
         item: null,
         coins: 0,
+        hitsLanded: 0,
         // AI personal traits (scales cleanly from kid-friendly 0.68 up to fierce 1.01 via aiSkill)
         aiBase: 0.66 + aiSkill * 0.34 + (i - 2) * 0.03,
         aiLine: (rng() - 0.5) * L.hw * 0.7,
@@ -694,11 +698,13 @@
       id: L.id,
       duo: duo,
       demo: demo,
+      autoGas: opts.autoGas !== false,
       aiSkill: aiSkill,
       rng: rng,
       worldTime: 0,
       time: 0,
-      started: demo, // In real play, race clock & launch activate cleanly on first human input
+      countdown: demo ? 0 : COUNTDOWN,
+      started: demo, // Brief 0.65s grid launch window, then auto-gas (or instant rocket start on input)
       finished: false,
       winner: -1,
       p1Dist: 0,
@@ -707,6 +713,8 @@
       coins: coins,
       erasers: erasers,
       inks: inks,
+      projectiles: [],
+      nextProjId: 1,
       ev: []
     };
   }
@@ -787,39 +795,71 @@
     };
   }
 
-  /* --------------------------------------------------------------- Item Use */
+  /* --------------------------------------------------------------- Item Use & Combat Projectiles */
   function grantItem(w, k) {
-    // Fair Mario-Kart-style odds: trailing karts more likely to get Rocket!
+    // Fair Mario-Kart-style odds with exciting offensive combat!
     var r = w.rng();
     var id;
     if (k.place >= 3) {
-      id = r < 0.62 ? 'rocket' : (r < 0.88 ? 'shield' : 'ink');
+      id = r < 0.36 ? 'plane' : (r < 0.62 ? 'rocket' : (r < 0.82 ? 'shell' : (r < 0.93 ? 'shield' : 'ink')));
     } else if (k.place === 2) {
-      id = r < 0.42 ? 'rocket' : (r < 0.76 ? 'shield' : 'ink');
+      id = r < 0.35 ? 'plane' : (r < 0.63 ? 'shell' : (r < 0.80 ? 'rocket' : (r < 0.92 ? 'shield' : 'ink')));
     } else {
-      id = r < 0.24 ? 'rocket' : (r < 0.62 ? 'shield' : 'ink');
+      id = r < 0.28 ? 'shell' : (r < 0.56 ? 'shield' : (r < 0.80 ? 'ink' : (r < 0.92 ? 'rocket' : 'plane')));
     }
     k.item = id;
     w.ev.push({ type: 'pickup', kart: k.id, item: id, x: k.x, z: k.z });
+  }
+
+  function findAheadTarget(w, ownerId, fromS) {
+    var L = w.L, bestId = -1, bestDs = Infinity, fallbackId = -1, fallbackD = Infinity;
+    var ok = w.karts[ownerId];
+    for (var i = 0; i < w.karts.length; i++) {
+      var cand = w.karts[i];
+      if (cand.id === ownerId || cand.finished) continue;
+      var ds = wrapS(L.len, cand.s - fromS);
+      if (ds > 1 && ds < L.len * 0.65 && ds < bestDs) { bestDs = ds; bestId = cand.id; }
+      var d = ok ? Math.hypot(cand.x - ok.x, cand.z - ok.z) : ds;
+      if (d < fallbackD) { fallbackD = d; fallbackId = cand.id; }
+    }
+    return bestId >= 0 ? bestId : fallbackId;
   }
 
   function useKartItem(w, k) {
     if (!k.item) return false;
     var item = k.item;
     k.item = null;
-    if (item === 'rocket') {
-      k.boostT = Math.max(k.boostT, 1.75);
-      k.invulnT = Math.max(k.invulnT, 1.75);
-      k.speed = Math.max(k.speed, BOOST_SPEED * 0.92);
+    var fx = Math.cos(k.ang), fz = Math.sin(k.ang);
+    if (item === 'plane') {
+      var targetId = findAheadTarget(w, k.id, k.s);
+      if (w.projectiles.length >= 12) w.projectiles.shift();
+      w.projectiles.push({
+        id: w.nextProjId++, kind: 'plane', owner: k.id, target: targetId,
+        x: k.x + fx * 2.2, y: 1.18, z: k.z + fz * 2.2,
+        vx: fx * 54, vz: fz * 54, ang: k.ang, s: k.s, idx: k.idx,
+        life: 5.5, age: 0, bounces: 0
+      });
+      w.ev.push({ type: 'planeFire', kart: k.id, target: targetId, x: k.x, z: k.z });
+    } else if (item === 'shell') {
+      if (w.projectiles.length >= 12) w.projectiles.shift();
+      w.projectiles.push({
+        id: w.nextProjId++, kind: 'shell', owner: k.id, target: -1,
+        x: k.x + fx * 2.2, y: 0.56, z: k.z + fz * 2.2,
+        vx: fx * 48, vz: fz * 48, ang: k.ang, s: k.s, idx: k.idx,
+        life: 5.0, age: 0, bounces: 0
+      });
+      w.ev.push({ type: 'shellFire', kart: k.id, x: k.x, z: k.z });
+    } else if (item === 'rocket') {
+      k.boostT = Math.max(k.boostT, 1.85);
+      k.invulnT = Math.max(k.invulnT, 1.85);
+      k.speed = Math.max(k.speed, BOOST_SPEED * 0.94);
       w.ev.push({ type: 'rocket', kart: k.id, x: k.x, z: k.z });
     } else if (item === 'shield') {
-      k.shieldT = 5.0;
-      k.boostT = Math.max(k.boostT, 0.45);
+      k.shieldT = 5.5;
+      k.boostT = Math.max(k.boostT, 0.5);
       w.ev.push({ type: 'shield', kart: k.id, x: k.x, z: k.z });
     } else if (item === 'ink') {
-      // Drop glossy ink splash right behind the kart
-      var bx = k.x - Math.cos(k.ang) * 2.9;
-      var bz = k.z - Math.sin(k.ang) * 2.9;
+      var bx = k.x - fx * 2.9, bz = k.z - fz * 2.9;
       if (w.inks.length < 18) {
         w.inks.push({ x: bx, z: bz, r: 2.2, temp: true, life: 11.0, owner: k.id });
       }
@@ -828,22 +868,119 @@
     return true;
   }
 
+  function stepProjectiles(w, dt) {
+    var L = w.L;
+    for (var i = w.projectiles.length - 1; i >= 0; i--) {
+      var p = w.projectiles[i];
+      p.age += dt;
+      p.life -= dt;
+      if (p.life <= 0) { w.projectiles.splice(i, 1); continue; }
+
+      if (p.kind === 'plane') {
+        var tgt = p.target >= 0 ? w.karts[p.target] : null;
+        if (!tgt || tgt.finished) {
+          p.target = findAheadTarget(w, p.owner, p.s);
+          tgt = p.target >= 0 ? w.karts[p.target] : null;
+        }
+        var aimX, aimZ;
+        if (tgt && Math.hypot(tgt.x - p.x, tgt.z - p.z) < 26) {
+          aimX = tgt.x; aimZ = tgt.z;
+        } else {
+          var sp = sampleAt(L, p.s + 10);
+          aimX = sp.x; aimZ = sp.z;
+        }
+        var wantAng = Math.atan2(aimZ - p.z, aimX - p.x);
+        var diff = wrapAngle(wantAng - p.ang);
+        p.ang = wrapAngle(p.ang + clamp(diff, -9.5 * dt, 9.5 * dt));
+        p.vx = Math.cos(p.ang) * 54;
+        p.vz = Math.sin(p.ang) * 54;
+        p.x += p.vx * dt;
+        p.z += p.vz * dt;
+        var pPr = projectPoint(L, p.x, p.z, p.idx);
+        p.s = pPr.s; p.idx = pPr.idx;
+        if (Math.abs(pPr.off) > L.hw - 0.7) {
+          var psign = pPr.off > 0 ? 1 : -1;
+          p.x = pPr.cx + pPr.nx * psign * (L.hw - 0.7);
+          p.z = pPr.cz + pPr.nz * psign * (L.hw - 0.7);
+        }
+      } else {
+        // Bouncing Eraser Shell: flies fast and ricochets off the pencil/ruler track walls!
+        p.x += p.vx * dt;
+        p.z += p.vz * dt;
+        var sPr = projectPoint(L, p.x, p.z, p.idx);
+        p.s = sPr.s; p.idx = sPr.idx;
+        var wallLim = L.hw - 0.85;
+        if (Math.abs(sPr.off) > wallLim) {
+          var sgn = sPr.off > 0 ? 1 : -1;
+          p.x = sPr.cx + sPr.nx * sgn * wallLim;
+          p.z = sPr.cz + sPr.nz * sgn * wallLim;
+          var vn = p.vx * sPr.nx + p.vz * sPr.nz;
+          if (vn * sgn > 0) {
+            p.vx -= 2 * vn * sPr.nx;
+            p.vz -= 2 * vn * sPr.nz;
+            p.ang = Math.atan2(p.vz, p.vx);
+            p.bounces++;
+            w.ev.push({ type: 'shellBounce', x: p.x, z: p.z });
+            if (p.bounces > 4) { w.projectiles.splice(i, 1); continue; }
+          }
+        }
+      }
+
+      // Check collision against karts
+      var hit = false;
+      for (var j = 0; j < w.karts.length; j++) {
+        var tk = w.karts[j];
+        if (tk.id === p.owner && p.age < 0.45) continue;
+        if (tk.invulnT > 0) continue;
+        if (Math.hypot(tk.x - p.x, tk.z - p.z) < KART_R + 1.15) {
+          hit = true;
+          if (tk.shieldT > 0) {
+            tk.shieldT = Math.min(tk.shieldT, 0.25);
+            w.ev.push({ type: 'shieldBlock', kart: tk.id, attacker: p.owner, kind: p.kind, x: tk.x, z: tk.z });
+          } else {
+            tk.spinT = 0.95;
+            tk.invulnT = 1.45;
+            tk.speed *= 0.35;
+            tk.airborne = true;
+            tk.vy = 7.8;
+            tk.drifting = false;
+            tk.driftStage = 0;
+            if (w.karts[p.owner] && p.owner !== tk.id) w.karts[p.owner].hitsLanded++;
+            w.ev.push({ type: 'missileHit', kart: tk.id, attacker: p.owner, kind: p.kind, x: tk.x, z: tk.z });
+          }
+          break;
+        }
+      }
+      if (hit) w.projectiles.splice(i, 1);
+    }
+  }
+
   /* --------------------------------------------------------------- Simulation Step */
   function step(w, dt, inputs) {
     dt = clamp(dt || FIXED_DT, 0.001, 0.05);
     w.worldTime += dt;
     inputs = inputs || [];
 
-    // Check if any human player pressed gas/brake/steer/item to launch the race from the grid
+    // Brief grid launch window (0.65s) so restarts hold p1Dist===0 cleanly, then Auto-Gas launches!
+    // Pressing gas/steer/item launches immediately (with a Rocket Start if pressing gas!).
     if (!w.started && !w.demo) {
+      w.countdown = Math.max(0, w.countdown - dt);
       var humanCount = w.duo ? 2 : 1;
       for (var h = 0; h < humanCount; h++) {
         var hi = inputs[h];
         if (hi && (hi.gas > 0.05 || hi.brake > 0.05 || Math.abs(hi.steer || 0) > 0.1 || hi.item)) {
           w.started = true;
+          if (hi.gas > 0.05 && w.countdown > 0 && w.countdown < COUNTDOWN * 0.9) {
+            w.karts[h].boostT = Math.max(w.karts[h].boostT, 0.45);
+          }
+          w.countdown = 0;
           w.ev.push({ type: 'go' });
           break;
         }
+      }
+      if (!w.started && w.autoGas && w.countdown <= 0) {
+        w.started = true;
+        w.ev.push({ type: 'go' });
       }
     }
 
@@ -908,6 +1045,10 @@
       var brake = clamp(inp.brake || 0, 0, 1);
       var steer = clamp(inp.steer || 0, -1, 1);
       var wantDrift = !!inp.drift;
+      // Auto-Gas by default: kids only need to steer, drift, and blast items (W/↑ adds extra surge!).
+      if (k.human && !k.finished && w.autoGas && brake <= 0.05 && inp.gas !== false) {
+        gas = Math.max(gas, 0.96);
+      }
 
       // Spin-out slowdown from ink spill
       if (k.spinT > 0) {
@@ -966,7 +1107,10 @@
       // Forward speed & boost
       var topSpeed = k.boostT > 0 ? BOOST_SPEED : MAX_SPEED;
       if (!k.human) topSpeed *= clamp(gas, 0.60, 1.05);
-      else if (k.coins > 0) topSpeed += Math.min(k.coins, 12) * 0.14;
+      else {
+        if (gas > 1.0) topSpeed += 1.4;
+        if (k.coins > 0) topSpeed += Math.min(k.coins, 12) * 0.14;
+      }
 
       var curAccel = k.boostT > 0 ? ACCEL * 1.65 : ACCEL;
       if (k.boostT > 0) {
@@ -1078,10 +1222,10 @@
         // 1) Boost chevrons
         for (j = 0; j < L.boosts.length; j++) {
           var b = L.boosts[j];
-          if (Math.hypot(k.x - b.x, k.z - b.z) < b.r + KART_R * 0.7) {
-            if (k.boostT < 0.75) {
-              k.boostT = Math.max(k.boostT, 1.05);
-              k.speed = Math.max(k.speed, BOOST_SPEED * 0.92);
+          if (Math.hypot(k.x - b.x, k.z - b.z) < b.r + KART_R * 0.75) {
+            if (k.boostT < 0.85) {
+              k.boostT = Math.max(k.boostT, 1.25);
+              k.speed = Math.max(k.speed, BOOST_SPEED * 0.94);
               w.ev.push({ type: 'boost', kart: k.id, x: b.x, z: b.z });
             }
           }
@@ -1170,8 +1314,9 @@
       }
     }
 
-    // Kart-vs-kart bouncy bumps (soft, playful, never locks together!)
+    // Kart-vs-kart bouncy bumps + homing missiles & bouncing eraser shells!
     if (w.started) {
+      stepProjectiles(w, dt);
       for (i = 0; i < w.karts.length; i++) {
         for (j = i + 1; j < w.karts.length; j++) {
           var a = w.karts[i], b2 = w.karts[j];
@@ -1264,8 +1409,8 @@
     var place = p1.place;
     var stars = place === 1 ? 3 : (place === 2 ? 2 : (place === 3 ? 1 : 0));
     var placePts = place === 1 ? 1000 : (place === 2 ? 700 : (place === 3 ? 450 : 200));
-    var timeBonus = clamp(Math.round((130 - w.time) * 5), 0, 500);
-    var score = placePts + p1.coins * 25 + p1.driftCount * 40 + timeBonus;
+    var timeBonus = clamp(Math.round((85 - w.time) * 6), 0, 500);
+    var score = placePts + p1.coins * 25 + p1.driftCount * 40 + (p1.hitsLanded || 0) * 80 + timeBonus;
     var coinsEarned = (place === 1 ? 40 : (place === 2 ? 25 : (place === 3 ? 15 : 8))) + p1.coins * 2;
     if (w.duo) {
       var winnerKart = w.karts[w.winner] || p1;
@@ -1298,6 +1443,7 @@
 
   return {
     LAPS: LAPS,
+    COUNTDOWN: COUNTDOWN,
     KART_R: KART_R,
     KART_W: KART_W,
     KART_L: KART_L,

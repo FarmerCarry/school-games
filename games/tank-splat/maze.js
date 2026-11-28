@@ -3,7 +3,7 @@
 (function () {
   'use strict';
 
-  var T = 10; // wall thickness (logical px)
+  var T = 16; // wall thickness (logical px, matched 1:1 with rendered walls in art.js)
 
   // Build a random maze: a perfect maze (depth-first) with some walls knocked
   // out so there are loops to circle around.

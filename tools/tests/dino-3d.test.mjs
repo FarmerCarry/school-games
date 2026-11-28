@@ -1,7 +1,7 @@
-// Dino 3D (الديناصور ثلاثي الأبعاد) browser integration tests in real Chromium:
-// real keyboard/mouse input, first-frame fence + early Play queue, pause/blur lifecycle,
-// journey victory + stars + wardrobe unlocks + persistence, failed-save retry,
-// endless seeded runs, and Arabic WebGL fallback (#scrError).
+// Dino 3D 3-Lane Stampede browser integration tests in real Chromium:
+// fast non-blocking boot, 3-lane keyboard + mouse-X steering, Jump/Click/Duck button/Right-Click,
+// Rampage Roar + Magma Boulder HUD, pause/blur lifecycle, lazy wardrobe + Kit.saveStatus retry,
+// endless 4-digit seeds, and Arabic WebGL fallback (#scrError).
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import path from 'node:path';
@@ -27,7 +27,7 @@ const SAVE = (extra = {}) => ({
   bank: 0, far: 0, color: 0, hat: 0, seenBank: 0, coached: true, ...extra
 });
 
-async function openGame(t, { save, ddaStart = {}, deniedStorage = false, holdFirstFrame = false, disableWebGL = false } = {}) {
+async function openGame(t, { save, ddaStart = {}, deniedStorage = false, disableWebGL = false } = {}) {
   const context = await browser.newContext({ viewport: { width: 1100, height: 620 }, serviceWorkers: 'block', reducedMotion: 'reduce' });
   const page = await context.newPage();
   const errors = [];
@@ -52,11 +52,6 @@ async function openGame(t, { save, ddaStart = {}, deniedStorage = false, holdFir
     const probe = window.dinoProbe = { results: [], ready: 0, failed: 0, failSave: false, writes: 0 };
     probe.step = (n = 1) => { for (let i = 0; i < n; i++) update(1 / 60); render(0); };
     probe.run = (n = 1) => { for (let i = 0; i < n; i++) update(1 / 60); };
-    probe.until = (cond, max = 5000) => {
-      const fn = new Function('g', 'return (' + cond + ');');
-      try { for (let i = 0; i < max; i++) { if (fn(window.Dino3DGame)) return true; update(1 / 60); } return fn(window.Dino3DGame); }
-      finally { render(0); }
-    };
     Object.defineProperty(window, 'Kit', {
       configurable: true,
       get: () => kit,
@@ -89,22 +84,9 @@ async function openGame(t, { save, ddaStart = {}, deniedStorage = false, holdFir
     };
   }, { save, ddaStart, deniedStorage, disableWebGL });
 
-  if (holdFirstFrame) {
-    await context.addInitScript(() => {
-      const origStatus = WebGL2RenderingContext.prototype.getSyncParameter;
-      WebGL2RenderingContext.prototype.getSyncParameter = function (sync, pname) {
-        if (pname === this.SYNC_STATUS && !window.releaseFirstFrame) {
-          window.firstFramePolls = (window.firstFramePolls || 0) + 1;
-          return this.UNSIGNALED;
-        }
-        return origStatus.call(this, sync, pname);
-      };
-    });
-  }
-
   await page.goto(`${server.origin}/games/dino-3d/`);
-  if (!holdFirstFrame && !disableWebGL) {
-    await page.waitForFunction(() => !!window.Dino3DGame && !!window.__game && window.dinoProbe.ready === 1, null, { polling: 50 });
+  if (!disableWebGL) {
+    await page.waitForFunction(() => !!window.Dino3DGame && !!window.__game && window.dinoProbe.ready === 1, null, { polling: 40 });
   }
   return page;
 }
@@ -131,27 +113,36 @@ async function focusSurface(page) {
   await page.evaluate(() => { document.activeElement?.blur(); document.getElementById('scene').focus(); Kit.keys.reset(); });
 }
 
-test('title screen, Play start, teach-by-doing coach, and real Jump/Click/Duck/Roar inputs', async t => {
+test('title screen, 1-click Enter start, 3-lane keyboard + Jump/Click + Duck button + Rampage HUD', async t => {
   const page = await openGame(t);
   await step(page, 2);
   assert.equal(await getMode(page), 'title');
   assert.ok(await visible(page, '#title') && await visible(page, '#play'));
   assert.equal(await visible(page, '#pause-button'), false);
 
-  // Clicking empty sky on title makes dino hop without leaving title
-  await page.mouse.click(120, 260);
-  await step(page, 2);
-  assert.equal(await getMode(page), 'title');
+  // Lazy map & wardrobe DOM is NOT pre-built during fast boot!
+  assert.equal(await page.locator('#cards .world-card').count(), 0, 'map builds lazily on demand');
 
-  // Enter starts Level 1-1 directly with coach hint visible
+  // Enter starts Level 1-1 directly
   await focusSurface(page);
   await key(page, 'Enter');
   await step(page, 2);
   let s = await getState(page);
   assert.equal(s.mode, 'playing');
   assert.equal(s.id, 'w1-1');
-  assert.ok(await visible(page, '#coach'), 'first-time coach shows jump hint');
-  assert.ok(await visible(page, '#pause-button'));
+  assert.equal(s.player.lane, 0);
+  assert.ok(await visible(page, '#btn-duck'), 'clickable duck button visible for mouse-only players');
+
+  // ArrowLeft / ArrowRight snaps crisply across 3 lanes
+  await key(page, 'ArrowLeft');
+  await step(page, 4);
+  assert.equal((await getState(page)).player.lane, -1, 'ArrowLeft moves to left lane');
+  await key(page, 'ArrowRight');
+  await step(page, 4);
+  assert.equal((await getState(page)).player.lane, 0, 'ArrowRight moves to center lane');
+  await key(page, 'KeyD');
+  await step(page, 4);
+  assert.equal((await getState(page)).player.lane, 1, 'KeyD moves to right lane');
 
   // Space jumps and increments inputJumps
   const j0 = await page.evaluate(() => Dino3DGame.inputJumps);
@@ -160,46 +151,29 @@ test('title screen, Play start, teach-by-doing coach, and real Jump/Click/Duck/R
   s = await getState(page);
   assert.ok(s.player.y > 0.35, 'Space lifts dino: ' + s.player.y);
   assert.equal(await page.evaluate(() => Dino3DGame.inputJumps), j0 + 1);
-  assert.equal(await visible(page, '#coach'), false, 'coach hides once player jumps');
 
   // Land, then mouse click jumps too
   await run(page, 70);
-  await page.mouse.click(640, 320);
+  await page.mouse.click(550, 310);
   await step(page, 6);
   assert.ok((await getState(page)).player.y > 0.35, 'mouse click jumps');
   assert.equal(await page.evaluate(() => Dino3DGame.inputJumps), j0 + 2);
 
-  // Land, then ArrowDown ducks and releases cleanly
+  // Land, then clickable #btn-duck triggers duck slide for mouse players
   await run(page, 70);
-  await key(page, 'ArrowDown', 'down');
-  await step(page, 2);
-  assert.equal((await getState(page)).player.duck, true, 'ArrowDown ducks');
-  await key(page, 'ArrowDown', 'up');
-  await step(page, 2);
-  assert.equal((await getState(page)).player.duck, false, 'releasing ArrowDown stands up');
+  await page.locator('#btn-duck').click();
+  await step(page, 3);
+  assert.equal((await getState(page)).player.duck, true, 'clickable #btn-duck activates duck slide');
+  await run(page, 50);
+  assert.equal((await getState(page)).player.duck, false, 'tap-slide ends cleanly');
 
-  // ArrowRight triggers Roar wave when bar is charged
-  assert.equal((await getState(page)).roar, 1);
-  await key(page, 'ArrowRight');
+  // Filling Rampage gauge triggers 5s golden invincible Rampage!
+  await page.evaluate(() => { Dino3DGame.world.p.roar = 1; });
+  await page.locator('#roar').click();
   await step(page, 2);
   s = await getState(page);
-  assert.equal(s.player.roar, true, 'ArrowRight activates Roar');
-  assert.equal(s.roar, 0, 'Roar drains bar on activation');
-});
-
-test('software-WebGL first-frame fence holds Kit.ready and queues early Play click', async t => {
-  const page = await openGame(t, { holdFirstFrame: true });
-  await page.waitForFunction(() => window.firstFramePolls > 2, null, { polling: 50 });
-  assert.ok(await visible(page, '#title') && await visible(page, '#play'), 'title shows before first frame finishes');
-  assert.equal(await page.evaluate(() => window.dinoProbe.ready), 0, 'not ready before fence signals');
-  assert.equal(await page.evaluate(() => typeof window.Dino3DGame), 'undefined');
-
-  await page.locator('#play').click();
-  assert.ok(await visible(page, '#title'), 'early click waits for 3D readiness');
-  await page.evaluate(() => { window.releaseFirstFrame = true; });
-  await page.waitForFunction(() => !!window.Dino3DGame && window.dinoProbe.ready === 1, null, { polling: 50 });
-  assert.equal(await getMode(page), 'playing', 'queued Play starts level 1-1 once live');
-  assert.equal((await getState(page)).id, 'w1-1');
+  assert.equal(s.player.roar, true, 'Rampage Roar activates cleanly');
+  assert.ok(s.rampageT > 4.5, '5s golden Rampage timer active: ' + s.rampageT);
 });
 
 test('pause, resume, focus loss lifecycle, and clean Restart reset', async t => {
@@ -218,15 +192,13 @@ test('pause, resume, focus loss lifecycle, and clean Restart reset', async t => 
   await step(page);
   assert.equal(JSON.stringify(await getState(page)), frozen, 'simulation stays frozen while paused');
 
-  // Restart resets distance and score cleanly
   await page.locator('#restart').click();
   await step(page, 2);
-  let s = await getState(page);
+  const s = await getState(page);
   assert.equal(s.mode, 'playing');
   assert.ok(s.distance < 1, 'distance reset after restart');
   assert.equal(s.score, 0, 'score reset after restart');
 
-  // Blur pauses; returning focus does NOT auto-resume
   await run(page, 30);
   await page.evaluate(() => window.dispatchEvent(new Event('blur')));
   await run(page, 2);
@@ -236,7 +208,7 @@ test('pause, resume, focus loss lifecycle, and clean Restart reset', async t => 
   assert.equal(await getMode(page), 'paused', 'focus return never auto-resumes');
 });
 
-test('wardrobe unlocks, persistence, and Kit.saveStatus retry on storage failure', async t => {
+test('lazy wardrobe unlocks, persistence, and Kit.saveStatus retry on storage failure', async t => {
   const page = await openGame(t, { save: SAVE({ bank: 30, seenBank: 0 }) });
   assert.ok(await page.locator('#btn-wardrobe.has-new').isVisible(), 'wardrobe badge highlights new unlock');
 
@@ -244,16 +216,14 @@ test('wardrobe unlocks, persistence, and Kit.saveStatus retry on storage failure
   await step(page, 2);
   assert.equal(await getMode(page), 'wardrobe');
 
-  // Locked color #5 (220 eggs) stays locked; unlocked color #1 (25 eggs) & hat #1 (20 eggs) equip!
   await page.locator('#colors .swatch').nth(5).click();
   assert.equal((await page.evaluate(() => Dino3DGame.save)).color, 0, 'locked color stays locked');
   await page.locator('#colors .swatch').nth(1).click();
   await page.locator('#hats .swatch').nth(1).click();
-  let saved = await page.evaluate(() => Dino3DGame.save);
+  const saved = await page.evaluate(() => Dino3DGame.save);
   assert.equal(saved.color, 1);
   assert.equal(saved.hat, 1);
 
-  // Simulate storage quota failure -> Kit.saveStatus shows retry -> retry succeeds!
   await page.evaluate(() => { window.dinoProbe.failSave = true; });
   await page.locator('#hats .swatch').nth(0).click();
   assert.ok(await visible(page, '.sg-save-status'), 'save failure banner shown');
@@ -264,7 +234,7 @@ test('wardrobe unlocks, persistence, and Kit.saveStatus retry on storage failure
   assert.equal(JSON.parse(await page.evaluate(() => localStorage.getItem('sg:dino-3d:save'))).hat, 0, 'retry writes updated save');
 });
 
-test('endless mode 4-digit seed validation and deterministic layout', async t => {
+test('endless mode 4-digit seed validation and deterministic 3-lane layout', async t => {
   const page = await openGame(t, { save: SAVE() });
   await page.locator('#btn-endless').click();
   await step(page);
@@ -277,13 +247,13 @@ test('endless mode 4-digit seed validation and deterministic layout', async t =>
   await page.locator('#code-go').click();
   await step(page, 2);
   assert.equal((await getState(page)).code, '0420');
-  const firstLayout = await page.evaluate(() => Dino3DGame.world.obs.slice(0, 6).map(o => [o.kind, Math.round(o.x * 100)]));
+  const firstLayout = await page.evaluate(() => Dino3DGame.world.obs.slice(0, 6).map(o => [o.kind, o.lane, Math.round(o.x * 100)]));
 
   await page.locator('#pause-button').click();
   await page.locator('#restart').click();
   await step(page, 2);
-  const secondLayout = await page.evaluate(() => Dino3DGame.world.obs.slice(0, 6).map(o => [o.kind, Math.round(o.x * 100)]));
-  assert.deepEqual(secondLayout, firstLayout, 'restarting with same 4-digit code reproduces exact layout');
+  const secondLayout = await page.evaluate(() => Dino3DGame.world.obs.slice(0, 6).map(o => [o.kind, o.lane, Math.round(o.x * 100)]));
+  assert.deepEqual(secondLayout, firstLayout, 'restarting with same 4-digit code reproduces exact 3-lane layout');
 });
 
 test('WebGL-unavailable fallback shows Arabic #scrError without crashing', async t => {

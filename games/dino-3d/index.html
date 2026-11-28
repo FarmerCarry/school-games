@@ -21,15 +21,16 @@
   <symbol id="i-egg" viewBox="0 0 64 64"><path d="M32 4 C48 4 56 30 56 40 C56 54 45 61 32 61 C19 61 8 54 8 40 C8 30 16 4 32 4 Z" fill="#fff6db" stroke="#24304a" stroke-width="5"/><circle cx="24" cy="30" r="5" fill="#38b6ff"/><circle cx="40" cy="42" r="6" fill="#ff6ba9"/><circle cx="36" cy="20" r="3.5" fill="#45d167"/></symbol>
   <symbol id="i-heart" viewBox="0 0 64 64"><path d="M32 57 C14 44 4 34 4 21 C4 11 12 5 20 5 C26 5 30 8 32 13 C34 8 38 5 44 5 C52 5 60 11 60 21 C60 34 50 44 32 57 Z" stroke="#24304a" stroke-width="5" stroke-linejoin="round"/></symbol>
   <symbol id="i-inf" viewBox="0 0 64 64"><path d="M32 32 C26 22 20 18 14 18 C7 18 3 24 3 32 C3 40 7 46 14 46 C20 46 26 42 32 32 C38 22 44 18 50 18 C57 18 61 24 61 32 C61 40 57 46 50 46 C44 46 38 42 32 32 Z" fill="none" stroke="currentColor" stroke-width="8" stroke-linejoin="round"/></symbol>
-  <symbol id="i-dino" viewBox="0 0 64 64"><path d="M12 54 L12 30 Q12 12 31 12 L44 12 Q57 12 57 25 L57 34 Q57 40 49 40 L34 40 L34 54 Z" stroke="#24304a" stroke-width="4.5" stroke-linejoin="round"/><circle cx="40" cy="24" r="6.5" fill="#fff"/><circle cx="42" cy="25" r="3.6" fill="#24304a"/><path d="M15 16 L21 6 L25 14 M26 12 L33 4 L35 12" fill="none" stroke="#24304a" stroke-width="4" stroke-linejoin="round"/></symbol>
+  <symbol id="i-dino" viewBox="0 0 64 64"><path d="M12 54 L12 30 Q12 12 31 12 L44 12 Q57 12 57 25 L57 34 Q57 40 49 40 L34 40 L34 54 Z" stroke="#24304a" stroke-width="4.5" stroke-linejoin="round"/><circle cx="40" cy="24" r="6.5" fill="#fff"/><circle cx="42" cy="25" r="3.6" fill="#24304a"/></symbol>
   <symbol id="i-nest" viewBox="0 0 64 64"><ellipse cx="32" cy="44" rx="27" ry="12" fill="#c4813d" stroke="#24304a" stroke-width="4.5"/><path d="M22 40 C22 26 28 20 32 20 C36 20 42 26 42 40 Z" fill="#fff6db" stroke="#24304a" stroke-width="4"/></symbol>
   <symbol id="i-roar" viewBox="0 0 64 64"><path d="M36 4 L12 36 L29 36 L24 60 L52 24 L34 24 Z" stroke="#24304a" stroke-width="4.5" stroke-linejoin="round"/></symbol>
+  <symbol id="i-duck" viewBox="0 0 64 64"><path d="M32 10 V42 M16 28 L32 46 L48 28" fill="none" stroke="currentColor" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/><rect x="12" y="50" width="40" height="8" rx="4"/></symbol>
 </svg>
 
-<canvas id="scene" tabindex="0" aria-label="الديناصور ثلاثي الأبعاد: مسافة أو السهم للأعلى للقفز، والسهم للأسفل للانزلاق، والسهم لليمين للزئير."></canvas>
+<canvas id="scene" tabindex="0" aria-label="الديناصور ثلاثي الأبعاد: الأسهم يمين ويسار لتبديل المسار، مسافة أو للأعلى للقفز، وللأسفل للانزلاق."></canvas>
 
 <div id="ui">
-  <!-- Minimal Poki Title Screen over Live 3D Dino -->
+  <!-- Minimal Title Screen over Live Running 3-Lane 3D Dino -->
   <section id="title" class="screen" aria-label="الديناصور ثلاثي الأبعاد">
     <div class="top-stats">
       <div class="pill star-pill" aria-label="النجوم"><svg aria-hidden="true"><use href="#i-star"/></svg><b id="title-stars" dir="ltr">0</b></div>
@@ -65,16 +66,16 @@
       </div>
 
       <div class="keys-bar">
-        <span class="k-item"><span dir="ltr"><span class="sg-key">مسافة</span> <span class="sg-key">↑</span></span> قفز</span>
+        <span class="k-item"><span dir="ltr"><span class="sg-key">←</span><span class="sg-key">→</span></span> مسار</span>
+        <span class="k-sep">•</span>
+        <span class="k-item"><span dir="ltr"><span class="sg-key">مسافة</span></span> قفز</span>
         <span class="k-sep">•</span>
         <span class="k-item"><span dir="ltr"><span class="sg-key">↓</span></span> انزلاق</span>
-        <span class="k-sep">•</span>
-        <span class="k-item"><span dir="ltr"><span class="sg-key">→</span> <span class="sg-key">Shift</span></span> زئير</span>
       </div>
     </div>
   </section>
 
-  <!-- World Map (5 Distinct Worlds x 3 Stages) -->
+  <!-- World Map (5 Worlds x 3 Stages, built lazily) -->
   <section id="map" class="screen glass-dim" aria-label="خريطة العوالم" hidden>
     <button type="button" id="map-home" class="corner-btn" aria-label="العودة للرئيسية"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
     <div class="screen-top">
@@ -84,7 +85,7 @@
     <div id="cards" class="world-grid"></div>
   </section>
 
-  <!-- Endless Run Setup -->
+  <!-- Endless Stampede Setup -->
   <section id="endless" class="screen glass-dim" aria-label="جري بلا نهاية" hidden>
     <button type="button" id="endless-home" class="corner-btn" aria-label="العودة للرئيسية"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
     <div class="modal-card endless-card">
@@ -103,7 +104,7 @@
     </div>
   </section>
 
-  <!-- Live 3D Wardrobe -->
+  <!-- Live 3D Wardrobe (built lazily) -->
   <section id="wardrobe" class="screen" aria-label="خزانة المظهر" hidden>
     <button type="button" id="wardrobe-back" class="corner-btn" aria-label="رجوع"><svg aria-hidden="true"><use href="#i-home"/></svg></button>
     <div class="wardrobe-panel">
@@ -138,14 +139,21 @@
         <small>الأفضل <b id="hud-far" dir="ltr">0</b></small>
       </div>
       <div class="code-pill" id="code-tag" hidden>رمز <b id="code-now" dir="ltr"></b></div>
+      <div class="boulder-warn" id="boulder-warn" hidden>🔥 الصخرة تقترب!</div>
     </div>
 
-    <div class="roar-hud" id="roar">
+    <!-- Rampage Roar Bar (clickable when full, auto-triggers at 100%!) -->
+    <button type="button" class="roar-hud" id="roar" aria-label="زئير الديناصور">
       <svg class="roar-icon" aria-hidden="true"><use href="#i-roar"/></svg>
       <div class="roar-bar"><i id="roar-fill"></i></div>
-      <span class="roar-key sg-key" dir="ltr">→</span>
-      <span class="roar-ready-tag" id="roar-label">زئير جاهز!</span>
-    </div>
+      <span class="roar-tag" id="roar-label">زئير الديناصور!</span>
+    </button>
+
+    <!-- Clean clickable Duck button for mouse-only players -->
+    <button type="button" class="duck-fab" id="btn-duck" aria-label="انزلاق" title="انزلاق (↓ أو نقرة يمين)">
+      <svg aria-hidden="true"><use href="#i-duck"/></svg>
+      <span>انزلاق</span>
+    </button>
 
     <div class="coach-hint" id="coach" hidden></div>
     <div class="world-banner" id="banner" hidden></div>
@@ -188,6 +196,10 @@
         <div class="pill dist-pill big-pill" id="res-far" hidden><b id="res-m" dir="ltr">0</b><span>م</span></div>
       </div>
       <div class="newbest-tag" id="res-best" hidden><svg aria-hidden="true"><use href="#i-star"/></svg><span>رقم قياسي جديد!</span></div>
+      <div class="next-unlock" id="res-unlock-bar" hidden>
+        <div class="nu-label" id="res-unlock-txt"></div>
+        <div class="nu-track"><i id="res-unlock-fill"></i></div>
+      </div>
       <button type="button" class="gift-btn" id="res-gift" hidden>
         <svg aria-hidden="true"><use href="#i-hat"/></svg><span id="res-gift-txt">مظهر جديد مفتوح!</span>
       </button>

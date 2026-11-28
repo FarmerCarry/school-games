@@ -106,7 +106,7 @@ test('a failed purchase save warns, keeps the old coins and saves everything on 
   assert.equal((await stored(page, 'equip'))[0].hat, 1);
 });
 
-test('the first two stages show an aim guide and explain a self-splat', async t => {
+test('the first two stages show an aim guide, own balls bounce harmlessly in Solo, and Chaos Ricochet allows self-splat', async t => {
   const page = await game(t);
   await startQuietStage(page, 0);
   assert.equal(await page.evaluate(() => __game.app.game.guide), true);
@@ -131,36 +131,123 @@ test('the first two stages show an aim guide and explain a self-splat', async t 
         return [headOn, Math.round(side), marked, angled, marks.length, wall];
       }
     } finally {
-      // the self-splat check below needs the tank back at its spawn, away from the bot
       TS_ART.drawBounce = drawBounce; [t.x, t.y, t.a] = home;
     }
   }), [3, 10, 0, true, 1, 0]);
 
-  // The player's own ball comes back at them.
-  await page.evaluate(() => {
+  // In Solo/Campaign, the player's own ball bounces harmlessly off their tank (no self-splat!).
+  const safeBounce = await page.evaluate(() => {
     const g = __game.app.game, t = g.tanks[0], c = Math.cos(t.a), s = Math.sin(t.a);
-    g.balls.push({ x: t.x + 60 * c, y: t.y + 60 * s, vx: -330 * c, vy: -330 * s, r: 7, owner: t, life: 5, age: 1,
-      bounces: 1, maxB: 6, safe: false, dist: 200, color: t.pal.paint, sq: 0, sqA: 0, giant: false });
+    const ball = { x: t.x + 48 * c, y: t.y + 48 * s, vx: -330 * c, vy: -330 * s, r: 7, owner: t, life: 5, age: 1,
+      bounces: 1, maxB: 6, safe: false, dist: 200, color: t.pal.paint, sq: 0, sqA: 0, giant: false };
+    g.balls.push(ball);
     t.active++;
-    runtime.step(0.3);
+    runtime.step(0.25);
+    return {
+      alive: t.alive,
+      selfOut: g.selfOut,
+      bounced: ball.bounces > 1,
+      boingPop: g.pops.some(p => p.text === 'بوينج!')
+    };
   });
-  const selfPop = () => page.evaluate(() => __game.app.game.pops.some(p => p.text === 'كرتك ارتدّت عليك!'));
-  assert.deepEqual([await page.evaluate(() => __game.app.game.selfOut), await selfPop()], [true, true]);
-  await page.evaluate(() => runtime.step(1));
-  assert.equal(await page.evaluate(() => __game.app.game.state), 'roundEnd');
-  assert.equal(await selfPop(), false, 'the banner pill replaces the popup');
-  assert.ok(await page.evaluate(() => { runtime.texts.length = 0; runtime.draw(1); return runtime.texts.includes('انتبه: كراتك ترتدّ وتلطّخك!'); }));
-  await page.evaluate(() => runtime.step(2.5));
-  assert.deepEqual(await page.evaluate(() => [__game.app.game.round, __game.app.game.selfOut]), [2, false]);
+  assert.deepEqual(safeBounce, { alive: true, selfOut: false, bounced: true, boingPop: true });
+
+  // Popups still stay below the HUD.
   assert.equal(await page.evaluate(() => {
     const g = __game.app.game, p = { x: 640, y: 120, text: 'x', color: '#fff', size: 30, life: 3, max: 3 };
     g.pops.push(p); runtime.step(2); return p.y;
   }), 100, 'popups stop rising below the HUD');
 
+  // Optional Chaos Ricochet in Free Play allows classic self-splat!
+  const chaosRes = await page.evaluate(() => {
+    __game.startFree(2, 0, 'medium', 3, true);
+    runtime.step(1);
+    const g = __game.app.game, t = g.tanks[0], c = Math.cos(t.a), s = Math.sin(t.a);
+    g.balls.push({ x: t.x + 48 * c, y: t.y + 48 * s, vx: -330 * c, vy: -330 * s, r: 7, owner: t, life: 5, age: 1,
+      bounces: 1, maxB: 6, safe: false, dist: 200, color: t.pal.paint, sq: 0, sqA: 0, giant: false });
+    t.active++;
+    runtime.step(0.3);
+    return { alive: t.alive, selfOut: g.selfOut, chaos: g.chaosRicochet };
+  });
+  assert.deepEqual(chaosRes, { alive: false, selfOut: true, chaos: true });
+
   await startQuietStage(page, 2);
   assert.equal(await page.evaluate(() => __game.app.game.guide), false);
   assert.equal(await page.evaluate(() => { runtime.dashes = 0; runtime.draw(1); return runtime.dashes; }), 0, 'no guide from stage 3');
   assert.equal(await page.evaluate(() => { __game.startFree(1, 1); return __game.app.game.guide; }), false);
+});
+
+test('1-click Play jumps straight into Round 1 (0.5s), 8-way + mouse aim, 2-HP shield, barrels & boost pads work', async t => {
+  const page = await game(t);
+  // 1-click Title Play drops straight into Round 1 with 0.5s countdown and matched T=16 walls
+  const quick = await page.evaluate(() => {
+    document.querySelector('[data-act="quickPlay"]').click();
+    const g = __game.app.game;
+    const startTimer = g.timer;
+    const wallT = g.maze.T;
+    const hp0 = g.tanks[0].hp;
+    const barrels = g.barrels.length;
+    const pads = g.pads.length;
+    runtime.step(0.6);
+    return { screen: __game.app.screen, startTimer, wallT, hp0, barrels, pads, playingAfterHalfSec: g.state === 'play' };
+  });
+  assert.equal(quick.screen, 'game');
+  assert.equal(quick.startTimer, 0.5);
+  assert.equal(quick.wallT, 16);
+  assert.equal(quick.hp0, 2, 'early stages grant 2-HP paint-shield');
+  assert.ok(quick.barrels >= 2, 'explosive paint barrels spawn');
+  assert.ok(quick.pads >= 2, 'boost pads spawn');
+  assert.equal(quick.playingAfterHalfSec, true, '0.5s countdown starts play quickly');
+
+  // 1P direct 8-way WASD + mouse turret aim + Left-Click fire + 2-HP shield + barrel + boost pad
+  const playRes = await page.evaluate(() => {
+    const g = __game.app.game;
+    g.tanks.forEach(t => { if (t.bot) t.bot.p = Object.assign({}, t.bot.p, { maxBalls: 0 }); });
+    const t0 = g.tanks[0], enemy = g.tanks[1];
+
+    // Place tank at open cell center and aim mouse directly downward
+    const c0 = TS_MAZE.cellCenter(g.maze, TS_MAZE.cellOf(g.maze, t0.x, t0.y));
+    t0.x = c0.x; t0.y = c0.y;
+    TS_GAME.mouse.x = t0.x; TS_GAME.mouse.y = t0.y + 120; TS_GAME.mouse.active = true; TS_GAME.mouse.pressed = true;
+    runtime.step(0.05);
+    const aimedDown = Math.abs(t0.a - Math.PI / 2) < 0.1;
+    const firedByMouse = g.balls.length >= 1;
+    g.balls.length = 0; t0.active = 0;
+
+    // 2-HP Paint-Shield absorbs first enemy hit, second hit splats
+    g.balls.push({ x: t0.x + 40, y: t0.y, vx: -330, vy: 0, r: 7, owner: enemy, life: 5, age: 1, bounces: 0, maxB: 6, safe: false, dist: 100, color: enemy.pal.paint, sq: 0, sqA: 0, giant: false });
+    enemy.active++;
+    runtime.step(0.25);
+    const survivedFirst = t0.alive && t0.hp === 1;
+    runtime.step(1.0); // wait out invuln
+    g.balls.push({ x: t0.x + 40, y: t0.y, vx: -330, vy: 0, r: 7, owner: enemy, life: 5, age: 1, bounces: 0, maxB: 6, safe: false, dist: 100, color: enemy.pal.paint, sq: 0, sqA: 0, giant: false });
+    enemy.active++;
+    runtime.step(0.25);
+    const splattedSecond = !t0.alive;
+
+    // Boost pad grants speed burst & barrel explodes when hit by a ball
+    __game.start(0);
+    runtime.step(0.6);
+    const g2 = __game.app.game, p = g2.tanks[0], pad = g2.pads[0], br = g2.barrels[0];
+    p.x = pad.x; p.y = pad.y;
+    runtime.step(0.05);
+    const padBoosted = p.speed > 2;
+    g2.balls.push({ x: br.x - 24, y: br.y, vx: 330, vy: 0, r: 7, owner: p, life: 5, age: 1, bounces: 0, maxB: 6, safe: false, dist: 100, color: p.pal.paint, sq: 0, sqA: 0, giant: false });
+    p.active++;
+    runtime.step(0.2);
+    const barrelExploded = !br.alive;
+
+    return { aimedDown, firedByMouse, survivedFirst, splattedSecond, padBoosted, barrelExploded };
+  });
+
+  assert.deepEqual(playRes, {
+    aimedDown: true,
+    firedByMouse: true,
+    survivedFirst: true,
+    splattedSecond: true,
+    padBoosted: true,
+    barrelExploded: true
+  });
 });
 
 test('a paused match keeps its last frame until something changes', async t => {

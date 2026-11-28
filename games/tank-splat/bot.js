@@ -215,7 +215,7 @@
         var st = 0.075;
         a += tr * rot * st;
         x += Math.cos(a) * f * spd * (f < 0 ? 0.72 : 1) * st; y += Math.sin(a) * f * spd * (f < 0 ? 0.72 : 1) * st;
-        var o = M.collideCircle(m, x, y, 18); x = o.x; y = o.y;
+        var o = M.collideCircle(m, x, y, 15); x = o.x; y = o.y;
         var time = s * st;
         for (var j = 0; j < near.length; j++) {
           var bl2 = near[j];

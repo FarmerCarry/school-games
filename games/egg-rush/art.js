@@ -217,6 +217,24 @@
       list.push(part(new T.CircleGeometry(1, 20), col, p[0], 0.05, p[2], -M.PI / 2, 0, -th, [it.hw, it.hd, 1]));
       list.push(part(new T.CircleGeometry(1, 12), hi, p[0] - 0.3, 0.055, p[2] - 0.2, -M.PI / 2, 0, -th, [it.hw * 0.35, it.hd * 0.2, 1]));
     }
+    function padParts(tr, it, list) {
+      var p = tf(tr, it.s, it.x, 0), th = headingAt(tr, it.s);
+      list.push(part(BOX, 0x1a2c54, p[0], 0.048, p[2], 0, -th, 0, [it.hw * 1.9, 0.04, it.hd * 1.9]));
+      for (var c = -1; c <= 1; c++) {
+        var q = tf(tr, it.s + c * 0.9, it.x, 0);
+        var col = c === 1 ? 0x4df5ff : 0xffe033;
+        list.push(part(BOX, col, q[0], 0.068, q[2], 0, -th + 0.45, 0, [0.95, 0.04, 0.24]),
+          part(BOX, col, q[0], 0.068, q[2], 0, -th - 0.45, 0, [0.95, 0.04, 0.24]));
+      }
+    }
+    function rampParts(tr, it, list) {
+      var th = headingAt(tr, it.s), w2 = it.hw * 1.85;
+      var p0 = tf(tr, it.s - 0.7, it.x, 0), p1 = tf(tr, it.s + 0.1, it.x, 0), p2 = tf(tr, it.s + 0.85, it.x, 0);
+      list.push(part(BOX, 0xff5a36, p0[0], 0.14, p0[2], 0.22, -th, 0, [w2, 0.22, 1.0]),
+        part(BOX, 0xffd23f, p1[0], 0.34, p1[2], 0.24, -th, 0, [w2, 0.34, 1.0]),
+        part(BOX, 0x3be890, p2[0], 0.56, p2[2], 0.24, -th, 0, [w2 * 0.96, 0.44, 0.9]),
+        part(BOX, 0xffffff, p1[0], 0.54, p1[2], 0.24, -th, 0, [w2 * 0.72, 0.06, 0.32]));
+    }
 
     var critterGeo = [], ballGeo = [];
     function getCritterGeo(w) {
@@ -260,6 +278,8 @@
     var waterMat = new T.MeshLambertMaterial({ color: 0x8fe3ff, transparent: true, opacity: 0.72, emissive: 0x1c5a80 });
     var waterGeo = new T.CylinderGeometry(0.25, 0.7, 1, 10, 1, true);
     var goldMat = new T.MeshLambertMaterial({ color: 0xffc81a, emissive: 0x7a4a00 });
+    var coinGeo = new T.CylinderGeometry(0.28, 0.28, 0.1, 10);
+    coinGeo.rotateX(M.PI / 2);
 
     // Scenery props per world.
     function treeGeo(c1, c2) {
@@ -368,6 +388,8 @@
         if (it.k === 'cone') { var p = tf(tr, it.s, it.x, 0); coneParts(w, list, [p[0], 0, p[2], -headingAt(tr, it.s) + R() * 6]); }
         else if (it.k === 'hurdle') hurdleParts(tr, it, w, list);
         else if (it.k === 'puddle') puddleParts(tr, it, w, list);
+        else if (it.k === 'pad') padParts(tr, it, list);
+        else if (it.k === 'ramp') rampParts(tr, it, list);
         else if (it.k === 'ball') balls.push(it);
         else if (it.k === 'critter') critters.push(it);
         else if (it.k === 'sprinkler') {
@@ -413,10 +435,13 @@
       if (sprinklers.length) { world.water = new T.InstancedMesh(waterGeo, waterMat, sprinklers.length); world.water.userData.keep = true; world.sprItems = sprinklers; group.add(world.water); }
       [world.balls, world.critters, world.water].forEach(function (m) { if (m) m.frustumCulled = false; });
       fans.frustumCulled = false;
-      // Golden eggs.
+      // Golden eggs + coin arcs.
       world.gold = new T.InstancedMesh(goldEggGeo, goldMat, M.max(1, tr.gold.length));
       world.gold.userData.keep = true; world.gold.frustumCulled = false;
       group.add(world.gold);
+      world.coins = new T.InstancedMesh(coinGeo, goldMat, M.max(1, tr.coins ? tr.coins.length : 1));
+      world.coins.userData.keep = true; world.coins.frustumCulled = false;
+      group.add(world.coins);
       // Clouds around.
       for (i = 0; i < 10; i++) {
         var a = i / 10 * M.PI * 2 + R();
@@ -600,8 +625,7 @@
         MT.compose(V.set(p.x, p.y, p.z), Q.setFromEuler(E.set(p.life * 5, p.life * 3, 0)), S.set(k, k, k));
         pMesh.setMatrixAt(i, MT);
       }
-      pMesh.count = pLive;
-      pMesh.instanceMatrix.needsUpdate = true;
+      Kit.webgl.shrinkCount(pMesh, pLive);
     }
 
     /* --------------------------------------------- splats */
@@ -618,25 +642,24 @@
     }
 
     /* --------------------------------------------- cameras */
-    var camPos = [new T.Vector3(), new T.Vector3()], camLook = [new T.Vector3(), new T.Vector3()], snapCam = true, shake = 0;
+    var camPos = [new T.Vector3(), new T.Vector3()], camLook = [new T.Vector3(), new T.Vector3()], snapCam = true;
+    var shaker = Kit.shake({ decay: 3.4 }), camFov = [58, 68], lastAspect = [0, 0], lastFov = [0, 0];
     var wantP = new T.Vector3(), wantL = new T.Vector3(), tmp = [0, 0, 0];
     function chase(k, r, dt, intro) {
       var tr = world.track, th = headingAt(tr, r.s), fx = M.sin(th), fz = -M.cos(th);
+      var boostBack = r.boost > 0 ? 0.55 : 0;
+      var introK = (intro != null && intro > 0) ? intro : 0;
+      var back = 4.9 + boostBack + introK * 3.2, up = 2.65 + introK * 2.0;
       tf(tr, r.s, r.x * 0.6, 0, tmp);
-      var back = 5.0, up = 2.75;
       wantP.set(tmp[0] - fx * back, up + r.y * 0.4, tmp[2] - fz * back);
-      tf(tr, r.s + 5, r.x * 0.7, 0, tmp);
+      tf(tr, r.s + 6, r.x * 0.7, 0, tmp);
       wantL.set(tmp[0], 1.05 + r.y * 0.3, tmp[2]);
-      if (intro != null && intro > 0) {
-        // Countdown swoop: from in front of the runner, round its side, to behind it.
-        var a = intro * M.PI, rp = tf(tr, r.s, r.x, 0, [0, 0, 0]), rx = M.cos(th), rz = M.sin(th);
-        wantP.set(rp[0] - fx * M.cos(a) * back + rx * M.sin(a) * 4.5, 1.7 + (up - 1.7) * (1 - M.sin(a / 2)), rp[2] - fz * M.cos(a) * back + rz * M.sin(a) * 4.5);
-        V2.set(rp[0], 1.1, rp[2]);
-        wantL.lerp(V2, M.min(1, intro * 1.5));
-        snapCam = true;
-      }
-      var kk = snapCam ? 1 : 1 - M.exp(-dt * 6);
+      if (introK > 0) snapCam = true;
+      var kk = snapCam ? 1 : 1 - M.exp(-dt * 8);
       camPos[k].lerp(wantP, kk); camLook[k].lerp(wantL, kk);
+      var baseFov = split ? 68 : 58;
+      var targetFov = baseFov + (r.boost > 0 ? 8 : (r.v > ER.V_JOG + 1.5 ? 4 : 0));
+      camFov[k] += (targetFov - camFov[k]) * (snapCam ? 1 : 1 - M.exp(-dt * 7));
     }
     // Menu shots: the camera stands in front of the runner (angle a0 off the track line) and sways a little.
     function orbit(k, r, t, dt, rad, h, a0, sway, lookY) {
@@ -645,14 +668,16 @@
       wantP.set(P[0], h, P[2]);
       P = tf(tr, r.s, r.x, 0, tmp);
       wantL.set(P[0], lookY, P[2]);
-      var kk = snapCam ? 1 : 1 - M.exp(-dt * 3);
+      var kk = snapCam ? 1 : 1 - M.exp(-dt * 4);
       camPos[k].lerp(wantP, kk); camLook[k].lerp(wantL, kk);
+      camFov[k] = 58;
     }
     function applyCam(k) {
       var c = cams[k];
       c.position.copy(camPos[k]);
-      if (shake > 0 && !view.calm) { c.position.x += (M.random() - 0.5) * shake * 0.5; c.position.y += (M.random() - 0.5) * shake * 0.5; }
+      if (shaker.power > 0.005 && !view.calm) { c.position.x += shaker.x * 0.45; c.position.y += shaker.y * 0.45; }
       c.lookAt(camLook[k]);
+      if (shaker.rot && !view.calm) c.rotation.z += shaker.rot * 1.4;
     }
 
     /* --------------------------------------------- per-frame update */
@@ -662,7 +687,7 @@
       if (!world) return;
       var dt = o.dt, t = o.t, race = o.race, tr = world.track;
       split = !!(o.follow && o.follow.length > 1);
-      shake = M.max(0, shake - dt * 2.2);
+      shaker.update(dt);
       nShadow = 0;
       // Runners.
       for (var i = 0; i < view.count; i++) poseRunner(rigs[i], race.runners[i], race, dt, t, o.mode);
@@ -697,7 +722,7 @@
         });
         world.water.instanceMatrix.needsUpdate = true;
       }
-      // Golden eggs.
+      // Golden eggs + coin arcs.
       tr.gold.forEach(function (g, k) {
         var taken = race.goldTaken[k] >= 0, P = tf(tr, g.s, g.x, 1.0 + g.need * 1.8 + M.sin(t * 3 + k) * 0.12, tmp);
         MT.compose(V.set(P[0], P[1], P[2]), Q.setFromEuler(E.set(0, t * 2.4 + k, 0.25)), S.setScalar(taken ? 0.0001 : 1));
@@ -705,6 +730,16 @@
         if (!taken) { shadowAt(P[0], P[2], 0.6); if (M.random() < dt * 3) emitP(P[0], P[1] + 0.2, P[2], 1, { speed: 0.8, up: 1.5, g: 1, color: 0xfff2a8, size: 0.06, life: 0.6 }); }
       });
       world.gold.instanceMatrix.needsUpdate = true;
+      var cLive = 0;
+      if (world.coins && tr.coins) {
+        for (var ci = 0; ci < tr.coins.length; ci++) {
+          if (race.coinsTaken && race.coinsTaken[ci] >= 0) continue;
+          var co = tr.coins[ci], cP = tf(tr, co.s, co.x, co.y + M.sin(t * 4.5 + ci) * 0.12, tmp);
+          MT.compose(V.set(cP[0], cP[1], cP[2]), Q.setFromEuler(E.set(0, t * 3.4 + ci * 0.5, 0)), S.set(1, 1, 1));
+          world.coins.setMatrixAt(cLive++, MT);
+        }
+        Kit.webgl.shrinkCount(world.coins, cLive);
+      }
       // Fans cheer (harder near the end of the race).
       var cheer = o.mode === 'result' || (race.over) ? 1 : 0.35;
       world.fanSpots.forEach(function (f, k) {
@@ -723,13 +758,14 @@
         if (sp.t > 8) { sp.mesh.visible = false; sp.t = -1; }
       });
       stepParticles(dt);
-      shadows.count = nShadow;
-      shadows.instanceMatrix.needsUpdate = true;
+      Kit.webgl.shrinkCount(shadows, nShadow);
       // Cameras.
       var f0 = race.runners[(o.follow && o.follow[0]) || 0];
       if (o.mode === 'skins') orbit(0, f0, t, dt, 3.4, 1.5, -0.45, 0.25, 0.62);
-      else if (o.mode === 'title') orbit(0, f0, t, dt, 6.4, 2.3, 0.55, 0.3, 1.25);
-      else if (o.mode === 'result') orbit(0, f0, t, dt, 4.2, 1.9, 0.5, 0.5, 1.0);
+      else if (o.mode === 'title') {
+        if (race.demo) chase(0, f0, dt, null);
+        else orbit(0, f0, t, dt, 6.4, 2.3, 0.55, 0.3, 1.25);
+      } else if (o.mode === 'result') orbit(0, f0, t, dt, 4.2, 1.9, 0.5, 0.5, 1.0);
       else {
         chase(0, f0, dt, o.intro);
         if (split) chase(1, race.runners[o.follow[1]], dt, o.intro);
@@ -743,7 +779,7 @@
       var tr = world.track, P = tf(tr, r.s, r.x, 0, tmp), th = headingAt(tr, r.s);
       rig.root.position.set(P[0], r.y, P[2]);
       rig.root.rotation.y = -th;
-      var moving = r.v > 0.5 && mode !== 'title' && mode !== 'skins', ph = r.phase, sw = moving ? M.min(1, r.v / 8) : 0;
+      var moving = r.v > 0.5 && mode !== 'skins' && (mode !== 'title' || race.demo), ph = r.phase, sw = moving ? M.min(1, r.v / 8) : 0;
       var idle = M.sin(t * 3 + r.i) * 0.5 + 0.5;
       var lean = r.lean || 0;
       // Body: bob, lean into the sideways run, squash on landing.
@@ -774,11 +810,12 @@
       rig.spoonG.rotation.z = -lean * 0.3 + (celebrate ? 0 : M.sin(t * 7 + r.i) * 0.02 * sw);
       rig.spoonG.rotation.x = celebrate ? -0.6 : 0;
       rig.spoonG.position.y = 1.04 + (celebrate ? 0.35 : 0);
-      var e = mode === 'title' || mode === 'skins' ? M.sin(t * 2.1 + r.i) * 0.25 : r.e;
+      var e = (mode === 'skins' || (mode === 'title' && !race.demo)) ? M.sin(t * 2.1 + r.i) * 0.25 : r.e;
       rig.pop = M.min(1, rig.pop + dt * 3);
       var popS = rig.pop < 1 ? 1 + M.sin(rig.pop * M.PI) * 0.5 : 1;
+      var crackJit = r.cracks > 0 && r.state === 'run' ? M.sin(t * 28 + r.i) * 0.08 : 0;
       rig.eggM.position.x = e * 0.16;
-      rig.eggM.rotation.z = -e * 0.9;
+      rig.eggM.rotation.z = -e * 0.9 + crackJit;
       rig.eggM.rotation.x = M.sin(t * 9 + r.ph) * 0.06 * (0.3 + M.abs(e));
       rig.eggM.scale.setScalar(popS * (rig.pop < 0.05 ? 0.05 : 1));
       rig.eggM.visible = r.state !== 'splat' && rig.flyT < 0;
@@ -799,8 +836,9 @@
           if (view.onSplat) view.onSplat(r.i);
         }
       }
-      // Dust from running feet.
-      if (moving && !r.air && r.v > 7 && M.random() < dt * 8 && pLive < PMAX - 20) emitP(P[0], 0.08, P[2], 1, { speed: 0.5, up: 0.5, g: 0, color: world.w === 0 ? 0xffc7b5 : 0xe8cf9e, size: 0.07, life: 0.3 });
+      // Turbo trail + dust from running feet.
+      if (moving && r.boost > 0 && M.random() < dt * 24 && pLive < PMAX - 10) emitP(P[0], 0.3 + r.y, P[2], 1, { speed: 1.4, up: 1.2, g: 2, colors: [0x4df5ff, 0xffe033, 0xffffff], size: 0.1, life: 0.35 });
+      else if (moving && !r.air && r.v > 7 && M.random() < dt * 8 && pLive < PMAX - 20) emitP(P[0], 0.08, P[2], 1, { speed: 0.5, up: 0.5, g: 0, color: world.w === 0 ? 0xffc7b5 : 0xe8cf9e, size: 0.07, life: 0.3 });
     }
 
     /* --------------------------------------------- events */
@@ -814,15 +852,32 @@
           rig.fly.position.copy(V); rig.fly.visible = true; rig.flyT = 0;
           var th = headingAt(tr, r.s);
           rig.flyV.set(M.cos(th) * e.side * 2.2 + M.sin(th) * r.v * 0.4, 4.2, M.sin(th) * e.side * 2.2 - M.cos(th) * r.v * 0.4);
-          if (r.human) shake = M.max(shake, 0.8);
+          if (r.human) shaker.add(0.95);
           break;
         case 'respawn': if (rig) { rig.pop = 0; tf(tr, r.s, r.x, 0, tmp); emitP(tmp[0], 1.4, tmp[2], 10, { speed: 2, up: 2, colors: [0xffffff, 0xffd23f], size: 0.08, life: 0.6 }); } break;
         case 'land': if (rig) { rig.land = 1; tf(tr, r.s, r.x, 0, tmp); emitP(tmp[0], 0.1, tmp[2], 4, { speed: 1.4, up: 0.8, g: 2, color: world.w === 1 ? 0xd6b48a : 0xffffff, size: 0.12, life: 0.4 }); } break;
+        case 'pad':
+          tf(tr, e.s, e.x, 0.2, tmp);
+          emitP(tmp[0], tmp[1], tmp[2], 16, { speed: 4.5, up: 2.5, g: 4, colors: [0x4df5ff, 0xffe033, 0xffffff], size: 0.11, life: 0.65 });
+          if (r && r.human) shaker.add(0.45);
+          break;
+        case 'ramp':
+          tf(tr, e.s, e.x, 0.6, tmp);
+          emitP(tmp[0], tmp[1], tmp[2], 14, { speed: 3.5, up: 4.5, g: 5, colors: [0xffe033, 0x3be890, 0xffffff], size: 0.1, life: 0.7 });
+          if (r && r.human) shaker.add(0.35);
+          break;
+        case 'coin':
+          var co = tr.coins && tr.coins[e.i];
+          if (co) { tf(tr, co.s, co.x, co.y, tmp); emitP(tmp[0], tmp[1], tmp[2], 8, { speed: 2.4, up: 2.2, g: 6, colors: [0xffd23f, 0xffffff], size: 0.08, life: 0.45 }); }
+          break;
+        case 'heal':
+          if (r) { tf(tr, r.s, r.x, 1.4, tmp); emitP(tmp[0], tmp[1], tmp[2], 12, { speed: 2.6, up: 2.6, g: 3, colors: [0x5ee36a, 0xffffff, 0xffd23f], size: 0.09, life: 0.65 }); }
+          break;
         case 'hit':
           tf(tr, e.s, e.x, 0, tmp);
           if (e.k === 'critter') emitP(tmp[0], 0.6, tmp[2], 14, { speed: 2.5, up: 3, g: 3, colors: world.w === 2 ? [0xff5a3c, 0xffffff] : [0xffffff, 0xfff3df], size: 0.1, life: 1.1 });
-          else emitP(tmp[0], 0.5, tmp[2], 10, { speed: 3, up: 3, colors: [0xffffff, 0xffd23f], size: 0.08, life: 0.5 });
-          if (r && r.human) shake = M.max(shake, 0.45);
+          else emitP(tmp[0], 0.5, tmp[2], 12, { speed: 3.2, up: 3.2, colors: [0xffffff, 0xffd23f, 0xff7a5c], size: 0.09, life: 0.55 });
+          if (r && r.human) shaker.add(0.6);
           break;
         case 'splash': tf(tr, e.s, e.x, 0, tmp); emitP(tmp[0], 0.15, tmp[2], 14, { speed: 2.5, up: 4, colors: world.w === 1 ? [0x7a4b26, 0x9a6a3e] : [0x8fe3ff, 0xffffff], size: 0.09, life: 0.6 }); break;
         case 'gold': var g = tr.gold[e.i]; tf(tr, g.s, g.x, 1.2 + g.need * 1.8, tmp); emitP(tmp[0], tmp[1], tmp[2], 22, { speed: 3.5, up: 3, g: 6, colors: [0xffd23f, 0xfff2a8, 0xffffff], size: 0.09, life: 0.9 }); break;
@@ -841,20 +896,26 @@
     };
 
     /* --------------------------------------------- render, resize, projection */
+    function syncCamProj(k, aspect) {
+      var fov = camFov[k];
+      if (M.abs(lastAspect[k] - aspect) > 1e-4 || M.abs(lastFov[k] - fov) > 0.05) {
+        cams[k].aspect = aspect; cams[k].fov = fov; cams[k].updateProjectionMatrix();
+        lastAspect[k] = aspect; lastFov[k] = fov;
+      }
+    }
     view.render = function () {
       if (!world) return;
-      var c = renderer.domElement;
       if (!split) {
         renderer.setScissorTest(false);
         renderer.setViewport(0, 0, vw, vh);
-        cams[0].aspect = vw / vh; cams[0].fov = 58; cams[0].updateProjectionMatrix();
+        syncCamProj(0, vw / vh);
         renderer.render(scene, cams[0]);
       } else {
         var hw = M.floor(vw / 2);
         renderer.setScissorTest(true);
         for (var k = 0; k < 2; k++) {
           renderer.setViewport(k * hw, 0, hw, vh); renderer.setScissor(k * hw, 0, hw, vh);
-          cams[k].aspect = hw / vh; cams[k].fov = 68; cams[k].updateProjectionMatrix();
+          syncCamProj(k, hw / vh);
           renderer.render(scene, cams[k]);
         }
         renderer.setScissorTest(false);
@@ -875,7 +936,7 @@
       return { x: (V.x + 1) / 2 * half + (split ? k * half : 0), y: (1 - V.y) / 2 * H, behind: V.z > 1 };
     };
     view.snap = function () { snapCam = true; };
-    view.shake = function (p) { shake = M.max(shake, p); };
+    view.shake = function (p) { shaker.add(p); };
     var slow = 0;
     view.frameTime = function (ms) {
       if (ms > 28) slow++; else slow = M.max(0, slow - 0.5);

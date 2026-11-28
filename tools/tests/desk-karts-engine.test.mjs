@@ -73,10 +73,11 @@ test('engine is pure UMD: works in Node and browser sandbox, zero Kit/DOM/timers
   assert.doesNotMatch(stripped, /\bdocument\b|setTimeout|setInterval|requestAnimationFrame|Math\.random|localStorage/);
 });
 
-test('2 cups & 6 handcrafted tracks (1-1..2-3) with 100% Arabic labels and non-overlapping spline geometry', () => {
+test('2 cups & 6 handcrafted tracks (1-1..2-3) with 100% Arabic labels, 2-lap sprints, 5 items, and non-overlapping spline geometry', () => {
   assert.equal(DK.CUPS.length, 2);
   assert.equal(DK.TRACKS.length, 6);
-  assert.equal(DK.LAPS, 3);
+  assert.equal(DK.LAPS, 2);
+  assert.ok(DK.ITEMS.plane && DK.ITEMS.shell && DK.ITEMS.rocket && DK.ITEMS.shield && DK.ITEMS.ink);
   for (const cup of DK.CUPS) assert.match(cup.name, ARABIC);
   for (const b of DK.BODIES) assert.match(b.name, ARABIC);
   for (const p of DK.PAINTS) assert.match(p.name, ARABIC);
@@ -88,7 +89,7 @@ test('2 cups & 6 handcrafted tracks (1-1..2-3) with 100% Arabic labels and non-o
     assert.equal(L.id, expectedId);
     assert.match(L.name, ARABIC);
     assert.ok(L.len > 150, `${L.id} length reasonable (${L.len.toFixed(1)})`);
-    assert.ok(L.boosts.length >= 2, `${L.id} has boost pads`);
+    assert.ok(L.boosts.length >= 4, `${L.id} has dense boost strips (${L.boosts.length})`);
     assert.ok(L.ramps.length >= 1, `${L.id} has textbook ramps`);
     assert.ok(L.erasers.length >= 2, `${L.id} has bouncy erasers`);
     assert.ok(L.inks.length >= 1, `${L.id} has ink spills`);
@@ -108,21 +109,29 @@ test('2 cups & 6 handcrafted tracks (1-1..2-3) with 100% Arabic labels and non-o
   }
 });
 
-test('idle P1 stationary guarantee: worldTime ticks while p1Dist and time remain 0 until input', () => {
+test('brief grid window holds p1Dist===0 then Auto-Gas launches automatically, while manual gas rocket-starts immediately', () => {
   const w = DK.create({ track: 0, seed: 77 });
+  assert.equal(w.autoGas, true);
   assert.equal(w.p1Dist, 0);
   assert.equal(w.time, 0);
   assert.equal(w.started, false);
-  for (let i = 0; i < 120; i++) step(w, []);
-  assert.ok(w.worldTime > 1.9, 'worldTime advances for live animations');
-  assert.equal(w.p1Dist, 0, 'P1 stays completely stationary without input');
-  assert.equal(w.time, 0, 'race timer stays 0 until player launches');
+  // First 0.35s holds clean grid state for restarts
+  for (let i = 0; i < 20; i++) step(w, []);
+  assert.equal(w.p1Dist, 0, 'grid holds p1Dist === 0 during brief launch window');
+  assert.equal(w.time, 0, 'clock stays 0 during brief launch window');
 
-  // Holding gas accelerates P1 cleanly immediately
-  for (let i = 0; i < 20; i++) step(w, [{ gas: 1, brake: 0, steer: 0, drift: false, item: false }]);
-  assert.equal(w.started, true);
-  assert.ok(w.p1Dist > 1.0, 'P1 accelerates off the line');
-  assert.ok(w.time > 0.2, 'race timer advances once started');
+  // After countdown elapses (~0.65s), Auto-Gas accelerates P1 with ZERO gas key held!
+  for (let i = 0; i < 45; i++) step(w, [{ gas: 0, brake: 0, steer: 0, drift: false, item: false }]);
+  assert.equal(w.started, true, 'Auto-Gas launches cleanly after brief grid window');
+  assert.ok(w.p1Dist > 3.0, `Auto-Gas accelerates P1 automatically (p1Dist=${w.p1Dist.toFixed(1)})`);
+  assert.ok(w.time > 0.2);
+
+  // Manual gas during launch window triggers instant rocket start
+  const w2 = DK.create({ track: 0, seed: 78 });
+  for (let i = 0; i < 10; i++) step(w2, []);
+  for (let i = 0; i < 15; i++) step(w2, [{ gas: 1, brake: 0, steer: 0, drift: false, item: false }]);
+  assert.equal(w2.started, true);
+  assert.ok(w2.p1Dist > 1.5, 'manual gas launches immediately');
 });
 
 test('forgiving wall bounce: slamming into pencil barrier slides smoothly forward and never sticks', () => {
@@ -211,23 +220,67 @@ test('textbook jump ramp, bouncy pink eraser, ink spill, and 3 pickup items all 
   assert.equal(w.inks.length, inksBefore + 1, 'ink item drops a temporary ink puddle behind kart');
 });
 
-test('all 6 tracks are cleanly winnable in 3 laps across DDA skill tiers', () => {
+test('homing paper-plane missile locks onto rival ahead and spins them out; bouncing eraser shell ricochets off walls', () => {
+  const w = DK.create({ track: 0, seed: 123 });
+  w.started = true;
+  const p1 = w.karts[0];
+  const rival = w.karts[1];
+  // Put rival 18m ahead of P1 on the spline
+  const sp1 = DK.sampleAt(w.L, 20);
+  const sp2 = DK.sampleAt(w.L, 38);
+  p1.x = sp1.x; p1.z = sp1.z; p1.s = sp1.s; p1.idx = sp1.idx; p1.ang = Math.atan2(sp1.tz, sp1.tx);
+  rival.x = sp2.x; rival.z = sp2.z; rival.s = sp2.s; rival.idx = sp2.idx; rival.ang = Math.atan2(sp2.tz, sp2.tx);
+  rival.shieldT = 0; rival.invulnT = 0; rival.spinT = 0;
+  // Move bots 2 & 3 behind so rival 1 is clearly the target ahead
+  const spBack = DK.sampleAt(w.L, 2);
+  w.karts[2].x = spBack.x; w.karts[2].z = spBack.z; w.karts[2].s = spBack.s;
+  w.karts[3].x = spBack.x; w.karts[3].z = spBack.z; w.karts[3].s = spBack.s;
+
+  p1.item = 'plane';
+  const fireEv = step(w, [{ gas: 1, brake: 0, steer: 0, drift: false, item: true }]);
+  assert.ok(fireEv.some(e => e.type === 'planeFire' && e.kart === 0), 'paper-plane missile fired');
+  assert.equal(w.projectiles.length, 1);
+  assert.equal(w.projectiles[0].kind, 'plane');
+
+  let hitEv = null;
+  for (let i = 0; i < 120 && !hitEv; i++) {
+    const ev = step(w, [{ gas: 0, brake: 1, steer: 0, drift: false, item: false }]);
+    hitEv = ev.find(e => e.type === 'missileHit' && e.attacker === 0 && e.kind === 'plane');
+  }
+  assert.ok(hitEv, 'homing paper-plane tracked and struck rival kart');
+  assert.ok(rival.spinT > 0.5 && rival.airborne, 'rival spun out and popped upward');
+  assert.equal(p1.hitsLanded, 1, 'combat hit credited to attacker');
+
+  // Bouncing eraser shell ricochets off pencil barrier
+  p1.ang = Math.atan2(sp1.tz, sp1.tx) + 0.65;
+  p1.item = 'shell';
+  const sEv = step(w, [{ gas: 0, brake: 1, steer: 0, drift: false, item: true }]);
+  assert.ok(sEv.some(e => e.type === 'shellFire' && e.kart === 0), 'bouncing eraser shell fired');
+  let bounced = false;
+  for (let i = 0; i < 60 && !bounced; i++) {
+    const ev = step(w, [{ gas: 0, brake: 1, steer: 0, drift: false, item: false }]);
+    if (ev.some(e => e.type === 'shellBounce')) bounced = true;
+  }
+  assert.ok(bounced, 'eraser shell ricochets cleanly off track barrier');
+});
+
+test('all 6 tracks are cleanly winnable in 2-lap sprints across DDA skill tiers', () => {
   for (let t = 0; t < DK.TRACKS.length; t++) {
     const w = DK.create({ track: t, aiSkill: 0.35, seed: 300 + t });
     let summary = null;
-    for (let f = 0; f < 60 * 95 && !w.finished; f++) {
+    for (let f = 0; f < 60 * 65 && !w.finished; f++) {
       const ev = step(w, [driveHuman(w, 0, true)]);
       const over = ev.find(e => e.type === 'raceOver');
       if (over) summary = over.summary;
     }
-    assert.ok(w.finished && summary, `track ${DK.TRACKS[t].id} finished cleanly`);
+    assert.ok(w.finished && summary, `track ${DK.TRACKS[t].id} finished cleanly in 2 laps`);
     assert.ok(summary.place <= 2, `skilled human places top 2 on ${DK.TRACKS[t].id} (got ${summary.place})`);
     assert.ok(summary.stars >= 2 && summary.score > 500 && summary.coinsEarned > 20);
   }
 });
 
 test('2P local racing triggers catch-up warp if one player falls far behind', () => {
-  const w = DK.create({ track: 0, duo: true, seed: 88 });
+  const w = DK.create({ track: 0, duo: true, autoGas: false, seed: 88 });
   let warped = false;
   // P1 drives fast while P2 stays still -> P2 warps cleanly near P1!
   for (let f = 0; f < 260; f++) {

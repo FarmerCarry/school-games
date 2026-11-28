@@ -9,105 +9,108 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<canvas id="game"></canvas>
-<button id="pausebtn" class="pbtn" hidden aria-label="إيقاف مؤقت" title="إيقاف مؤقت (P)">❚❚</button>
+<canvas id="game" tabindex="0" aria-label="عالم المكعبات: الأسهم للحركة والحفر التلقائي والنفاثة، ومسافة أو النقر لتفجير TNT."></canvas>
+<button type="button" id="pausebtn" class="pbtn" hidden aria-label="إيقاف مؤقت" title="إيقاف مؤقت (P / Esc)">❚❚</button>
+
 <div id="ui">
-<div id="title" class="ov" hidden>
-<h1 class="logo"><span class="lw g">عالم</span><span class="lw o">المكعبات</span></h1>
-<div class="tag">احفر سريعًا · فجّر المتفجرات · اكتشف غرف الكنز والوحوش!</div>
-<div id="slots"></div>
-<div class="trow">
-<div class="tbox skinbox">
-<button class="arrow" id="skinL" aria-label="الزي السابق">▶</button>
-<canvas id="skinCv" width="96" height="118"></canvas>
-<div class="skinmeta"><div id="skinName"></div><div id="skinInfo"></div><div id="totalStars"></div></div>
-<button class="arrow" id="skinR" aria-label="الزي التالي">◀</button>
+  <!-- Minimal 1-Click Title Screen over Live Animated Mine -->
+  <section id="title" class="ov" aria-label="عالم المكعبات">
+    <div class="title-top">
+      <div class="stat-pill gem-pill"><span>💎</span><b id="titleGems" dir="ltr">0</b></div>
+      <div class="stat-pill star-pill"><span>★</span><b id="titleStars" dir="ltr">0</b></div>
+      <div class="stat-pill win-pill" id="titleWinsPill" hidden><span>🏆</span><b id="titleWins" dir="ltr">0</b></div>
+    </div>
+
+    <div class="title-center">
+      <h1 class="logo"><span class="lw g">عالم</span><span class="lw o">المكعبات</span></h1>
+      <div class="tag">احفر بالنفاثة • فجّر TNT • اجمع 3 آثار واهرب!</div>
+
+      <button type="button" id="playBtn" class="hero-play">▶ انطلق للمنجم!</button>
+
+      <div class="mode-toggle" role="group" aria-label="وضع اللعب">
+        <button type="button" id="modeSurv" class="mbtn on" aria-pressed="true">⚡ سباق 90 ثانية</button>
+        <button type="button" id="modeFree" class="mbtn" aria-pressed="false">🧱 وضع حر</button>
+      </div>
+
+      <div class="keys-strip">
+        <span><span dir="ltr"><span class="sg-key">WASD</span> / <span class="sg-key">الأسهم</span></span> حفر ونفاثة</span>
+        <span class="sep">•</span>
+        <span><span dir="ltr"><span class="sg-key">مسافة</span> / <span class="sg-key">نقر</span></span> تفجير TNT</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Minimal High-Contrast In-Game HUD -->
+  <div id="hud" hidden>
+    <div class="hud-left">
+      <div class="relics-pill" id="relicsHud" aria-label="الآثار">
+        <span class="r-slot" data-i="0">👑</span>
+        <span class="r-slot" data-i="1">💎</span>
+        <span class="r-slot" data-i="2">🌟</span>
+        <b id="hudRelics" dir="ltr">0/3</b>
+      </div>
+      <div class="stat-pill gem-pill"><span>💎</span><b id="hudGems" dir="ltr">0</b></div>
+      <div class="fuel-pill" title="وقود النفاثة">
+        <span>🚀</span>
+        <div class="fuel-bar"><i id="fuelFill"></i></div>
+      </div>
+    </div>
+
+    <div class="hud-center">
+      <div class="timer-pill" id="timerPill"><b id="hudTime" dir="ltr">90</b><span id="hudTimeUnit">ث</span></div>
+      <div class="goal-pill" id="hudGoal">اجمع 3 آثار متوهجة!</div>
+    </div>
+
+    <button type="button" id="tntBtn" class="tnt-fab" aria-label="زرع قنبلة TNT" title="قنبلة TNT (مسافة أو نقر)">
+      <span class="tnt-ico">💣</span>
+      <span class="tnt-meta"><b>TNT</b><small id="tntAmmo" dir="ltr">3/3</small></span>
+    </button>
+
+    <!-- Free Sandbox 4-block quick-build bar -->
+    <div id="sandboxBar" class="sandbox-bar" hidden role="group" aria-label="اختر مكعب للبناء (نقرة يمين)"></div>
+
+    <div id="banner" class="mine-banner" hidden></div>
+  </div>
+
+  <!-- Pause Overlay -->
+  <section id="pause" class="ov dim" aria-label="إيقاف مؤقت" hidden>
+    <div class="panel pause-panel">
+      <h2>استراحة</h2>
+      <div class="pause-stats" id="pauseStats"></div>
+      <div class="btn-row">
+        <button type="button" class="sg-btn good" id="resumeBtn">▶ متابعة</button>
+        <button type="button" class="sg-btn" id="restartBtn">↻ جولة جديدة</button>
+        <button type="button" class="sg-btn secondary" id="quitBtn">🏠 الرئيسية</button>
+      </div>
+      <div class="hint2"><span dir="ltr"><span class="sg-key">P</span></span> متابعة • <span dir="ltr"><span class="sg-key">R</span></span> إعادة</div>
+    </div>
+  </section>
+
+  <!-- Victory / Time-Up Result Card with 1-Click Upgrades (skybound-golf DNA!) -->
+  <section id="result" class="ov dim" aria-label="نتيجة الجولة" hidden>
+    <div class="panel result-panel">
+      <h2 id="resTitle">هربت بالكنز!</h2>
+      <div class="res-stars" id="resStars" aria-hidden="true"><span>★</span><span>★</span><span>★</span></div>
+      <div class="res-summary">
+        <div class="stat-pill gem-pill"><span>💎</span><b id="resGems" dir="ltr">0</b></div>
+        <div class="stat-pill star-pill"><span>🏆</span><b id="resScore" dir="ltr">0</b></div>
+        <div class="stat-pill" id="resBankPill"><span>🏦 رصيدك:</span><b id="resBank" dir="ltr">0</b></div>
+      </div>
+      <div id="resSub" class="res-sub"></div>
+
+      <div class="up-head">⚡ طوّر معدّاتك للجولة القادمة</div>
+      <div id="upgradeGrid" class="up-grid"></div>
+
+      <div class="btn-row">
+        <button type="button" class="hero-play small" id="againBtn">▶ جولة جديدة</button>
+        <button type="button" class="sg-btn secondary" id="resultHome">🏠 الرئيسية</button>
+      </div>
+    </div>
+  </section>
 </div>
-<div class="tbox howto">
-<div class="k"><span dir="ltr"><span class="sg-key">A</span><span class="sg-key">D</span></span></div><div>مشي وركض</div>
-<div class="k"><span class="sg-key">W</span><span class="sg-key">مسافة</span></div><div>قفز / حذاء نفاث</div>
-<div class="k"><span class="sg-key">انقر</span></div><div>حفر سريع وقتال</div>
-<div class="k"><span class="sg-key">نقرة يمين</span></div><div>بناء / تفجير TNT</div>
-<div class="k"><span class="sg-key">1-9</span><span class="sg-key">العجلة</span></div><div>اختر الأداة</div>
-<div class="k"><span class="sg-key">E</span></div><div>الحقيبة والصنع</div>
-</div>
-</div>
-<button id="playBtn" class="sg-btn good">▶ العب</button>
-<div class="hint2">اضغط <span class="sg-key">Enter</span> للعب · الحفر يستخدم أقوى معول في حقيبتك تلقائيًا!</div>
-</div>
-<div id="newworld" class="ov" hidden>
-<div class="panel">
-<h2>اختر طريقة اللعب!</h2>
-<div class="diff-bar" id="newDiffBar" role="group" aria-label="مستوى المغامرة">
-<button type="button" class="dbtn" data-d="easy">🌟 سهل</button>
-<button type="button" class="dbtn sel" data-d="normal">⚔️ متوسط</button>
-<button type="button" class="dbtn" data-d="hero">🔥 بطل</button>
-</div>
-<div class="diff-desc" id="diffDesc">مغامرة متوازنة مع سلايم الكهوف وغرف الكنز!</div>
-<div class="modes">
-<button class="mode s" id="modeSurv"><img id="icSurv" alt=""><b>مغامرة</b><p>احفر بسرعة، فجّر المتفجرات، افتح صناديق الكنز وأنجز 27 مهمة!</p><span class="sg-key">1</span></button>
-<button class="mode c" id="modeCrea"><img id="icCrea" alt=""><b>إبداع</b><p>كل المكعبات والمتفجرات بلا حدود. طِر في السماء وابنِ قلعتك!</p><span class="sg-key">2</span></button>
-</div>
-<button class="sg-btn secondary" id="modeBack">رجوع</button>
-</div>
-</div>
-<div id="loading" class="ov" hidden>
-<div class="panel loadbox"><div class="loadblocks"><span></span><span></span><span></span><span></span></div>نبني عالمك…</div>
-</div>
-<div id="pause" class="ov" hidden>
-<div class="panel" style="width:760px">
-<h2>استراحة</h2>
-<div id="pauseName"></div>
-<div id="pauseStars"></div>
-<div class="diff-bar survPause" id="pauseDiffBar" role="group" aria-label="مستوى الصعوبة">
-<button type="button" class="dbtn" data-d="easy">🌟 سهل</button>
-<button type="button" class="dbtn" data-d="normal">⚔️ متوسط</button>
-<button type="button" class="dbtn" data-d="hero">🔥 بطل</button>
-</div>
-<div class="pq" id="pauseQuests"></div>
-<div>
-<button class="sg-btn good" id="resumeBtn">▶ تابع اللعب</button>
-<button class="sg-btn secondary" id="homeBtn">🏠 العودة للبداية</button>
-<button class="sg-btn secondary" id="quitBtn">💾 احفظ واخرج</button>
-</div>
-<div class="hint2">اضغط <span class="sg-key">P</span> أو <span class="sg-key">Esc</span> لتتابع · عالق في كهف؟ اضغط «العودة للبداية»</div>
-</div>
-</div>
-<div id="master" class="ov" hidden>
-<div class="panel">
-<h2>بطل عالم المكعبات!</h2>
-<div style="font-size:21px">أنجزت جميع المهام واكتشفت أسرار الأعماق!</div>
-<div id="masterStars"></div>
-<button class="sg-btn good" id="masterKeep">تابع المغامرة</button>
-<button class="sg-btn secondary" id="masterMenu">القائمة الرئيسية</button>
-<div class="hint2">جرّب مستوى «بطل» أو افتح كل الأزياء الخارقة بالنجوم!</div>
-</div>
-</div>
-<div id="inv" class="ov" hidden>
-<div class="panel invp">
-<button class="sg-btn secondary" id="invClose">إغلاق (E)</button>
-<div class="invL">
-<h3 class="survOnly">🎒 الحقيبة <small style="font-size:14px;opacity:.75">(36 خانة)</small></h3>
-<h3 class="creaOnly">🧱 كل المكعبات <small style="font-size:15px;opacity:.75">- انقر لتضعه في الشريط</small></h3>
-<div class="grid" id="bag"></div>
-<div id="palette"></div>
-<div class="lbl"><span class="dim">الشريط السريع (1-9)</span> <span id="hotTip"></span></div>
-<div class="grid" id="hot"></div>
-<div id="invPick" class="survOnly"></div>
-<div class="tips survOnly">انقر لحمل الأغراض أو وضعها · نقرة يمين تأخذ النصف · <span dir="ltr">Shift</span>+نقرة تنقل سريعًا</div>
-<div class="tips creaOnly">اختر خانة في الشريط ثم انقر أي مكعب بالأعلى. نقرة يمين على خانة تفرغها.</div>
-</div>
-<div class="invR survOnly">
-<h3>⚡ الصنع السريع</h3>
-<div class="stations"><span class="station" id="stTable"><img id="icTable" alt="">طاولة الصنع</span><span class="station" id="stFurnace"><img id="icFurn" alt="">الفرن</span><span style="font-size:13px;opacity:.7;align-self:center"><span dir="ltr">Shift</span>+نقرة تصنع 10</span></div>
-<div id="craftList"></div>
-</div>
-</div>
-</div>
-<div id="cursorStack" hidden></div>
-</div>
+
+<div id="live" class="sr" aria-live="polite"></div>
 <script src="../../shared/kit.js"></script>
-<script src="../../shared/artkit.js"></script>
 <script src="../../shared/juice.js"></script>
 <script src="data.js"></script>
 <script src="world.js"></script>
