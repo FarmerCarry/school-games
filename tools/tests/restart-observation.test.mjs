@@ -57,10 +57,10 @@ test('Blob restart observation survives legitimate growth before the next async 
   };
   try { await scenario.restart(page); } finally { page.mouse.click = realClick; }
   const current = await page.evaluate(() => __game.info());
-  assert.ok(current.mass >= 30, 'the old live mass threshold must actually be exceeded');
+  assert.ok(current.mass > 40, 'live mass must grow past the 40 starting mass during delayed frames');
   assert.equal(current.alive, true);
   assert.equal(current.playerCells, 1);
-  assert.deepEqual(await page.evaluate(() => window.sgBlobRestart), { state: 'play', alive: true, playerCells: 1, mass: 20 });
+  assert.deepEqual(await page.evaluate(() => window.sgBlobRestart), { state: 'play', alive: true, playerCells: 1, mass: 40 });
   assert.equal(await page.evaluate(scenario.active), true, 'live gameplay still resumes');
   assert.equal(await page.evaluate(scenario.reset), true, 'the exact reset was observed before growth');
 });
@@ -68,17 +68,17 @@ test('Blob restart observation survives legitimate growth before the next async 
 test('Blob restart observation rejects wrong mass, dead or split players, and a paused result', async t => {
   const page = await pageFor(t);
   for (const bad of [
-    { state: 'play', alive: true, playerCells: 1, mass: 40 },
-    { state: 'play', alive: false, playerCells: 1, mass: 20 },
-    { state: 'play', alive: true, playerCells: 2, mass: 20 },
-    { state: 'pause', alive: true, playerCells: 1, mass: 20 }
+    { state: 'play', alive: true, playerCells: 1, mass: 60 },
+    { state: 'play', alive: false, playerCells: 1, mass: 40 },
+    { state: 'play', alive: true, playerCells: 2, mass: 40 },
+    { state: 'pause', alive: true, playerCells: 1, mass: 40 }
   ]) {
     await page.setContent('<button id="btnRestart" onclick="window.clicked++">Broken restart</button>');
     await page.evaluate(bad => {
       window.clicked = 0;
       window.__game = { info: () => bad };
       // A previous successful observation must not conceal a broken restart.
-      window.sgBlobRestart = { state: 'play', alive: true, playerCells: 1, mass: 20 };
+      window.sgBlobRestart = { state: 'play', alive: true, playerCells: 1, mass: 40 };
     }, bad);
     await scenario.restart(page);
     assert.equal(await page.evaluate(() => window.clicked), 1, 'the actual button handler ran');
