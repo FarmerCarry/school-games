@@ -5,6 +5,8 @@
  * level back to it (and a level left after falling again and again). */
 (function () {
   'use strict';
+  var _W='#ffffff',_G='#ffd23f',_Y='#ffcc00',_R='#ff5d6c',_B='#4fd1ff',_P='#ff7eb6',_wa=function(a){return'rgba(255,255,255,'+a+')'},_ia=function(a){return'rgba(28,34,80,'+a+')'};
+  var _M=Math,_sn=_M.sin,_cs=_M.cos,_mn=_M.min,_mx=_M.max,_ab=_M.abs,_fl=_M.floor,_rd=_M.round,_sq=_M.sqrt,_PI=_M.PI;
   const J = Kit.juice, AU = Kit.audio, H = KO.hud, W = 1280, HH = 720;
   const $ = id => document.getElementById(id);
   const canvas = $('scene'), hudCanvas = $('hud'), ui = $('ui'), ghostEl = $('ghost');
@@ -13,10 +15,10 @@
   const hudView = Kit.fit(hudCanvas, W, HH, { maxDpr: Kit.webgl.isSoftware() ? 1 : 1.25, onResize: () => { dirty = true; hudSig = ''; } });
   const fit = Kit.fit(canvas, W, HH, { webgl: true, maxDpr: 1.5, onResize: v => {
     ui.style.left = canvas.style.left; ui.style.top = canvas.style.top; ui.style.transform = 'scale(' + v.scale + ')';
-    if (view) view.resize(Math.round(W * v.scale), Math.round(HH * v.scale));
+    if (view) view.resize(_rd(W * v.scale), _rd(HH * v.scale));
     dirty = true;
   } });
-  const pixelScale = () => Math.min(2, Math.max(1, Math.round(hudView.scale * hudView.dpr * 4) / 4));
+  const pixelScale = () => _mn(2, _mx(1, _rd(hudView.scale * hudView.dpr * 4) / 4));
   const PRAISE = ['رائع!', 'ممتاز!', 'مذهل!', 'بطل!'];
   // The little keyboard at the bottom of the screen.
   const KB = { u: 34, x: (W - KO.KB_W * 34) / 2, y: HH - KO.KB_ROWS * 34 - 16 };
@@ -25,6 +27,8 @@
   const store = Kit.store('keyboard-obby');
   const saveStatus = Kit.saveStatus({ retry: persist });
   let save = KO.loadSave(store.get('save', null));
+  let ghosts = store.get('ghosts', null);
+  if (!ghosts || typeof ghosts !== 'object' || Array.isArray(ghosts)) ghosts = {};
   function persist() {
     if (store.set('save', save) === false) { saveStatus.failed(); return false; }
     saveStatus.saved();
@@ -38,6 +42,7 @@
   let screen = 'title', world = null, cur = { w: 0, l: 0 }, time = 0, viewTime = 0;
   let queue = [], floats = [], hudFlash = {}, banner = null, ending = null, result = null, resultT = 0, resultLock = 0;
   let idle = 0, menuIdle = 0, menuNext = 5, coinBump = 0, bubbleBump = 0, reported = false;
+  let activeGhost = null, ghostPose = null, nudgeHint = 0, nudgeCount = 0;
 
   /* ------------------------------------------------------------ screens */
   const SCREENS = { title: 'scrTitle', map: 'scrMap', shop: 'scrShop', pause: 'scrPause', result: 'scrResult' };
@@ -180,7 +185,7 @@
     if (r === 'buy') { J.coin(3); J.levelUp(); } else J.select();
     view.setOutfit(save.color, save.hat);
     const hk = view.keyWorld('Space');
-    view.burst(hk.x, hk.y + 0.6, hk.z, { count: 30, colors: ['#ffd23f', '#ffffff', '#ff6fb5', '#4fd1ff'], speed: 2.4, up: 3, life: 0.8, size: 0.06 });
+    view.burst(hk.x, hk.y + 0.6, hk.z, { count: 30, colors: [_G, _W, '#ff6fb5', _B], speed: 2.4, up: 3, life: 0.8, size: 0.06 });
     refreshShop();
   }
 
@@ -194,6 +199,8 @@
     world = KO.create(L, { tier: tier, rise: rise });
     view.setTheme(w); view.setLevel(L);
     queue.length = 0; floats = []; hudFlash = {}; ending = null; result = null; idle = 0; reported = false;
+    activeGhost = KO.sanitizeGhost(ghosts[KO.ghostKey(L)], L.path.length);
+    ghostPose = null; nudgeHint = 0; nudgeCount = 0;
     banner = { t: 0 };
     // Play stats: every level try is a round (w1-1 ..); the coached first level is the tutorial.
     Kit.stats.round('w' + (w + 1) + '-' + (l + 1));
@@ -206,8 +213,8 @@
   // Leaving a level the child kept falling in counts as a hard try for the difficulty.
   function leaveLevel() {
     Kit.stats.end('quit'); // a level left unfinished (nothing when it was finished)
-    if (world && world.started && !world.done && !reported && world.falls >= 2) { reported = true; dda.result(Math.min(0.25, KO.progress(world) * 0.3)); }
-    world = null; ending = null; banner = null;
+    if (world && world.started && !world.done && !reported && world.falls >= 2) { reported = true; dda.result(_mn(0.25, KO.progress(world) * 0.3)); }
+    world = null; ending = null; banner = null; activeGhost = null; ghostPose = null; nudgeHint = 0;
     view.setLevel(null);
   }
   function pause(own) {
@@ -230,6 +237,8 @@
   /* ------------------------------------------------------------- result */
   function finish() {
     const r = KO.result(world), out = KO.apply(save, cur.w, cur.l, r);
+    const gk = KO.ghostKey(world.L);
+    if (r.times && (out.best || !ghosts[gk])) { ghosts[gk] = r.times; store.set('ghosts', ghosts); }
     if (!save.coach) Kit.stats.tutorial('done');
     save.coach = true;
     Kit.stats.end('win', out.stars);
@@ -247,7 +256,7 @@
     resultT = 0; resultLock = 0.7;
     $('resTitle').textContent = KO.WORLDS[result.w].name + ' ' + (result.l + 1);
     $('resStars').querySelectorAll('svg').forEach(s => s.classList.remove('on', 'pop'));
-    $('resTime').textContent = String(Math.round(r.time)) + ' / ' + Math.round(r.par);
+    $('resTime').textContent = String(_rd(r.time)) + ' / ' + _rd(r.par);
     $('resTimeBox').classList.toggle('good', r.time <= r.par);
     $('resOops').textContent = String(r.mistakes);
     $('resOopsBox').classList.toggle('good', r.mistakes <= KO.allowed(r.n));
@@ -298,7 +307,31 @@
   on($('resAgain'), () => { if (resultLock <= 0) again(); });
   on($('resMap'), () => { if (resultLock <= 0) { J.back(); toMap(); } });
   document.querySelectorAll('.lang').forEach(b => on(b, () => setLang(b.dataset.lang)));
-  canvas.addEventListener('pointerdown', () => { focusGame(); menuIdle = 0; });
+  function hitLitKey(p, code) {
+    const k = KO.KEY[code];
+    if (!k) return false;
+    const kx = KB.x + k.x * KB.u, ky = KB.y + k.row * KB.u;
+    if (p.x >= kx - 8 && p.x <= kx + k.w * KB.u + 8 && p.y >= ky - 8 && p.y <= ky + KB.u + 8) return true;
+    if (_ab(p.x - 640) <= 130 && p.y >= 10 && p.y <= 176) return true;
+    if (view) {
+      const w3 = view.keyWorld(code), pr = view.project(w3.x, w3.y, w3.z);
+      if (!pr.behind && Math.hypot(p.x - pr.x, p.y - pr.y) <= (code === 'Space' ? 160 : 78)) return true;
+    }
+    return false;
+  }
+  canvas.addEventListener('pointerdown', e => {
+    focusGame(); menuIdle = 0;
+    if (screen !== 'play' || !world || ending || cur.w !== 0 || e.button !== 0) return;
+    const target = KO.target(world);
+    if (!target || !hitLitKey(fit.toLogical(e.clientX, e.clientY), target)) return;
+    nudgeCount++; nudgeHint = 2.6; bubbleBump = 1;
+    hudFlash[target] = ['ok', 0.3];
+    if (view) view.flash(target, 'ok');
+    J.tap();
+    if (cur.w === 0 && cur.l === 0 && world.hops === 0 && idle >= 4 && !queue.length) {
+      queue.push(target); idle = 0; hideGhost();
+    } else if (!ghost.on) showGhost(H.keyCenter(target, KB.x, KB.y, KB.u));
+  });
   window.addEventListener('pointermove', () => { menuIdle = 0; });
   // The keys of the course are taken in the order they were pressed (by physical key, so it
   // works whichever language Windows types): key repeats, Ctrl/Alt shortcuts and keys on
@@ -346,6 +379,11 @@
   function boing(k) { AU.tone({ freq: 170, to: 560 + 200 * k, type: 'sine', dur: 0.24, vol: 0.18 }); }
   function splash() { AU.noise({ dur: 0.38, vol: 0.26, filter: 2600, to: 280 }); J.pop(0.9); }
   function crumbleSound() { AU.noise({ dur: 0.32, vol: 0.18, filter: 1000, to: 160 }); }
+  function jetSound(tier) {
+    const k = tier > 1 ? 1.12 : 1;
+    [523, 659, 784, 988, 1047].forEach((f, i) => AU.tone({ freq: f * k, type: 'triangle', dur: 0.18, vol: 0.2, delay: i * 0.045 }));
+    J.whoosh(0.8); J.coin(5);
+  }
   function handleEvents() {
     const w = world;
     for (const e of w.ev) {
@@ -354,7 +392,12 @@
         case 'ok':
           Kit.track.hit();
           hudFlash[e.code] = ['ok', 0.22]; bubbleBump = 1;
-          if (e.combo >= 5 && e.combo % 5 === 0) { J.streak(e.combo / 5); addFloat(PRAISE[Math.min(PRAISE.length - 1, e.combo / 5 - 1)], heroAbove(w.hero, 1.6), '#ffd23f', 46); }
+          if (e.combo >= 3 && e.combo % KO.JET_STREAK !== 0) J.streak(_mn(12, e.combo));
+          break;
+        case 'jetpack':
+          jetSound(e.combo / KO.JET_STREAK); coinBump = 1; view.shake(0.24);
+          addFloat(e.combo === KO.JET_STREAK ? 'نفاث الحروف! 🚀' : PRAISE[_mn(PRAISE.length - 1, _fl(e.combo / KO.JET_STREAK) - 1)] + ' 🚀', heroAbove(w.hero, 1.75), _G, 46);
+          addFloat('+' + e.coins, heroAbove(w.hero, 1.15), '#7ff6ff', 36);
           break;
         case 'wrong':
           Kit.track.miss();
@@ -362,9 +405,9 @@
           J.error(); oops();
           addFloat('أوه!', heroAbove(e, 1.3), '#ff8fa3', 42);
           break;
-        case 'hop': J.jump(Math.min(1, 0.25 + e.d / 8)); view.flash(e.code, 'ok'); break;
-        case 'land': J.land(Math.min(1, 0.25 + e.d * 0.08)); Kit.track.cue(); break; // the next key is asked for
-        case 'coin': J.coin(Math.min(5, e.n)); coinBump = 1; addFloat('+1', heroAbove(e, 1.1), '#ffd23f', 38); break;
+        case 'hop': J.jump(_mn(1, 0.25 + e.d / 8)); view.flash(e.code, 'ok'); break;
+        case 'land': J.land(_mn(1, 0.25 + e.d * 0.08)); Kit.track.cue(); break; // the next key is asked for
+        case 'coin': J.coin(_mn(5, e.n)); coinBump = 1; addFloat('+1', heroAbove(e, 1.1), _G, 38); break;
         case 'gem': J.chime(2); coinBump = 1; addFloat('+5', heroAbove(e, 1.2), '#ff9cf0', 42); break;
         case 'checkpoint': J.chime(1); addFloat('نقطة حفظ!', heroAbove(e, 1.5), '#7dffb0', 40); say('نقطة حفظ'); break;
         case 'shake': J.pop(0.15); break;
@@ -372,9 +415,9 @@
         case 'restore': J.pop(0.6); break;
         case 'wait': addFloat('انتظر…', heroAbove(e, 1.3), '#bff4ff', 34); break;
         case 'fall': J.whoosh(0.6); break;
-        case 'splash': splash(); view.shake(0.8); addFloat('بلوب!', KO.toWorld(e.x, e.y + 1, e.z, {}), '#ffffff', 46); break;
+        case 'splash': splash(); view.shake(0.8); addFloat('بلوب!', KO.toWorld(e.x, e.y + 1, e.z, {}), _W, 46); break;
         case 'respawn': boing(0.4); break;
-        case 'bonk': J.impact(0.6); boing(1); view.shake(0.5); addFloat('بوينغ!', heroAbove(e, 1.5), '#ffd23f', 44); break;
+        case 'bonk': J.impact(0.6); boing(1); view.shake(0.5); addFloat('بوينغ!', heroAbove(e, 1.5), _G, 44); break;
         case 'finish': finish(); break;
       }
     }
@@ -429,13 +472,15 @@
   function decay(dt) {
     for (let i = floats.length - 1; i >= 0; i--) { floats[i].t += dt; if (floats[i].t > 1.3) floats.splice(i, 1); }
     for (const c in hudFlash) { hudFlash[c][1] -= dt; if (hudFlash[c][1] <= 0) delete hudFlash[c]; }
-    coinBump = Math.max(0, coinBump - dt * 4); bubbleBump = Math.max(0, bubbleBump - dt * 5);
+    coinBump = _mx(0, coinBump - dt * 4); bubbleBump = _mx(0, bubbleBump - dt * 5);
+    if (nudgeHint > 0) nudgeHint = _mx(0, nudgeHint - dt);
   }
   function playStep(dt) {
     typeKeys();
     KO.step(world, dt);
     handleEvents();
     if (!world) return;
+    ghostPose = activeGhost && world.started ? KO.ghostAt(world.L, activeGhost, world.t) : null;
     if (banner) { banner.t += dt; if (banner.t > 1.4) banner = null; }
     if (ending) { ending.t += dt; if (ending.t > 1.6) showResult(); }
     else coachStep(dt);
@@ -463,7 +508,7 @@
     for (const x of w.L.words) if (step >= x.start && step < x.start + x.len) return { text: x.text, at: step - x.start };
     return null;
   }
-  function fmtTime(t) { return String(Math.floor(t)); }
+  function fmtTime(t) { return String(_fl(t)); }
   function drawHud() {
     const show = (screen === 'play' || screen === 'pause') && !!world;
     if (!show) {
@@ -476,13 +521,14 @@
       return;
     }
     if (!hudVisible) { hudCanvas.style.visibility = ''; hudVisible = true; hudSig = ''; }
-    const w = world, still = calm(), target = KO.target(w), rawPulse = still ? 1 : 0.5 + 0.5 * Math.sin(time * 7);
-    const pulse = Math.round(rawPulse * 10) / 10;
+    const w = world, still = calm(), target = KO.target(w), rawPulse = still ? 1 : 0.5 + 0.5 * _sn(time * 7);
+    const pulse = _rd(rawPulse * 10) / 10;
     const wd = target && !ending ? wordNow(w) : null;
-    const hasAnim = floats.length > 0 || !!banner || coinBump > 0.01 || bubbleBump > 0.01 || Object.keys(hudFlash).length > 0;
+    const gProg = ghostPose ? _rd(ghostPose.progress * 100) : -1;
+    const hasAnim = floats.length > 0 || !!banner || coinBump > 0.01 || bubbleBump > 0.01 || nudgeHint > 0 || Object.keys(hudFlash).length > 0;
     const sig = hasAnim ? '' : [
-      cur.w, cur.l, w.coins + w.gems * 5, Math.floor(w.t), w.mistakes, w.next, w.cp,
-      Math.round(w.jelly * 200), still ? 1 : Math.round(time * 8) & 15, target, w.L.path[w.next + 1] || '',
+      cur.w, cur.l, w.coins + w.gems * 5, _fl(w.t), w.mistakes, w.next, w.cp, w.combo, w.jet ? 1 : 0, w.jellyFreeze > 0 ? 1 : 0, gProg,
+      _rd(w.jelly * 200), still ? 1 : _rd(time * 8) & 15, target, w.L.path[w.next + 1] || '',
       wd ? wd.text + ':' + wd.at : '', ending ? 1 : 0, save.lang, save.color, pulse
     ].join('|');
     if (sig && sig === hudSig) return;
@@ -496,14 +542,16 @@
     H.chip(g, 96, 18, 150, 'coin', String(w.coins + w.gems * 5), coinBump);
     H.chip(g, 96, 84, 150, 'clock', fmtTime(w.t));
     if (w.mistakes) H.chip(g, 96, 150, 150, 'oops', String(w.mistakes));
-    H.text(g, (cur.w + 1) + '-' + (cur.l + 1), 880, 44, 34, '#ffffff', { stroke: 8 });
-    H.progress(g, 930, 44, 220, KO.progress(w), w.L.cps, w.n, KO.COLORS[save.color].c);
-    H.jar(g, 1218, 130, 40, 300, w.jelly, KO.THEMES[cur.w].jelly, time, still);
+    if (w.combo >= 2 || w.jet) H.streak(g, 96, w.mistakes ? 216 : 150, w.combo, w.jet, pulse);
+    H.text(g, (cur.w + 1) + '-' + (cur.l + 1), 880, 44, 34, _W, { stroke: 8 });
+    H.progress(g, 930, 44, 220, KO.progress(w), w.L.cps, w.n, KO.COLORS[save.color].c, ghostPose ? ghostPose.progress : -1);
+    H.jar(g, 1218, 130, 40, 300, w.jelly, KO.THEMES[cur.w].jelly, time, still, w.jellyFreeze > 0);
     if (target && !ending) H.bubble(g, 640, 12, { code: target, lang: save.lang, word: wd, pulse: pulse, bump: still ? 0 : bubbleBump });
     H.keyboard(g, KB.x, KB.y, KB.u, { lang: save.lang, target: ending ? '' : target, ahead: w.L.path[w.next + 1] || '', pulse: still ? 0.5 : pulse, flash: hudFlash, ps: pixelScale() });
+    if (nudgeHint > 0) H.nudge(g, 640, KB.y - 68, _mn(1, nudgeHint / 0.4));
     if (banner) {
-      const k = Math.min(1, banner.t / 0.25);
-      g.globalAlpha = Math.max(0, Math.min(1, (1.4 - banner.t) / 0.3));
+      const k = _mn(1, banner.t / 0.25);
+      g.globalAlpha = _mx(0, _mn(1, (1.4 - banner.t) / 0.3));
       H.banner(g, (cur.w + 1) + '-' + (cur.l + 1), KO.WORLDS[cur.w].name, still ? 1 : k, KO.THEMES[cur.w].jelly[0]);
       g.globalAlpha = 1;
     }
@@ -514,14 +562,14 @@
     const now = performance.now();
     if (screen === 'play' && lastFrame && view.frameTime(now - lastFrame)) fit.resize();
     lastFrame = now;
-    const dt = Math.max(0, Math.min(0.1, time - viewTime));
+    const dt = _mx(0, _mn(0.1, time - viewTime));
     viewTime = time;
     const mode = screen === 'play' || screen === 'pause' ? 'play' : screen === 'result' ? 'result' : screen === 'shop' ? 'shop' : 'menu';
     view.calm = calm();
     const w = world && (mode === 'play' || mode === 'result') ? world : mode === 'menu' && demo && !calm() ? demo : null;
     const target = w && mode === 'play' && !ending ? KO.target(w) : '';
     view.update({ mode: mode, dt: dt, t: time, w: w, next: target, ahead: w && !ending ? w.L.path[w.next + 1] || '' : '',
-      queued: w ? w.queue.map(i => w.L.path[i]) : null, snap: snap });
+      queued: w ? w.queue.map(i => w.L.path[i]) : null, ghost: mode === 'play' ? ghostPose : null, snap: snap });
     snap = false;
     view.render();
     drawHud();
@@ -530,7 +578,7 @@
 
   /* --------------------------------------------------- test and debug hook */
   const page = (x, y) => { const r = canvas.getBoundingClientRect(); return { x: r.left + x * fit.scale, y: r.top + y * fit.scale }; };
-  const r3 = v => Math.round(v * 1000) / 1000;
+  const r3 = v => _rd(v * 1000) / 1000;
   function snapshot() {
     const w = world, h = w ? w.hero : null;
     return {
@@ -538,6 +586,8 @@
       target: w ? KO.target(w) : '', next: w ? w.next : 0, at: w ? w.at : -1, cp: w ? w.cp : -1, n: w ? w.n : 0, path: w ? w.L.path.slice() : [],
       hops: w ? w.hops : 0, presses: w ? w.presses : 0, mistakes: w ? w.mistakes : 0, falls: w ? w.falls : 0, bonks: w ? w.bonks : 0,
       coins: w ? w.coins : 0, gems: w ? w.gems : 0, time: w ? r3(w.t) : 0, jelly: w ? r3(w.jelly) : 0, done: !!(w && w.done), started: !!(w && w.started),
+      combo: w ? w.combo : 0, jet: !!(w && w.jet), jellyFreeze: w ? r3(w.jellyFreeze) : 0, jetBursts: w ? w.jetBursts : 0,
+      hasGhost: !!activeGhost, ghostStep: ghostPose ? ghostPose.step : -1, nudgeCount: nudgeCount, nudgeHint: nudgeHint > 0,
       hero: h ? { phase: h.phase, x: r3(h.x), y: r3(h.y), z: r3(h.z) } : null, queue: w ? w.queue.length : 0,
       ending: !!ending, stars: result ? result.out.stars : 0, ghost: ghost.on, banner: !!banner, calm: calm(), particles: view ? view.particleCount() : 0
     };

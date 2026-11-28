@@ -115,6 +115,11 @@
     T({ freq: base * 1.5, type: 'triangle', dur: 0.18, vol: 0.25, delay: 0.12 });
     if (combo >= 5) T({ freq: base * 2, type: 'sine', dur: 0.25, vol: 0.18, delay: 0.18 });
   };
+  S.turbo = function (tier) {
+    var b = tier > 1 ? 659 : 523;
+    [1, 1.25, 1.5, 1.875, 2.25].forEach(function (m, i) { T({ freq: b * m, type: 'triangle', dur: 0.16, vol: 0.18, delay: i * 0.05 }); });
+    A.noise({ dur: 0.28, vol: 0.12, filter: 1400, to: 4200 });
+  };
   S.close = function () { T({ freq: 300, to: 900, type: 'sine', dur: 0.2, vol: 0.2 }); };
   S.jump = function () { A.noise({ dur: 0.35, vol: 0.18, filter: 2500, to: 600 }); T({ freq: 220, to: 660, type: 'triangle', dur: 0.3, vol: 0.2 }); };
   S.land = function () { T({ freq: 140, to: 60, type: 'triangle', dur: 0.15, vol: 0.35 }); A.noise({ dur: 0.15, vol: 0.2, filter: 900, to: 200 }); };

@@ -391,3 +391,62 @@ test('the picture fills the 1100x620 frame and full screen without scrollbars', 
     assert.ok(box.scroll[0] <= box.scroll[2] && box.scroll[1] <= box.scroll[3], 'no scrollbars');
   }
 });
+
+test('Streak Jetpack & Best-Run Ghost: 5-streak ignites jetpack + jelly freeze, saves compact ghost, and races ghost on replay', async t => {
+  const page = await game(t, { dda: TIER[1], reducedMotion: 'no-preference' });
+  await startFirst(page);
+  assert.equal((await state(page)).hasGhost, false, 'no ghost before first clear');
+  // Type 5 clean keys in a row to ignite Streak Jetpack.
+  let s = await state(page);
+  for (let i = 0; i < 5; i++) {
+    s = await state(page);
+    await page.keyboard.press(s.target);
+    await run(page, 18);
+  }
+  s = await state(page);
+  assert.equal(s.jet, true, 'Streak Jetpack ignited on 5-streak');
+  assert.equal(s.jetBursts, 1);
+  assert.ok(s.jellyFreeze > 0.5, 'jelly freeze active after jetpack ignition');
+  // Finish the rest of level 1-1.
+  await playLevel(page);
+  assert.ok(await until(page, "s.screen === 'result'", 60 * 4));
+  const savedGhosts = await page.evaluate(() => JSON.parse(localStorage.getItem('sg:keyboard-obby:ghosts') || 'null'));
+  assert.ok(savedGhosts && Array.isArray(savedGhosts.w1l1) && savedGhosts.w1l1.length === 8, 'compact ghost timestamps stored in Kit.store');
+  await run(page, 60);
+  // Press R to replay and verify the Best-Run Ghost races along the keyboard!
+  await page.keyboard.press('KeyR');
+  await step(page);
+  s = await state(page);
+  assert.equal(s.screen, 'play');
+  assert.equal(s.hasGhost, true, 'Best-Run Ghost loaded for replay');
+  await page.keyboard.press(s.target);
+  await run(page, 90);
+  s = await state(page);
+  assert.ok(s.ghostStep >= 0, `ghost keycap hopping across keyboard (step ${s.ghostStep})`);
+  assert.ok(await page.evaluate(() => __game.drawCalls()) <= 20, 'draw calls stay lean with jetpack + ghost');
+});
+
+test('Gentle Click-to-Nudge Assist: clicking the lit key shows hint on early click and forgives first-step hop after >4s idle on Stage 1-1', async t => {
+  const page = await game(t, { dda: TIER[1] });
+  await startFirst(page);
+  // Let level banner finish.
+  await run(page, 95);
+  let s = await state(page);
+  assert.equal(s.hops, 0);
+  const kp = await page.evaluate(code => __game.keyPoint(code), s.target);
+  // Early click (< 4s idle): playful nudge + glowing keyboard hint, no auto-hop yet.
+  await page.mouse.click(kp.x, kp.y);
+  await step(page, 2);
+  s = await state(page);
+  assert.equal(s.nudgeCount, 1);
+  assert.equal(s.nudgeHint, true, 'shows glowing keyboard nudge hint');
+  assert.equal(s.hops, 0, 'early click nudges instead of auto-hopping');
+  // Wait >4s idle on Stage 1-1 with 0 hops, then click lit key -> forgiving first-step hop!
+  await run(page, 60 * 5);
+  await page.mouse.click(kp.x, kp.y);
+  await step(page, 4);
+  s = await state(page);
+  assert.equal(s.hops, 1, 'forgiving first-step hop on Stage 1-1 after >4s idle');
+  assert.equal(s.nudgeCount, 2);
+  assert.equal(s.nudgeHint, true);
+});

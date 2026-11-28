@@ -705,3 +705,40 @@ test('world 11 mixes the five new skills, part after part', async t => {
   assert.equal(s.mode, 'drag'); assert.equal(s.goal, 2);
   assert.equal(s.screen, 'play'); assert.equal(s.world, 10); assert.equal(s.level, 0);
 });
+
+test('Arcade Party (#btnParty): Chain-Pop Shockwaves, Golden Pinata 5-mini burst, combo fever multiplier, live PB crown, and instant Enter/Space replay', async t => {
+  const page = await game(t, { save: SAVE(0, { best: [12, 0, 0, 0, 0] }), reducedMotion: 'no-preference' });
+  await page.locator('#btnParty').click();
+  await step(page, 2);
+  let s = await state(page);
+  assert.equal(s.screen, 'play'); assert.equal(s.party, true); assert.ok(s.tier >= 4); assert.equal(s.best, 12);
+  // Pop bubbles rapidly until both a Chain-Pop Shockwave and a Giant Golden Pinata have been popped!
+  for (let i = 0; i < 240; i++) {
+    s = await state(page);
+    if (s.shockwaveCount >= 1 && s.pinatasPopped >= 1) break;
+    const pin = s.targets.find(o => o.pinata);
+    const tgt = pin || s.targets[0];
+    if (tgt) {
+      const p = await page.evaluate(([x, y]) => __game.point(x, y), [tgt.x, tgt.y]);
+      await page.mouse.move(p.x, p.y);
+    }
+    await page.evaluate(() => { bb.run(8); bb.paint(); });
+  }
+  s = await state(page);
+  assert.ok(s.shockwaveCount >= 1, `Chain-Pop Shockwave triggered (${s.shockwaveCount})`);
+  assert.ok(s.pinatasPopped >= 1, `Golden Pinata popped (${s.pinatasPopped})`);
+  assert.ok(s.score > 12, `scored past PB (${s.score})`);
+  assert.ok(s.feverGauge > 0 || s.fever > 0, 'Rainbow Fever gauge active');
+  // Advance to the end of the 60s Arcade Party and verify instant 1-key replay via Space!
+  assert.ok(await until(page, "s.screen === 'result'", 60 * 65), 'reaches party result screen');
+  await step(page, 25);
+  assert.equal(await page.locator('#resHint').isVisible(), true, 'instant replay hint shown on party result');
+  assert.ok((await page.evaluate(() => __game.save)).best[0] >= s.score, 'new PB saved');
+  await page.keyboard.press('Space');
+  await step(page, 2);
+  const replay = await state(page);
+  assert.equal(replay.screen, 'play', 'Space instantly replays Arcade Party');
+  assert.equal(replay.party, true);
+  assert.ok(replay.tier >= 4, 'instant replay preserves brisk Tier 4+ pace');
+  assert.equal(replay.hits, 0);
+});

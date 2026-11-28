@@ -119,7 +119,7 @@ test('storefront shelves, conditional starter, bento hero, hover hearts, roulett
   assert.equal(await fresh.locator('.bento-grid .tile').count(), 9, 'bento hero displays 1 flagship + 8 flanking S-tier tiles');
   assert.equal(await fresh.locator('.bento-grid .tile.hero-tile').first().getAttribute('data-slug'), 'tunnel-blitz');
   assert.equal(await fresh.locator('.catalog-grid .tile').first().getAttribute('data-slug'), 'tunnel-blitz', 'starter is never duplicated as tile #1');
-  assert.equal(await fresh.locator('.new-grid .tile').count(), 6, 'new shelf highlights the 6 brand-new games');
+  assert.equal(await fresh.locator('.new-grid .tile').count(), 8, 'new shelf highlights the 8 brand-new games');
   assert.ok(await fresh.locator('.friends-grid .tile').count() >= 6, '2-player shelf appears on home');
 
   // Hover-heart button toggles favorite without navigating and updates the nav badge + home shelf.
@@ -131,7 +131,7 @@ test('storefront shelves, conditional starter, bento hero, hover hearts, roulett
   // Returning PC (has recent history): starter banner hides; recent & favorites shelves appear cleanly.
   const page = await pageFor(t);
   await page.addInitScript(() => {
-    localStorage.setItem('sg:site:recent', '["pool-party","recess-kitchen"]');
+    localStorage.setItem('sg:site:recent', '["pool-party","critter-mart"]');
     localStorage.setItem('sg:site:favs', '["drift-king","critter-mart"]');
   });
   await page.goto(origin);

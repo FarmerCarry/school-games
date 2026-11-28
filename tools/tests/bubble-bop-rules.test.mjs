@@ -685,3 +685,66 @@ test('targets of the new worlds appear where a child can reach them, never under
   }
   assert.ok(mouse.y > BB.SUB.y1 + BB.SUB.r, 'the submarine stays above the bottom row of helpers');
 });
+
+test('Chain-Pop Shockwaves: 3 rapid bubble pops unleash a shockwave that domino-pops nearby bubbles and charges Rainbow Fever', () => {
+  const plan = BB.plan(0, 'P', 4), world = BB.create(plan, 13);
+  // Step briefly so initial spawn clock passes, then stage 4 nearby bubbles deterministically.
+  BB.step(world, DT, none());
+  world.targets.length = 0; world.ev.length = 0;
+  const mk = (x, y) => {
+    const b = { id: world.next++, kind: 'bubble', x, y, r: 44, age: 1, phase: 0, color: 0, gold: false, dead: false, hoverY: y, wait: 99, waited: 0, sway: 0, speedK: 1, vx: 0, vy: 0 };
+    world.targets.push(b);
+    return b;
+  };
+  const b1 = mk(400, 360), b2 = mk(500, 360), b3 = mk(600, 360), b4 = mk(710, 360);
+  // Pop 3 bubbles rapidly by moving pointer onto b1, b2, b3.
+  for (const b of [b1, b2, b3]) {
+    BB.step(world, DT, Object.assign(none(), { px: b.x, py: b.y }));
+  }
+  assert.ok(world.shockwaveCount >= 1, '3 rapid pops triggered a Chain-Pop Shockwave');
+  assert.ok(world.ev.some(e => e.t === 'shockwave'), 'shockwave event emitted');
+  assert.ok(world.feverGauge > 0.5, `Rainbow Fever gauge charged (${world.feverGauge})`);
+  assert.ok(world.mult >= 2, `party combo multiplier reached ×${world.mult}`);
+  world.ev.length = 0;
+  // Step forward so expanding shockwave reaches nearby bubble b4 in a domino chain!
+  let chainPop = null;
+  for (let i = 0; i < 30 && !chainPop; i++) {
+    BB.step(world, DT, none());
+    chainPop = world.ev.find(e => e.t === 'pop' && e.by === 'shockwave' && e.id === b4.id);
+    world.ev.length = 0;
+  }
+  assert.ok(chainPop, 'shockwave ring domino-popped nearby bubble b4');
+  assert.ok(chainPop.chain >= 1);
+  // Trigger one more shockwave to fill the Rainbow Fever gauge and ignite Fever!
+  const b5 = mk(420, 320), b6 = mk(520, 320), b7 = mk(620, 320);
+  let feverFired = false;
+  for (const b of [b5, b6, b7]) {
+    BB.step(world, DT, Object.assign(none(), { px: b.x, py: b.y }));
+    if (world.ev.some(e => e.t === 'fever')) feverFired = true;
+    world.ev.length = 0;
+  }
+  assert.ok(feverFired && world.fever > 0, 'Rainbow Fever ignited once gauge filled');
+  assert.ok(world.mult >= 3, `Rainbow Fever + combo lifts party multiplier to ×${world.mult}`);
+});
+
+test('Golden Pinata Bubbles in Arcade Party burst into 5 bonus mini-bubbles and score big', () => {
+  const plan = BB.plan(0, 'P', 4), world = BB.create(plan, 7);
+  let pinata = null;
+  for (let i = 0; i < 60 * 15 && !pinata; i++) {
+    BB.step(world, DT, none());
+    world.ev.length = 0;
+    pinata = world.targets.find(t => !t.dead && t.pinata);
+  }
+  assert.ok(pinata, 'a Giant Golden Pinata bubble spawns in Arcade Party mode');
+  assert.equal(pinata.gold, true);
+  assert.ok(pinata.r > BB.TUNE.touch.r[3] * 1.3, 'pinata is visibly giant');
+  const scoreBefore = world.score;
+  // Move pointer onto the pinata to burst it!
+  BB.step(world, DT, Object.assign(none(), { px: pinata.x, py: pinata.y }));
+  const popEv = world.ev.find(e => e.t === 'pop' && e.pinata);
+  assert.ok(popEv, 'pinata pop event emitted');
+  assert.equal(world.pinatasPopped, 1);
+  assert.ok(world.score - scoreBefore >= 10, 'pinata awards 10× multiplier bonus points');
+  const minis = world.targets.filter(t => !t.dead && t.mini);
+  assert.equal(minis.length, 5, 'Golden Pinata bursts into 5 bonus mini-bubbles');
+});

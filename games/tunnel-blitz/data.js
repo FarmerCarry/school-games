@@ -2,6 +2,8 @@
 (function () {
   'use strict';
   var TB = window.TB = {};
+  var M = Math, abs = M.abs, sin = M.sin, cos = M.cos, flr = M.floor, PI = M.PI; function ran() { return M.random(); }
+
 
   // One entry per zone. After zone 8 the list loops with higher speed.
   // col = main neon, alt = second neon (bars / spirals), bg = far background, N = tunnel sides.
@@ -127,13 +129,13 @@
 
   function glass(g, x, y, rx, ry) {
     g.fillStyle = '#152044';
-    g.beginPath(); g.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2); g.fill();
+    g.beginPath(); g.ellipse(x, y, rx, ry, 0, 0, PI * 2); g.fill();
     g.fillStyle = 'rgba(160, 235, 255, 0.85)';
-    g.beginPath(); g.ellipse(x - rx * 0.3, y - ry * 0.35, rx * 0.35, ry * 0.3, -0.4, 0, Math.PI * 2); g.fill();
+    g.beginPath(); g.ellipse(x - rx * 0.3, y - ry * 0.35, rx * 0.35, ry * 0.3, -0.4, 0, PI * 2); g.fill();
   }
 
   function flame(g, x, y, w, len, skin, t) {
-    var f = len * (0.85 + 0.3 * Math.abs(Math.sin(t * 37 + x * 9)));
+    var f = len * (0.85 + 0.3 * abs(sin(t * 37 + x * 9)));
     g.globalCompositeOperation = 'lighter';
     g.fillStyle = skin.rainbow ? hsl(t * 200, 100, 60) : skin.flame[1];
     g.globalAlpha = 0.75;
@@ -172,7 +174,7 @@
     },
     manta: function (g, s, t, fl) {
       flame(g, 0, 0.42, 0.2, fl, s, t);
-      var flap = Math.sin(t * 6) * 0.08;
+      var flap = sin(t * 6) * 0.08;
       g.beginPath();
       g.moveTo(0, -0.72);
       g.quadraticCurveTo(0.62, -0.55, 1.18, 0.3 + flap);
@@ -190,7 +192,7 @@
     },
     bee: function (g, s, t, fl) {
       flame(g, 0, 0.66, 0.18, fl, s, t);
-      var fw = 0.55 + 0.45 * Math.abs(Math.sin(t * 38));
+      var fw = 0.55 + 0.45 * abs(sin(t * 38));
       g.fillStyle = 'rgba(220, 245, 255, 0.75)'; g.strokeStyle = 'rgba(255,255,255,0.9)'; g.lineWidth = 0.05;
       g.beginPath(); g.ellipse(-0.6, -0.3, 0.5, 0.26 * fw, -0.5, 0, 6.29); g.fill(); g.stroke();
       g.beginPath(); g.ellipse(0.6, -0.3, 0.5, 0.26 * fw, 0.5, 0, 6.29); g.fill(); g.stroke();
@@ -211,7 +213,7 @@
     saucer: function (g, s, t, fl) {
       flame(g, 0, 0.32, 0.3, fl * 0.7, s, t);
       g.fillStyle = 'rgba(150, 230, 255, 0.35)'; g.strokeStyle = 'rgba(200,245,255,0.9)'; g.lineWidth = 0.06;
-      g.beginPath(); g.arc(0, -0.12, 0.48, Math.PI, 0); g.fill();
+      g.beginPath(); g.arc(0, -0.12, 0.48, PI, 0); g.fill();
       // alien pal
       g.fillStyle = '#7dff3a';
       g.beginPath(); g.ellipse(0, -0.2, 0.26, 0.24, 0, 0, 6.29); g.fill();
@@ -219,13 +221,13 @@
       var blink = (t % 3) > 2.85 ? 0.2 : 1;
       g.beginPath(); g.ellipse(-0.1, -0.24, 0.06, 0.08 * blink, 0, 0, 6.29); g.ellipse(0.1, -0.24, 0.06, 0.08 * blink, 0, 0, 6.29); g.fill();
       g.strokeStyle = 'rgba(200,245,255,0.9)';
-      g.beginPath(); g.arc(0, -0.12, 0.48, Math.PI, 0); g.stroke();
+      g.beginPath(); g.arc(0, -0.12, 0.48, PI, 0); g.stroke();
       g.beginPath(); g.ellipse(0, 0.02, 1.02, 0.34, 0, 0, 6.29);
       g.fillStyle = bodyFill(g, s, t); g.fill();
       g.strokeStyle = s.dark; g.lineWidth = 0.09; g.stroke();
       g.fillStyle = s.dark; g.beginPath(); g.ellipse(0, 0.12, 0.8, 0.12, 0, 0, 6.29); g.fill();
       for (var i = 0; i < 5; i++) {
-        var on = Math.floor(t * 6 + i) % 2 === 0;
+        var on = flr(t * 6 + i) % 2 === 0;
         g.fillStyle = on ? s.trim : '#ffe14a';
         g.beginPath(); g.arc(-0.64 + i * 0.32, 0.12, 0.08, 0, 6.29); g.fill();
       }
@@ -259,11 +261,11 @@
     },
     star: function (g, s, t, fl) {
       flame(g, 0, 0.5, 0.24, fl, s, t);
-      var r1 = 1.0, r2 = 0.48, a0 = -Math.PI / 2 + Math.sin(t * 3) * 0.12;
+      var r1 = 1.0, r2 = 0.48, a0 = -PI / 2 + sin(t * 3) * 0.12;
       g.beginPath();
       for (var i = 0; i < 10; i++) {
-        var r = i % 2 ? r2 : r1, a = a0 + i * Math.PI / 5;
-        if (i) g.lineTo(Math.cos(a) * r, Math.sin(a) * r); else g.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+        var r = i % 2 ? r2 : r1, a = a0 + i * PI / 5;
+        if (i) g.lineTo(cos(a) * r, sin(a) * r); else g.moveTo(cos(a) * r, sin(a) * r);
       }
       g.closePath();
       g.fillStyle = s.body; g.fill();
@@ -272,7 +274,7 @@
       g.fillStyle = '#3a2000';
       g.beginPath(); g.ellipse(-0.17, -0.06, 0.07, 0.12 * blink, 0, 0, 6.29); g.ellipse(0.17, -0.06, 0.07, 0.12 * blink, 0, 0, 6.29); g.fill();
       g.strokeStyle = '#3a2000'; g.lineWidth = 0.06; g.lineCap = 'round';
-      g.beginPath(); g.arc(0, 0.08, 0.14, 0.3, Math.PI - 0.3); g.stroke();
+      g.beginPath(); g.arc(0, 0.08, 0.14, 0.3, PI - 0.3); g.stroke();
       g.fillStyle = 'rgba(255, 110, 110, 0.6)';
       g.beginPath(); g.arc(-0.3, 0.1, 0.07, 0, 6.29); g.arc(0.3, 0.1, 0.07, 0, 6.29); g.fill();
     },
@@ -291,7 +293,7 @@
       // sparkle
       var sp = (t * 1.3) % 1;
       if (sp < 0.3) {
-        var k = Math.sin(sp / 0.3 * Math.PI) * 0.22;
+        var k = sin(sp / 0.3 * PI) * 0.22;
         g.fillStyle = '#ffffff';
         g.beginPath(); g.moveTo(0.7, 0.05 - k); g.lineTo(0.74, 0.05); g.lineTo(0.7, 0.05 + k); g.lineTo(0.66, 0.05); g.closePath(); g.fill();
         g.beginPath(); g.moveTo(0.7 - k, 0.05); g.lineTo(0.7, 0.09); g.lineTo(0.7 + k, 0.05); g.lineTo(0.7, 0.01); g.closePath(); g.fill();

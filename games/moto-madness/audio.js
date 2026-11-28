@@ -102,6 +102,10 @@
     tone({ freq: 360, to: 1100, type: 'triangle', dur: 0.2, vol: 0.12, delay: 0.03 });
   };
   A.boost = function () { noise({ dur: 0.45, vol: 0.16, filter: 700, to: 3000 }); tone({ freq: 200, to: 800, type: 'triangle', dur: 0.4, vol: 0.16 }); };
+  A.turbo = function () {
+    noise({ dur: 0.42, vol: 0.2, filter: 900, to: 3600 });
+    [523, 659, 784, 1047, 1319].forEach(function (f, i) { tone({ freq: f, to: f * 1.14, type: 'triangle', dur: 0.14, vol: 0.17, delay: i * 0.045 }); });
+  };
   A.crate = function () { noise({ dur: 0.12, vol: 0.3, filter: 2500, to: 600 }); tone({ freq: 240, to: 140, type: 'square', dur: 0.06, vol: 0.12 }); };
   A.crateBreak = function () { noise({ dur: 0.18, vol: 0.2, filter: 3000, to: 400 }); };
   A.creak = function () { tone({ freq: 160, to: 120, type: 'sawtooth', dur: 0.12, vol: 0.06 }); };

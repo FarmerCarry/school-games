@@ -11,6 +11,8 @@
 (function (root) {
   'use strict';
   var MM = root.MM = root.MM || {};
+  var M = Math, abs = M.abs, min = M.min, max = M.max, flr = M.floor, sin = M.sin, cos = M.cos, sqrt = M.sqrt, PI = M.PI; function ran() { return M.random(); }
+
 
   var G = 1400;            // gravity px/s^2
   var SUB = 8;             // physics sub-steps per 60 Hz frame
@@ -30,17 +32,17 @@
   MM.rng = rng;
 
   function mkSeg(x1, y1, x2, y2, k) {
-    var dx = x2 - x1, dy = y2 - y1, len = Math.sqrt(dx * dx + dy * dy);
+    var dx = x2 - x1, dy = y2 - y1, len = sqrt(dx * dx + dy * dy);
     if (len < 0.01) return null;
     dx /= len; dy /= len;
     return { x1: x1, y1: y1, x2: x2, y2: y2, dx: dx, dy: dy, nx: dy, ny: -dx, len: len, k: k || 'g',
-      mark: 0, minX: Math.min(x1, x2), maxX: Math.max(x1, x2), loop: null, half: '', power: 0, ref: null, mover: null };
+      mark: 0, minX: min(x1, x2), maxX: max(x1, x2), loop: null, half: '', power: 0, ref: null, mover: null };
   }
   function setSeg(s, x1, y1, x2, y2) {
-    var dx = x2 - x1, dy = y2 - y1, len = Math.sqrt(dx * dx + dy * dy) || 1;
+    var dx = x2 - x1, dy = y2 - y1, len = sqrt(dx * dx + dy * dy) || 1;
     dx /= len; dy /= len;
     s.x1 = x1; s.y1 = y1; s.x2 = x2; s.y2 = y2; s.dx = dx; s.dy = dy; s.nx = dy; s.ny = -dx; s.len = len;
-    s.minX = Math.min(x1, x2); s.maxX = Math.max(x1, x2);
+    s.minX = min(x1, x2); s.maxX = max(x1, x2);
   }
 
   /* =================================================================== BUILDER */
@@ -61,14 +63,14 @@
   B.flat = function (len) { return this.pt(this.x + len, this.y); };
   B.slope = function (len, rise) { return this.pt(this.x + len, this.y - rise); };
   B.curve = function (len, fn, step) {
-    var n = Math.max(2, Math.ceil(len / (step || 20))), x0 = this.x, y0 = this.y;
+    var n = max(2, M.ceil(len / (step || 20))), x0 = this.x, y0 = this.y;
     for (var i = 1; i <= n; i++) { var t = i / n; this.pt(x0 + len * t, y0 + fn(t)); }
     return this;
   };
   // smooth bump (h>0 up, h<0 valley)
-  B.hill = function (len, h) { return this.curve(len, function (t) { return -h * (1 - Math.cos(2 * Math.PI * t)) / 2; }); };
+  B.hill = function (len, h) { return this.curve(len, function (t) { return -h * (1 - cos(2 * PI * t)) / 2; }); };
   // smooth S-curve to a new height (rise>0 goes up)
-  B.to = function (len, rise) { return this.curve(len, function (t) { return -rise * (1 - Math.cos(Math.PI * t)) / 2; }); };
+  B.to = function (len, rise) { return this.curve(len, function (t) { return -rise * (1 - cos(PI * t)) / 2; }); };
   // concave kicker built into the ground: flat start, steep lip at the end
   B.ramp = function (len, h) { return this.curve(len, function (t) { return -h * t * t; }, 14); };
   // convex: steep start, flat top
@@ -105,7 +107,7 @@
   };
   // wooden kicker ramp sitting on the ground
   B.kicker = function (len, h) {
-    var x0 = this.x, y0 = this.y, pts = [], n = Math.ceil(len / 14);
+    var x0 = this.x, y0 = this.y, pts = [], n = M.ceil(len / 14);
     for (var i = 0; i <= n; i++) { var t = i / n; pts.push([x0 + len * t, y0 - h * t * t]); }
     pts.push([x0 + len, y0]);
     this.addExtra(pts, 'w');
@@ -115,7 +117,7 @@
   };
   // wooden landing ramp (front face is a wall, so jump onto it!)
   B.lander = function (len, h) {
-    var x0 = this.x, y0 = this.y, pts = [[x0, y0], [x0, y0 - h]], n = Math.ceil(len / 16);
+    var x0 = this.x, y0 = this.y, pts = [[x0, y0], [x0, y0 - h]], n = M.ceil(len / 16);
     for (var i = 1; i <= n; i++) { var t = i / n; pts.push([x0 + len * t, y0 - h * (1 - t) * (1 - t)]); }
     this.addExtra(pts, 'w');
     this.shapes.push({ type: 'lander', pts: pts, x1: x0, x2: x0 + len, y: y0, h: h });
@@ -126,8 +128,8 @@
   B.mushroom = function (power) {
     var x0 = this.x, y0 = this.y, cx = x0 + 60, pts = [], sh = { type: 'mushroom', cx: cx, y: y0, t: 9 };
     for (var i = 0; i <= 12; i++) {
-      var a = Math.PI + Math.PI * i / 12;
-      pts.push([cx + Math.cos(a) * 58, y0 - 6 + Math.sin(a) * 44]);
+      var a = PI + PI * i / 12;
+      pts.push([cx + cos(a) * 58, y0 - 6 + sin(a) * 44]);
     }
     this.addExtra(pts, 'b', { power: power || 1150, ref: sh });
     this.shapes.push(sh);
@@ -139,10 +141,10 @@
     this.flat(R + 160);
     var cx = this.x, cy = this.y - R;
     var lp = { cx: cx, cy: cy, R: R, st: 0 };
-    var n = Math.ceil(2 * Math.PI * R / 20), prev = null;
+    var n = M.ceil(2 * PI * R / 20), prev = null;
     for (var i = 0; i <= n; i++) {
-      var phi = Math.PI / 2 - 2 * Math.PI * i / n;
-      var p = [cx + R * Math.cos(phi), cy + R * Math.sin(phi)];
+      var phi = PI / 2 - 2 * PI * i / n;
+      var p = [cx + R * cos(phi), cy + R * sin(phi)];
       if (prev) {
         var s = mkSeg(prev[0], prev[1], p[0], p[1], 'g');
         if (s) { s.loop = lp; s.half = i <= n / 2 ? 'A' : 'B'; this.extra.push(s); }
@@ -157,7 +159,7 @@
   };
   B.seesaw = function (len) {
     len = len || 380;
-    var x0 = this.x, y0 = this.y, lift = 38, P = len + 90, tilt = Math.asin(lift / (P / 2));
+    var x0 = this.x, y0 = this.y, lift = 38, P = len + 90, tilt = M.asin(lift / (P / 2));
     this.movers.push({ type: 'seesaw', x: x0 + len / 2, y: y0 - lift, len: P, amin: -tilt, amax: tilt, a: -tilt });
     return this.pit(len, 190);
   };
@@ -239,17 +241,17 @@
     }
     for (i = 0; i < this.extra.length; i++) L.segs.push(this.extra[i]);
     var minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9;
-    for (i = 1; i < c.length - 2; i++) { minX = Math.min(minX, c[i].x); maxX = Math.max(maxX, c[i].x); minY = Math.min(minY, c[i].y); maxY = Math.max(maxY, c[i].y); }
+    for (i = 1; i < c.length - 2; i++) { minX = min(minX, c[i].x); maxX = max(maxX, c[i].x); minY = min(minY, c[i].y); maxY = max(maxY, c[i].y); }
     L.minX = minX; L.maxX = maxX; L.minY = minY; L.maxY = maxY; L.killY = maxY + 700;
     // grid
-    L.cell0 = Math.floor((minX - 400) / CELL);
-    var ncell = Math.floor((maxX + 400) / CELL) - L.cell0 + 1;
+    L.cell0 = flr((minX - 400) / CELL);
+    var ncell = flr((maxX + 400) / CELL) - L.cell0 + 1;
     L.grid = [];
     for (i = 0; i < ncell; i++) L.grid.push([]);
     for (i = 0; i < L.segs.length; i++) {
       s = L.segs[i];
-      var a = Math.floor(s.minX / CELL) - L.cell0, b = Math.floor(s.maxX / CELL) - L.cell0;
-      for (var j = Math.max(0, a); j <= Math.min(ncell - 1, b); j++) L.grid[j].push(s);
+      var a = flr(s.minX / CELL) - L.cell0, b = flr(s.maxX / CELL) - L.cell0;
+      for (var j = max(0, a); j <= min(ncell - 1, b); j++) L.grid[j].push(s);
     }
     // decor spots on gentle ground
     var R = rng((this.def.seed || 7) * 7919 + 13);
@@ -258,12 +260,12 @@
       x += 90 + R() * 240;
       var blocked = x > this.finishX - 200 && x < this.finishX + 200;
       for (i = 0; i < this.noDecor.length; i++) if (x > this.noDecor[i][0] && x < this.noDecor[i][1]) blocked = true;
-      for (i = 0; i < this.checkpoints.length; i++) if (Math.abs(x - this.checkpoints[i].x) < 70) blocked = true;
-      for (i = 0; i < this.signs.length; i++) if (Math.abs(x - this.signs[i].x - 60) < 110) blocked = true;
+      for (i = 0; i < this.checkpoints.length; i++) if (abs(x - this.checkpoints[i].x) < 70) blocked = true;
+      for (i = 0; i < this.signs.length; i++) if (abs(x - this.signs[i].x - 60) < 110) blocked = true;
       if (blocked) continue;
       var y1 = chainY(c, x - 30), y2 = chainY(c, x + 30);
-      if (y1 == null || y2 == null || Math.abs(y2 - y1) > 22) continue;
-      L.decor.push({ x: x, y: Math.max(y1, y2) + 4, v: R(), s: 0.75 + R() * 0.5 });
+      if (y1 == null || y2 == null || abs(y2 - y1) > 22) continue;
+      L.decor.push({ x: x, y: max(y1, y2) + 4, v: R(), s: 0.75 + R() * 0.5 });
     }
     return L;
   };
@@ -274,7 +276,7 @@
     var i = lo;
     if (i <= 0 || i >= c.length) return null;
     var a = c[i - 1], b = c[i];
-    if (b.x === a.x) return Math.min(a.y, b.y);
+    if (b.x === a.x) return min(a.y, b.y);
     return a.y + (b.y - a.y) * (x - a.x) / (b.x - a.x);
   }
   MM.chainY = chainY;
@@ -339,11 +341,11 @@
     var x = this.cp >= 0 ? L.checkpoints[this.cp].x : L.start.x;
     var gy = this.groundAt(x, -1e9, true);
     var gy2 = this.groundAt(x + 30, -1e9, true), gy1 = this.groundAt(x - 30, -1e9, true);
-    var a = Math.atan2(gy2 - gy1, 60);
+    var a = M.atan2(gy2 - gy1, 60);
     this.placeBike(x, gy - 44, a);
     this.crashed = false; this.crashT = 0; this.rider = null;
     this.airT = 0; this.takeoffA = 0; this.pendingFlip = null; this.wheelieT = 0; this.wheelieShown = false;
-    this.boostCd = 0; this.bounceCd = 0; this.grounded = true; this.chassisHit = 0; this.landGrace = 0;
+    this.boostCd = 0; this.bounceCd = 0; this.grounded = true; this.chassisHit = 0; this.landGrace = 0; this.flipGrace = 0; this.nitroT = 0;
     this.maxAirH = 0; this.hungT = 0;
     // dynamic stuff back to the start
     this.movers = [];
@@ -365,7 +367,7 @@
   };
 
   W.placeBike = function (x, y, a) {
-    var b = this.bike, ca = Math.cos(a), sa = Math.sin(a);
+    var b = this.bike, ca = cos(a), sa = sin(a);
     b.x = x; b.y = y; b.a = a; b.vx = 0; b.vy = 0; b.w = 0;
     for (var i = 0; i < 2; i++) {
       var wh = b.wheels[i], an = wh.anc;
@@ -384,7 +386,7 @@
     return m;
   };
   W.updateMoverSeg = function (m) {
-    var hl = m.len / 2, ca = Math.cos(m.a), sa = Math.sin(m.a);
+    var hl = m.len / 2, ca = cos(m.a), sa = sin(m.a);
     setSeg(m.seg, m.x - ca * hl, m.y - sa * hl, m.x + ca * hl, m.y + sa * hl);
   };
   W.moveMovers = function (h) {
@@ -394,8 +396,8 @@
       if (m.type === 'seesaw') {
         m.w *= (1 - 1.2 * h);
         m.a += m.w * h;
-        if (m.a < d.amin) { if (m.w < -2.5) this.events.push({ type: 'thunk', x: m.x, y: m.y }); m.a = d.amin; m.w = Math.max(0, -m.w * 0.15); }
-        if (m.a > d.amax) { if (m.w > 2.5) this.events.push({ type: 'thunk', x: m.x, y: m.y }); m.a = d.amax; m.w = Math.min(0, -m.w * 0.15); }
+        if (m.a < d.amin) { if (m.w < -2.5) this.events.push({ type: 'thunk', x: m.x, y: m.y }); m.a = d.amin; m.w = max(0, -m.w * 0.15); }
+        if (m.a > d.amax) { if (m.w > 2.5) this.events.push({ type: 'thunk', x: m.x, y: m.y }); m.a = d.amax; m.w = min(0, -m.w * 0.15); }
       } else if (m.type === 'plank') {
         if (m.st === 1) { m.t += h; if (m.t > 0.3) { m.st = 2; this.events.push({ type: 'plank', x: m.x, y: m.y }); } }
         else if (m.st === 2) {
@@ -408,7 +410,7 @@
         if (m.st === 0) { if (m.onT > 0.3 && !this.crashed) { m.st = 1; m.t = 0; this.events.push({ type: 'lift', x: m.x, y: m.y }); } }
         else if (m.st === 1 || m.st === 3) {
           m.t += h;
-          var u = Math.min(1, m.t / d.time);
+          var u = min(1, m.t / d.time);
           f = u * u * (3 - 2 * u); fv = 6 * u * (1 - u) / d.time;
           if (m.st === 3) { f = 1 - f; fv = -fv; }
           if (u >= 1) { m.st = m.st === 1 ? 2 : 0; m.t = 0; if (m.st === 2) this.events.push({ type: 'liftStop', x: m.x, y: m.y }); }
@@ -433,7 +435,7 @@
     if (d2 >= r * r) return false;
     if (t > 0 && t < s.len) { out.nx = s.nx; out.ny = s.ny; out.pen = r - side; }
     else {
-      var d = Math.sqrt(d2);
+      var d = sqrt(d2);
       if (d < 1e-4) return false;
       out.nx = ex / d; out.ny = ey / d; out.pen = r - d;
       if (out.nx * s.nx + out.ny * s.ny < 0.05) return false;
@@ -449,7 +451,7 @@
   // Collide a circle with the level. Fills this.contacts, returns count.
   W.collide = function (x, y, r, noMovers) {
     var L = this.level, n = 0, cs = this.contacts, stamp = ++this.stamp, i, s;
-    var c0 = Math.floor((x - r) / CELL) - L.cell0, c1 = Math.floor((x + r) / CELL) - L.cell0;
+    var c0 = flr((x - r) / CELL) - L.cell0, c1 = flr((x + r) / CELL) - L.cell0;
     if (c0 < 0) c0 = 0;
     if (c1 > L.grid.length - 1) c1 = L.grid.length - 1;
     for (var c = c0; c <= c1; c++) {
@@ -477,7 +479,7 @@
 
   // Height of the first upward-facing surface at x at or below yFrom.
   W.groundAt = function (x, yFrom, staticOnly) {
-    var L = this.level, best = 1e9, c = Math.floor(x / CELL) - L.cell0, i, s, y;
+    var L = this.level, best = 1e9, c = flr(x / CELL) - L.cell0, i, s, y;
     if (c >= 0 && c < L.grid.length) {
       var cell = L.grid[c];
       for (i = 0; i < cell.length; i++) {
@@ -508,11 +510,11 @@
   W.crash = function (why) {
     if (this.finished) this.pendingFlip = null; // no falls past the line, but a flip landed on the head still doesn't count
     if (this.crashed || this.finished) return;
-    var b = this.bike, ca = Math.cos(b.a), sa = Math.sin(b.a);
+    var b = this.bike, ca = cos(b.a), sa = sin(b.a);
     this.crashed = true; this.crashT = 0; this.crashes++;
-    this.pendingFlip = null;
+    this.pendingFlip = null; this.nitroT = 0;
     var hx = b.x + (-8) * ca - (-44) * sa, hy = b.y + (-8) * sa + (-44) * ca;
-    this.rider = { x: hx, y: hy, vx: b.vx * 0.7 - 60, vy: Math.min(b.vy * 0.5, 0) - 420, a: b.a, w: (b.vx >= 0 ? -1 : 1) * (7 + Math.random() * 3), r: 16, ground: 0, t: 0 };
+    this.rider = { x: hx, y: hy, vx: b.vx * 0.7 - 60, vy: min(b.vy * 0.5, 0) - 420, a: b.a, w: (b.vx >= 0 ? -1 : 1) * (7 + ran() * 3), r: 16, ground: 0, t: 0 };
     this.events.push({ type: 'crash', x: hx, y: hy, why: why || 'bonk' });
   };
 
@@ -573,7 +575,7 @@
         else if (m.type === 'plank' && m.st === 0) { m.st = 1; m.t = 0; this.events.push({ type: 'creak', x: m.x, y: m.y }); }
       }
       if (isBike && s.loop && !this.crashed) {
-        var sp = Math.sqrt(this.bike.vx * this.bike.vx + this.bike.vy * this.bike.vy);
+        var sp = sqrt(this.bike.vx * this.bike.vx + this.bike.vy * this.bike.vy);
         if (sp > 300) { var f = G * 1.05 * H; wh.vx -= nx * f; wh.vy -= ny * f; this.loopStick = 0.1; }
       }
       if (isBike) {
@@ -598,9 +600,9 @@
     var b = this.bike, target = 1450;
     var vt = b.vx * tx + b.vy * ty;
     if (vt < target) {
-      var dv = Math.min(3600 * H, target - vt);
+      var dv = min(3600 * H, target - vt);
       b.vx += tx * dv; b.vy += ty * dv;
-      for (var i = 0; i < 2; i++) { b.wheels[i].vx += tx * dv; b.wheels[i].vy += ty * dv; b.wheels[i].s = Math.max(b.wheels[i].s, vt + dv); }
+      for (var i = 0; i < 2; i++) { b.wheels[i].vx += tx * dv; b.wheels[i].vy += ty * dv; b.wheels[i].s = max(b.wheels[i].s, vt + dv); }
     }
     if (this.boostCd <= 0) this.events.push({ type: 'boost', x: b.x, y: b.y });
     this.boostCd = 0.5;
@@ -610,11 +612,11 @@
     if (!mv.on) return false;
     if (mv.on === 3) return true;
     // Require bike center inside the platform safe core (center 80% and both wheels horizontally over the deck)
-    var lim = Math.min(mv.len * 0.4, Math.max(40, mv.len * 0.5 - 46));
-    if (Math.abs(b.x - mv.x) > lim) return false;
+    var lim = min(mv.len * 0.4, max(40, mv.len * 0.5 - 46));
+    if (abs(b.x - mv.x) > lim) return false;
     var wlim = mv.len * 0.4;
-    return ((mv.on & 1) && Math.abs(b.wheels[0].x - mv.x) <= wlim) ||
-           ((mv.on & 2) && Math.abs(b.wheels[1].x - mv.x) <= wlim);
+    return ((mv.on & 1) && abs(b.wheels[0].x - mv.x) <= wlim) ||
+           ((mv.on & 2) && abs(b.wheels[1].x - mv.x) <= wlim);
   }
 
   W.substep = function (inp) {
@@ -638,7 +640,7 @@
       b.vx = hold.vx + (b.vx - hold.vx) * kd;
       for (i = 0; i < 2; i++) { wh = b.wheels[i]; wh.vx = hold.vx + (wh.vx - hold.vx) * kd; }
     }
-    var ca = Math.cos(b.a), sa = Math.sin(b.a);
+    var ca = cos(b.a), sa = sin(b.a);
 
     // gravity + air drag
     b.vy += G * h;
@@ -670,11 +672,20 @@
     var rear = b.wheels[0], front = b.wheels[1];
     var fwd = b.vx * ca + b.vy * sa;
     if (gas) {
-      if (rear.s < VMAX) rear.s = Math.min(VMAX, rear.s + MOTOR * h * (1 - Math.max(0, rear.s) / (VMAX * 1.2)));
+      if (rear.s < VMAX) rear.s = min(VMAX, rear.s + MOTOR * h * (1 - max(0, rear.s) / (VMAX * 1.2)));
+    }
+    if (this.nitroT > 0 && ctl && !hold && !brake && rear.air < 0.06 && front.air < 0.12) {
+      var nf = this.nitroT / 1.5, ntx = -(rear.ny || -1), nty = rear.nx || 0, nvt = b.vx * ntx + b.vy * nty;
+      if (ntx > 0.5 && nvt < 1080) {
+        var ndv = min(320 * nf * h, 1080 - nvt);
+        b.vx += ntx * ndv; b.vy += nty * ndv;
+        rear.vx += ntx * ndv; rear.vy += nty * ndv; front.vx += ntx * ndv; front.vy += nty * ndv;
+        rear.s = max(rear.s, nvt + ndv);
+      }
     }
     if (brake || hold) {
-      for (i = 0; i < 2; i++) { wh = b.wheels[i]; wh.s = wh.s > 0 ? Math.max(0, wh.s - BRAKE * h) : Math.min(0, wh.s + BRAKE * h); }
-      if (brake && fwd < 40 && this.started) rear.s = Math.max(-280, rear.s - 1800 * h);
+      for (i = 0; i < 2; i++) { wh = b.wheels[i]; wh.s = wh.s > 0 ? max(0, wh.s - BRAKE * h) : min(0, wh.s + BRAKE * h); }
+      if (brake && fwd < 40 && this.started) rear.s = max(-280, rear.s - 1800 * h);
     }
     for (i = 0; i < 2; i++) { wh = b.wheels[i]; if (wh.air > 0.1 && !(gas && i === 0)) wh.s *= (1 - 0.6 * h); }
     // lean
@@ -684,13 +695,13 @@
       if (grounded) {
         // fade the ground lean as the bike pitches away from the slope (easy, controllable wheelies)
         var gw = rear.air < 0.05 ? rear : front;
-        var rel = b.a - Math.atan2(gw.nx || 0, -(gw.ny || -1));
-        while (rel > Math.PI) rel -= 2 * Math.PI;
-        while (rel < -Math.PI) rel += 2 * Math.PI;
+        var rel = b.a - M.atan2(gw.nx || 0, -(gw.ny || -1));
+        while (rel > PI) rel -= 2 * PI;
+        while (rel < -PI) rel += 2 * PI;
         if (rel * lean > 0) {
           // leaning back: easy wheelies; leaning forward: only a small stoppie, never over the bars
-          if (lean > 0) acc *= clamp(1 - (Math.abs(rel) - 0.2) / 0.3, 0, 1);
-          else acc *= clamp(1 - (Math.abs(rel) - 0.35) / 0.5, 0.2, 1);
+          if (lean > 0) acc *= clamp(1 - (abs(rel) - 0.2) / 0.3, 0, 1);
+          else acc *= clamp(1 - (abs(rel) - 0.35) / 0.5, 0.2, 1);
         }
         else acc *= 0.8;
       }
@@ -701,10 +712,20 @@
     } else if (grounded && !this.crashed) {
       // hands off while standing on the tail / nose: tip back onto the wheels
       var gw2 = rear.air < 0.05 ? rear : front;
-      var rel2 = b.a - Math.atan2(gw2.nx || 0, -(gw2.ny || -1));
-      while (rel2 > Math.PI) rel2 -= 2 * Math.PI;
-      while (rel2 < -Math.PI) rel2 += 2 * Math.PI;
-      if (Math.abs(rel2) > 0.9 && Math.abs(rel2) < 2.2 && b.w * rel2 >= -1.5) this.pivotSpin(-Math.sign(rel2) * 14 * h, gw2.x, gw2.y);
+      var rel2 = b.a - M.atan2(gw2.nx || 0, -(gw2.ny || -1));
+      while (rel2 > PI) rel2 -= 2 * PI;
+      while (rel2 < -PI) rel2 += 2 * PI;
+      if (abs(rel2) > 0.9 && abs(rel2) < 2.2 && b.w * rel2 >= -1.5) this.pivotSpin(-M.sign(rel2) * 14 * h, gw2.x, gw2.y);
+    }
+    if (this.flipGrace > 0 && grounded && !this.crashed) {
+      var fgw = rear.air < 0.05 ? rear : front;
+      var frel = b.a - M.atan2(fgw.nx || 0, -(fgw.ny || -1));
+      while (frel > PI) frel -= 2 * PI;
+      while (frel < -PI) frel += 2 * PI;
+      if (abs(frel) > 1.1 && abs(frel) < 2.15) {
+        if (b.w * frel > 0) b.w *= 0.88;
+        this.spin(-M.sign(frel) * 32 * h);
+      }
     }
     // integrate
     b.x += b.vx * h; b.y += b.vy * h; b.a += b.w * h;
@@ -712,7 +733,7 @@
     // wheel collisions
     for (i = 0; i < 2; i++) { b.wheels[i].air += h; this.wheelTerrain(b.wheels[i], true); }
     // chassis solid points
-    ca = Math.cos(b.a); sa = Math.sin(b.a);
+    ca = cos(b.a); sa = sin(b.a);
     for (i = 0; i < SOLID.length; i++) {
       var sp = SOLID[i], lx = sp.x * ca - sp.y * sa, ly = sp.x * sa + sp.y * ca;
       n = this.collide(b.x + lx, b.y + ly, sp.r);
@@ -727,18 +748,21 @@
     // crash points (rider head/back, handlebars)
     if (!this.crashed) {
       var airGrace = !this.grounded || this.airT > 0.1 || this.landGrace > 0;
+      var flipSave = (!this.grounded && abs(b.a - this.takeoffA) >= 5.18) || !!this.pendingFlip || this.flipGrace > 0;
+      var bonkMin = flipSave ? -0.53 : -0.37;
       for (i = 0; i < CRASH.length; i++) {
         var cp = CRASH[i], clx = cp.x * ca - cp.y * sa, cly = cp.x * sa + cp.y * ca;
         n = this.collide(b.x + clx, b.y + cly, cp.r);
         if (n > 0) {
           c = this.contacts[0];
           if (c.seg.k === 's') { this.crash('spikes'); break; }
-          // Soften air-landing bonk tolerance by +15 deg (~111 deg from upright) so playful flips forgive slight tilts
+          // Forgive +10 deg extra landing pitch when finishing a full flip (~122 deg from upright)
           var upDot = clamp(sa * c.nx - ca * c.ny, -1, 1);
-          if (airGrace && upDot > -0.37) {
+          if (airGrace && upDot > bonkMin) {
             resolveRigid(b, clx, cly, c, 0.08, 0.35);
-            var side = ca * c.nx + sa * c.ny;
-            b.w += (side >= 0 ? 1 : -1) * 10 * h;
+            var dir = ca * c.nx + sa * c.ny >= 0 ? 1 : -1;
+            if (flipSave && b.w * dir < 0) b.w *= 0.65;
+            b.w += dir * (flipSave ? 45 : 10) * h;
             this.chassisHit = 0.08;
             continue;
           }
@@ -784,7 +808,7 @@
     r.s *= (1 - (r.kind === 'log' ? 1.2 : 0.05) * h);
     // boulders are pushed along by the course: they never stop chasing you
     if (r.kind === 'boulder' && r.air < 0.1) {
-      if (r.vx < 430) { r.vx += 900 * h; r.s = Math.max(r.s, r.vx); }
+      if (r.vx < 430) { r.vx += 900 * h; r.s = max(r.s, r.vx); }
       else if (r.vx > 760) { var k = 1 - 3 * h; r.vx *= k; r.vy *= k; r.s *= k; }
     }
     // vs bike wheels
@@ -793,7 +817,7 @@
       var wh = b.wheels[i];
       var dx = wh.x - r.x, dy = wh.y - r.y, d2 = dx * dx + dy * dy, rr = r.r + wh.r;
       if (d2 < rr * rr && d2 > 1e-6) {
-        var d = Math.sqrt(d2), nx = dx / d, ny = dy / d, pen = rr - d;
+        var d = sqrt(d2), nx = dx / d, ny = dy / d, pen = rr - d;
         var mw = 3, im1 = 1 / mw, im2 = 1 / r.m, it = im1 + im2;
         wh.x += nx * pen * im1 / it; wh.y += ny * pen * im1 / it;
         r.x -= nx * pen * im2 / it; r.y -= ny * pen * im2 / it;
@@ -807,7 +831,7 @@
       }
     }
     if (r.kind === 'boulder' && !this.crashed) {
-      var ca = Math.cos(b.a), sa = Math.sin(b.a);
+      var ca = cos(b.a), sa = sin(b.a);
       for (i = 0; i < CRASH.length; i++) {
         var cp = CRASH[i], x = b.x + cp.x * ca - cp.y * sa, y = b.y + cp.x * sa + cp.y * ca;
         var ddx = x - r.x, ddy = y - r.y;
@@ -818,7 +842,7 @@
     }
     if (r.kind === 'log' && !this.crashed) {
       // logs push the chassis bottom a little so you can ride over them
-      var dx2 = b.x - r.x, dy2 = b.y + 20 - r.y, dd = Math.sqrt(dx2 * dx2 + dy2 * dy2);
+      var dx2 = b.x - r.x, dy2 = b.y + 20 - r.y, dd = sqrt(dx2 * dx2 + dy2 * dy2);
       if (dd < r.r + 10 && dd > 0.01) { var pn = (r.r + 10 - dd); b.x += dx2 / dd * pn * 0.5; b.y += dy2 / dd * pn * 0.5; r.x -= dx2 / dd * pn * 0.5; }
     }
     if (r.stopX && r.x > r.stopX) { r.dead = true; this.events.push({ type: 'boulderBreak', x: r.x, y: r.y, r: r.r }); }
@@ -855,11 +879,11 @@
         var hit = false, hs = cr.s / 2;
         for (j = 0; j < 2 && !hit; j++) {
           var wh = b.wheels[j];
-          if (Math.abs(wh.x - cr.x) < hs + wh.r && Math.abs(wh.y - cr.y) < hs + wh.r) hit = true;
+          if (abs(wh.x - cr.x) < hs + wh.r && abs(wh.y - cr.y) < hs + wh.r) hit = true;
         }
-        if (!hit && Math.abs(b.x - cr.x) < hs + 55 && Math.abs(b.y - cr.y) < hs + 40) hit = true;
-        if (!hit && this.rider && Math.abs(this.rider.x - cr.x) < hs + 16 && Math.abs(this.rider.y - cr.y) < hs + 16) hit = true;
-        if (hit) this.wakeCrate(cr, Math.max(Math.abs(b.vx), 280) * (b.vx < 0 ? -1 : 1), true);
+        if (!hit && abs(b.x - cr.x) < hs + 55 && abs(b.y - cr.y) < hs + 40) hit = true;
+        if (!hit && this.rider && abs(this.rider.x - cr.x) < hs + 16 && abs(this.rider.y - cr.y) < hs + 16) hit = true;
+        if (hit) this.wakeCrate(cr, max(abs(b.vx), 280) * (b.vx < 0 ? -1 : 1), true);
       } else if (cr.st === 1) {
         cr.t += DT;
         cr.vy += G * DT;
@@ -874,16 +898,16 @@
   };
   W.wakeCrate = function (cr, v, byBike) {
     cr.st = 1; cr.t = 0;
-    cr.vx = v * (1.05 + Math.random() * 0.35);
-    cr.vy = -260 - Math.random() * 260;
-    cr.w = (Math.random() - 0.5) * 16;
+    cr.vx = v * (1.05 + ran() * 0.35);
+    cr.vy = -260 - ran() * 260;
+    cr.w = (ran() - 0.5) * 16;
     this.smashed++;
     if (byBike) { var b = this.bike; b.vx *= 0.97; }
     this.events.push({ type: 'crate', x: cr.x, y: cr.y });
     // wake the crates stacked on top
     for (var i = 0; i < this.crates.length; i++) {
       var o = this.crates[i];
-      if (o.st === 0 && Math.abs(o.x - cr.x) < cr.s && o.y < cr.y && cr.y - o.y < cr.s * 1.2) this.wakeCrate(o, v * 0.8, false);
+      if (o.st === 0 && abs(o.x - cr.x) < cr.s && o.y < cr.y && cr.y - o.y < cr.s * 1.2) this.wakeCrate(o, v * 0.8, false);
     }
   };
 
@@ -905,7 +929,7 @@
       if (mv.type === 'platform' && onP && mv.st !== 2) heldPlat = true;
     }
     if (heldPlat && !this.crashed && !this.finished) {
-      var baseA = Math.round(b.a / (2 * Math.PI)) * (2 * Math.PI);
+      var baseA = M.round(b.a / (2 * PI)) * (2 * PI);
       b.a = baseA + (b.a - baseA) * 0.85;
       b.w *= 0.85;
     }
@@ -913,6 +937,8 @@
     if (this.boostCd > 0) this.boostCd -= DT;
     if (this.chassisHit > 0) this.chassisHit -= DT;
     if (this.landGrace > 0) this.landGrace -= DT;
+    if (this.flipGrace > 0) this.flipGrace -= DT;
+    if (this.nitroT > 0) this.nitroT = max(0, this.nitroT - DT);
     this.stepCrates();
 
     // air time, flips, landings
@@ -922,13 +948,13 @@
     if (!this.grounded) {
       if (wasGround) { this.takeoffA = b.a; this.airT = 0; this.takeoffY = b.y; }
       this.airT += DT;
-      this.maxAirH = Math.max(this.maxAirH, this.takeoffY - b.y);
+      this.maxAirH = max(this.maxAirH, this.takeoffY - b.y);
     } else if (!wasGround) {
       if (this.airT > 0.2) this.landGrace = 0.25;
-      var imp = Math.max(rear.impact, front.impact);
+      var imp = max(rear.impact, front.impact);
       if (this.airT > 0.3 && !this.crashed) {
-        var rot = b.a - this.takeoffA, n = Math.floor((Math.abs(rot) + 1.1) / (2 * Math.PI));
-        if (n > 0 && !this.settled) this.pendingFlip = { n: n, dir: rot < 0 ? 'back' : 'front', t: 0.18 };
+        var rot = b.a - this.takeoffA, n = flr((abs(rot) + 1.1) / (2 * PI));
+        if (n > 0 && !this.settled) { this.pendingFlip = { n: n, dir: rot < 0 ? 'back' : 'front', t: 0.18 }; this.flipGrace = 0.35; }
         var both = rear.air < 0.05 && front.air < 0.05;
         this.events.push({ type: 'land', v: imp, air: this.airT, x: b.x, y: b.y, perfect: both && imp < 900 && this.airT > 0.7 });
         if (this.airT > this.bestAir) this.bestAir = this.airT;
@@ -941,15 +967,16 @@
         var pf = this.pendingFlip; this.pendingFlip = null;
         if (!this.crashed && !this.settled) {
           this.flips += pf.n; this.bonus += pf.n;
-          if (this.finished) this.finalTime = Math.max(0, this.time - this.bonus); // landed past the line: still counts
-          this.events.push({ type: 'flip', n: pf.n, dir: pf.dir, x: b.x, y: b.y });
+          if (this.finished) this.finalTime = max(0, this.time - this.bonus); // landed past the line: still counts
+          else this.nitroT = 1.5;
+          this.events.push({ type: 'flip', n: pf.n, dir: pf.dir, x: b.x, y: b.y, nitro: !this.finished });
         }
       }
     }
     // hung up on the belly (e.g. on a pit edge or a ramp lip) with the driven rear wheel dangling:
     // nobody can ride out of that, so tumble off and go back to the checkpoint
     if (!this.crashed && this.started && !this.finished && rear.air > 0.3 && this.chassisHit > 0 &&
-        Math.abs(b.vx) < 120 && Math.abs(b.vy) < 120) {
+        abs(b.vx) < 120 && abs(b.vy) < 120) {
       this.hungT += DT;
       if (this.hungT > 1.2) this.crash('stuck');
     } else this.hungT = 0;
@@ -971,7 +998,7 @@
       }
       if (b.x > L.finishX) {
         this.finished = true;
-        this.finalTime = Math.max(0, this.time - this.bonus);
+        this.finalTime = max(0, this.time - this.bonus);
         this.events.push({ type: 'finish', x: b.x, y: b.y });
       }
     }
@@ -995,7 +1022,7 @@
         if (inside && dx < 0 && dy < 0) { lp.st = 2; this.events.push({ type: 'loop', x: lp.cx, y: lp.cy - lp.R }); }
         else if (dy > lp.R * 0.3 && b.vx < -40) lp.st = 0;
       }
-      if (lp.st !== 0 && Math.abs(dx) > lp.R + 220) lp.st = 0;
+      if (lp.st !== 0 && abs(dx) > lp.R + 220) lp.st = 0;
     }
   };
 
@@ -1004,7 +1031,7 @@
   W.slopeAt = function (x, yRef) {
     var y1 = this.groundAt(x - 26, yRef), y2 = this.groundAt(x + 26, yRef);
     if (y1 > 1e8 || y2 > 1e8) return 0;
-    return Math.atan2(y2 - y1, 52);
+    return M.atan2(y2 - y1, 52);
   };
   MM.autopilot = function (w, opts) {
     opts = opts || {};
@@ -1014,12 +1041,12 @@
     for (i = 0; i < L.bot.length; i++) {
       var hnt = L.bot[i];
       if (x >= hnt.x0 && x <= hnt.x1) {
-        if (hnt.v != null) maxV = Math.min(maxV, hnt.v);
+        if (hnt.v != null) maxV = min(maxV, hnt.v);
         if (hnt.lean != null) leanOv = hnt.lean;
         if (hnt.wait && hnt.wait(w)) { maxV = -1; }
       }
     }
-    if (opts.maxV) maxV = Math.min(maxV, opts.maxV);
+    if (opts.maxV) maxV = min(maxV, opts.maxV);
     var sp = b.vx;
     if (sp > maxV) { inp.gas = false; if (sp > maxV + 100 || maxV < 0) inp.brake = true; }
     var target, yRef = b.y - 30;
@@ -1035,12 +1062,12 @@
       }
       if (opts.flips && w.airT > 0.05 && t > 0.75 && !w.crashed) {
         var done = b.a - w.takeoffA;
-        if (done > -2 * Math.PI + 0.9 && t > 0.3 + (2 * Math.PI + done) / 8) { inp.lean = -1; return inp; }
+        if (done > -2 * PI + 0.9 && t > 0.3 + (2 * PI + done) / 8) { inp.lean = -1; return inp; }
       }
     }
     var err = target - b.a;
-    while (err > Math.PI) err -= 2 * Math.PI;
-    while (err < -Math.PI) err += 2 * Math.PI;
+    while (err > PI) err -= 2 * PI;
+    while (err < -PI) err += 2 * PI;
     var u = err * (w.grounded ? 3.2 : 2.6) - b.w * (w.grounded ? 0.35 : 0.42);
     inp.lean = u > 0.25 ? 1 : u < -0.25 ? -1 : 0;
     if (leanOv != null) inp.lean = leanOv;

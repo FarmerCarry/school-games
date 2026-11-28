@@ -454,3 +454,52 @@ test('the shop: coins buy colours and hats, owned items are worn for free, and a
   const coins = LEVELS.reduce((a, { w, l }) => { const L = KO.level(w, l, 'ar'); return a + L.coins.length + 5 * L.gems.length + 9; }, 0);
   assert.ok(coins >= shop * 0.6, `${coins} coins for a shop of ${shop}`);
 });
+
+test('Streak Jetpack: 5 clean consecutive keys ignite jetpack, award bonus coins, and freeze the rising jelly for 2 s', () => {
+  const L = course('F J F J F J F J'), w = KO.create(L, { tier: 3, rise: 0.2 });
+  for (let i = 0; i < 4; i++) {
+    assert.equal(KO.press(w, L.path[i]), 'hop');
+    run(w, 25);
+  }
+  assert.equal(w.jet, false);
+  assert.equal(w.jellyFreeze, 0);
+  const jellyBefore = w.jelly, coinsBefore = w.coins;
+  assert.ok(jellyBefore > 0.05, 'jelly rises before 5-streak');
+  // 5th consecutive clean key ignites Streak Jetpack!
+  assert.equal(KO.press(w, L.path[4]), 'hop');
+  const jetEv = w.ev.find(e => e.t === 'jetpack');
+  assert.ok(jetEv, 'jetpack event emitted at 5-streak');
+  assert.equal(w.jet, true);
+  assert.equal(w.jetBursts, 1);
+  assert.equal(w.coins, coinsBefore + KO.JET_COINS, 'bonus coins burst awarded');
+  assert.equal(w.jellyFreeze, KO.JET_FREEZE, '2 s jelly-freeze granted');
+  run(w, 60); // 1 second passes while frozen
+  assert.equal(w.jelly, jellyBefore, 'jelly stays frozen during the 2 s bonus');
+  run(w, 120); // 2 more seconds: freeze expires and jelly resumes rising
+  assert.equal(w.jellyFreeze, 0);
+  assert.ok(w.jelly > jellyBefore + 0.05, 'jelly resumes rising after freeze expires');
+  // A wrong key turns the jetpack off.
+  assert.equal(KO.press(w, 'KeyQ'), 'wrong');
+  assert.equal(w.jet, false);
+});
+
+test('Best-Run Ghost: finishing records monotonic hop timestamps; sanitizeGhost and ghostAt replay the path accurately', () => {
+  const L = KO.level(0, 0, 'ar');
+  const { w } = typist(L, 1, 0.35);
+  assert.equal(w.done, true);
+  const r = KO.result(w);
+  assert.ok(Array.isArray(r.times) && r.times.length === L.path.length, 'recorded one timestamp per step');
+  for (let i = 1; i < r.times.length; i++) assert.ok(r.times[i] >= r.times[i - 1], 'timestamps are non-decreasing');
+  assert.deepEqual(plain(KO.sanitizeGhost(r.times, L.path.length)), plain(r.times));
+  assert.equal(KO.sanitizeGhost([10, 5, 20], 3), null, 'rejects non-monotonic');
+  assert.equal(KO.sanitizeGhost([10, 20], 3), null, 'rejects wrong length');
+  assert.equal(KO.sanitizeGhost('bad', 3), null, 'rejects non-array');
+  const startPose = KO.ghostAt(L, r.times, 0);
+  assert.ok(startPose && startPose.progress >= 0 && startPose.progress < 0.25 && !startPose.done);
+  const midPose = KO.ghostAt(L, r.times, r.times[3] / 100);
+  assert.ok(midPose && midPose.step >= 2 && midPose.progress > 0.3 && midPose.progress < 1);
+  const endPose = KO.ghostAt(L, r.times, r.times[r.times.length - 1] / 100 + 0.5);
+  const goalKey = KO.KEY[L.path[L.path.length - 1]];
+  assert.equal(endPose.done, true);
+  assert.equal(endPose.x, goalKey.cx); assert.equal(endPose.z, goalKey.cz);
+});

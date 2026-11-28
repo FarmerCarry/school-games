@@ -6,6 +6,8 @@
 (function (root) {
   'use strict';
   var DK = root.DK || (root.DK = {});
+  var M = Math, min = M.min, max = M.max, sin = M.sin, cos = M.cos, sqrt = M.sqrt, PI = M.PI; function ran() { return M.random(); }
+
 
   /* --------------------------------------------------------- colour utils */
   var rgbCache = {};
@@ -21,11 +23,11 @@
   // Shades are cached (k quantised to 1/64) so drawing a car every frame builds no new strings.
   var shadeCache = {};
   function shade(hex, k) {
-    var q = Math.round(k * 64), tab = shadeCache[hex] || (shadeCache[hex] = {}), hit = tab[q];
+    var q = M.round(k * 64), tab = shadeCache[hex] || (shadeCache[hex] = {}), hit = tab[q];
     if (hit) return hit;
     var c = rgb(hex);
     k = q / 64;
-    var r = Math.min(255, c[0] * k) | 0, g = Math.min(255, c[1] * k) | 0, b = Math.min(255, c[2] * k) | 0;
+    var r = min(255, c[0] * k) | 0, g = min(255, c[1] * k) | 0, b = min(255, c[2] * k) | 0;
     return (tab[q] = 'rgb(' + r + ',' + g + ',' + b + ')');
   }
   function mix(h1, h2, t) {
@@ -63,7 +65,7 @@
     var v = [], faces = [], k;
     if (r2 == null) r2 = r;
     for (k = 0; k < n; k++) {
-      var a = (k + 0.5) / n * Math.PI * 2, ca = Math.cos(a), sa = Math.sin(a);
+      var a = (k + 0.5) / n * PI * 2, ca = cos(a), sa = sin(a);
       if (axis === 'y') {
         v.push([cx + r * ca, cy - len / 2, cz + r * sa]);
         v.push([cx + r * ca, cy + len / 2, cz + r * sa]);
@@ -261,8 +263,8 @@
         parts.push(ball(0, 0, 0.66, 0.4, '#9cf5c8'));
         parts.push(ball(0.05, 0, 0.72, 0.17, '#5fdc7a'));
         for (var k = 0; k < 6; k++) {
-          var a = k / 6 * Math.PI * 2;
-          parts.push(ball(Math.cos(a) * 0.72, Math.sin(a) * 0.72, 0.5, 0.07, k % 2 ? '#ffe34d' : '#ff6fb5'));
+          var a = k / 6 * PI * 2;
+          parts.push(ball(cos(a) * 0.72, sin(a) * 0.72, 0.5, 0.07, k % 2 ? '#ffe34d' : '#ff6fb5'));
         }
         return parts;
       }
@@ -314,7 +316,7 @@
   var PX = 0.866, PY = 0.5, PZ = 0.9;
   var VX = 0.9, VY = 0.9, VZ = 1;           // direction towards the camera
   var LX = -0.35, LY = 0.62, LZ = 0.7;       // light direction
-  var ll = Math.sqrt(LX * LX + LY * LY + LZ * LZ); LX /= ll; LY /= ll; LZ /= ll;
+  var ll = sqrt(LX * LX + LY * LY + LZ * LZ); LX /= ll; LY /= ll; LZ /= ll;
   DK.ISO = { PX: PX, PY: PY, PZ: PZ, VX: VX, VY: VY, VZ: VZ };
 
   var tmpV = [];
@@ -327,10 +329,10 @@
   //       yaw, pitch, roll, sq (vertical squash), z (world height), alpha }
   DK.drawCar = function (ctx, car, o) {
     var S = o.S;
-    var cy = Math.cos(o.yaw), sy = Math.sin(o.yaw);
-    var cp = Math.cos(o.pitch || 0), sp = Math.sin(o.pitch || 0);
-    var cr = Math.cos(o.roll || 0), sr = Math.sin(o.roll || 0);
-    var sq = o.sq || 1, stretch = 1 / Math.sqrt(sq);
+    var cy = cos(o.yaw), sy = sin(o.yaw);
+    var cp = cos(o.pitch || 0), sp = sin(o.pitch || 0);
+    var cr = cos(o.roll || 0), sr = sin(o.roll || 0);
+    var sq = o.sq || 1, stretch = 1 / sqrt(sq);
     var zOff = o.z || 0;
     // rotation matrix R = Yaw * Pitch(about y) * Roll(about x)
     var m00 = cy * cp, m01 = cy * sp * sr - sy * cr, m02 = cy * sp * cr + sy * sr;
@@ -359,18 +361,18 @@
     order.sort(byD);
     if (o.alpha != null) ctx.globalAlpha = o.alpha;
     ctx.lineJoin = 'round';
-    ctx.lineWidth = Math.max(1, S * 0.025);
+    ctx.lineWidth = max(1, S * 0.025);
     ctx.strokeStyle = 'rgba(40,30,70,0.35)';
     for (var n = 0; n < order.length; n++) {
       var e = order[n], P = e.p;
       if (P.t === 'b') {
         var r = P.r * S * stretch;
         ctx.fillStyle = shade(P.col, 0.88);
-        ctx.beginPath(); ctx.arc(e.sx, e.sy, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.arc(e.sx, e.sy, r, 0, PI * 2); ctx.fill(); ctx.stroke();
         ctx.fillStyle = shade(P.col, 1.08);
-        ctx.beginPath(); ctx.arc(e.sx - r * 0.18, e.sy - r * 0.2, r * 0.72, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(e.sx - r * 0.18, e.sy - r * 0.2, r * 0.72, 0, PI * 2); ctx.fill();
         ctx.fillStyle = 'rgba(255,255,255,0.55)';
-        ctx.beginPath(); ctx.arc(e.sx - r * 0.35, e.sy - r * 0.4, r * 0.22, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(e.sx - r * 0.35, e.sy - r * 0.4, r * 0.22, 0, PI * 2); ctx.fill();
         continue;
       }
       var V = P.v;
@@ -382,9 +384,9 @@
         var wx = c[0] - a[0], wy = c[1] - a[1], wz = c[2] - a[2];
         var nx = uy * wz - uz * wy, ny = uz * wx - ux * wz, nz = ux * wy - uy * wx;
         if (nx * VX + ny * VY + nz * VZ <= 1e-6) continue;
-        var nl = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1;
+        var nl = sqrt(nx * nx + ny * ny + nz * nz) || 1;
         var lit = (nx * LX + ny * LY + nz * LZ) / nl;
-        ctx.fillStyle = shade(F.c, 0.66 + 0.42 * Math.max(-0.2, lit));
+        ctx.fillStyle = shade(F.c, 0.66 + 0.42 * max(-0.2, lit));
         ctx.beginPath();
         ctx.moveTo(a[3], a[4]);
         for (var t = 1; t < I.length; t++) ctx.lineTo(tmpV[I[t]][3], tmpV[I[t]][4]);
@@ -400,7 +402,7 @@
   var hullPts = [];
   DK.carShadow = function (ctx, car, o, sdx, sdy) {
     var L = (car.len || 1.5) * 0.52, W = 0.44;
-    var cy = Math.cos(o.yaw), sy = Math.sin(o.yaw);
+    var cy = cos(o.yaw), sy = sin(o.yaw);
     var S = o.S;
     hullPts.length = 0;
     [[L, W], [L, -W], [-L, -W], [-L, W]].forEach(function (p) {

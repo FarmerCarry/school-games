@@ -1,114 +1,128 @@
-// Pure Node unit tests for Shortcut Factory 3D (مصنع الاختصارات) engine.
+// Shortcut Factory (Toy Claw Rush) pure Node engine tests.
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import { test } from 'node:test';
 import { createRequire } from 'node:module';
-import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const require = createRequire(import.meta.url);
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const SF = require(path.join(repo, 'games/shortcut-factory/engine.js'));
+const enginePath = path.join(repo, 'games/shortcut-factory/engine.js');
+const SF = require(enginePath);
 
-function stepSec(w, sec) {
-  const n = Math.ceil(sec * 60);
-  for (let i = 0; i < n; i++) SF.step(w, 1 / 60);
+function stepFrames(w, n, input = {}) {
+  const all = [];
+  for (let i = 0; i < n; i++) all.push(...SF.step(w, 1 / 60, i === 0 ? input : {}));
+  return all;
 }
 
-test('Shortcut Factory: 12 levels across 3 halls plus rush mode', () => {
-  assert.equal(SF.COUNT, 12);
-  assert.equal(SF.HALLS.length, 3);
-  assert.ok(SF.RUSH.rush);
-  for (const L of SF.LEVELS) {
-    const w = SF.create(L, { dda: 0.35, seed: 123 });
-    assert.ok(w.boxes.length >= 1, `${L.id} has boxes`);
-    assert.ok(w.toys.length >= 1, `${L.id} starts with toys`);
+test('engine.js stays pure: zero DOM, zero Kit, zero Math.random', () => {
+  const src = fs.readFileSync(enginePath, 'utf8');
+  assert.doesNotMatch(src, /\bMath\.random\s*\(/);
+  assert.doesNotMatch(src, /\bKit\s*\./);
+  assert.doesNotMatch(src, /\bdocument\s*\./);
+  assert.doesNotMatch(src, /\blocalStorage\b/);
+});
+
+test('12 progressive 45-60s stages across 3 factory wings + Endless mode', () => {
+  assert.equal(SF.LEVELS.length, 12);
+  assert.equal(SF.WINGS.length, 3);
+  assert.equal(SF.UPGRADES.length, 4);
+  assert.equal(SF.ENDLESS_CFG.endless, true);
+  for (const lv of SF.LEVELS) {
+    assert.ok(lv.duration >= 45 && lv.duration <= 60, `${lv.id} duration 45-60s`);
+    const w = SF.create({ level: lv.idx, seed: 100 + lv.idx });
+    assert.ok(w.toys.length >= 8, `${lv.id} starts with toys on all 3 lanes`);
   }
 });
 
-test('Shortcut Factory: copy and paste fill an order and finish level 1-1', () => {
-  const w = SF.create(SF.LEVELS[0], { dda: 0.35, seed: 7 });
-  stepSec(w, 6);
-  assert.ok(w.toys.length >= 1);
-  SF.select(w, w.toys[0].id);
-  assert.equal(SF.act(w, 'copy'), true, 'Ctrl+C copies selected toy');
-  assert.equal(w.clip.length, 1);
-
-  assert.equal(SF.act(w, 'paste'), true);
-  assert.equal(SF.act(w, 'paste'), true);
-  assert.equal(w.counts.copy, 1);
-  assert.equal(w.counts.paste, 2);
-
-  stepSec(w, 25);
-  assert.equal(w.done, true);
-  assert.equal(w.won, true);
-  const res = SF.result(w);
-  assert.ok(res.stars >= 1 && res.stars <= 3);
+test('determinism: identical seed and drop inputs produce identical state', () => {
+  const runOnce = () => {
+    const w = SF.create({ level: 2, seed: 7777 });
+    for (let f = 0; f < 300; f++) {
+      SF.step(w, 1 / 60, { dropPress: f === 15 || f === 120 || f === 210 });
+    }
+    return SF.publicState(w, 'play');
+  };
+  assert.deepEqual(runOnce(), runOnce());
 });
 
-test('Shortcut Factory: delete removes broken toys, cut lifts to clipboard, undo/redo rewind', () => {
-  const w = SF.create(SF.LEVELS[2], { dda: 0.35, seed: 11 });
-  const target = w.toys[0];
-  SF.select(w, target.id);
-  const beforeCount = w.toys.length;
-  assert.equal(SF.act(w, 'cut'), true);
-  assert.equal(w.toys.length, beforeCount - 1);
-  assert.equal(w.clip.length, 1);
-  assert.equal(w.clipCut, true);
-
-  const w2 = SF.create(SF.LEVELS[4], { dda: 0.35, seed: 19 });
-  const t0 = w2.toys[0];
-  SF.select(w2, t0.id);
-  const n0 = w2.toys.length;
-  assert.equal(SF.act(w2, 'delete'), true);
-  assert.equal(w2.toys.length, n0 - 1);
-  assert.equal(SF.act(w2, 'undo'), true);
-  assert.equal(w2.toys.length, n0, 'undo restores deleted toy');
-
-  const w3 = SF.create(SF.LEVELS[9], { dda: 0.35, seed: 29 });
-  SF.select(w3, w3.toys[0].id);
-  assert.equal(SF.act(w3, 'copy'), true);
-  assert.equal(SF.act(w3, 'paste'), true);
-  const afterPaste = w3.toys.length;
-  assert.equal(SF.act(w3, 'undo'), true);
-  assert.equal(w3.toys.length, afterPaste - 1);
-  assert.equal(SF.act(w3, 'redo'), true);
-  assert.equal(w3.toys.length, afterPaste, 'redo reapplies undone paste');
+test('1-button drop snatches toy, reels up to hopper, scores points, and chains 3 grabs into 6s Fever Mode', () => {
+  const w = SF.create({ level: 0, seed: 55 });
+  // Place 3 plushies cleanly directly under claw across 3 drops
+  let feverStarted = false;
+  for (let grab = 0; grab < 3; grab++) {
+    assert.equal(w.claw.state, 'swing');
+    w.toys = [{
+      id: 900 + grab, kind: 'bear', lane: 0,
+      x: w.claw.x, y: SF.LANES[0].y, r: SF.TOYS.bear.r, bobPhase: 0, scale: 1, pulled: false, offX: 0, offY: 0
+    }];
+    const evs = stepFrames(w, 65, { dropPress: true });
+    if (evs.some(e => e.type === 'feverStart')) feverStarted = true;
+  }
+  assert.equal(w.grabs, 3);
+  assert.equal(w.combo, 3);
+  assert.ok(w.score > 60);
+  assert.equal(feverStarted, true, '3 consecutive grabs ignite 6s Fever Mode!');
+  assert.ok(w.fever > 4.5 && w.fever <= SF.FEVER_DUR);
 });
 
-test('Shortcut Factory: selectAll selects every toy and Ctrl+S seals full boxes in Hall 3', () => {
-  const w = SF.create(SF.LEVELS[5], { dda: 0.35, seed: 31 });
-  assert.ok(w.toys.length >= 2);
-  assert.equal(SF.act(w, 'selectAll'), true);
-  assert.equal(w.sel.length, w.toys.length);
+test('Magnet Orb pulls adjacent toys simultaneously, Fizz-Crate pops boots, and Rubber Boot tosses without ending run', () => {
+  // Magnet Orb test
+  const wm = SF.create({ level: 4, seed: 21 });
+  const cx = wm.claw.x;
+  wm.toys = [
+    { id: 1, kind: 'magnet', lane: 0, x: cx, y: SF.LANES[0].y, r: 35, bobPhase: 0, scale: 1, pulled: false, offX: 0, offY: 0 },
+    { id: 2, kind: 'duck', lane: 0, x: cx + 90, y: SF.LANES[0].y, r: 32, bobPhase: 0, scale: 1, pulled: false, offX: 0, offY: 0 },
+    { id: 3, kind: 'dino', lane: 1, x: cx - 70, y: SF.LANES[1].y, r: 36, bobPhase: 0, scale: 1, pulled: false, offX: 0, offY: 0 },
+    { id: 4, kind: 'goldbot', lane: 1, x: cx + 80, y: SF.LANES[1].y, r: 38, bobPhase: 0, scale: 1, pulled: false, offX: 0, offY: 0 }
+  ];
+  const mEvs = stepFrames(wm, 70, { dropPress: true });
+  assert.ok(mEvs.some(e => e.type === 'magnet' && e.count === 3), 'Magnet Orb pulls 3 adjacent toys');
+  assert.equal(wm.grabs, 4, 'all 4 toys delivered in one mega-haul!');
+  assert.ok(wm.fever > 0, '4-toy haul immediately ignites Fever!');
 
-  const wSeal = SF.create(SF.LEVELS[8], { dda: 0.35, seed: 5 });
-  assert.equal(SF.needsSeal(wSeal), true);
-  const box = SF.active(wSeal);
-  SF.select(wSeal, wSeal.toys[0].id);
-  SF.act(wSeal, 'copy');
-  SF.act(wSeal, 'paste');
-  SF.act(wSeal, 'paste');
-  stepSec(wSeal, 22);
-  assert.equal(box.state, 'full', 'full Hall-3 box waits for Ctrl+S seal');
-  assert.equal(SF.act(wSeal, 'save'), true, 'Ctrl+S seals full box');
-  assert.equal(wSeal.counts.save, 1);
+  // Fizz-Crate chain-pop test
+  const wf = SF.create({ level: 3, seed: 22 });
+  const fx = wf.claw.x;
+  wf.toys = [
+    { id: 10, kind: 'fizz', lane: 0, x: fx, y: SF.LANES[0].y, r: 35, bobPhase: 0, scale: 1, pulled: false, offX: 0, offY: 0 },
+    { id: 11, kind: 'boot', lane: 0, x: fx + 100, y: SF.LANES[0].y, r: 31, bobPhase: 0, scale: 1, pulled: false, offX: 0, offY: 0 },
+    { id: 12, kind: 'boot', lane: 1, x: fx - 60, y: SF.LANES[1].y, r: 31, bobPhase: 0, scale: 1, pulled: false, offX: 0, offY: 0 }
+  ];
+  const fEvs = stepFrames(wf, 65, { dropPress: true });
+  assert.equal(fEvs.filter(e => e.type === 'fizzPop').length, 2, 'Fizz-Crate chain-pops both nearby boots into bonus coins');
+
+  // Rubber Boot toss test
+  const wb = SF.create({ level: 1, seed: 23 });
+  wb.combo = 2;
+  wb.toys = [{ id: 20, kind: 'boot', lane: 0, x: wb.claw.x, y: SF.LANES[0].y, r: 31, bobPhase: 0, scale: 1, pulled: false, offX: 0, offY: 0 }];
+  const bEvs = stepFrames(wb, 50, { dropPress: true });
+  assert.ok(bEvs.some(e => e.type === 'boot'));
+  assert.equal(wb.bootsTossed, 1);
+  assert.equal(wb.combo, 0);
+  assert.equal(wb.over, false, 'boot never kills run');
 });
 
-test('Shortcut Factory: saves ignore legacy shapes, track unlocks, and buy skins', () => {
-  const fresh = SF.loadSave({ legacy: true, stars: [99] });
-  assert.equal(fresh.v, 1);
-  assert.equal(SF.totalStars(fresh), 0);
-  assert.equal(SF.isOpen(fresh, 0), true);
-  assert.equal(SF.isOpen(fresh, 1), false);
+test('save loader migrates legacy saves, unlocks stages on win, and buys all 4 claw upgrades', () => {
+  const s = SF.loadSave({ v: 1, legacy: true, stars: [3] });
+  assert.equal(s.v, SF.SAVE_VERSION);
+  assert.equal(SF.isUnlocked(s, 0), true);
+  assert.equal(SF.isUnlocked(s, 1), false);
 
-  const out = SF.apply(fresh, 0, { stars: 3, score: 500, coins: 80 });
-  assert.equal(out.opened, true);
-  assert.equal(SF.isOpen(fresh, 1), true);
-  assert.equal(SF.buy(fresh, 1), 'buy');
-  assert.equal(fresh.skin, 1);
-  assert.equal(SF.buy(fresh, 5), 'poor');
+  SF.applyResult(s, { level: 0, endless: false, won: true, stars: 2, score: 300, coins: 200 });
+  assert.equal(SF.isUnlocked(s, 1), true);
+  assert.equal(SF.nextLevel(s), 1);
 
-  const round = SF.loadSave(JSON.parse(JSON.stringify(fresh)));
-  assert.equal(round.skin, 1);
-  assert.equal(round.stars[0], 3);
+  assert.equal(SF.buyUpgrade(s, 'turbo'), 'buy');
+  assert.equal(SF.buyUpgrade(s, 'grip'), 'buy');
+  assert.equal(SF.buyUpgrade(s, 'magnet'), 'buy');
+  assert.equal(SF.buyUpgrade(s, 'gold'), 'buy');
+  assert.deepEqual(s.upg, { turbo: 1, grip: 1, magnet: 1, gold: 1 });
+  assert.equal(s.coins, 200 - (30 + 35 + 40 + 45));
+
+  const reloaded = SF.loadSave(JSON.parse(JSON.stringify(s)));
+  assert.deepEqual(reloaded.upg, s.upg);
+  assert.equal(reloaded.stars[0], 2);
 });

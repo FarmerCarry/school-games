@@ -6,6 +6,7 @@
  * and turns the world's events into pictures and sound. */
 (function () {
   'use strict';
+  var _M=Math,_sn=_M.sin,_cs=_M.cos,_mn=_M.min,_mx=_M.max,_ab=_M.abs,_fl=_M.floor,_rd=_M.round,_sq=_M.sqrt,_PI=_M.PI;
   var BB = window.BB = window.BB || {};
   var W = 1280, H = 720;
   BB.W = W; BB.H = H;
@@ -15,6 +16,9 @@
   BB.WAVE_SECONDS = 15;   // a party gets faster every 15 s
   BB.BOP_R = 42;          // Bop's body radius
   BB.COMBO_WINDOW = 1.6;  // s between two pops that keep a combo going
+  BB.CHAIN_N = 3;         // rapid bubble pops to trigger a Chain-Pop Shockwave
+  BB.FEVER_SECONDS = 8;   // s of Rainbow Fever once the gauge fills
+  BB.PINATA_EVERY = 7;    // Giant Golden Pinata bubble cadence in Party mode
 
   // Worlds 1-4 teach one input each and world 5 mixes them; worlds 6-10 teach five more
   // (drag, double click, press and hold, all four arrows, letter keys) and world 11 mixes those.
@@ -247,7 +251,7 @@
   BB.MAX_LIVE = { drag: 4, dbl: 5, hold: 1, steer: 4, keys: 4 };
 
   function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
-  function tierOf(t) { t = Math.round(Number(t)); return t >= 1 && t <= BB.TIERS ? t : 1; }
+  function tierOf(t) { t = _rd(Number(t)); return t >= 1 && t <= BB.TIERS ? t : 1; }
   BB.clamp = clamp;
 
   // Seeded random numbers (mulberry32), so a level replays exactly in tests.
@@ -277,8 +281,8 @@
       expect += BB.PARTY_SECONDS / modes.length / (t.gap[tier - 1] * 0.62 + (BB.COST[mode] || 0)) * 0.55;
       return { mode: mode, goal: goal };
     });
-    return { w: w, l: party ? 'P' : lv, party: party, tier: tier, segments: segments, par: Math.round(par),
-      duration: party ? BB.PARTY_SECONDS : 0, expect: Math.round(expect) };
+    return { w: w, l: party ? 'P' : lv, party: party, tier: tier, segments: segments, par: _rd(par),
+      duration: party ? BB.PARTY_SECONDS : 0, expect: _rd(expect) };
   };
 
   /* --------------------------------------------------------- hit tests */
@@ -296,10 +300,10 @@
   // never closer than stop. It never pushes a target away and moves it at most
   // strength * dt per step, so a target never jumps. Returns the distance moved.
   BB.magnet = function (t, ax, ay, strength, reach, dt, stop) {
-    var dx = ax - t.x, dy = ay - t.y, d = Math.sqrt(dx * dx + dy * dy);
+    var dx = ax - t.x, dy = ay - t.y, d = _sq(dx * dx + dy * dy);
     stop = stop > 0 ? stop : 0;
     if (!(d > stop) || !(d <= reach) || !(strength > 0) || !(dt > 0)) return 0;
-    var step = Math.min(strength * (0.35 + 0.65 * (1 - d / reach)) * dt, d - stop);
+    var step = _mn(strength * (0.35 + 0.65 * (1 - d / reach)) * dt, d - stop);
     t.x += dx / d * step;
     t.y += dy / d * step;
     return step;
@@ -321,6 +325,7 @@
       plan: plan, tier: plan.tier, party: plan.party, rand: BB.rng(seed == null ? 1 : seed),
       t: 0, seg: -1, mode: '', tune: null, segT: 0, segHits: 0, goal: 0, made: 0,
       hits: 0, escapes: 0, missClicks: 0, spawned: 0, score: 0, combo: 0, bestCombo: 0, mult: 1, lastHit: -9,
+      rapid: 0, fever: 0, feverGauge: 0, shockwaves: [], shockwaveCount: 0, pinatasPopped: 0, pinataCD: 5,
       wave: 1, over: false, targets: [], next: 1, spawnT: 0, ev: [], activity: 0, fastTrack: false,
       bop: { x: W / 2, y: H / 2 + 40, vx: 0, vy: 0 },
       frog: { x: BB.FROG.x, y: BB.FROG.ground, vy: 0, air: false, buffer: 0, tongue: 0, tx: 0, ty: 0, jumps: 0 },
@@ -353,20 +358,20 @@
       }
       return v;
     }
-    var k = Math.pow(1.12, w.wave - 1);
-    if (key === 'gap') return v * 0.62 / k;
+    var k = Math.pow(1.12, w.wave - 1), fk = w.fever > 0 ? 1.2 : 1;
+    if (key === 'gap') return v * 0.62 / (k * fk);
     if (key === 'speed' || key === 'fall') return v * 1.1 * k;
-    if (key === 'live') return v + 1 + Math.min(2, w.wave - 1);
-    if (key === 'wait' || key === 'life') return Math.min(v, 6.5 / k);
+    if (key === 'live') return v + 1 + _mn(2, w.wave - 1) + (w.fever > 0 ? 1 : 0);
+    if (key === 'wait' || key === 'life') return _mn(v, 6.5 / k);
     if (key === 'grow' || key === 'sub') return v * Math.pow(1.06, w.wave - 1);
     return v;
   }
   BB.knob = knob;
   // How many targets may be on screen at once.
-  function liveCap(w) { return w.tune.live ? Math.min(knob(w, 'live'), BB.MAX_LIVE[w.mode] || 99) : 1; }
+  function liveCap(w) { return w.tune.live ? _mn(knob(w, 'live'), BB.MAX_LIVE[w.mode] || 99) : 1; }
 
   function make(w, kind, x, y, r) {
-    var t = { id: w.next++, kind: kind, x: x, y: y, r: r, age: 0, phase: w.rand() * 6.283, color: Math.floor(w.rand() * 6),
+    var t = { id: w.next++, kind: kind, x: x, y: y, r: r, age: 0, phase: w.rand() * 6.283, color: _fl(w.rand() * 6),
       gold: (w.party || w.fastTrack) && w.rand() < knob(w, 'gold'), dead: false };
     w.targets.push(t); w.spawned++; w.made++;
     w.ev.push({ t: 'spawn', kind: kind, id: t.id, x: x, y: y });
@@ -377,11 +382,11 @@
   function pickX(w, near, spread, away, edge) {
     var lo = edge, hi = W - edge, i, x, d;
     for (i = 0; i < 10; i++) {
-      x = lo + w.rand() * (hi - lo); d = Math.abs(x - near);
+      x = lo + w.rand() * (hi - lo); d = _ab(x - near);
       if (d <= spread && d >= away && !crowded(w, x)) return x;
     }
     var side = w.rand() < 0.5 ? -1 : 1;
-    d = away + w.rand() * Math.max(0, Math.min(spread, 420) - away);
+    d = away + w.rand() * _mx(0, _mn(spread, 420) - away);
     x = near + side * d;
     if (x < lo || x > hi) x = near - side * d;
     return clamp(x, lo, hi);
@@ -389,34 +394,67 @@
   function crowded(w, x) {
     for (var i = 0; i < w.targets.length; i++) {
       var t = w.targets[i];
-      if (!t.dead && Math.abs(t.x - x) < t.r * 2.2 + 30 && (t.kind !== 'bubble' || t.y > H - 260) && (t.kind !== 'fruit' || t.y < 260)) return true;
+      if (!t.dead && _ab(t.x - x) < t.r * 2.2 + 30 && (t.kind !== 'bubble' || t.y > H - 260) && (t.kind !== 'fruit' || t.y < 260)) return true;
     }
     return false;
   }
 
-  function pop(w, t, by) {
+  function pop(w, t, by, chainStep) {
     t.dead = true;
     w.hits++; w.segHits++;
-    w.combo = w.t - w.lastHit <= BB.COMBO_WINDOW ? w.combo + 1 : 1;
+    var direct = by !== 'shockwave', within = w.t - w.lastHit <= BB.COMBO_WINDOW;
+    w.combo = within ? w.combo + 1 : 1;
+    if (direct) w.rapid = within ? w.rapid + 1 : 1;
     w.lastHit = w.t;
     if (w.combo > w.bestCombo) w.bestCombo = w.combo;
-    w.mult = w.party ? Math.min(5, 1 + Math.floor(w.combo / 5)) : 1;
-    var points = (t.gold ? 5 : 1) * w.mult;
+    var baseMult = w.combo >= 15 ? 5 : w.combo >= 10 ? 4 : w.combo >= 6 ? 3 : w.combo >= 3 ? 2 : 1;
+    w.mult = w.party ? _mn(5, baseMult + (w.fever > 0 ? 1 : 0)) : 1;
+    var points = (t.pinata ? 10 : t.gold ? 5 : 1) * w.mult;
     w.score += points;
-    w.ev.push({ t: 'pop', kind: t.kind, id: t.id, x: t.x, y: t.y, r: t.r, gold: t.gold, color: t.color, combo: w.combo,
-      mult: w.mult, points: points, by: by, age: t.age, big: !!t.big, type: t.type, br: t.br, critter: t.critter, home: t.home, code: t.code, cap: t.cap });
-    // A big bubble bursts into three little ones.
-    if (t.big) {
+    if (t.kind === 'bubble' || t.kind === 'balloon') {
+      if (w.fever > 0) { if (t.pinata) w.fever = _mn(BB.FEVER_SECONDS, w.fever + 1.5); }
+      else w.feverGauge = _mn(1, w.feverGauge + (t.pinata ? 0.45 : direct ? 0.14 : 0.08));
+    }
+    w.ev.push({ t: 'pop', kind: t.kind, id: t.id, x: t.x, y: t.y, r: t.r, gold: t.gold, pinata: !!t.pinata, mini: !!t.mini,
+      color: t.color, combo: w.combo, mult: w.mult, points: points, by: by, chain: chainStep || 0, hit: w.hits, fever: w.fever > 0,
+      age: t.age, big: !!t.big, type: t.type, br: t.br, critter: t.critter, home: t.home, code: t.code, cap: t.cap });
+    // A Giant Golden Pinata bursts into 5 bonus mini-bubbles; a regular big bubble bursts into 3.
+    if (t.pinata) {
+      w.pinatasPopped++;
+      for (var p = 0; p < 5; p++) {
+        var ang = -_PI + (p + 0.5) * _PI / 5;
+        var mx = clamp(t.x + _cs(ang) * 34, 80, W - 80), my = clamp(t.y + _sn(ang) * 20, 130, H - 90);
+        var pm = make(w, 'bubble', mx, my, _mx(24, t.r * 0.4));
+        pm.vx = _cs(ang) * 320; pm.vy = _sn(ang) * 150;
+        pm.hoverY = clamp(t.y - 30 - (p % 3) * 35, 160, 420);
+        pm.wait = _mx(t.wait || 4, 3.8); pm.waited = 0; pm.sway = 22; pm.speedK = 0.85;
+        pm.mini = true; pm.bonus = true; pm.gold = p === 2; pm.color = p % 6;
+      }
+    } else if (t.big) {
       for (var i = 0; i < 3; i++) {
         var m = make(w, 'bubble', t.x, t.y, t.r * 0.5);
-        m.vx = (i - 1) * 260; m.vy = 0; m.hoverY = Math.min(t.y, 300); m.wait = t.wait; m.waited = 0; m.sway = t.sway * 0.5; m.speedK = 1.3; m.mini = true;
+        m.vx = (i - 1) * 260; m.vy = 0; m.hoverY = _mn(t.y, 300); m.wait = t.wait; m.waited = 0; m.sway = t.sway * 0.5; m.speedK = 1.3; m.mini = true;
         m.gold = false;
       }
+    }
+    // Popping 3 bubbles/balloons rapidly triggers a fizzy rainbow Chain-Pop Shockwave!
+    if (direct && (t.kind === 'bubble' || t.kind === 'balloon') && w.rapid >= BB.CHAIN_N && w.rapid % BB.CHAIN_N === 0) {
+      var maxR = w.fever > 0 ? 340 : 270;
+      w.shockwaves.push({ x: t.x, y: t.y, r: t.r, maxR: maxR, speed: 780, popped: 0 });
+      w.shockwaveCount++;
+      if (w.fever > 0) w.fever = _mn(BB.FEVER_SECONDS, w.fever + 1.2);
+      else w.feverGauge = _mn(1, w.feverGauge + 0.34);
+      w.ev.push({ t: 'shockwave', x: t.x, y: t.y, r: t.r, maxR: maxR, combo: w.combo, fever: w.fever > 0 });
+    }
+    if (w.fever <= 0 && w.feverGauge >= 1) {
+      w.fever = BB.FEVER_SECONDS; w.feverGauge = 1;
+      if (w.party) w.mult = _mn(5, baseMult + 1);
+      w.ev.push({ t: 'fever', dur: BB.FEVER_SECONDS, x: t.x, y: t.y, mult: w.mult });
     }
   }
   function escape(w, t) {
     t.dead = true;
-    w.escapes++; w.combo = 0; w.mult = 1;
+    w.escapes++; w.combo = 0; w.rapid = 0; w.mult = 1;
     w.ev.push({ t: 'escape', kind: t.kind, id: t.id, x: t.x, y: t.y, r: t.r, color: t.color, type: t.type });
   }
   function vanish(w) {
@@ -431,11 +469,16 @@
   MODE.touch = {
     spawn: function (w) {
       var r = knob(w, 'r'), lv = w.party ? 0 : w.plan.l, big = !w.party && lv === 2 && w.made % 4 === 3;
-      var b = make(w, 'bubble', pickX(w, w.bop.x, knob(w, 'spread'), w.party ? 0 : 150, 150), 0, big ? r * 1.3 : w.party && w.rand() < 0.5 ? r * 0.85 : r);
+      var hasPinata = w.party && w.targets.some(function (o) { return !o.dead && o.pinata; });
+      var pinata = w.party && !hasPinata && (w.pinataCD <= 0 || (w.made > 0 && w.made % BB.PINATA_EVERY === 0));
+      var rad = pinata ? r * 1.55 : big ? r * 1.3 : w.party && w.rand() < 0.5 ? r * 0.85 : r;
+      var b = make(w, 'bubble', pickX(w, w.bop.x, knob(w, 'spread'), w.party ? 0 : 150, 150), 0, rad);
       b.y = H + b.r + 8;
-      if (b.gold) b.r = r * 0.8;
-      b.hoverY = 190 + w.rand() * 230; b.wait = knob(w, 'wait'); b.waited = 0;
-      b.sway = knob(w, 'sway') * [1, 1.8, 2.4][lv]; b.big = big; b.speedK = big ? 0.8 : b.gold ? 1.35 : 1; b.vx = 0;
+      if (pinata) { b.pinata = true; b.gold = true; w.pinataCD = 9.5; }
+      else if (b.gold) b.r = r * 0.8;
+      b.hoverY = pinata ? 190 + w.rand() * 150 : 190 + w.rand() * 230;
+      b.wait = pinata ? _mx(knob(w, 'wait'), 3.5) : knob(w, 'wait'); b.waited = 0;
+      b.sway = knob(w, 'sway') * [1, 1.8, 2.4][lv]; b.big = big; b.speedK = pinata ? 0.72 : big ? 0.8 : b.gold ? 1.35 : 1; b.vx = 0; b.vy = 0;
     },
     update: function (w, dt) {
       var bop = w.bop, margin = knob(w, 'margin'), magnet = knob(w, 'magnet') * w.activity, reach = knob(w, 'reach'), speed = knob(w, 'speed');
@@ -443,10 +486,11 @@
         var b = w.targets[i];
         if (b.dead) continue;
         b.age += dt;
-        if (b.vx) { b.x += b.vx * dt; b.vx *= Math.pow(0.04, dt); if (Math.abs(b.vx) < 3) b.vx = 0; }
+        if (b.vx) { b.x += b.vx * dt; b.vx *= Math.pow(0.04, dt); if (_ab(b.vx) < 3) b.vx = 0; }
+        if (b.vy) { b.y = clamp(b.y + b.vy * dt, b.r + 70, H - b.r - 12); b.vy *= Math.pow(0.04, dt); if (_ab(b.vy) < 3) b.vy = 0; }
         if (b.y <= b.hoverY && b.waited < b.wait) b.waited += dt;
-        else b.y -= (speed * b.speedK + Math.max(0, b.y - 560) * 1.8) * dt;
-        b.x = clamp(b.x + Math.cos(b.age * 1.5 + b.phase) * b.sway * 1.5 * dt, b.r + 8, W - b.r - 8);
+        else b.y -= (speed * b.speedK + _mx(0, b.y - 560) * 1.8) * dt;
+        b.x = clamp(b.x + _cs(b.age * 1.5 + b.phase) * b.sway * 1.5 * dt, b.r + 8, W - b.r - 8);
         if (w.known && magnet > 0) BB.magnet(b, bop.x, bop.y, magnet, reach + b.r + BB.BOP_R, dt, b.r * 0.5);
         // Bop's body or the pointer itself pops a bubble: whichever reaches it first.
         if (w.known && (BB.touchHit(bop.x, bop.y, b, BB.BOP_R + margin) || BB.touchHit(w.px, w.py, b, margin))) pop(w, b, 'touch');
@@ -459,11 +503,11 @@
       var r = knob(w, 'r'), spread = knob(w, 'spread'), ax = w.known ? w.px : w.bop.x, ay = w.known ? w.py : w.bop.y;
       var x = 0, y = 0, best = -1, i, j;
       for (i = 0; i < 16; i++) {
-        var cx = 170 + w.rand() * (W - 340), cy = 200 + w.rand() * 300, d = Math.sqrt((cx - ax) * (cx - ax) + (cy - ay) * (cy - ay));
+        var cx = 170 + w.rand() * (W - 340), cy = 200 + w.rand() * 300, d = _sq((cx - ax) * (cx - ax) + (cy - ay) * (cy - ay));
         var room = 9999;
         for (j = 0; j < w.targets.length; j++) {
           var o = w.targets[j];
-          if (!o.dead) room = Math.min(room, Math.sqrt((o.x - cx) * (o.x - cx) + (o.y - cy) * (o.y - cy)) - o.r - r);
+          if (!o.dead) room = _mn(room, _sq((o.x - cx) * (o.x - cx) + (o.y - cy) * (o.y - cy)) - o.r - r);
         }
         // Near the pointer (but never right under it) and clear of the other balloons.
         var score = (d <= spread && d >= r + 90 ? 2 : 0) + (room > 40 ? 1 : 0);
@@ -482,19 +526,19 @@
         b = w.targets[i];
         if (b.dead) continue;
         b.age += dt;
-        b.grow = Math.min(1, b.grow + dt / 0.35);
+        b.grow = _mn(1, b.grow + dt / 0.35);
         if (!b.leaving && b.age > b.life) b.leaving = true;
         if (b.leaving) b.by -= (160 + 60 * b.age / (b.life + 1)) * dt;
         else {
           b.bx += b.vx * dt;
           if (b.bx < b.r + 40 || b.bx > W - b.r - 40) { b.vx = -b.vx; b.bx = clamp(b.bx, b.r + 40, W - b.r - 40); }
         }
-        b.x = b.bx; b.y = b.by + Math.sin(b.age * 2.1 + b.phase) * b.bob;
+        b.x = b.bx; b.y = b.by + _sn(b.age * 2.1 + b.phase) * b.bob;
         if (w.known && !b.leaving && magnet > 0) {
           var m = { x: b.x, y: b.y };
           BB.magnet(m, w.px, w.py, magnet, reach + b.r, dt, b.r * 0.3);
           b.bx = clamp(b.bx + m.x - b.x, b.r + 40, W - b.r - 40); b.by = clamp(b.by + m.y - b.y, 150, 560);
-          b.x = b.bx; b.y = b.by + Math.sin(b.age * 2.1 + b.phase) * b.bob;
+          b.x = b.bx; b.y = b.by + _sn(b.age * 2.1 + b.phase) * b.bob;
         }
         b.hot = w.known && BB.clickHit(w.px, w.py, b, margin);
         if (b.y < -b.r * 2.6) escape(w, b);
@@ -541,16 +585,16 @@
           if (frog.buffer > 0) launch(w);
         }
       }
-      frog.buffer = Math.max(0, frog.buffer - dt);
-      frog.tongue = Math.max(0, frog.tongue - dt);
+      frog.buffer = _mx(0, frog.buffer - dt);
+      frog.tongue = _mx(0, frog.tongue - dt);
       for (i = 0; i < w.targets.length; i++) {
         var f = w.targets[i];
         if (f.dead) continue;
         f.age += dt;
-        var dx = f.x - frog.x, ad = Math.abs(dx), k = slow + (1 - slow) * clamp((ad - 10) / (win * 1.5), 0, 1);
-        if (slow === 0 && ad <= 10 && f.waited < f.wait) { f.waited += dt; f.x += (frog.x - f.x) * Math.min(1, dt * 4); }
-        else f.x += f.dir * speed * Math.max(k, slow > 0 ? slow : 0.16) * dt;
-        f.y = f.baseY + Math.sin(f.age * 3.2 + f.phase) * f.zig;
+        var dx = f.x - frog.x, ad = _ab(dx), k = slow + (1 - slow) * clamp((ad - 10) / (win * 1.5), 0, 1);
+        if (slow === 0 && ad <= 10 && f.waited < f.wait) { f.waited += dt; f.x += (frog.x - f.x) * _mn(1, dt * 4); }
+        else f.x += f.dir * speed * _mx(k, slow > 0 ? slow : 0.16) * dt;
+        f.y = f.baseY + _sn(f.age * 3.2 + f.phase) * f.zig;
         if (frog.air && ad <= win && f.y >= frog.y - F.h - F.tongue && f.y <= frog.y) {
           frog.tongue = 0.22; frog.tx = f.x; frog.ty = f.y;
           pop(w, f, 'jump');
@@ -565,10 +609,10 @@
       // In a level a fruit never falls into a basket that stays put: beyond the catch
       // reach (half-width + 17) plus its full side-to-side wobble (2 * sway), so the
       // child has to steer.
-      var away = w.party ? 0 : Math.max(tier <= 2 ? 130 : 60, w.basket.hw + 17 + 2 * sway + 20);
+      var away = w.party ? 0 : _mx(tier <= 2 ? 130 : 60, w.basket.hw + 17 + 2 * sway + 20);
       var x = pickX(w, w.basket.x, knob(w, 'spread'), away, 150);
       var f = make(w, 'fruit', x, 60, 34);
-      f.type = Math.floor(w.rand() * 5); f.fallK = 0.9 + 0.2 * w.rand();
+      f.type = _fl(w.rand() * 5); f.fallK = 0.9 + 0.2 * w.rand();
       f.sway = sway; f.steered = false;
     },
     update: function (w, dt, input) {
@@ -577,34 +621,34 @@
       bk.vx += clamp(want - bk.vx, -6000 * dt, 6000 * dt);
       bk.x += bk.vx * dt;
       if (bk.x < bk.hw + 16 || bk.x > W - bk.hw - 16) { bk.x = clamp(bk.x, bk.hw + 16, W - bk.hw - 16); bk.vx = 0; }
-      bk.squash = Math.max(0, bk.squash - dt * 4);
+      bk.squash = _mx(0, bk.squash - dt * 4);
       for (var i = 0; i < w.targets.length; i++) {
         var f = w.targets[i];
         if (f.dead) continue;
         f.age += dt;
         f.y += fall * f.fallK * dt;
-        f.x = clamp(f.x + Math.cos(f.age * 1.7 + f.phase) * f.sway * 1.7 * dt, 60, W - 60);
+        f.x = clamp(f.x + _cs(f.age * 1.7 + f.phase) * f.sway * 1.7 * dt, 60, W - 60);
         // The magnet helps only a fruit the child has steered for (an arrow press while
         // it falls): like the pointer magnet, nothing is caught by itself.
         if (input.dir) f.steered = true;
         if (f.steered && f.y > 330 && f.y < B.y) BB.magnet(f, bk.x, f.y, magnet, reach + bk.hw, dt, 0);
-        if (f.y >= B.y - 8 && f.y <= B.y + 30 && Math.abs(f.x - bk.x) <= bk.hw + f.r * 0.5) { bk.squash = 1; pop(w, f, 'catch'); }
+        if (f.y >= B.y - 8 && f.y <= B.y + 30 && _ab(f.x - bk.x) <= bk.hw + f.r * 0.5) { bk.squash = 1; pop(w, f, 'catch'); }
         else if (f.y > B.ground) escape(w, f);
       }
     }
   };
 
   /* ------------------------------------------ worlds 6-11: shared bits */
-  function dist(ax, ay, bx, by) { var dx = ax - bx, dy = ay - by; return Math.sqrt(dx * dx + dy * dy); }
+  function dist(ax, ay, bx, by) { var dx = ax - bx, dy = ay - by; return _sq(dx * dx + dy * dy); }
   function byId(w, id) { for (var i = 0; i < w.targets.length; i++) if (w.targets[i].id === id && !w.targets[i].dead) return w.targets[i]; return null; }
-  function shuffle(w, a) { for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(w.rand() * (i + 1)), t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
+  function shuffle(w, a) { for (var i = a.length - 1; i > 0; i--) { var j = _fl(w.rand() * (i + 1)), t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
   // A party plays the layouts of level 3.
   function levelOf(w) { return w.party ? 2 : w.plan.l; }
   function missClick(w, x, y) { w.missClicks++; w.ev.push({ t: 'missClick', x: x, y: y }); }
   // A slip in the newer worlds (a carried turtle let go on the sand, a bubble blown too big)
   // counts against the second star like a target that got away, but nothing is lost.
   function slip(w, t, why) {
-    w.escapes++; w.combo = 0; w.mult = 1;
+    w.escapes++; w.combo = 0; w.rapid = 0; w.mult = 1;
     w.ev.push({ t: 'slip', kind: t.kind, why: why, id: t.id, x: t.x, y: t.y, r: t.r });
   }
   // The button was let go by a pause or a lost window, not by the child: the turtle in hand
@@ -682,15 +726,15 @@
     spawn: function (w) {
       var r = knob(w, 'r'), d = knob(w, 'dist'), snap = knob(w, 'snap'), best = null, bs = -1, i, j;
       // Every colour gets its turtles, but rarely the same pool twice in a row.
-      var pool = w.pools[Math.floor(w.rand() * w.pools.length)];
+      var pool = w.pools[_fl(w.rand() * w.pools.length)];
       if (w.pools.length > 1 && pool.color === w.lastR && w.rand() < 0.7) pool = w.pools[(w.pools.indexOf(pool) + 1) % w.pools.length];
       w.lastR = pool.color;
       // A spot about `dist` from its pool (squashed a little: the beach is wide), clear of every
       // pool's slide-in zone, of the other turtles, of Bop and of the on-screen mouse; a few
       // fixed spots on the sand are the fallback.
       for (i = 0; i < 34 && bs < d * 0.85; i++) {
-        var a = w.rand() * Math.PI * 2, x = i < 28 ? clamp(pool.x + Math.cos(a) * d, 110, W - 110) : SPOTS[i - 28][0];
-        var y = i < 28 ? clamp(pool.y + Math.sin(a) * d * 0.85, 230, 640) : SPOTS[i - 28][1];
+        var a = w.rand() * _PI * 2, x = i < 28 ? clamp(pool.x + _cs(a) * d, 110, W - 110) : SPOTS[i - 28][0];
+        var y = i < 28 ? clamp(pool.y + _sn(a) * d * 0.85, 230, 640) : SPOTS[i - 28][1];
         var score = dist(x, y, pool.x, pool.y);
         if ((x > 960 && y > 500) || (x < 210 && y > 540)) score = -1; // the on-screen mouse, Bop
         for (j = 0; j < w.pools.length; j++) if (dist(x, y, w.pools[j].x, w.pools[j].y) < w.pools[j].r + snap + r * 0.5 + 24) score = -1;
@@ -704,7 +748,7 @@
     },
     update: function (w, dt, input) {
       var snap = knob(w, 'snap'), pull = knob(w, 'pull'), grab = knob(w, 'grab'), i, t, p;
-      if (w.poolMove) { var sh = 90 * Math.sin(w.segT * w.poolMove / 90); for (i = 0; i < w.pools.length; i++) w.pools[i].x = w.pools[i].bx + sh; }
+      if (w.poolMove) { var sh = 90 * _sn(w.segT * w.poolMove / 90); for (i = 0; i < w.pools.length; i++) w.pools[i].x = w.pools[i].bx + sh; }
       var evs = input.mouse || [];
       for (i = 0; i < evs.length; i++) {
         if (evs[i].down) dragPress(w, evs[i].x, evs[i].y);
@@ -718,7 +762,7 @@
         t.age += dt;
         p = poolOf(w, t.home);
         if (t.state === 'home') {
-          t.k = Math.min(1, t.k + dt / 0.28);
+          t.k = _mn(1, t.k + dt / 0.28);
           var e = t.k * (2 - t.k);
           t.x = t.sx + (p.x - t.sx) * e; t.y = t.sy + (p.y - t.sy) * e;
           if (t.k >= 1) pop(w, t, 'drag');
@@ -732,7 +776,7 @@
           if (d < zone) { var lean = pull * (1 - d / zone); fx += (p.x - fx) * lean; fy += (p.y - fy) * lean; p.near = 1; }
           fx = clamp(fx, t.r, W - t.r); fy = clamp(fy, 150, H - t.r * 0.6);
           t.travel += dist(t.x, t.y, fx, fy);
-          if (Math.abs(fx - t.x) > 0.5) t.face = fx < t.x ? -1 : 1;
+          if (_ab(fx - t.x) > 0.5) t.face = fx < t.x ? -1 : 1;
           t.x = fx; t.y = fy;
           // A turtle carried after a click slides in by itself once it is over its water.
           if (w.carry === t.id && d < p.r * 0.6) { w.carry = 0; dragHome(w, t); }
@@ -755,10 +799,10 @@
       var lv = levelOf(w), r = knob(w, 'r'), big = !w.party && lv === 2 && w.made % 4 === 3;
       var spots = lv === 0 ? BB.REEF.floor : BB.REEF.floor.concat(BB.REEF.rocks), ax = w.known ? w.px : W / 2, pick = null, best = -1;
       for (var i = 0; i < spots.length; i++) {
-        var s = spots[(i + Math.floor(w.rand() * spots.length)) % spots.length], free = true;
+        var s = spots[(i + _fl(w.rand() * spots.length)) % spots.length], free = true;
         for (var j = 0; j < w.targets.length; j++) { var o = w.targets[j]; if (!o.dead && dist(o.x, o.y, s[0], s[1]) < 120) free = false; }
         // Level 1 starts near the pointer; later anywhere.
-        var score = free ? 2 + (lv > 0 || Math.abs(s[0] - ax) < 500 ? 1 : 0) + w.rand() * 0.5 : -1;
+        var score = free ? 2 + (lv > 0 || _ab(s[0] - ax) < 500 ? 1 : 0) + w.rand() * 0.5 : -1;
         if (score > best) { best = score; pick = s; }
       }
       if (!pick || best < 0) return;
@@ -771,7 +815,7 @@
       for (i = 0; i < w.targets.length; i++) {
         t = w.targets[i];
         if (t.dead) continue;
-        t.age += dt; t.knock = Math.max(0, t.knock - dt * 3);
+        t.age += dt; t.knock = _mx(0, t.knock - dt * 3);
         if (t.armed && w.t - t.at > gap) { t.armed = false; w.ev.push({ t: 'unarm', id: t.id }); }
         if (t.age > t.life) { t.dig += dt; if (t.dig > 0.8) { escape(w, t); continue; } }
         t.hot = w.known && BB.clamHit(w.px, w.py, t, margin);
@@ -814,11 +858,11 @@
     spawn: function (w) {
       // The last bubble floats away with its critter before the next one sits on the wand.
       if (w.made > 0 && w.t - w.lastHit < 0.9) return;
-      var sizes = BB.RINGS[levelOf(w)], i = Math.floor(w.rand() * sizes.length);
-      if (sizes.length > 1 && sizes[i] === w.lastR) i = (i + 1 + Math.floor(w.rand() * (sizes.length - 1))) % sizes.length;
+      var sizes = BB.RINGS[levelOf(w)], i = _fl(w.rand() * sizes.length);
+      if (sizes.length > 1 && sizes[i] === w.lastR) i = (i + 1 + _fl(w.rand() * (sizes.length - 1))) % sizes.length;
       w.lastR = sizes[i];
       var t = make(w, 'wand', BB.WAND.x, BB.WAND.y, sizes[i]);
-      t.br = 0; t.state = 'ready'; t.critter = Math.floor(w.rand() * 4); t.ring = t.r; t.inBand = false; t.held = 0;
+      t.br = 0; t.state = 'ready'; t.critter = _fl(w.rand() * 4); t.ring = t.r; t.inBand = false; t.held = 0;
       t.pulse = levelOf(w) === 2 ? knob(w, 'pulse') : 0;
     },
     update: function (w, dt, input) {
@@ -828,16 +872,16 @@
         var t = w.targets[i];
         if (t.dead) continue;
         t.age += dt;
-        t.ring = t.r + t.pulse * Math.sin(t.age * 2.4);
+        t.ring = t.r + t.pulse * _sn(t.age * 2.4);
         // Only a fresh press starts a bubble, so a button still held from the last one does nothing.
         if (t.state === 'ready') {
           if (press) { t.state = 'grow'; t.br = BB.BUBBLE0; t.held = 0; w.ev.push({ t: 'blow', id: t.id, x: t.x, y: t.y }); }
         } else if (hold) {
           t.held += dt;
-          t.br += knob(w, 'grow') * (Math.abs(t.br - t.ring) <= tol ? knob(w, 'slow') : 1) * dt;
-          t.inBand = Math.abs(t.br - t.ring) <= tol;
+          t.br += knob(w, 'grow') * (_ab(t.br - t.ring) <= tol ? knob(w, 'slow') : 1) * dt;
+          t.inBand = _ab(t.br - t.ring) <= tol;
           if (t.br > t.ring + tol + 20) burst(w, t, false);
-        } else if (Math.abs(t.br - t.ring) <= tol) { t.inBand = false; pop(w, t, 'hold'); }
+        } else if (_ab(t.br - t.ring) <= tol) { t.inBand = false; pop(w, t, 'hold'); }
         else burst(w, t, t.br < t.ring);
       }
     }
@@ -846,7 +890,7 @@
   // (outside a party), for the ghost hand and the tests.
   BB.holdTime = function (tier, R) {
     var t = BB.TUNE.hold, g = t.grow[tier - 1], tol = t.tol[tier - 1], s = t.slow[tier - 1];
-    var lo = Math.max(BB.BUBBLE0, R - tol);
+    var lo = _mx(BB.BUBBLE0, R - tol);
     return (lo - BB.BUBBLE0) / g + (R - lo) / (g * s);
   };
 
@@ -859,8 +903,8 @@
   ];
   // How far a circle (x, y, r) sinks into a wall (a rounded box): null when it is clear.
   BB.wallHit = function (x, y, r, wl) {
-    var rad = Math.min(wl.w, wl.h) / 2, cx = clamp(x, wl.x - wl.w / 2 + rad, wl.x + wl.w / 2 - rad), cy = clamp(y, wl.y - wl.h / 2 + rad, wl.y + wl.h / 2 - rad);
-    var dx = x - cx, dy = y - cy, d = Math.sqrt(dx * dx + dy * dy), need = r + rad;
+    var rad = _mn(wl.w, wl.h) / 2, cx = clamp(x, wl.x - wl.w / 2 + rad, wl.x + wl.w / 2 - rad), cy = clamp(y, wl.y - wl.h / 2 + rad, wl.y + wl.h / 2 - rad);
+    var dx = x - cx, dy = y - cy, d = _sq(dx * dx + dy * dy), need = r + rad;
     if (d >= need) return null;
     if (d < 0.001) { dx = 0; dy = -1; d = 1; }
     return { nx: dx / d, ny: dy / d, depth: need - d };
@@ -889,21 +933,21 @@
         for (i = 0; i < 10 && !spot; i++) {
           var j = (w.rand() - 0.5) * 2;
           if (dir === 0 || dir === 2) { x = s.x + (dir === 0 ? 1 : -1) * d * (0.85 + 0.3 * w.rand()); y = s.y + j * 90; }
-          else { x = s.x + j * 60; y = dir === 1 ? S.y0 + 10 + w.rand() * 50 : S.y1 - 10 - w.rand() * 50; if (Math.abs(y - s.y) < 110) continue; }
+          else { x = s.x + j * 60; y = dir === 1 ? S.y0 + 10 + w.rand() * 50 : S.y1 - 10 - w.rand() * 50; if (_ab(y - s.y) < 110) continue; }
           if (clearSpot(w, x, y, r) && dist(x, y, s.x, s.y) > away) spot = { x: x, y: y };
         }
       }
       for (i = 0; i < 40 && !spot; i++) {
         x = S.x0 + 40 + w.rand() * (S.x1 - S.x0 - 80); y = S.y0 + 20 + w.rand() * (S.y1 - S.y0 - 40);
-        if (clearSpot(w, x, y, r) && dist(x, y, s.x, s.y) > Math.max(away, 200)) spot = { x: x, y: y };
+        if (clearSpot(w, x, y, r) && dist(x, y, s.x, s.y) > _mx(away, 200)) spot = { x: x, y: y };
       }
       if (!spot) return;
       var p = make(w, 'star', spot.x, spot.y, r);
       p.life = knob(w, 'life'); p.spin = w.rand() < 0.5 ? -1 : 1;
     },
     update: function (w, dt, input) {
-      var s = w.sub, S = BB.SUB, dx = input.dx || 0, dy = input.dy || 0, top = knob(w, 'sub'), len = Math.sqrt(dx * dx + dy * dy) || 1, i;
-      var k = Math.min(1, dt * 7);
+      var s = w.sub, S = BB.SUB, dx = input.dx || 0, dy = input.dy || 0, top = knob(w, 'sub'), len = _sq(dx * dx + dy * dy) || 1, i;
+      var k = _mn(1, dt * 7);
       s.vx += (dx / len * top - s.vx) * k; s.vy += (dy / len * top - s.vy) * k;
       s.x += s.vx * dt; s.y += s.vy * dt;
       if (dx) s.face = dx > 0 ? 1 : -1;
@@ -942,11 +986,11 @@
       var free = set.filter(function (c) { return !used[c] && c !== w.lastCode; });
       if (!free.length) free = set.filter(function (c) { return !used[c]; });
       if (!free.length) return;
-      var code = free[Math.floor(w.rand() * free.length)], x = W / 2, y = 220, best = -1;
+      var code = free[_fl(w.rand() * free.length)], x = W / 2, y = 220, best = -1;
       w.lastCode = code;
       for (i = 0; i < 16 && best < 300; i++) {
         var cx = 190 + w.rand() * (W - 380), cy = 160 + w.rand() * 130, room = 9999;
-        for (j = 0; j < w.targets.length; j++) { var o = w.targets[j]; if (!o.dead) room = Math.min(room, Math.abs(o.rx - cx)); }
+        for (j = 0; j < w.targets.length; j++) { var o = w.targets[j]; if (!o.dead) room = _mn(room, _ab(o.rx - cx)); }
         if (room > best) { best = room; x = cx; y = cy; }
       }
       // It floats in from the nearer side and settles in the sky above the keyboard.
@@ -964,20 +1008,20 @@
         if (!b.leaving && b.age > b.life) b.leaving = true;
         if (b.leaving) b.ey -= (150 + 40 * b.age / (b.life + 1)) * dt;
         else if (!b.arrived) {
-          var k = Math.min(1, dt * 2.6);
+          var k = _mn(1, dt * 2.6);
           b.ex += (b.rx - b.ex) * k; b.ey += (b.ry - b.ey) * k;
-          if (Math.abs(b.rx - b.ex) < 3 && Math.abs(b.ry - b.ey) < 3) b.arrived = true;
+          if (_ab(b.rx - b.ex) < 3 && _ab(b.ry - b.ey) < 3) b.arrived = true;
         } else {
           b.rx += b.vx * dt;
           if (b.rx < 170 || b.rx > W - 170) { b.vx = -b.vx; b.rx = clamp(b.rx, 170, W - 170); }
           // Drifting balloons turn back before their keycaps overlap.
           for (j = 0; j < w.targets.length; j++) {
             var o = w.targets[j];
-            if (o !== b && !o.dead && o.arrived && !o.leaving && Math.abs(o.rx - b.rx) < 200 && (o.rx - b.rx) * b.vx > 0) b.vx = -b.vx;
+            if (o !== b && !o.dead && o.arrived && !o.leaving && _ab(o.rx - b.rx) < 200 && (o.rx - b.rx) * b.vx > 0) b.vx = -b.vx;
           }
           b.ex = b.rx;
         }
-        b.x = b.ex; b.y = b.ey + Math.sin(b.age * 2 + b.phase) * b.bob;
+        b.x = b.ex; b.y = b.ey + _sn(b.age * 2 + b.phase) * b.bob;
         if (b.leaving && b.y < -b.r * 2.2 - b.cap - 40) escape(w, b);
       }
       var keys = input.keys || [];
@@ -1006,25 +1050,46 @@
     if (input.px != null && input.py != null) {
       var nx = clamp(input.px, 0, W), ny = clamp(input.py, 0, H);
       // The magnet only helps a pointer that is moving: nothing pops by itself.
-      w.activity = w.known && Math.abs(nx - w.px) + Math.abs(ny - w.py) > 0.5 ? 1 : Math.max(0, w.activity - dt / 1.5);
+      w.activity = w.known && _ab(nx - w.px) + _ab(ny - w.py) > 0.5 ? 1 : _mx(0, w.activity - dt / 1.5);
       w.px = nx; w.py = ny; w.known = true;
-    } else w.activity = Math.max(0, w.activity - dt / 1.5);
+    } else w.activity = _mx(0, w.activity - dt / 1.5);
     if (w.known) BB.follow(w.bop, w.px, w.py, dt);
     if (w.party) {
-      var wave = 1 + Math.floor(Math.min(w.t, w.plan.duration - 0.001) / BB.WAVE_SECONDS);
+      if (w.pinataCD > 0) w.pinataCD -= dt;
+      var wave = 1 + _fl(_mn(w.t, w.plan.duration - 0.001) / BB.WAVE_SECONDS);
       if (wave !== w.wave) { w.wave = wave; w.ev.push({ t: 'wave', n: wave }); }
       var segs = w.plan.segments.length;
       if (segs > 1) {
         // Each part gets an equal share of the minute: 15 s each in world 5, 12 s in world 11.
-        var s = Math.floor(w.t / (w.plan.duration / segs)) % segs;
+        var s = _fl(w.t / (w.plan.duration / segs)) % segs;
         if (s !== w.seg && w.t < w.plan.duration) { vanish(w); enter(w, s); w.ev.push({ t: 'segment', mode: w.mode }); }
       }
     }
+    if (w.fever > 0) {
+      w.fever = _mx(0, w.fever - dt);
+      w.feverGauge = w.fever > 0 ? w.fever / BB.FEVER_SECONDS : 0;
+    } else if (w.feverGauge > 0 && w.t - w.lastHit > 2.2) {
+      w.feverGauge = _mx(0, w.feverGauge - dt * 0.14);
+    }
     if (input.cancel) cancel(w);
     MODE[w.mode].update(w, dt, input);
+    // Expanding fizzy rainbow shockwaves pop nearby bubbles/balloons in a domino chain!
+    for (var si = w.shockwaves.length - 1; si >= 0; si--) {
+      var sw = w.shockwaves[si];
+      sw.r += sw.speed * dt;
+      for (var ti = 0; ti < w.targets.length; ti++) {
+        var bt = w.targets[ti];
+        if (bt.dead || (bt.kind !== 'bubble' && bt.kind !== 'balloon') || (bt.mini && bt.age < 0.25)) continue;
+        if (dist(sw.x, sw.y, bt.x, bt.y) <= sw.r + bt.r) {
+          sw.popped++;
+          pop(w, bt, 'shockwave', sw.popped);
+        }
+      }
+      if (sw.r >= sw.maxR) w.shockwaves.splice(si, 1);
+    }
     // Spawning: never more on screen than the tier allows, never more than the level needs.
     var n = live(w), intro = w.seg > 0 || (w.party && w.t > 1) ? 1.1 : 0.6;
-    if (n === 0) w.spawnT = Math.min(w.spawnT, 0.3);
+    if (n === 0) w.spawnT = _mn(w.spawnT, 0.3);
     w.spawnT -= dt;
     if (w.segT >= intro && w.spawnT <= 0 && n < liveCap(w) && (w.party || w.segHits + n < w.goal)) {
       MODE[w.mode].spawn(w);
@@ -1039,7 +1104,7 @@
     return w;
   };
   // Remaining goal and party seconds, for the HUD.
-  BB.left = function (w) { return w.party ? Math.max(0, w.plan.duration - w.t) : Math.max(0, w.goal - w.segHits); };
+  BB.left = function (w) { return w.party ? _mx(0, w.plan.duration - w.t) : _mx(0, w.goal - w.segHits); };
 
   /* ------------------------------------------------------ stars, DDA */
   BB.result = function (w) {
@@ -1049,15 +1114,15 @@
   // Finishing a level always earns a star; one more for letting few targets get away,
   // one more for keeping pace. Missed clicks never cost a star: mashing is fine.
   BB.stars = function (r) {
-    var acc = r.hits / Math.max(1, r.hits + r.escapes);
+    var acc = r.hits / _mx(1, r.hits + r.escapes);
     return 1 + (acc >= 0.75 ? 1 : 0) + (r.time <= r.par ? 1 : 0);
   };
   // 0..1 for Kit.dda: accuracy (missed clicks count a little) and pace, or for a party
   // the share of the expected pops.
   BB.outcome = function (r) {
-    var acc = r.hits / Math.max(1, r.hits + r.escapes + 0.2 * Math.min(r.missClicks, r.hits * 2 + 2));
-    var x = r.party ? 0.6 * acc + 0.4 * Math.min(1, r.hits / Math.max(1, r.expect)) : 0.55 * acc + 0.45 * Math.min(1, r.par / Math.max(1, r.time));
-    return Math.round(clamp(x, 0, 1) * 1000) / 1000;
+    var acc = r.hits / _mx(1, r.hits + r.escapes + 0.2 * _mn(r.missClicks, r.hits * 2 + 2));
+    var x = r.party ? 0.6 * acc + 0.4 * _mn(1, r.hits / _mx(1, r.expect)) : 0.55 * acc + 0.45 * _mn(1, r.par / _mx(1, r.time));
+    return _rd(clamp(x, 0, 1) * 1000) / 1000;
   };
 
   /* ---------------------------------------------------------- rewards */
@@ -1093,7 +1158,7 @@
     for (var w = 0; w < BB.N; w++) { stars.push([0, 0, 0]); best.push(0); }
     return { v: 1, stars: stars, best: best, grip: false, color: 0, hat: 0, seenStars: 0 };
   };
-  function int(v, lo, hi) { return typeof v === 'number' && Math.floor(v) === v && v >= lo && v <= hi; }
+  function int(v, lo, hi) { return typeof v === 'number' && _fl(v) === v && v >= lo && v <= hi; }
   // Every field is checked: a damaged or hand-edited save always loads as a playable one.
   BB.loadSave = function (raw) {
     var s = BB.freshSave();

@@ -1,154 +1,103 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>مطبخ الفسحة</title>
-  <link rel="stylesheet" href="../../shared/game.css">
-  <link rel="stylesheet" href="style.css">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>مطبخ الفسحة</title>
+<link rel="icon" href="../../favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../../shared/game.css">
+<link rel="stylesheet" href="style.css">
 </head>
-<body data-mode="title">
-  <canvas id="scene" tabindex="0" aria-label="ساحة مطبخ الفسحة ثلاثية الأبعاد"></canvas>
+<body>
+<canvas id="game" tabindex="0" aria-label="ساحة مطبخ الفسحة"></canvas>
 
-  <!-- In-game HUD -->
-  <div id="hud" class="hud" hidden>
-    <div class="hud-top">
-      <div class="hud-stats">
-        <button id="btnPause" class="icon-btn" type="button" aria-label="استراحة" title="استراحة (P / Esc)">⏸</button>
-        <div class="pill stage-pill"><span id="hudStage" dir="ltr">1-1</span></div>
-        <div class="pill score-pill">
-          <span class="ico">⭐</span><b id="hudScore">0</b>
-          <span class="star-dots" id="hudStars" aria-hidden="true"><i>★</i><i>★</i><i>★</i></span>
-        </div>
-        <div class="pill time-pill" id="hudTimeWrap"><span class="ico">⏱</span><b id="hudTime">90</b></div>
-        <div class="pill combo-pill" id="hudCombo" hidden>🔥 <b id="hudComboVal" dir="ltr">×2</b></div>
-      </div>
+<!-- Live Gameplay HUD -->
+<header id="hud" class="rk-hud" hidden>
+  <div class="score-bar" dir="ltr">
+    <div class="team p1"><span id="p1Tag" dir="rtl">أنت</span><b id="scLeft">0</b></div>
+    <div id="hudTimer" class="timer-pill">45</div>
+    <div class="team p2"><b id="scRight">0</b><span id="p2Tag" dir="rtl">الشيف الآلي</span></div>
+  </div>
+  <div id="hudMod" class="mod-pill">وجبة طازجة!</div>
+</header>
+<button id="btnPause" class="rk-pause" type="button" aria-label="إيقاف مؤقت" title="إيقاف مؤقت (P / Esc)" hidden>⏸</button>
 
-      <div id="ordersBar" class="orders-bar" aria-label="طلبات الزبائن"></div>
+<!-- Title Screen over Live Animated Canteen Attract World -->
+<section id="scrTitle" class="rk-title">
+  <div class="title-top">
+    <div class="title-pills">
+      <span class="sg-pill">🪙 <b id="titleCoins" dir="ltr">0</b></span>
+      <span class="sg-pill">🏆 <b id="titleWins" dir="ltr">0</b></span>
     </div>
-
-    <div id="toast" class="toast" hidden role="status"></div>
-
-    <div id="ghostHint" class="ghost-hint" hidden>
-      <span id="ghostText">ابدأ بشريحة اللحم واشوها</span>
-      <span class="ghost-keys" dir="ltr"><span class="sg-key">←</span><span class="sg-key">→</span><span class="sg-key">↑</span><span class="sg-key">↓</span> <span class="sg-key">مسافة</span></span>
-    </div>
+    <h1 class="rk-logo">مطبخ الفسحة</h1>
+    <p class="rk-tag">اقلب السندويش وسجّل في صندوق خصمك!</p>
   </div>
 
-  <!-- Minimal vibrant Title overlay (live 3D kitchen behind it) -->
-  <div id="scrTitle" class="overlay overlay-title">
-    <div class="title-hero">
-      <div class="logo-badge" aria-hidden="true">👨‍🍳🍔</div>
-      <h1 class="game-logo">مطبخ الفسحة</h1>
-
-      <div class="title-stats">
-        <span class="mini-pill" id="titleStars">⭐ <b>0/27</b></span>
-        <span class="mini-pill" id="titleCoins">🪙 <b>0</b></span>
-        <span class="mini-pill" id="titleBest">🏆 <b>0</b></span>
-      </div>
-
-      <button id="btnPlay" class="play-btn" type="button">▶ العب الآن</button>
-
-      <div class="title-actions">
-        <button id="btnDuo" class="chip-btn" type="button" aria-pressed="false">👤 لاعب واحد</button>
-        <button id="btnLevels" class="chip-btn" type="button">🗺️ المطابخ</button>
-        <button id="btnEndless" class="chip-btn" type="button">∞ الاندفاع</button>
-        <button id="btnWardrobe" class="chip-btn" type="button">👒 الأزياء</button>
-      </div>
-
-      <div id="controlsBar" class="controls-strip"></div>
+  <div class="title-bottom">
+    <div class="cta-row">
+      <button id="btnPlay" class="sg-btn good rk-play" type="button">العب! ▶</button>
+      <button id="btnDuo" class="sg-btn rk-duo" type="button">👥 لاعبان</button>
+      <button id="btnHats" class="sg-btn secondary rk-hats-btn" type="button"><span id="titleHatIco">👨‍🍳</span> القبعات</button>
+    </div>
+    <div class="keys-hint">
+      <span dir="ltr"><span class="sg-key">مسافة</span> / <span class="sg-key">W</span> / <span class="sg-key">انقر</span></span>
+      <span>اقفز واضرب بالملعقة! · لاعب 2: <span class="sg-key" dir="ltr">↑</span></span>
     </div>
   </div>
+</section>
 
-  <!-- Canteen Levels selector -->
-  <div id="scrLevels" class="overlay" hidden>
-    <div class="card card-wide">
-      <div class="card-head">
-        <h2>🗺️ اختر المطبخ</h2>
-        <span class="mini-pill" id="levelsStars">⭐ <b>0/27</b></span>
-      </div>
-      <div id="levelsGrid" class="canteens-list"></div>
-      <div class="card-foot">
-        <button id="btnLevelsEndless" class="sg-btn good" type="button">∞ الاندفاع اللانهائي</button>
-        <button id="btnLevelsBack" class="sg-btn secondary" type="button">رجوع</button>
-      </div>
+<!-- Pause Overlay -->
+<section id="scrPause" class="sg-overlay" hidden aria-modal="true" role="dialog" aria-label="استراحة">
+  <div class="sg-panel rk-panel">
+    <h2 class="sg-title">استراحة ☕</h2>
+    <div class="rk-actions">
+      <button id="btnResume" class="sg-btn good" type="button">تابع اللعب ▶</button>
+      <button id="btnRestart" class="sg-btn" type="button">مباراة جديدة</button>
+      <button id="btnHome" class="sg-btn secondary" type="button">الرئيسية</button>
     </div>
   </div>
+</section>
 
-  <!-- Chef Wardrobe (Aprons & Hats) -->
-  <div id="scrWardrobe" class="overlay" hidden>
-    <div class="card card-wide">
-      <div class="card-head">
-        <h2>👨‍🍳 أزياء الطاهي</h2>
-        <span class="mini-pill" id="shopCoins">🪙 <b>0</b></span>
-      </div>
-      <div class="wardrobe-section">
-        <h3>المريلة</h3>
-        <div id="apronGrid" class="skin-grid"></div>
-      </div>
-      <div class="wardrobe-section">
-        <h3>القبعة</h3>
-        <div id="hatGrid" class="skin-grid"></div>
-      </div>
-      <div class="card-foot">
-        <button id="btnShopBack" class="sg-btn secondary" type="button">رجوع</button>
-      </div>
+<!-- Result Card -->
+<section id="scrResult" class="sg-overlay" hidden aria-modal="true" role="dialog" aria-label="نتيجة المباراة">
+  <div class="sg-panel rk-panel">
+    <h2 id="resTitle" class="sg-title">فوز رائع! 🏆</h2>
+    <p id="resSub" class="sg-sub">أنت بطل الملعقة الطائرة!</p>
+    <div class="res-score" dir="ltr">
+      <span class="rs p1" id="resScoreLeft">5</span>
+      <span class="rs-sep">-</span>
+      <span class="rs p2" id="resScoreRight">2</span>
+    </div>
+    <div class="res-wallet">
+      <span>🪙 <b id="resCoins" dir="ltr">+50</b></span>
+      <span>· رصيدك: <b id="resWallet" dir="ltr">50</b></span>
+    </div>
+    <div id="resNextHat" class="next-hat" hidden>
+      <div id="resNextLabel" class="next-hat-lbl"></div>
+      <div class="next-hat-bar"><div id="resNextFill" class="next-hat-fill"></div></div>
+    </div>
+    <div class="rk-actions">
+      <button id="btnAgain" class="sg-btn good" type="button">العب مجددًا ▶</button>
+      <button id="btnResHats" class="sg-btn" type="button">🎩 القبعات</button>
+      <button id="btnResHome" class="sg-btn secondary" type="button">الرئيسية</button>
     </div>
   </div>
+</section>
 
-  <!-- Pause overlay -->
-  <div id="scrPause" class="overlay" hidden>
-    <div class="card">
-      <h2>⏸ استراحة</h2>
-      <p class="card-sub" id="pauseSub">مطبخ الفسحة جاهز لعودتك!</p>
-      <div class="btn-col">
-        <button id="btnResume" class="sg-btn good" type="button">▶ متابعة</button>
-        <button id="btnRestart" class="sg-btn" type="button">🔄 إعادة المرحلة</button>
-        <button id="btnHome" class="sg-btn secondary" type="button">🏠 القائمة الرئيسية</button>
-      </div>
-    </div>
+<!-- Silly Chef Hats Closet -->
+<section id="scrHats" class="sg-overlay" hidden aria-modal="true" role="dialog" aria-label="قبعات الشيف">
+  <div class="sg-panel rk-panel hats-panel">
+    <h2 class="sg-title">قبعات الشيف 🎩</h2>
+    <p class="sg-sub">🪙 رصيدك: <b id="hatsCoins" dir="ltr">0</b></p>
+    <div id="hatsGrid" class="hats-grid"></div>
+    <button id="btnHatsBack" class="sg-btn secondary" type="button">رجوع</button>
   </div>
+</section>
 
-  <!-- Result overlay -->
-  <div id="scrResult" class="overlay" hidden>
-    <div class="card">
-      <div id="resNewBest" class="new-best" hidden>🏆 رقم قياسي جديد!</div>
-      <h2 id="resTitle">أحسنت يا شيف!</h2>
-      <div id="resStars" class="res-stars" aria-label="النجوم">
-        <span class="star" data-i="1">★</span>
-        <span class="star" data-i="2">★</span>
-        <span class="star" data-i="3">★</span>
-      </div>
-      <div class="res-grid">
-        <div class="res-box"><span>النقاط</span><b id="resScore">0</b></div>
-        <div class="res-box"><span>الطلبات</span><b id="resServed">0</b></div>
-        <div class="res-box"><span>العملات</span><b id="resCoins" dir="ltr">+0</b></div>
-      </div>
-      <div class="btn-row">
-        <button id="btnNext" class="sg-btn good" type="button" hidden>التالي ◀</button>
-        <button id="btnAgain" class="sg-btn" type="button">العب مجددًا</button>
-        <button id="btnResHome" class="sg-btn secondary" type="button">الرئيسية</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- WebGL unavailable fallback -->
-  <div id="scrError" class="overlay" hidden>
-    <div class="card">
-      <h2>⚠️ تعذّر تشغيل العرض ثلاثي الأبعاد</h2>
-      <p class="card-sub">متصفح هذا الجهاز لا يدعم WebGL حاليًا. جرّب تحديث الصفحة أو فتحها في متصفح أحدث.</p>
-    </div>
-  </div>
-
-  <div id="ctxNotice" class="toast toast-warn" hidden>جاري استعادة رسومات المطبخ...</div>
-  <div id="live" class="sr-only" aria-live="polite"></div>
-
-  <script src="../../shared/kit.js"></script>
-  <script src="../../shared/webgl.js"></script>
-  <script src="../../shared/juice.js"></script>
-  <script src="../../lib/three/three.min.js"></script>
-  <script src="engine.js"></script>
-  <script src="art.js"></script>
-  <script src="game.js"></script>
+<script src="../../shared/kit.js"></script>
+<script src="../../shared/juice.js"></script>
+<script src="engine.js"></script>
+<script src="art.js"></script>
+<script src="game.js"></script>
 </body>
 </html>

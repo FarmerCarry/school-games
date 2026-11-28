@@ -165,3 +165,61 @@ test('a run keeps going past zone 60 (the tunnel used to end there and freeze th
   assert.equal(zones.length, 64);
   assert.ok(zones.at(-1) > 62, `the run reached zone ${zones.at(-1)}`);
 });
+
+test('3 consecutive near-misses trigger 5s Rainbow Overdrive Shield with x2 orbs and obstacle blast-through', async t => {
+  const page = await game(t);
+  await play(page);
+  const fever = await page.evaluate(() => {
+    tb.step(10, false);
+    __game.nearMiss();
+    __game.nearMiss();
+    const before3 = __game.info();
+    __game.nearMiss();
+    const on3 = __game.info();
+    tb.step(6, true); // paint rainbow shimmer, ship aura & HUD pill
+    // Keep flying straight (no steering) until an obstacle row hits the Overdrive Shield
+    let absorbed = false;
+    for (let i = 0; i < 600 && __game.info().state === 'play'; i++) {
+      tb.step(1, false);
+      const cur = __game.info();
+      if (on3.overdriveShield && !cur.overdriveShield && cur.overdrive > 0 && cur.state === 'play') {
+        absorbed = true;
+        break;
+      }
+    }
+    const afterHit = __game.info();
+    // Let overdrive expire safely under autopilot
+    __game.autopilot(true); __game.invincible(true);
+    tb.step(320, false);
+    const expired = __game.info();
+    return { before3, on3, absorbed, afterHit, expired };
+  });
+  assert.equal(fever.before3.overdrive, 0, '2 near-misses do not trigger overdrive yet');
+  assert.equal(fever.on3.closeRun, 3);
+  assert.equal(fever.on3.streak, 3);
+  assert.equal(fever.on3.overdrive, 5, '3 consecutive near-misses trigger 5s Rainbow Overdrive');
+  assert.equal(fever.on3.overdriveShield, true, 'Overdrive Shield activates');
+  assert.equal(fever.absorbed, true, 'Overdrive Shield absorbs 1 obstacle impact cleanly without dying');
+  assert.equal(fever.afterHit.state, 'play');
+  assert.equal(fever.expired.overdrive, 0, 'Overdrive timer expires cleanly');
+  assert.equal(fever.expired.overdriveShield, false);
+});
+
+test('mid-tunnel golden boost gates trigger speed surge, bonus points, and render cleanly', async t => {
+  const page = await game(t);
+  await play(page);
+  const res = await page.evaluate(() => {
+    __game.invincible(true);
+    tb.step(30, false);
+    const before = __game.info();
+    const spawned = __game.spawnBoost();
+    tb.step(20, true); // fly through the glowing golden boost gate while painting
+    const after = __game.info();
+    return { spawned, before, after };
+  });
+  assert.equal(res.spawned, true);
+  assert.equal(res.after.boostsRun, 1, 'threading the boost gate registers');
+  assert.ok(res.after.boostT > 0.8, `speed-rush timer active (${res.after.boostT})`);
+  assert.ok(res.after.v > res.before.v + 2, `speed surged (${res.before.v} -> ${res.after.v})`);
+  assert.ok(res.after.score >= res.before.score + 25, `bonus points awarded (${res.before.score} -> ${res.after.score})`);
+});

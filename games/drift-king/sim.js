@@ -9,18 +9,20 @@
 (function (root) {
   'use strict';
   var DK = root.DK || (root.DK = {});
+  var M = Math, abs = M.abs, min = M.min, max = M.max, flr = M.floor, sin = M.sin, cos = M.cos, sqrt = M.sqrt, PI = M.PI; function ran() { return M.random(); }
+
 
   var TURN_R = 0.9;    // heading turns at speed / TURN_R rad/s (spatial radius)
   var GRIP_L = 0.8;    // velocity direction follows heading over this distance
   var MARGIN = 0.22;   // forgiving: centre may go this far past an edge
   var ZONE_LEN = 260;  // road distance per zone (sky / palette change)
-  var ANG = [Math.PI, -Math.PI / 2];
+  var ANG = [PI, -PI / 2];
   var DX = [-1, 0], DY = [0, -1];
   var LX = [0, 1], LY = [-1, 0];   // left normal of each direction
 
   function wrap(a) {
-    while (a > Math.PI) a -= Math.PI * 2;
-    while (a < -Math.PI) a += Math.PI * 2;
+    while (a > PI) a -= PI * 2;
+    while (a < -PI) a += PI * 2;
     return a;
   }
   function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
@@ -35,15 +37,15 @@
 
   // Difficulty as a function of road distance.
   function params(d) {
-    var k = 1 - Math.exp(-d / 1000);
-    var kw = 1 - Math.exp(-d / 800);
+    var k = 1 - M.exp(-d / 1000);
+    var kw = 1 - M.exp(-d / 800);
     return {
       speed: 6.8 + 4.6 * k,            // 6.8 -> 11.4 units/s
       width: 3.5 - 1.15 * kw,          // 3.5 -> 2.35
       segMin: 5.2 - 1.9 * k,           // shortest straight
       segMax: 11.5 - 4.5 * k,          // longest straight
-      ramp: d > 200 ? Math.min(0.2, 0.07 + d / 9000) : 0,
-      quick: d > 120 ? Math.min(0.35, 0.1 + d / 4000) : 0  // chance of a short "flick" straight
+      ramp: d > 65 ? min(0.24, 0.13 + d / 7000) : 0,
+      quick: d > 120 ? min(0.35, 0.1 + d / 4000) : 0  // chance of a short "flick" straight
     };
   }
 
@@ -52,6 +54,7 @@
     this.rand = rng(seed || 1);
     this.segs = [];
     this.base = 0;
+    this.lastRamp = -9;
     this.coins = [];
     this.items = [];     // gates etc.
     this.addSeg();
@@ -74,16 +77,17 @@
     else if (i < 4) len = 9 - i * 0.5;
     else if (r() < p.quick) len = p.segMin * (0.72 + r() * 0.1);
     else len = p.segMin + (p.segMax - p.segMin) * r();
-    len = Math.max(len, w * 0.5 + (prev ? prev.w * 0.5 : 0) + 1.6);
+    len = max(len, w * 0.5 + (prev ? prev.w * 0.5 : 0) + 1.6);
     var sx = prev ? prev.ex : 0, sy = prev ? prev.ey : 0;
     var seg = {
       i: i, dir: dir, sx: sx, sy: sy, len: len, w: w, d0: d0,
       ext0: prev ? prev.w * 0.5 : 2.5, ext1: w * 0.5,
-      gap: null, zone: Math.floor(d0 / ZONE_LEN)
+      gap: null, zone: flr(d0 / ZONE_LEN)
     };
-    // Ramp + gap: only on long straights, far enough from both corners.
-    if (i > 5 && p.ramp && r() < p.ramp) {
-      seg.len = len = Math.max(len, 13.5);
+    // Ramp + gap: only on long straights, spaced apart for dramatic sky-jump rhythm spikes.
+    if (i > 5 && i - this.lastRamp >= 4 && p.ramp && r() < p.ramp) {
+      this.lastRamp = i;
+      seg.len = len = max(len, 13.5);
       var a = seg.ext0 + 4.6;
       var g = 2.6 + r() * 0.8;
       seg.gap = { a: a, b: a + g, ramp: 1.5, h: 0.42 };
@@ -96,7 +100,7 @@
     // zone gate
     var zStart = seg.zone * ZONE_LEN;
     if (seg.zone > 0 && (!prev || prev.zone !== seg.zone)) {
-      var s = clamp(zStart - d0, seg.ext0 + 0.8, Math.max(seg.ext0 + 0.8, len - seg.w));
+      var s = clamp(zStart - d0, seg.ext0 + 0.8, max(seg.ext0 + 0.8, len - seg.w));
       if (seg.gap && s > seg.gap.a - 2) s = seg.ext0 + 0.8;
       var gp = this.point(seg, s, 0);
       this.items.push({ type: 'gate', seg: i, x: gp.x, y: gp.y, dir: dir, w: w, zone: seg.zone });
@@ -127,7 +131,7 @@
     if (room < 2) return;
     var roll = r();
     if (roll < 0.42) {
-      var n = Math.min(5, Math.floor(room / 1.1));
+      var n = min(5, flr(room / 1.1));
       var lat = 0;
       var pat = r();
       if (pat < 0.35) lat = (r() < 0.5 ? -1 : 1) * (seg.w * 0.5 - 0.55);
@@ -151,7 +155,7 @@
 
   function inSeg(seg, x, y, m) {
     var s = along(seg, x, y), l = lateral(seg, x, y);
-    if (Math.abs(l) > seg.w * 0.5 + m) return false;
+    if (abs(l) > seg.w * 0.5 + m) return false;
     if (s < -seg.ext0 - m || s > seg.len + seg.ext1 + m) return false;
     if (seg.gap && s > seg.gap.a + 0.05 && s < seg.gap.b - m) return false;
     return true;
@@ -171,14 +175,25 @@
     }
   };
 
-  // Road distance -> world point (for the best-score flag etc.)
-  Road.prototype.pointAtDist = function (d) {
+  // Road distance -> world point (for the best-score flag and best-run ghost car)
+  Road.prototype.pointAtDist = function (d, lat) {
     for (var k = 0; k < this.segs.length; k++) {
       var sg = this.segs[k];
       if (d >= sg.d0 && d < sg.d0 + sg.len) {
-        var s = d - sg.d0;
-        if (sg.gap && s > sg.gap.a - 0.3 && s < sg.gap.b + 0.3) s = sg.gap.b + 0.3;
-        var pt = this.point(sg, s, 0); pt.seg = sg; pt.s = s; return pt;
+        var s = d - sg.d0, z = 0;
+        if (lat == null) {
+          if (sg.gap && s > sg.gap.a - 0.3 && s < sg.gap.b + 0.3) s = sg.gap.b + 0.3;
+          lat = 0;
+        } else {
+          var lim = max(0.2, sg.w * 0.5 - 0.25);
+          lat = clamp(lat, -lim, lim);
+          if (sg.gap) {
+            var g = sg.gap;
+            if (s > g.a - g.ramp && s < g.a) z = g.h * (s - (g.a - g.ramp)) / g.ramp;
+            else if (s >= g.a && s < g.b + 1.6) z = jumpZ(s - g.a, g.b + 1.6 - g.a, g.h);
+          }
+        }
+        var pt = this.point(sg, s, lat); pt.seg = sg; pt.s = s; pt.z = z; pt.yaw = ANG[sg.dir]; return pt;
       }
     }
     return null;
@@ -219,7 +234,7 @@
     }
     var seg = road.get(car.seg);
     var target = params(seg.d0).speed;
-    car.v += (target - car.v) * Math.min(1, dt * (car.v < target - 1 ? 1.6 : 0.8));
+    car.v += (target - car.v) * min(1, dt * (car.v < target - 1 ? 1.6 : 0.8));
 
     if (!car.air) {
       var tgt = hold ? ANG[1] : ANG[0];
@@ -229,10 +244,10 @@
       car.head = wrap(car.head + st);
       car.turning = st / dt / w;
       var dv = wrap(car.head - car.vel);
-      car.vel = wrap(car.vel + dv * Math.min(1, dt * car.v / GRIP_L));
+      car.vel = wrap(car.vel + dv * min(1, dt * car.v / GRIP_L));
       car.slip = wrap(car.head - car.vel);
       // gentle centring once straight (helps kids recover from small errors)
-      if (Math.abs(car.slip) < 0.05 && Math.abs(wrap(car.head - ANG[seg.dir])) < 0.04) {
+      if (abs(car.slip) < 0.05 && abs(wrap(car.head - ANG[seg.dir])) < 0.04) {
         var s0 = along(seg, car.x, car.y);
         if (s0 > seg.ext0 + 0.3) {
           var lat = lateral(seg, car.x, car.y);
@@ -245,7 +260,7 @@
       car.turning = 0;
     }
 
-    var mx = Math.cos(car.vel) * car.v * dt, my = Math.sin(car.vel) * car.v * dt;
+    var mx = cos(car.vel) * car.v * dt, my = sin(car.vel) * car.v * dt;
     car.x += mx; car.y += my;
 
     // advance current segment
@@ -264,7 +279,7 @@
     // ramps and jumps
     if (car.air) {
       var a = car.air;
-      a.s += Math.sqrt(mx * mx + my * my);
+      a.s += sqrt(mx * mx + my * my);
       if (a.s >= a.D) {
         car.air = null; car.z = 0;
         if (inSeg(seg, car.x, car.y, MARGIN)) {
@@ -277,7 +292,9 @@
       var g = seg.gap;
       if (s > g.a - g.ramp && s < g.a) {
         car.z = g.h * (s - (g.a - g.ramp)) / g.ramp;
-      } else if (s >= g.a && s < g.b && Math.abs(lateral(seg, car.x, car.y)) < seg.w * 0.5 + MARGIN) {
+        var rlat = lateral(seg, car.x, car.y), rmv = clamp(-rlat * 1.4, -0.8, 0.8) * dt;
+        car.x += LX[seg.dir] * rmv; car.y += LY[seg.dir] * rmv;
+      } else if (s >= g.a && s < g.b && abs(lateral(seg, car.x, car.y)) < seg.w * 0.5 + MARGIN) {
         car.air = { s: s - g.a, D: g.b + 1.6 - g.a, h0: g.h };
         car.z = g.h;
         ev.push({ t: 'jump' });
@@ -296,21 +313,21 @@
 
     // distance to nearest edge (for "close call")
     var latNow = lateral(seg, car.x, car.y);
-    var edge = seg.w * 0.5 - Math.abs(latNow);
+    var edge = seg.w * 0.5 - abs(latNow);
 
     // corner evaluation ("Perfect!")
     var c = car.corner;
     if (c && !c.done && c.seg === seg.i) {
-      if (s > seg.ext0 * 0.4) c.minEdge = Math.min(c.minEdge, edge);
+      if (s > seg.ext0 * 0.4) c.minEdge = min(c.minEdge, edge);
       if (s >= seg.ext0 + 1.0) {
         c.done = true;
-        var aligned = Math.abs(wrap(car.head - ANG[seg.dir])) < 0.35;
-        var off = Math.abs(latNow);
+        var aligned = abs(wrap(car.head - ANG[seg.dir])) < 0.35;
+        var off = abs(latNow);
         var q;
         if (aligned && off < seg.w * 0.11 + 0.08) q = 'perfect';
         else if (c.minEdge < 0.12) q = 'close';
         else q = 'ok';
-        ev.push({ t: 'corner', q: q, seg: seg.i, off: off });
+        ev.push({ t: 'corner', q: q, seg: seg.i, off: off, minEdge: c.minEdge });
       }
     }
   }
@@ -326,9 +343,9 @@
     car.state = 'fall';
     car.air = null;
     car.fall = {
-      vx: Math.cos(car.vel) * sp * 0.8, vy: Math.sin(car.vel) * sp * 0.8, vz: vz + 2.2,
+      vx: cos(car.vel) * sp * 0.8, vy: sin(car.vel) * sp * 0.8, vz: vz + 2.2,
       pitch: 0, roll: 0,
-      vp: (Math.random() * 2 - 1) * 3 + 4, vr: (l > 0 ? 1 : -1) * (5 + Math.random() * 3), vh: (Math.random() * 2 - 1) * 4,
+      vp: (ran() * 2 - 1) * 3 + 4, vr: (l > 0 ? 1 : -1) * (5 + ran() * 3), vh: (ran() * 2 - 1) * 4,
       behind: behind
     };
     car.events.push({ t: 'fall', behind: behind });

@@ -1,7 +1,4 @@
-// Recess Kitchen 3D (games/recess-kitchen/) in real Chromium:
-// Title screen with zero idle audio, 1P keyboard movement/dash/full burger cooking & serving,
-// 2P Co-op independent controls & telemetry, Endless Rush, Wardrobe purchase & save quota retry,
-// Pause freeze & Restart reset, and Result stars & level unlock.
+// Recess Kitchen (Snack Flip & Bump Party) Playwright Chromium browser tests.
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import path from 'node:path';
@@ -23,8 +20,8 @@ after(async () => {
   await server?.close();
 });
 
-async function openGame(t, { save, dda = 0.35, reducedMotion = 'reduce', size = [1280, 720] } = {}) {
-  const ctx = await browser.newContext({ viewport: { width: size[0], height: size[1] }, reducedMotion });
+async function openGame(t, { save, reducedMotion = 'reduce' } = {}) {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 }, reducedMotion });
   const errors = [], requests = [];
   ctx.on('page', page => {
     page.on('pageerror', e => errors.push(e.message));
@@ -37,17 +34,14 @@ async function openGame(t, { save, dda = 0.35, reducedMotion = 'reduce', size = 
     assert.deepEqual(requests, [], 'no external network requests');
   });
 
-  await ctx.addInitScript(({ save, dda }) => {
+  await ctx.addInitScript(({ save }) => {
     if (location.protocol !== 'http:') return;
-    if (!sessionStorage.getItem('rk3-seeded')) {
-      sessionStorage.setItem('rk3-seeded', '1');
-      if (save !== undefined) {
-        localStorage.setItem('sg:recess-kitchen:save3', typeof save === 'string' ? save : JSON.stringify(save));
-      }
+    if (!sessionStorage.getItem('rk4-seeded')) {
+      sessionStorage.setItem('rk4-seeded', '1');
+      if (save !== undefined) localStorage.setItem('sg:recess-kitchen:save4', JSON.stringify(save));
     }
     let kit;
-    const rk = window.rk = { results: [], rounds: [], ends: [], hits: 0, misses: 0, failSave: false, audioStarts: 0 };
-
+    const rk = window.rk = { rounds: [], ends: [], dda: [], hits: 0, failSave: false, audioStarts: 0 };
     const origStart = window.AudioScheduledSourceNode && window.AudioScheduledSourceNode.prototype.start;
     if (origStart) {
       window.AudioScheduledSourceNode.prototype.start = function () {
@@ -55,207 +49,173 @@ async function openGame(t, { save, dda = 0.35, reducedMotion = 'reduce', size = 
         return origStart.apply(this, arguments);
       };
     }
-
     Object.defineProperty(window, 'Kit', {
       configurable: true,
       get: () => kit,
       set(value) {
         kit = value;
         kit.loop = (update, render) => {
-          rk.step = (n = 1) => { for (let i = 0; i < n; i++) { update(1 / 60); render(0); } };
           rk.run = (n = 1) => { for (let i = 0; i < n; i++) update(1 / 60); render(0); };
           return { stop() {} };
         };
         const makeDda = kit.dda;
         kit.dda = (slug, opts) => {
-          const ctrl = makeDda.call(kit, slug, Object.assign({}, opts, { start: dda }));
+          const ctrl = makeDda.call(kit, slug, opts);
           const origRes = ctrl.result;
-          ctrl.result = outcome => { rk.results.push(outcome); return origRes.call(ctrl, outcome); };
+          ctrl.result = o => { rk.dda.push(o); return origRes.call(ctrl, o); };
           return ctrl;
         };
-        if (kit.stats) {
-          const origRound = kit.stats.round;
-          const origEnd = kit.stats.end;
-          kit.stats.round = id => { rk.rounds.push(id); return origRound.call(kit.stats, id); };
-          kit.stats.end = function (outcome, score) {
-            rk.ends.push({ outcome, score, argc: arguments.length });
-            return origEnd.apply(kit.stats, arguments);
-          };
-        }
-        if (kit.track) {
-          const origHit = kit.track.hit;
-          const origMiss = kit.track.miss;
-          kit.track.hit = () => { rk.hits++; return origHit.call(kit.track); };
-          kit.track.miss = () => { rk.misses++; return origMiss.call(kit.track); };
-        }
+        const origRound = kit.stats.round, origEnd = kit.stats.end;
+        kit.stats.round = id => { rk.rounds.push(id); return origRound.call(kit.stats, id); };
+        kit.stats.end = function (outcome, score) {
+          rk.ends.push({ outcome, score, argc: arguments.length });
+          return origEnd.apply(kit.stats, arguments);
+        };
+        const origHit = kit.track.hit;
+        kit.track.hit = () => { rk.hits++; return origHit.call(kit.track); };
       }
     });
-
-    const origSetItem = Storage.prototype.setItem;
+    const origSet = Storage.prototype.setItem;
     Storage.prototype.setItem = function (key) {
-      if (key === 'sg:recess-kitchen:save3' && window.rk && window.rk.failSave) {
-        throw new DOMException('Quota exceeded fixture', 'QuotaExceededError');
+      if (key === 'sg:recess-kitchen:save4' && window.rk.failSave) {
+        throw new DOMException('Quota fixture', 'QuotaExceededError');
       }
-      return origSetItem.apply(this, arguments);
+      return origSet.apply(this, arguments);
     };
-  }, { save, dda });
+  }, { save });
 
   const page = await ctx.newPage();
-  await page.goto(`${server.origin}/games/recess-kitchen/`, { timeout: 90000 });
-  await page.waitForFunction(() => window.__game && window.rk && window.rk.step, null, { timeout: 30000 });
+  await page.goto(`${server.origin}/games/recess-kitchen/`, { waitUntil: 'load' });
+  await page.waitForFunction(() => window.__game && window.rk && window.rk.run, null, { timeout: 15000 });
   return page;
 }
 
 const state = page => page.evaluate(() => __game.state);
 const run = (page, n = 1) => page.evaluate(n => rk.run(n), n);
 
-test('title waits with zero idle audio; Play starts 1-1; ArrowRight moves Chef 1 right cleanly', async t => {
+test('title attract animates with zero idle audio; 1-click Play launches solo match; Space & Click flip chef', async t => {
   const page = await openGame(t);
-  await run(page, 40);
+  await run(page, 60);
+  const st0 = await state(page);
+  assert.equal(st0.screen, 'title');
+  assert.equal(st0.phase, 'title');
+  assert.equal(await page.evaluate(() => rk.audioStarts), 0, 'zero idle audio on title');
+
+  // Clicking empty corner does NOT start game
+  await page.mouse.click(4, 4);
   assert.equal((await state(page)).screen, 'title');
-  assert.equal(await page.evaluate(() => rk.audioStarts), 0, 'zero audio on idle title screen');
 
-  await page.click('#btnPlay');
-  await run(page, 6);
-  const s0 = await state(page);
-  assert.equal(s0.screen, 'play');
-  assert.equal(s0.id, '1-1');
-  assert.equal(s0.atStart, true);
-  assert.equal(s0.orders.length, 1);
-  assert.deepEqual(await page.evaluate(() => rk.rounds), ['L1']);
-
-  const xBefore = s0.chefs[0].x;
-  await page.keyboard.down('ArrowRight');
-  await run(page, 18);
-  await page.keyboard.up('ArrowRight');
-  const s1 = await state(page);
-  assert.ok(s1.chefs[0].x > xBefore + 0.5, `Chef 1 moves right cleanly (${xBefore} -> ${s1.chefs[0].x})`);
-  assert.equal(s1.atStart, false);
-});
-
-test('1P full burger cook, assemble, serve, pause freeze, and restart reset', async t => {
-  const page = await openGame(t);
+  // 1-click Play!
   await page.click('#btnPlay');
   await run(page, 4);
+  let s = await state(page);
+  assert.equal(s.screen, 'play');
+  assert.equal(s.mode, 'solo');
+  assert.equal(s.atStart, true);
+  assert.deepEqual(await page.evaluate(() => rk.rounds), ['solo']);
 
-  // Move to patty crate, pick up, cook on stove, combine at bun crate, serve at window
-  const servedOk = await page.evaluate(() => {
-    const w = __game.world;
-    const c = w.chefs[0];
-    const placeAndAct = kind => {
-      const st = w.stations.find(s => s.kind === kind);
-      const dirs = [[0, 1], [0, -1], [1, 0], [-1, 0]];
-      for (const [dx, dy] of dirs) {
-        const nc = st.c + dx, nr = st.r + dy;
-        if (nc >= 0 && nc < w.cols && nr >= 0 && nr < w.rows && !w.grid[nr][nc]) {
-          c.x = nc + 0.5; c.y = nr + 0.5; c.fx = -dx; c.fy = -dy;
-          break;
-        }
-      }
-      window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space', key: ' ', bubbles: true, cancelable: true }));
-      rk.run(2);
-      window.dispatchEvent(new KeyboardEvent('keyup', { code: 'Space', key: ' ' }));
-      rk.run(2);
-    };
-    placeAndAct('crate_patty');
-    placeAndAct('stove');
-    rk.run(170); // finish grilling patty
-    placeAndAct('stove');
-    placeAndAct('crate_bun');
-    placeAndAct('serve');
-    return { served: w.served, score: w.score, hits: rk.hits };
-  });
-  assert.equal(servedOk.served, 1);
-  assert.ok(servedOk.score >= 100);
-  assert.equal(servedOk.hits, 1);
+  // Space jumps chef 1
+  await page.keyboard.press('Space');
+  await run(page, 6);
+  s = await state(page);
+  assert.ok(s.jumps >= 1, 'Space flips P1 chef');
+  assert.equal(s.atStart, false);
 
-  // Pause freezes time and stays silent
+  // Let chef land, then mouse click also flips chef!
+  await run(page, 65);
+  const jBefore = (await state(page)).jumps;
+  const pt = await page.evaluate(() => __game.point(640, 360));
+  await page.mouse.click(pt.x, pt.y);
+  await run(page, 6);
+  assert.ok((await state(page)).jumps > jBefore, 'canvas click flips P1 chef');
+});
+
+test('pause freezes time silently, restart resets score/jumps, and solo match win reports numeric score & DDA', async t => {
+  const page = await openGame(t);
+  await page.click('#btnPlay');
+  await run(page, 12);
+  await page.keyboard.press('Space');
+  await run(page, 6);
+
+  // Pause freezes time with zero audio
   await page.click('#btnPause');
-  await run(page, 2);
-  const paused0 = await state(page);
-  assert.equal(paused0.screen, 'pause');
-  const audioBefore = await page.evaluate(() => rk.audioStarts);
+  const p0 = await state(page);
+  assert.equal(p0.screen, 'pause');
+  const a0 = await page.evaluate(() => rk.audioStarts);
   await run(page, 60);
-  const paused1 = await state(page);
-  assert.equal(paused1.time, paused0.time, 'simulation time freezes while paused');
-  assert.equal(await page.evaluate(() => rk.audioStarts), audioBefore, 'zero audio while paused');
+  const p1 = await state(page);
+  assert.equal(p1.time, p0.time, 'time freezes when paused');
+  assert.equal(await page.evaluate(() => rk.audioStarts), a0, 'zero audio while paused');
 
   // Restart resets cleanly
   await page.click('#btnRestart');
   await run(page, 4);
-  const reset = await state(page);
-  assert.equal(reset.screen, 'play');
-  assert.equal(reset.atStart, true);
-  assert.equal(reset.served, 0);
-  assert.equal(reset.score, 0);
+  const r0 = await state(page);
+  assert.equal(r0.screen, 'play');
+  assert.equal(r0.jumps, 0);
+  assert.deepEqual(r0.goals, [0, 0]);
+
+  // Score 5th goal to win solo match
+  await page.evaluate(() => {
+    __game.world.goals = [4, 1];
+    __game.world.snacks[0].x = RK.W - RK.GOAL_W + 30;
+    __game.world.snacks[0].y = RK.GOAL_TOP + 90;
+    rk.run(4);
+  });
+  const endState = await state(page);
+  assert.equal(endState.screen, 'result');
+  const tele = await page.evaluate(() => ({ ends: rk.ends, dda: rk.dda, coins: __game.save.coins }));
+  const lastEnd = tele.ends[tele.ends.length - 1];
+  assert.equal(lastEnd.outcome, 'win');
+  assert.equal(lastEnd.score, 5, 'reports numeric score');
+  assert.equal(tele.dda.length, 1, 'solo match feeds DDA');
+  assert.ok(tele.coins >= 60, 'coins awarded on win');
+
+  // Sub-second retry via Enter after 0.35s lock!
+  await run(page, 30);
+  await page.keyboard.press('Enter');
+  assert.equal((await state(page)).screen, 'play');
 });
 
-test('2P Co-op independent controls, Endless Rush, Wardrobe purchase, and save quota retry', async t => {
+test('1-click 2P mode uses W vs ArrowUp, reports duo end without solo DDA, and hat closet handles save retry', async t => {
   const page = await openGame(t, {
-    save: { v: 3, levels: Array.from({ length: 9 }, () => ({ stars: 0, best: 0 })), bestScore: 0, bestEndless: 0, coins: 100, aprons: [0], hats: [0], apron: 0, hat: 0, tutorialDone: true }
+    save: { v: 4, coins: 80, hats: [0], hat: 0, wins: 1, matches: 1, bestGoals: 5, duoWins: [0, 0] }
   });
 
-  // Wardrobe purchase + save failure & retry
-  await page.click('#btnWardrobe');
+  // Open Hats drawer, test quota failure & retry
+  await page.click('#btnHats');
+  assert.equal((await state(page)).screen, 'hats');
   await page.evaluate(() => { rk.failSave = true; });
-  await page.locator('#apronGrid .skin-card').nth(1).click(); // costs 40 coins
+  await page.locator('.hat-card[data-hat="1"]').click();
   await page.waitForSelector('.sg-save-status:not([hidden])');
   await page.evaluate(() => { rk.failSave = false; });
   await page.locator('.sg-save-status button').click();
-  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('sg:recess-kitchen:save3')));
-  assert.equal(saved.apron, 1);
-  assert.equal(saved.coins, 60);
-  await page.click('#btnShopBack');
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('sg:recess-kitchen:save4')));
+  assert.equal(saved.hat, 1);
+  assert.equal(saved.coins, 55);
+  await page.click('#btnHatsBack');
 
-  // 2P Co-op independent movement + telemetry end without score or DDA
+  // 1-click 2P local mode
   await page.click('#btnDuo');
-  await page.click('#btnPlay');
   await run(page, 4);
-  const s0 = await state(page);
-  assert.equal(s0.chefs.length, 2);
-  await page.keyboard.down('KeyD');
-  await page.keyboard.down('ArrowLeft');
-  await run(page, 18);
-  await page.keyboard.up('KeyD');
-  await page.keyboard.up('ArrowLeft');
-  const s1 = await state(page);
-  assert.ok(s1.chefs[0].x > s0.chefs[0].x + 0.4, 'P1 moves right with KeyD');
-  assert.ok(s1.chefs[1].x < s0.chefs[1].x - 0.4, 'P2 moves left with ArrowLeft');
+  assert.equal((await state(page)).mode, 'duo');
+  await page.keyboard.press('KeyW');
+  await page.keyboard.press('ArrowUp');
+  await run(page, 6);
+  const s = await state(page);
+  assert.ok(s.chefs[0].jumps >= 1, 'P1 flips with W');
+  assert.ok(s.chefs[1].jumps >= 1, 'P2 flips with ArrowUp');
 
-  // Fast-forward 2P round end
-  await page.evaluate(() => { __game.world.timeLeft = 0.05; rk.run(8); });
-  assert.equal((await state(page)).screen, 'result');
-  const tele = await page.evaluate(() => ({ ends: rk.ends, dda: rk.results }));
-  assert.equal(tele.ends[tele.ends.length - 1].outcome, 'end');
-  assert.equal(tele.ends[tele.ends.length - 1].argc, 1, '2P rounds report end without score');
-  assert.equal(tele.dda.length, 0, '2P rounds never feed solo DDA');
-
-  // Return home and start Endless Rush
-  await page.click('#btnResHome');
-  await page.click('#btnDuo'); // back to 1P
-  await page.click('#btnEndless');
-  await run(page, 4);
-  const endState = await state(page);
-  assert.equal(endState.screen, 'play');
-  assert.equal(endState.id, 'endless');
-});
-
-test('solo round win unlocks level 1-2, awards stars & coins, and reports DDA', async t => {
-  const page = await openGame(t);
-  await page.click('#btnPlay');
-  await run(page, 4);
+  // Finish 2P match
   await page.evaluate(() => {
-    __game.world.score = 450;
-    __game.world.served = 3;
-    __game.world.humanMoved = true;
-    __game.world.timeLeft = 0.05;
-    rk.run(10);
+    __game.world.goals = [4, 3];
+    __game.world.snacks[0].x = RK.W - RK.GOAL_W + 30;
+    __game.world.snacks[0].y = RK.GOAL_TOP + 90;
+    rk.run(4);
   });
-  const res = await page.evaluate(() => ({ screen: __game.state.screen, result: __game.result, save: __game.save, dda: rk.results }));
-  assert.equal(res.screen, 'result');
-  assert.equal(res.result.won, true);
-  assert.equal(res.result.stars, 2);
-  assert.equal(res.save.levels[0].stars, 2);
-  assert.equal(res.dda.length, 1);
-  assert.equal(await page.locator('#btnNext').isHidden(), false, 'Next level button shown after unlock');
+  assert.equal((await state(page)).screen, 'result');
+  const tele = await page.evaluate(() => ({ ends: rk.ends, dda: rk.dda }));
+  assert.equal(tele.ends[tele.ends.length - 1].outcome, 'end');
+  assert.equal(tele.ends[tele.ends.length - 1].argc, 1, '2P omits score');
+  assert.equal(tele.dda.length, 0, '2P does not touch solo DDA');
 });

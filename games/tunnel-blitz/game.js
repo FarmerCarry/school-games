@@ -7,8 +7,12 @@
  */
 (function () {
   'use strict';
-  var TB = window.TB;
-  var TAU = Math.PI * 2, PI = Math.PI;
+  var TB = window.TB, M = Math, abs = M.abs, min = M.min, max = M.max, flr = M.floor, sin = M.sin, cos = M.cos;
+  function ran() { return M.random(); }
+  function blend(g, on) { g.globalCompositeOperation = on ? 'lighter' : 'source-over'; }
+  function disc(g, x, y, r, col) { g.fillStyle = col; g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill(); }
+  function arcLine(g, x, y, r, col, lw, a0, a1) { g.strokeStyle = col; g.lineWidth = lw; g.beginPath(); g.arc(x, y, r, a0 || 0, a1 == null ? TAU : a1); g.stroke(); }
+  var TAU = M.PI * 2, PI = M.PI;
 
   var W = 1280, H = 720, CX = 640, CY = 336;
   var F = 520;            // focal length (px)
@@ -25,14 +29,14 @@
   /* ------------------------------------------------------------ helpers */
   function mod(a, m) { a %= m; return a < 0 ? a + m : a; }
   function angDiff(a, b) { return mod(a - b + PI, TAU) - PI; }
-  function rnd(a, b) { return a + Math.random() * (b - a); }
-  function rsign() { return Math.random() < 0.5 ? -1 : 1; }
+  function rnd(a, b) { return a + ran() * (b - a); }
+  function rsign() { return ran() < 0.5 ? -1 : 1; }
   function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
   function lerp(a, b, t) { return a + (b - a) * t; }
   function rgba(c, a) { return 'rgba(' + (c[0] | 0) + ',' + (c[1] | 0) + ',' + (c[2] | 0) + ',' + a.toFixed(3) + ')'; }
   function rgb(r, g, b) { return 'rgb(' + (r | 0) + ',' + (g | 0) + ',' + (b | 0) + ')'; }
   function hsv(h, s, v, out) {
-    h = mod(h, 360) / 60; var i = Math.floor(h), f = h - i;
+    h = mod(h, 360) / 60; var i = flr(h), f = h - i;
     var p = v * (1 - s), q = v * (1 - s * f), t = v * (1 - s * (1 - f)), r, g, b;
     switch (i) { case 0: r = v; g = t; b = p; break; case 1: r = q; g = v; b = p; break; case 2: r = p; g = v; b = t; break;
       case 3: r = p; g = q; b = v; break; case 4: r = t; g = p; b = v; break; default: r = v; g = p; b = q; }
@@ -83,9 +87,9 @@
     // any run can reach (1000 zones is over 4 hours; 60 ran out after 16 minutes).
     for (var k = 1; k <= 1000; k++) {
       var z = TB.ZDEF[(k - 1) % 8];
-      var vn = k <= 8 ? 15 + 3 * (k - 1) : Math.min(46, 36 + 2 * (k - 8));
+      var vn = k <= 8 ? 15 + 3 * (k - 1) : min(46, 36 + 2 * (k - 8));
       var v = vn * WS;
-      var loop = Math.min(7, Math.floor((k - 1) / 8));
+      var loop = min(7, flr((k - 1) / 8));
       ZT.push({ k: k, start: s, len: v * 16, v: v, vn: vn, N: z.N, col: z.col, alt: z.alt, bg: z.bg, name: z.name + ROMAN[loop],
         rainbow: !!z.rainbow });
       s += v * 16;
@@ -99,7 +103,7 @@
     zCache = k;
     return k;
   }
-  function rotMaxFor(v) { return Math.min(6.4, 4.5 + (v / WS - 15) * 0.07); }
+  function rotMaxFor(v) { return min(6.4, 4.5 + (v / WS - 15) * 0.07); }
 
   var TMP_C = [0, 0, 0];
   function zoneCol(Z, k, time) { // main colour of a zone (rainbow zones cycle)
@@ -108,11 +112,11 @@
   }
 
   function params(k) {
-    var i = Math.min(k, 9) - 1, Z = ZT[k];
-    var late = k > 9 ? Math.max(0.82, 1 - 0.025 * (k - 9)) : 1;
+    var i = min(k, 9) - 1, Z = ZT[k];
+    var late = k > 9 ? max(0.82, 1 - 0.025 * (k - 9)) : 1;
     return {
       k: k, v: Z.v, N: Z.N, Z: Z,
-      gapW: Math.max(0.66, [2.1, 1.75, 1.45, 1.25, 1.1, 0.98, 0.9, 0.82, 0.76][i] * (k > 9 ? late : 1)),
+      gapW: max(0.66, [2.1, 1.75, 1.45, 1.25, 1.1, 0.98, 0.9, 0.82, 0.76][i] * (k > 9 ? late : 1)),
       rowT: [1.1, 0.95, 0.86, 0.8, 0.74, 0.7, 0.66, 0.62, 0.58][i] * late,
       shift: [1.3, 1.7, 2.1, 2.4, 2.7, 2.9, 3.1, 3.14, 3.14][i],
       rm: rotMaxFor(Z.v)
@@ -133,8 +137,9 @@
   ];
 
   /* ------------------------------------------------------------ canvas */
-  var canvas = document.getElementById('game');
-  var ui = document.getElementById('ui');
+  function $(id) { return document.getElementById(id); }
+  var canvas = $('game');
+  var ui = $('ui');
   var view = Kit.fit(canvas, W, H, {
     maxDpr: 1.5,
     onResize: function (v) {
@@ -160,7 +165,7 @@
       var ac = A.ctx;
       if (!ac || !A.master) return false;
       var bn = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate), bd = bn.getChannelData(0), last = 0;
-      for (var i = 0; i < bd.length; i++) { last = (last + 0.02 * (Math.random() * 2 - 1)) / 1.02; bd[i] = last * 3.5; }
+      for (var i = 0; i < bd.length; i++) { last = (last + 0.02 * (ran() * 2 - 1)) / 1.02; bd[i] = last * 3.5; }
       var src = ac.createBufferSource(); src.buffer = bn; src.loop = true;
       f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 300; f.Q.value = 0.6;
       g = ac.createGain(); g.gain.value = 0;
@@ -172,7 +177,7 @@
       // level 0..1 = how hard you are spinning
       set: function (level) {
         if (A.muted) level = 0;
-        level = Math.round(level * 20) / 20; // only touch the audio graph when it really changes
+        level = M.round(level * 20) / 20; // only touch the audio graph when it really changes
         if (!g && (!level || !ensure())) return;
         if (level === lvl) return;
         lvl = level;
@@ -184,12 +189,12 @@
 
   var Sfx = {
     orb: function (n) {
-      var f = 820 * Math.pow(2, Math.min(n, 14) / 12);
+      var f = 820 * M.pow(2, min(n, 14) / 12);
       A.tone({ freq: f, type: 'sine', dur: 0.09, vol: 0.2 });
       A.tone({ freq: f * 1.5, type: 'triangle', dur: 0.12, vol: 0.1, delay: 0.04 });
     },
     close: function (n) {
-      var base = 1320 * Math.pow(2, Math.min(n - 1, 8) / 12);
+      var base = 1320 * M.pow(2, min(n - 1, 8) / 12);
       [1, 1.26, 1.5, 2].forEach(function (m, i) { A.tone({ freq: base * m, type: 'sine', dur: 0.09, vol: 0.12, delay: i * 0.03 }); });
       A.noise({ dur: 0.2, vol: 0.07, filter: 9000, to: 2500 });
     },
@@ -199,6 +204,14 @@
       A.noise({ dur: 0.35, vol: 0.28, filter: 4000, to: 400 });
       A.tone({ freq: 900, to: 200, type: 'triangle', dur: 0.25, vol: 0.18 });
       for (var i = 0; i < 5; i++) A.tone({ freq: rnd(2500, 4200), type: 'triangle', dur: 0.06, vol: 0.06, delay: 0.03 + i * 0.03 });
+    },
+    overdrive: function () {
+      [523, 659, 784, 1047, 1319, 1568].forEach(function (f, i) { A.tone({ freq: f, to: f * 1.06, type: 'triangle', dur: 0.15, vol: 0.17, delay: i * 0.04 }); });
+      A.noise({ dur: 0.35, vol: 0.09, filter: 1200, to: 5200 });
+    },
+    boost: function () {
+      A.tone({ freq: 360, to: 1440, type: 'triangle', dur: 0.26, vol: 0.2 });
+      A.noise({ dur: 0.28, vol: 0.12, filter: 900, to: 4200 });
     },
     crash: function () {
       A.noise({ dur: 0.7, vol: 0.42, filter: 2000, to: 70 });
@@ -232,7 +245,8 @@
     zone: 1, runT: 0, score: 0, bonus: 0,
     orbsRun: 0, closeRun: 0, streak: 0, lastCloseT: -9, lastCloseRow: -1, bestStreak: 0, shieldsRun: 0,
     orbStreak: 0, orbStreakT: 0,
-    shield: false, invuln: 0, dyingT: 0, overT: 0, shake: 0, flash: 0, flashCol: [255, 255, 255],
+    shield: false, invuln: 0, ov: 0, ovS: false, bsT: 0, bsN: 0,
+    dyingT: 0, overT: 0, shake: 0, flash: 0, flashCol: [255, 255, 255],
     squash: 0, bump: 0, fovKick: 0, beat: 0, passedBest: false, runActive: false, ringD: 0,
     runMissions: [], lastWhoosh: 0,
     autopilot: false, invincible: false, dispScore: 0
@@ -243,12 +257,12 @@
   /* ---------------------------------------------------------- generator */
   var gen = null;
   function genReset(startD, a) {
-    gen = { d: startD, a: a == null ? PI / 2 : a, half: PI, plen: 0, row: 0, shieldD: startD + 280 };
+    gen = { d: startD, a: a == null ? PI / 2 : a, half: PI, plen: 0, row: 0, shieldD: startD + 280, boostD: startD + 75 };
   }
   function snapGap(c, w, N) {
     var ca = PI / N, v0 = PI / 2 + PI / N;
-    var g = Math.max(1, Math.round(w / ca));
-    var s = Math.round((c - v0) / ca - g / 2);
+    var g = max(1, M.round(w / ca));
+    var s = M.round((c - v0) / ca - g / 2);
     var a0 = v0 + s * ca;
     return [a0, a0 + g * ca];
   }
@@ -275,15 +289,16 @@
   // Moves the generator to the next row, keeping it reachable in time.
   function adv(P, lim, nc, half, len, minT, trail, react) {
     len = len || 0.6;
-    var da = Math.abs(angDiff(nc, gen.a));
-    var move = Math.min(PI - half, Math.max(0, da + gen.half - half)) + 0.12;
+    var da = abs(angDiff(nc, gen.a));
+    var move = min(PI - half, max(0, da + gen.half - half)) + 0.12;
     var need = move / (P.rm * 0.7) + (react == null ? 0.26 : react);
-    var sp = gen.plen + P.v * Math.max(minT || P.rowT, need);
+    var sp = gen.plen + P.v * max(minT || P.rowT, need);
     var nd = gen.d + sp;
     if (nd + len > lim) return -1;
-    if (trail && Math.random() < 0.45) {
-      var from = gen.d + gen.plen, dd = nd - 1.5 - from, dA = angDiff(nc, gen.a);
-      for (var i = 1; i <= 3; i++) addOrb(from + dd * i / 4, gen.a + dA * i / 4);
+    var prevEnd = gen.d + gen.plen;
+    if (trail && ran() < 0.45) {
+      var dd = nd - 1.5 - prevEnd, dA = angDiff(nc, gen.a);
+      for (var i = 1; i <= 3; i++) addOrb(prevEnd + dd * i / 4, gen.a + dA * i / 4);
     }
     gen.row++;
     gen.d = nd; gen.a = nc; gen.half = half; gen.plen = len;
@@ -291,6 +306,9 @@
     if (P.k >= 2 && nd > gen.shieldD && !G.shield) {
       addOrb(nd - 0.7, nc, 'shield');
       gen.shieldD = nd + P.v * rnd(35, 50);
+    } else if (nd - prevEnd > 4.2 && nd > gen.boostD) {
+      addOrb(prevEnd + (nd - prevEnd) * 0.45, nc + rsign() * rnd(0.55, 0.95), 'boost');
+      gen.boostD = nd + P.v * rnd(10, 15);
     }
     return nd;
   }
@@ -298,11 +316,11 @@
     if (P.Z.rainbow) return hsv(gen.row * 47, 0.8, 1).slice();
     return alt ? P.Z.alt : P.Z.col;
   }
-  function gapOrb(d, a, chance) { if (Math.random() < chance) addOrb(d - 0.7, a); }
+  function gapOrb(d, a, chance) { if (ran() < chance) addOrb(d - 0.7, a); }
 
   var PAT = {
     wall: function (P, lim) {
-      var gp = snapGap(gen.a + rsign() * rnd(Math.min(0.9, P.gapW * 0.45), P.shift), P.gapW, P.N);
+      var gp = snapGap(gen.a + rsign() * rnd(min(0.9, P.gapW * 0.45), P.shift), P.gapW, P.N);
       var nc = (gp[0] + gp[1]) / 2, d = adv(P, lim, nc, (gp[1] - gp[0]) / 2, 0.6, 0, true);
       if (d < 0) return false;
       addRing(d, [gp], { rIn: 0.2, N: P.N, c: colOf(P) });
@@ -310,7 +328,7 @@
       return true;
     },
     half: function (P, lim) {
-      var n = 1 + (Math.random() < 0.5 ? 1 : 0);
+      var n = 1 + (ran() < 0.5 ? 1 : 0);
       for (var i = 0; i < n; i++) {
         var gp = snapGap(gen.a + rsign() * rnd(0.9, 1.8), PI, P.N);
         var nc = (gp[0] + gp[1]) / 2, d = adv(P, lim, nc, (gp[1] - gp[0]) / 2, 0.6, 0, true);
@@ -333,8 +351,8 @@
       return true;
     },
     slalom: function (P, lim) {
-      var n = P.k <= 2 ? 3 : 3 + Math.floor(Math.random() * 3);
-      var gw = (P.k <= 2 ? 0.95 : 0.78) * PI, len = Math.min(2.0, Math.max(1.2, P.v * 0.13));
+      var n = P.k <= 2 ? 3 : 3 + flr(ran() * 3);
+      var gw = (P.k <= 2 ? 0.95 : 0.78) * PI, len = min(2.0, max(1.2, P.v * 0.13));
       var c = gen.a + rnd(-0.6, 0.6), side = rsign();
       for (var i = 0; i < n; i++) {
         var gp = snapGap(c + (i % 2) * side * gw, gw, P.N);
@@ -346,9 +364,9 @@
       return true;
     },
     spiral: function (P, lim) {
-      var n = 5 + Math.floor(Math.random() * 4) + (P.k >= 5 ? 2 : 0);
+      var n = 5 + flr(ran() * 4) + (P.k >= 5 ? 2 : 0);
       var step = rsign() * rnd(0.32, 0.5) * (P.k >= 5 ? 1.15 : 1);
-      var w = Math.max(1.0, P.gapW), c = gen.a + rnd(-0.5, 0.5), col = colOf(P, true);
+      var w = max(1.0, P.gapW), c = gen.a + rnd(-0.5, 0.5), col = colOf(P, true);
       for (var i = 0; i < n; i++) {
         var d = adv(P, lim, c, w / 2, 0.5, 0.2, false, i === 0 ? null : 0.06);
         if (d < 0) return false;
@@ -359,7 +377,7 @@
       return true;
     },
     zigzag: function (P, lim) {
-      var n = 4 + Math.floor(Math.random() * 3), dir = rsign(), w = Math.max(0.66, P.gapW * 0.85);
+      var n = 4 + flr(ran() * 3), dir = rsign(), w = max(0.66, P.gapW * 0.85);
       for (var i = 0; i < n; i++) {
         var gp = snapGap(gen.a + dir * rnd(0.9, 1.7), w, P.N);
         dir = -dir;
@@ -371,9 +389,9 @@
       return true;
     },
     bars: function (P, lim) {
-      var rows = 1 + Math.floor(Math.random() * 3);
+      var rows = 1 + flr(ran() * 3);
       for (var r = 0; r < rows; r++) {
-        var B = P.k < 4 ? 2 : [2, 3, 3, 4][Math.floor(Math.random() * 4)];
+        var B = P.k < 4 ? 2 : [2, 3, 3, 4][flr(ran() * 4)];
         if (P.k >= 7 && B === 2) B = 3;
         var bw = 0.36, step = TAU / B;
         var target = gen.a + rnd(-P.shift * 0.5, P.shift * 0.5);
@@ -389,7 +407,7 @@
       return true;
     },
     spinWall: function (P, lim) {
-      var rows = 1 + Math.floor(Math.random() * 3);
+      var rows = 1 + flr(ran() * 3);
       for (var r = 0; r < rows; r++) {
         var w = P.gapW * 1.1;
         var gp = snapGap(gen.a + rsign() * rnd(0.5, P.shift), w, P.N);
@@ -401,17 +419,17 @@
       return true;
     },
     checker: function (P, lim) {
-      var sideA = TAU / P.N, m = Math.max(1, Math.round(0.62 / sideA)), t = sideA * m;
-      var T = Math.floor(TAU / (2 * t));
+      var sideA = TAU / P.N, m = max(1, M.round(0.62 / sideA)), t = sideA * m;
+      var T = flr(TAU / (2 * t));
       if (T < 2) return PAT.wall(P, lim);
-      var v0 = PI / 2 + PI / P.N, ph = Math.random() < 0.5 ? 0 : 1;
-      var rows = 2 + Math.floor(Math.random() * 3);
+      var v0 = PI / 2 + PI / P.N, ph = ran() < 0.5 ? 0 : 1;
+      var rows = 2 + flr(ran() * 3);
       for (var r = 0; r < rows; r++) {
         var want = r === 0 ? gen.a + rnd(-0.4, 0.4) : gen.a + rsign() * t;
         var best = null, bestD = 99;
         for (var i = 0; i < T; i++) {
           var gs = v0 + (2 * i + ph + 1) * t, ge = i < T - 1 ? gs + t : v0 + ph * t + TAU;
-          var gc = (gs + ge) / 2, dd = Math.abs(angDiff(gc, want));
+          var gc = (gs + ge) / 2, dd = abs(angDiff(gc, want));
           if (dd < bestD) { bestD = dd; best = [gc, (ge - gs) / 2]; }
         }
         var d = adv(P, lim, best[0], best[1], 0.6, 0.5, false);
@@ -429,9 +447,9 @@
   };
 
   function pickPattern(k) {
-    var w = WEIGHTS[Math.min(k, 8)], tot = 0, n;
+    var w = WEIGHTS[min(k, 8)], tot = 0, n;
     for (n in w) if (n !== gen.last) tot += w[n];
-    var r = Math.random() * tot;
+    var r = ran() * tot;
     for (n in w) { if (n === gen.last) continue; r -= w[n]; if (r <= 0) return n; }
     return 'wall';
   }
@@ -454,14 +472,14 @@
   function part(x, y, vx, vy, life, size, col, type, grav, spin) {
     if (PS.length >= MAXP) return null;
     var p = { x: x, y: y, vx: vx, vy: vy, life: life, max: life, size: size, col: col, type: type || 0, g: grav || 0,
-      a: Math.random() * TAU, va: spin || 0 };
+      a: ran() * TAU, va: spin || 0 };
     PS.push(p);
     return p;
   }
   function burst(x, y, n, col, speed, life, size, type, grav) {
     for (var i = 0; i < n; i++) {
-      var a = Math.random() * TAU, s = speed * (0.35 + Math.random() * 0.65);
-      part(x, y, Math.cos(a) * s, Math.sin(a) * s, life * (0.6 + Math.random() * 0.4), size * (0.6 + Math.random() * 0.6), col, type, grav, rnd(-8, 8));
+      var a = ran() * TAU, s = speed * (0.35 + ran() * 0.65);
+      part(x, y, cos(a) * s, sin(a) * s, life * (0.6 + ran() * 0.4), size * (0.6 + ran() * 0.6), col, type, grav, rnd(-8, 8));
     }
   }
   function updateParts(dt) {
@@ -476,16 +494,16 @@
   function drawParts(g) {
     for (var i = 0; i < PS.length; i++) {
       var p = PS[i], f = p.life / p.max, s = p.size;
-      g.globalAlpha = Math.min(1, f * 1.5);
+      g.globalAlpha = min(1, f * 1.5);
       if (p.type === 3) { // shard (normal blend)
-        g.globalCompositeOperation = 'source-over';
+        blend(g, 0);
         g.save(); g.translate(p.x, p.y); g.rotate(p.a);
         g.fillStyle = p.col; g.beginPath(); g.moveTo(0, -s); g.lineTo(s * 0.8, s * 0.7); g.lineTo(-s * 0.7, s * 0.5); g.closePath(); g.fill();
         g.strokeStyle = 'rgba(255,255,255,0.8)'; g.lineWidth = 2; g.stroke();
         g.restore();
         continue;
       }
-      g.globalCompositeOperation = 'lighter';
+      blend(g, 1);
       g.fillStyle = p.col; g.strokeStyle = p.col;
       if (p.type === 1) { // spark streak
         g.lineWidth = s * 0.5; g.beginPath(); g.moveTo(p.x, p.y); g.lineTo(p.x - p.vx * 0.05, p.y - p.vy * 0.05); g.stroke();
@@ -500,12 +518,12 @@
       }
     }
     g.globalAlpha = 1;
-    g.globalCompositeOperation = 'source-over';
+    blend(g, 0);
   }
 
   // Speed streaks flying past near the walls (3D).
   var STREAKS = [];
-  for (var si = 0; si < 34; si++) STREAKS.push({ a: Math.random() * TAU, r: rnd(0.55, 0.95), d: rnd(0, FAR) });
+  for (var si = 0; si < 34; si++) STREAKS.push({ a: ran() * TAU, r: rnd(0.55, 0.95), d: rnd(0, FAR) });
 
   /* ---------------------------------------------------- pops & banners */
   var pops = [], banner = null;
@@ -520,26 +538,26 @@
   function proj(a, r, z) {
     var s = cam.f * r / z, zz = z / FAR; zz *= zz;
     a += cam.rot;
-    px = CX + Math.cos(a) * s + cam.bx * zz;
-    py = CY + Math.sin(a) * s + cam.by * zz;
+    px = CX + cos(a) * s + cam.bx * zz;
+    py = CY + sin(a) * s + cam.by * zz;
   }
   function polyR(a, N) {
     var seg = TAU / N, t = mod(a - (PI / 2 + PI / N), seg) - seg / 2;
-    return Math.cos(PI / N) / Math.cos(t);
+    return cos(PI / N) / cos(t);
   }
   var ARC = [];
   function arcAngles(A0, B0, N) {
     ARC.length = 0; ARC.push(A0);
     var seg = TAU / N, v0 = PI / 2 + PI / N;
-    var v = v0 + (Math.floor((A0 - v0) / seg) + 1) * seg;
+    var v = v0 + (flr((A0 - v0) / seg) + 1) * seg;
     while (v < B0 - 1e-6) { ARC.push(v); v += seg; }
     ARC.push(B0);
     return ARC;
   }
-  function fog(z) { var f = clamp(1.12 - z / FAR, 0, 1); return f * Math.sqrt(f); }
+  function fog(z) { var f = clamp(1.12 - z / FAR, 0, 1); return f * M.sqrt(f); }
 
   /* ------------------------------------------------------------ tunnel */
-  var VAX = [], VAY = [], VBX = [], VBY = [], FC = [0, 0, 0];
+  var VAX = [], VAY = [], VBX = [], VBY = [], FC = [0, 0, 0], OVR_C = [0, 0, 0], OVR_M = [0, 0, 0];
   function faceColor(style, j, k, N, col, time, beat) { // returns strength; colour in FC
     FC[0] = col[0]; FC[1] = col[1]; FC[2] = col[2];
     var odd = (j + k) & 1;
@@ -550,7 +568,7 @@
       case 'rainbow': hsv(k * 26 + time * 60, 0.85, 1, FC); return 0.2 + odd * 0.06;
       case 'pulse': return (odd ? 0.08 : 0.13) + beat * ((k & 3) === 0 ? 0.25 : 0.08);
       case 'lava':
-        var s = 0.5 + 0.5 * Math.sin(j * 1.7 + k * 0.45 + time * 2.2);
+        var s = 0.5 + 0.5 * sin(j * 1.7 + k * 0.45 + time * 2.2);
         FC[0] = 255; FC[1] = 60 + 150 * s; FC[2] = 20; return 0.1 + 0.22 * s;
       case 'zebra':
         if (((j + k) & 3) < 2) { FC[0] = lerp(col[0], 255, 0.7); FC[1] = lerp(col[1], 255, 0.7); FC[2] = lerp(col[2], 255, 0.7); return 0.38; }
@@ -559,14 +577,14 @@
         if (((j * 2 + k) & 3) < 2) { FC[0] = 255; FC[1] = 110; FC[2] = 200; return 0.32; }
         FC[0] = 255; FC[1] = 250; FC[2] = 255; return 0.16;
       case 'galaxy':
-        hsv(265 + 55 * Math.sin(j * 0.9 + k * 0.33 + time * 0.6), 0.75, 1, FC); return 0.09 + odd * 0.03;
+        hsv(265 + 55 * sin(j * 0.9 + k * 0.33 + time * 0.6), 0.75, 1, FC); return 0.09 + odd * 0.03;
       default: return odd ? 0.13 : 0.22;
     }
   }
   function drawTunnel(g, style, time, beat, fixedZone, boost) {
     boost = boost || 1;
     var D = cam.D;
-    var kStart = Math.floor((D + NEAR) / RING), kEnd = Math.floor((D + FAR) / RING);
+    var kStart = flr((D + NEAR) / RING), kEnd = flr((D + FAR) / RING);
     var starsStyle = style === 'stars' || style === 'galaxy';
     // Weak rainbow tints over the dark base read as olive and brown, so the default
     // grid paints rainbow zones stronger. Bought styles keep their own palettes.
@@ -579,6 +597,12 @@
       if (zB <= zA) continue;
       var Z = ZT[fixedZone || zoneAt(dA)], N = Z.N;
       var col = zoneCol(Z, k, time), bg = Z.bg;
+      if (G.ov > 0 && !fixedZone) {
+        var ov = min(1, G.ov) * 0.6;
+        hsv(k * 28 + time * 190, 0.95, 1, OVR_C);
+        OVR_M[0] = lerp(col[0], OVR_C[0], ov); OVR_M[1] = lerp(col[1], OVR_C[1], ov); OVR_M[2] = lerp(col[2], OVR_C[2], ov);
+        col = OVR_M;
+      }
       var seg = TAU / N, v0 = PI / 2 + PI / N, j;
       for (j = 0; j < N; j++) {
         var a = v0 + j * seg;
@@ -588,7 +612,7 @@
       var fo = fog((zA + zB) * 0.5), fb = fo * boost * (Z.rainbow ? rainbowBoost : 1);
       for (j = 0; j < N; j++) {
         var j2 = (j + 1) % N;
-        var s = Math.min(1, faceColor(style, j, k, N, col, time, beat) * fb);
+        var s = min(1, faceColor(style, j, k, N, col, time, beat) * fb);
         g.fillStyle = rgb(bg[0] + (FC[0] - bg[0]) * s, bg[1] + (FC[1] - bg[1]) * s, bg[2] + (FC[2] - bg[2]) * s);
         g.beginPath();
         g.moveTo(VAX[j], VAY[j]); g.lineTo(VAX[j2], VAY[j2]); g.lineTo(VBX[j2], VBY[j2]); g.lineTo(VBX[j], VBY[j]);
@@ -599,7 +623,7 @@
             var u = ((h >> 4) % 100) / 100, w = ((h >> 11) % 100) / 100;
             var sx = lerp(lerp(VAX[j], VAX[j2], u), lerp(VBX[j], VBX[j2], u), w);
             var sy = lerp(lerp(VAY[j], VAY[j2], u), lerp(VBY[j], VBY[j2], u), w);
-            var ss = clamp(10 / zA, 1, 5) * (style === 'galaxy' ? 0.6 + 0.4 * Math.sin(time * 5 + h) : 1);
+            var ss = clamp(10 / zA, 1, 5) * (style === 'galaxy' ? 0.6 + 0.4 * sin(time * 5 + h) : 1);
             g.fillStyle = rgba(WHITE, 0.8 * fo);
             g.fillRect(sx - ss / 2, sy - ss / 2, ss, ss);
           }
@@ -615,7 +639,7 @@
       g.stroke();
       if (ringVisible && (style !== 'stripes' || (k & 3) === 0)) {
         var pulse = style === 'pulse' ? beat * 1.6 : beat * 0.5;
-        g.strokeStyle = rgba(bright ? mix(col, WHITE, 0.5) : col, Math.min(1, fo * ((bright ? 0.95 : 0.35) + pulse * 0.4)));
+        g.strokeStyle = rgba(bright ? mix(col, WHITE, 0.5) : col, min(1, fo * ((bright ? 0.95 : 0.35) + pulse * 0.4)));
         g.lineWidth = clamp((bright ? 7 : 3) / zA, 0.6, bright ? 6 : 3) * (1 + pulse * 0.6);
         g.beginPath();
         g.moveTo(VAX[0], VAY[0]);
@@ -630,16 +654,16 @@
     var zN = o.d - cam.D, zF = zN + o.len;
     if (zF <= NEAR || zN >= FAR) return;
     var off = o.spin * (o.d - shipD), A0 = o.a0 + off, B0 = o.a1 + off;
-    var z0 = Math.max(zN, NEAR);
+    var z0 = max(zN, NEAR);
     // Obstacles come out of the fog sooner than the tunnel walls, so they read from mid-distance.
-    var fa = Math.sqrt(fog(z0)) * Math.min(1, (FAR - z0) / 6);
-    if (o.broken) fa *= Math.max(0, 1 - o.broken * 4);
+    var fa = M.sqrt(fog(z0)) * min(1, (FAR - z0) / 6);
+    if (o.broken) fa *= max(0, 1 - o.broken * 4);
     if (fa <= 0.01) return;
     var c = o.c, N = o.N, arcs = arcAngles(A0, B0, N), n = arcs.length, i, a, pr;
     var lw = clamp(7 / z0, 1.5, 6);
     // inner face (long slabs only)
     if (o.len > 1 && o.rIn > 0.05) {
-      var zf = Math.min(zF, FAR);
+      var zf = min(zF, FAR);
       g.beginPath();
       for (i = 0; i < n; i++) { a = arcs[i]; proj(a, polyR(a, N) * o.rIn, zf); if (i) g.lineTo(px, py); else g.moveTo(px, py); }
       for (i = n - 1; i >= 0; i--) { a = arcs[i]; proj(a, polyR(a, N) * o.rIn, z0); g.lineTo(px, py); }
@@ -663,48 +687,52 @@
     g.closePath();
     g.fillStyle = rgba(o.cLite, 0.6 * fa);
     g.fill();
-    g.globalCompositeOperation = 'lighter';
+    blend(g, 1);
     g.strokeStyle = rgba(c, 0.35 * fa); g.lineWidth = lw * 2.6; g.stroke();
     g.strokeStyle = rgba(mix(c, WHITE, 0.55), 0.95 * fa); g.lineWidth = lw; g.stroke();
     // inner trim line for depth
     g.beginPath();
     for (i = 0; i < n; i++) { a = arcs[i]; pr = polyR(a, N) * (0.86 + o.rIn * 0.05); proj(a, pr, zN); if (i) g.lineTo(px, py); else g.moveTo(px, py); }
     g.strokeStyle = rgba(c, 0.5 * fa); g.lineWidth = lw * 0.6; g.stroke();
-    g.globalCompositeOperation = 'source-over';
+    blend(g, 0);
   }
 
   function drawPickup(g, p) {
     var z = p.d - cam.D;
     if (z < ZS - 0.7 || z > FAR) return;
-    var fa = fog(z) * Math.min(1, (FAR - z) / 6) * Math.min(1, (z - ZS + 0.7) / 0.6);
+    var fa = fog(z) * min(1, (FAR - z) / 6) * min(1, (z - ZS + 0.7) / 0.6);
     proj(p.a, ORB_R, z);
-    var s = cam.f / z * (p.kind === 'shield' ? 0.13 : 0.085) * (1 + 0.12 * Math.sin(G.t * 9 + p.d));
-    g.globalCompositeOperation = 'lighter';
-    if (p.kind === 'shield') {
-      g.fillStyle = 'rgba(80, 200, 255,' + (0.25 * fa) + ')';
-      g.beginPath(); g.arc(px, py, s * 1.9, 0, TAU); g.fill();
-      g.strokeStyle = 'rgba(160, 240, 255,' + fa + ')'; g.lineWidth = Math.max(1.5, s * 0.18);
-      g.beginPath(); g.arc(px, py, s, 0, TAU); g.stroke();
+    var s = cam.f / z * (p.kind === 'boost' ? 0.21 : p.kind === 'shield' ? 0.13 : 0.085) * (1 + 0.12 * sin(G.t * 9 + p.d));
+    blend(g, 1);
+    if (p.kind === 'boost') {
+      disc(g, px, py, s * 1.65, 'rgba(255,190,40,' + (0.24 * fa) + ')');
+      arcLine(g, px, py, s, 'rgba(255,210,60,' + fa + ')', max(2, s * 0.2));
+      g.strokeStyle = 'rgba(255,250,200,' + (0.9 * fa) + ')'; g.lineWidth = max(1.5, s * 0.14);
+      g.lineCap = 'round'; g.lineJoin = 'round';
+      for (var ci = 0; ci < 2; ci++) {
+        var cy = py + (ci - 0.35) * s * 0.42;
+        g.beginPath(); g.moveTo(px - s * 0.42, cy + s * 0.22); g.lineTo(px, cy - s * 0.2); g.lineTo(px + s * 0.42, cy + s * 0.22); g.stroke();
+      }
+    } else if (p.kind === 'shield') {
+      disc(g, px, py, s * 1.9, 'rgba(80,200,255,' + (0.25 * fa) + ')');
+      arcLine(g, px, py, s, 'rgba(160,240,255,' + fa + ')', max(1.5, s * 0.18));
       g.fillStyle = 'rgba(255,255,255,' + fa + ')';
-      g.beginPath(); // little shield emblem
+      g.beginPath();
       g.moveTo(px, py - s * 0.6); g.lineTo(px + s * 0.5, py - s * 0.35); g.lineTo(px + s * 0.4, py + s * 0.25);
       g.lineTo(px, py + s * 0.6); g.lineTo(px - s * 0.4, py + s * 0.25); g.lineTo(px - s * 0.5, py - s * 0.35); g.closePath(); g.fill();
     } else {
-      g.fillStyle = 'rgba(255, 190, 40,' + (0.28 * fa) + ')';
-      g.beginPath(); g.arc(px, py, s * 2, 0, TAU); g.fill();
-      g.fillStyle = 'rgba(255, 210, 60,' + fa + ')';
-      g.beginPath(); g.arc(px, py, s, 0, TAU); g.fill();
-      g.fillStyle = 'rgba(255, 255, 230,' + fa + ')';
-      g.beginPath(); g.arc(px - s * 0.25, py - s * 0.25, s * 0.42, 0, TAU); g.fill();
+      disc(g, px, py, s * 2, 'rgba(255,190,40,' + (0.28 * fa) + ')');
+      disc(g, px, py, s, 'rgba(255,210,60,' + fa + ')');
+      disc(g, px - s * 0.25, py - s * 0.25, s * 0.42, 'rgba(255,255,230,' + fa + ')');
     }
-    g.globalCompositeOperation = 'source-over';
+    blend(g, 0);
   }
 
   function drawGate(g, k) {
     var Z = ZT[k], z = Z.start - cam.D;
     if (z < NEAR + 0.2 || z > FAR) return;
-    var fa = fog(z) * Math.min(1, (FAR - z) / 5), col = zoneCol(Z, 0, G.t), N = Z.N, seg = TAU / N, v0 = PI / 2 + PI / N;
-    g.globalCompositeOperation = 'lighter';
+    var fa = fog(z) * min(1, (FAR - z) / 5), col = zoneCol(Z, 0, G.t), N = Z.N, seg = TAU / N, v0 = PI / 2 + PI / N;
+    blend(g, 1);
     for (var pass = 0; pass < 2; pass++) {
       g.beginPath();
       for (var j = 0; j <= N; j++) { proj(v0 + j * seg, pass ? 0.93 : 0.99, z); if (j) g.lineTo(px, py); else g.moveTo(px, py); }
@@ -712,7 +740,7 @@
       g.lineWidth = clamp((pass ? 10 : 30) / z, 1, pass ? 10 : 34);
       g.stroke();
     }
-    g.globalCompositeOperation = 'source-over';
+    blend(g, 0);
     // zone number floating in the middle
     proj(0, 0, z);
     var fs = clamp(360 / z, 8, 220);
@@ -735,7 +763,7 @@
     var fa = fog(z), N = ZT[zoneAt(G.ringD)].N, seg = TAU / N, v0 = PI / 2 + PI / N;
     g.beginPath();
     for (var j = 0; j <= N; j++) { proj(v0 + j * seg, 0.97, z); if (j) g.lineTo(px, py); else g.moveTo(px, py); }
-    g.globalCompositeOperation = 'lighter';
+    blend(g, 1);
     g.strokeStyle = 'rgba(255, 190, 40,' + (0.45 * fa) + ')';
     g.lineWidth = clamp(40 / z, 2, 40);
     g.stroke();
@@ -743,7 +771,7 @@
     g.lineWidth = clamp(14 / z, 1.5, 14);
     g.setLineDash([clamp(50 / z, 3, 50), clamp(30 / z, 2, 30)]);
     g.stroke(); g.setLineDash([]);
-    g.globalCompositeOperation = 'source-over';
+    blend(g, 0);
     proj(PI * 1.5 - cam.rot, 0.62, z);
     var fs = clamp(150 / z, 10, 70);
     g.font = '700 ' + fs.toFixed(0) + 'px Fredoka, "Segoe UI", sans-serif';
@@ -759,30 +787,35 @@
     var sway = -G.rotVel / rm * 14;
     var sq = G.squash, bmp = G.bump;
     var sx = 1 + 0.16 * sq + 0.12 * bmp, sy = 1 - 0.12 * sq + 0.12 * bmp;
-    var bob = G.state === 'title' ? Math.sin(G.t * 3) * 5 : Math.sin(G.t * 11) * 1.2;
+    var bob = G.state === 'title' ? sin(G.t * 3) * 5 : sin(G.t * 11) * 1.2;
     var x = SHIP_X + sway, y = SHIP_Y + bob;
     // glow cast on the floor
     var Z = ZT[G.zone], col = zoneCol(Z, 0, G.t);
-    g.globalCompositeOperation = 'lighter';
+    blend(g, 1);
     g.fillStyle = rgba(col, 0.18);
     g.beginPath(); g.ellipse(x, SHIP_Y + 26, 58, 12, 0, 0, TAU); g.fill();
-    g.globalCompositeOperation = 'source-over';
+    blend(g, 0);
     g.save();
     g.translate(x, y); g.rotate(bank); g.scale(SHIP_SCALE * sx, SHIP_SCALE * sy);
-    var fl = 0.3 + clamp((G.v / WS - 12) / 30, 0, 1) * 0.35;
+    var fl = 0.3 + clamp((G.v / WS - 12) / 30, 0, 1) * 0.35 + (G.bsT > 0 ? 0.32 : 0) + (G.ov > 0 ? 0.18 : 0);
     TB.drawShip(g, sk, G.t, fl);
     g.restore();
+    if (G.ov > 0) {
+      var or = SHIP_SCALE * (G.ovS ? 1.62 : 1.38) * (1 + 0.05 * sin(G.t * 14));
+      var oc = hsv(G.t * 260, 0.9, 1, OVR_C);
+      blend(g, 1);
+      disc(g, x, y, or, rgba(oc, G.ovS ? 0.16 : 0.08));
+      arcLine(g, x, y, or, rgba(oc, G.ovS ? 0.95 : 0.55), G.ovS ? 4 : 2.5, -PI / 2, -PI / 2 + TAU * clamp(G.ov / 5, 0, 1));
+      blend(g, 0);
+    }
     if (G.shield || G.invuln > 0) {
-      var blink = G.invuln > 0 && !G.shield ? (Math.floor(G.t * 16) % 2 ? 0.2 : 0.7) : 1;
-      var r = SHIP_SCALE * 1.45 * (1 + 0.04 * Math.sin(G.t * 7));
-      g.globalCompositeOperation = 'lighter';
-      g.fillStyle = 'rgba(80, 200, 255,' + (0.14 * blink) + ')';
-      g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
-      g.strokeStyle = 'rgba(170, 240, 255,' + (0.85 * blink) + ')'; g.lineWidth = 3;
-      g.beginPath(); g.arc(x, y, r, 0, TAU); g.stroke();
-      g.strokeStyle = 'rgba(255,255,255,' + (0.6 * blink) + ')'; g.lineWidth = 3;
-      g.beginPath(); g.arc(x, y, r * 0.8, -2.4 + Math.sin(G.t * 2) * 0.2, -1.6); g.stroke();
-      g.globalCompositeOperation = 'source-over';
+      var blink = G.invuln > 0 && !G.shield ? (flr(G.t * 16) % 2 ? 0.2 : 0.7) : 1;
+      var r = SHIP_SCALE * 1.45 * (1 + 0.04 * sin(G.t * 7));
+      blend(g, 1);
+      disc(g, x, y, r, 'rgba(80,200,255,' + (0.14 * blink) + ')');
+      arcLine(g, x, y, r, 'rgba(170,240,255,' + (0.85 * blink) + ')', 3);
+      arcLine(g, x, y, r * 0.8, 'rgba(255,255,255,' + (0.6 * blink) + ')', 3, -2.4 + sin(G.t * 2) * 0.2, -1.6);
+      blend(g, 0);
     }
   }
 
@@ -797,7 +830,7 @@
     g.direction = ARABIC.test(text) ? 'rtl' : 'ltr';
     g.font = '700 ' + size + 'px ' + FONT;
     g.lineJoin = 'round';
-    g.lineWidth = Math.max(4, size * 0.16);
+    g.lineWidth = max(4, size * 0.16);
     g.strokeStyle = stroke || 'rgba(0,0,0,0.55)';
     g.strokeText(text, x, y);
     g.fillStyle = fill;
@@ -831,7 +864,7 @@
     textOutlined(g, Z.name, bx + 236, by + 60, 16, 'rgba(255,255,255,0.9)');
     var prog = clamp((G.D + ZS - Z.start) / Z.len, 0, 1);
     g.fillStyle = 'rgba(255,255,255,0.15)'; roundRect(g, bx + 14, by + 68, 222, 8, 4); g.fill();
-    g.fillStyle = rgba(col, 1); roundRect(g, bx + 236 - Math.max(8, 222 * prog), by + 68, Math.max(8, 222 * prog), 8, 4); g.fill();
+    g.fillStyle = rgba(col, 1); roundRect(g, bx + 236 - max(8, 222 * prog), by + 68, max(8, 222 * prog), 8, 4); g.fill();
     // orbs
     var oy = by + 114;
     g.fillStyle = 'rgba(0,0,0,0.45)'; roundRect(g, bx, oy - 20, 124, 40, 20); g.fill();
@@ -843,6 +876,14 @@
       g.fillStyle = 'rgba(0,0,0,0.45)'; roundRect(g, bx + 132, oy - 20, 118, 40, 20); g.fill();
       g.strokeStyle = '#8ff4ff'; g.lineWidth = 3; g.beginPath(); g.arc(bx + 154, oy, 11, 0, TAU); g.stroke();
       textOutlined(g, 'درع', bx + 176, oy + 8, 22, '#8ff4ff');
+    }
+    if (G.ov > 0) {
+      var ox = bx + (G.shield ? 258 : 132), oc2 = hsv(G.t * 240, 0.85, 1, OVR_C);
+      g.fillStyle = 'rgba(0,0,0,0.5)'; roundRect(g, ox, oy - 20, 146, 40, 20); g.fill();
+      g.strokeStyle = rgba(oc2, 0.95); g.lineWidth = 3; g.stroke();
+      g.fillStyle = rgba(oc2, 0.85); roundRect(g, ox + 12, oy + 9, max(6, 122 * clamp(G.ov / 5, 0, 1)), 5, 3); g.fill();
+      g.textAlign = 'center';
+      textOutlined(g, '⚡ ×2', ox + 73, oy + 3, 20, '#fff27a');
     }
   }
 
@@ -860,11 +901,11 @@
     if (banner) {
       var b = banner, t = b.t / b.life;
       var sc = t < 0.12 ? lerp(2.2, 1, t / 0.12) : 1;
-      var al = t > 0.8 ? 1 - (t - 0.8) / 0.2 : Math.min(1, t / 0.08);
+      var al = t > 0.8 ? 1 - (t - 0.8) / 0.2 : min(1, t / 0.08);
       // after a moment the banner glides up, shrinks and dims, so the tunnel centre
       // (where the next rows come from) is clear again while the text is still showing
       var up = clamp((t - 0.25) / 0.2, 0, 1); up = up * up * (3 - 2 * up);
-      sc *= lerp(1, 0.75, up); al = Math.min(al, lerp(1, 0.6, up));
+      sc *= lerp(1, 0.75, up); al = min(al, lerp(1, 0.6, up));
       g.save(); g.globalAlpha = al;
       g.translate(CX, lerp(250, 165, up)); g.scale(sc, sc);
       textOutlined(g, b.title, 0, 0, 92, b.col, 'rgba(0,0,0,0.6)');
@@ -891,21 +932,21 @@
     // camera
     cam.D = G.D; cam.rot = G.rot;
     var bd = G.D / WS;
-    cam.bx = (Math.sin(bd * 0.011) * 0.8 + Math.sin(bd * 0.0063 + 1.3) * 0.5) * 260;
-    cam.by = (Math.sin(bd * 0.0085 + 2.1) * 0.7 + Math.sin(bd * 0.0051) * 0.4) * 150;
+    cam.bx = (sin(bd * 0.011) * 0.8 + sin(bd * 0.0063 + 1.3) * 0.5) * 260;
+    cam.by = (sin(bd * 0.0085 + 2.1) * 0.7 + sin(bd * 0.0051) * 0.4) * 150;
     cam.f = F * (1 - (reduced ? 0 : 0.1 * G.fovKick));
     var bg = Z.bg;
     g.fillStyle = rgb(bg[0], bg[1], bg[2]);
     g.fillRect(0, 0, W, H);
     g.save();
-    if (G.shake > 0.1 && !reduced) g.translate((Math.random() - 0.5) * G.shake * 2, (Math.random() - 0.5) * G.shake * 2);
+    if (G.shake > 0.1 && !reduced) g.translate((ran() - 0.5) * G.shake * 2, (ran() - 0.5) * G.shake * 2);
     drawTunnel(g, save.tunnel, G.t, G.beat, 0);
     // light at the end of the tunnel
     var gx = CX + cam.bx * 0.85, gy = CY + cam.by * 0.85;
     var col = zoneCol(Z, 0, G.t);
     var gr = g.createRadialGradient(gx, gy, 0, gx, gy, 140);
     gr.addColorStop(0, rgba(mix(col, WHITE, 0.5), 0.55 + G.beat * 0.2)); gr.addColorStop(1, rgba(col, 0));
-    g.globalCompositeOperation = 'lighter';
+    blend(g, 1);
     g.fillStyle = gr; g.fillRect(gx - 140, gy - 140, 280, 280);
     // speed streaks
     g.lineCap = 'round';
@@ -919,7 +960,7 @@
       g.lineWidth = clamp(4 / z, 0.5, 4);
       g.beginPath(); g.moveTo(x1, y1); g.lineTo(px, py); g.stroke();
     }
-    g.globalCompositeOperation = 'source-over';
+    blend(g, 0);
     // depth-sorted things
     var list = DRAW; list.length = 0;
     for (i = 0; i < obs.length; i++) list.push(obs[i]);
@@ -936,7 +977,7 @@
     g.restore();
     // flash
     if (G.flash > 0.01) {
-      g.fillStyle = rgba(G.flashCol, reduced ? Math.min(G.flash * 0.7, 0.2) : G.flash * 0.7);
+      g.fillStyle = rgba(G.flashCol, reduced ? min(G.flash * 0.7, 0.2) : G.flash * 0.7);
       g.fillRect(0, 0, W, H);
     }
     if (!vignette) {
@@ -977,8 +1018,8 @@
   function steerTo(a) {
     var th = theta();
     var d = angDiff(a, th);
-    if (Math.abs(d) < 0.05) return 0;
-    if (Math.abs(d) < Math.abs(G.rotVel) * 0.06) return 0;
+    if (abs(d) < 0.05) return 0;
+    if (abs(d) < abs(G.rotVel) * 0.06) return 0;
     return d > 0 ? -1 : 1;
   }
 
@@ -996,7 +1037,8 @@
     resetWorld(ZT[1].v);
     G.state = 'play'; G.runActive = true; G.committed = false;
     G.runT = 0; G.lastWhoosh = 0; G.score = 0; G.bonus = 0; G.orbsRun = 0; G.closeRun = 0; G.streak = 0; G.bestStreak = 0; G.lastCloseT = -9;
-    G.lastCloseRow = -1; G.shieldsRun = 0; G.shield = false; G.invuln = 0; G.passedBest = false; G.runMissions = [];
+    G.lastCloseRow = -1; G.shieldsRun = 0; G.shield = false; G.invuln = 0; G.ov = 0; G.ovS = false; G.bsT = 0; G.bsN = 0;
+    G.passedBest = false; G.runMissions = [];
     G.orbStreak = 0; G.zoneOrbs = 0; G.flash = 0.6; G.flashCol = ZT[1].col; G.fovKick = 1; G.dispScore = 0; G.missionTimer = 0;
     G.ringD = bestRingD();
     PS.length = 0; pops.length = 0;
@@ -1004,7 +1046,7 @@
     Kit.stats.round('endless');
     showBanner('انطلق!', ZT[1].name, rgba(ZT[1].col, 1), 1.4);
     Sfx.go();
-    document.getElementById('pauseBtn').hidden = false;
+    $('pauseBtn').hidden = false;
     checkMissions();
   }
 
@@ -1013,10 +1055,10 @@
     var Z = ZT[k], col = zoneCol(Z, 0, G.t);
     if (G.state !== 'play') return;
     showBanner('المنطقة ' + k, Z.name + ' - أسرع!', rgba(col, 1), 2);
-    G.flash = 0.55; G.flashCol = col.slice(); G.fovKick = 1; G.shake = Math.max(G.shake, 6);
+    G.flash = 0.55; G.flashCol = col.slice(); G.fovKick = 1; G.shake = max(G.shake, 6);
     Sfx.zone();
     // reward for reaching a new zone: bonus orbs (makes shop unlocks come faster)
-    var zb = Math.min(40, 5 * (k - 1));
+    var zb = min(40, 5 * (k - 1));
     if (zb > 0) {
       G.orbsRun += zb; G.zoneOrbs = (G.zoneOrbs || 0) + zb;
       // shown under the orb counter (it floats up into it), away from the tunnel centre
@@ -1025,33 +1067,53 @@
       Sfx.orb(10);
     }
     for (var i = 0; i < 40; i++) {
-      var a = Math.random() * TAU, sp = rnd(300, 900);
-      part(CX, CY, Math.cos(a) * sp, Math.sin(a) * sp, rnd(0.4, 0.9), rnd(3, 7), rgba(col, 1), 1);
+      var a = ran() * TAU, sp = rnd(300, 900);
+      part(CX, CY, cos(a) * sp, sin(a) * sp, rnd(0.4, 0.9), rnd(3, 7), rgba(col, 1), 1);
     }
     checkMissions();
   }
 
   function nearMiss() {
     G.closeRun++;
-    G.streak = (G.runT - G.lastCloseT < 2.6) ? G.streak + 1 : 1;
+    G.streak = (G.runT - G.lastCloseT < 3.5) ? G.streak + 1 : 1;
     G.lastCloseT = G.runT;
     if (G.streak > G.bestStreak) G.bestStreak = G.streak;
-    var pts = Math.min(50, 10 * G.streak);
+    var pts = min(50, 10 * G.streak);
     G.bonus += pts;
     var col = rgba(mix(zoneCol(ZT[G.zone], 0, G.t), WHITE, 0.3), 1);
-    pop('على الحافة!', SHIP_X + rnd(-20, 20), SHIP_Y - 92, col, 44 + Math.min(G.streak, 5) * 3, 0.9);
-    if (G.streak > 1) pop('×' + G.streak, SHIP_X - 150, SHIP_Y - 40, '#ff5ad0', 40 + Math.min(G.streak, 6) * 4, 0.9);
+    pop('على الحافة!', SHIP_X + rnd(-20, 20), SHIP_Y - 92, col, 44 + min(G.streak, 5) * 3, 0.9);
+    if (G.streak > 1) pop('×' + G.streak, SHIP_X - 150, SHIP_Y - 40, '#ff5ad0', 40 + min(G.streak, 6) * 4, 0.9);
     pop('+' + pts, SHIP_X + 110, SHIP_Y - 40, '#ffd23f', 28, 0.8);
     for (var i = 0; i < 14; i++) {
       var a = rnd(-PI, 0), sp = rnd(150, 420);
-      part(SHIP_X + rnd(-30, 30), SHIP_Y - 10, Math.cos(a) * sp, Math.sin(a) * sp, rnd(0.4, 0.8), rnd(7, 13), i % 2 ? '#ffffff' : col, 2, 300);
+      part(SHIP_X + rnd(-30, 30), SHIP_Y - 10, cos(a) * sp, sin(a) * sp, rnd(0.4, 0.8), rnd(7, 13), i % 2 ? '#ffffff' : col, 2, 300);
     }
-    G.bump = 1; G.flash = Math.max(G.flash, 0.12); G.flashCol = [255, 255, 255];
+    G.bump = 1; G.flash = max(G.flash, 0.12); G.flashCol = [255, 255, 255];
     Sfx.close(G.streak);
+    if (G.closeRun >= 3 && G.streak >= 3 && G.streak % 3 === 0) {
+      G.ov = 5; G.ovS = true;
+      showBanner('الاندفاع الذهبي! ⚡', 'درع قوس قزح ×2!', '#ffd23f', 1.7);
+      G.flash = max(G.flash, 0.4); G.flashCol = [255, 220, 80]; G.fovKick = max(G.fovKick, 0.85); G.shake = max(G.shake, 7);
+      burst(SHIP_X, SHIP_Y, 20, '#ffd23f', 440, 0.65, 8, 2, 0);
+      part(SHIP_X, SHIP_Y, 0, 0, 0.5, 130, '#ff5ad0', 4);
+      Sfx.overdrive();
+    }
   }
 
   function collect(p) {
     p.taken = true;
+    if (p.kind === 'boost') {
+      G.bsT = 1.6; G.bsN++;
+      var bp = G.ov > 0 ? 50 : 25;
+      G.bonus += bp; G.fovKick = 1.15; G.bump = 1; G.squash = 0.8;
+      G.flash = max(G.flash, 0.22); G.flashCol = [255, 215, 70]; G.shake = max(G.shake, 5);
+      pop('بوابة سرعة! ⚡', SHIP_X, SHIP_Y - 102, '#ffd23f', 42, 0.95);
+      pop('+' + bp, SHIP_X + 110, SHIP_Y - 46, '#fff6c0', 30, 0.85);
+      burst(SHIP_X, SHIP_Y, 18, '#ffd23f', 480, 0.55, 7, 1, 0);
+      part(SHIP_X, SHIP_Y, 0, 0, 0.45, 130, '#ffd23f', 4);
+      Sfx.boost();
+      return;
+    }
     if (p.kind === 'shield') {
       G.shield = true; G.shieldsRun++;
       pop('درع!', SHIP_X, SHIP_Y - 100, '#8ff4ff', 46, 1);
@@ -1060,47 +1122,50 @@
       Sfx.shieldGet();
       return;
     }
-    G.orbsRun++;
+    var mult = G.ov > 0 ? 2 : 1;
+    G.orbsRun += mult;
+    if (mult > 1) G.bonus += 4;
     G.orbStreak = G.orbStreakT > 0 ? G.orbStreak + 1 : 0;
     G.orbStreakT = 1.2;
-    G.bump = Math.max(G.bump, 0.6);
-    pop('+1', SHIP_X + rnd(-40, 40), SHIP_Y - 60, '#ffd23f', 28, 0.6);
+    G.bump = max(G.bump, 0.6);
+    pop('+' + mult, SHIP_X + rnd(-40, 40), SHIP_Y - 60, mult > 1 ? '#fff27a' : '#ffd23f', mult > 1 ? 34 : 28, 0.6);
     burst(SHIP_X, SHIP_Y - 20, 10, '#ffd23f', 320, 0.45, 6, 2, 200);
     part(SHIP_X, SHIP_Y - 10, 0, 0, 0.35, 50, '#ffd23f', 4);
     Sfx.orb(G.orbStreak);
   }
 
+  function breakRow(o, fCol, msg, mCol, rb) {
+    G.invuln = 1.1; o.broken = 0.001;
+    for (var i = 0; i < obs.length; i++) if (obs[i].row === o.row) obs[i].broken = 0.001;
+    G.shake = 12; G.flash = 0.45; G.flashCol = fCol;
+    pop(msg, CX, SHIP_Y - 120, mCol, 40, 1.2);
+    for (i = 0; i < 22; i++) {
+      var a = ran() * TAU, sp = rnd(200, 660);
+      part(SHIP_X, SHIP_Y - 20, cos(a) * sp, sin(a) * sp - 100, rnd(0.6, 1.1), rnd(10, 20), rb ? rgba(hsv(i * 28, 0.9, 1, OVR_C), 1) : rgba(o.c, 1), 3, 700, rnd(-10, 10));
+    }
+    Sfx.shieldBreak();
+  }
   function hitBlock(o) {
     if (G.invincible || G.invuln > 0) return;
-    if (G.shield) {
-      G.shield = false; G.invuln = 1.1; o.broken = 0.001;
-      for (var i = 0; i < obs.length; i++) if (obs[i].row === o.row) obs[i].broken = 0.001;
-      G.shake = 12; G.flash = 0.5; G.flashCol = [140, 230, 255];
-      pop('الدرع أنقذك!', CX, SHIP_Y - 120, '#8ff4ff', 40, 1.2);
-      for (i = 0; i < 22; i++) {
-        var a = Math.random() * TAU, sp = rnd(200, 650);
-        part(SHIP_X, SHIP_Y - 20, Math.cos(a) * sp, Math.sin(a) * sp - 100, rnd(0.6, 1.1), rnd(10, 20), rgba(o.c, 1), 3, 700, rnd(-10, 10));
-      }
-      Sfx.shieldBreak();
-      return;
-    }
+    if (G.ov > 0 && G.ovS) { G.ovS = false; breakRow(o, [255, 215, 70], 'تحطيم قوس قزح!', '#ffd23f', 1); return; }
+    if (G.shield) { G.shield = false; breakRow(o, [140, 230, 255], 'الدرع أنقذك!', '#8ff4ff', 0); return; }
     die(o);
   }
 
   function die(o) {
     G.state = 'dying'; G.dyingT = 0;
     G.shake = 24; G.flash = 1; G.flashCol = [255, 255, 255];
-    document.getElementById('pauseBtn').hidden = true;
+    $('pauseBtn').hidden = true;
     var sk = shipSkin(), cols = [sk.body, sk.trim, sk.dark, sk.flame[1]];
     if (sk.rainbow) cols = ['#ff5a5a', '#ffd23f', '#3ddc84', '#19e6ff', '#b44dff'];
     for (var i = 0; i < 22; i++) {
-      var a = rnd(-PI, 0.3) + (Math.random() < 0.2 ? PI : 0), sp = rnd(250, 820);
-      part(SHIP_X + rnd(-20, 20), SHIP_Y + rnd(-15, 15), Math.cos(a) * sp, Math.sin(a) * sp, rnd(1.0, 1.8), rnd(9, 22), cols[i % cols.length], 3, 900, rnd(-14, 14));
+      var a = rnd(-PI, 0.3) + (ran() < 0.2 ? PI : 0), sp = rnd(250, 820);
+      part(SHIP_X + rnd(-20, 20), SHIP_Y + rnd(-15, 15), cos(a) * sp, sin(a) * sp, rnd(1.0, 1.8), rnd(9, 22), cols[i % cols.length], 3, 900, rnd(-14, 14));
     }
     var oc = rgba(o ? o.c : WHITE, 1);
     for (i = 0; i < 40; i++) {
-      a = Math.random() * TAU; sp = rnd(200, 1100);
-      part(SHIP_X, SHIP_Y, Math.cos(a) * sp, Math.sin(a) * sp, rnd(0.4, 1.0), rnd(4, 9), i % 3 ? oc : '#ffffff', 1, 400);
+      a = ran() * TAU; sp = rnd(200, 1100);
+      part(SHIP_X, SHIP_Y, cos(a) * sp, sin(a) * sp, rnd(0.4, 1.0), rnd(4, 9), i % 3 ? oc : '#ffffff', 1, 400);
     }
     part(SHIP_X, SHIP_Y, 0, 0, 0.6, 260, '#ffffff', 4);
     part(SHIP_X, SHIP_Y, 0, 0, 0.9, 420, oc, 4);
@@ -1118,12 +1183,12 @@
     G.wasBest = G.score > save.best;
     G.prevBest = save.best;
     if (G.wasBest) { save.best = G.score; save.bestD = G.D; }
-    save.bestZone = Math.max(save.bestZone, G.zone);
+    save.bestZone = max(save.bestZone, G.zone);
     save.orbs += G.orbsRun; save.orbsTotal += G.orbsRun; save.closeTotal += G.closeRun;
-    save.recOrbs = Math.max(save.recOrbs, G.orbsRun - (G.zoneOrbs || 0)); // picked orbs only (zone bonus excluded)
-    save.recClose = Math.max(save.recClose, G.closeRun);
-    save.recStreak = Math.max(save.recStreak, G.bestStreak);
-    save.recShield = Math.max(save.recShield, G.shieldsRun);
+    save.recOrbs = max(save.recOrbs, G.orbsRun - (G.zoneOrbs || 0)); // picked orbs only (zone bonus excluded)
+    save.recClose = max(save.recClose, G.closeRun);
+    save.recStreak = max(save.recStreak, G.bestStreak);
+    save.recShield = max(save.recShield, G.shieldsRun);
     persist();
     checkMissions();
   }
@@ -1138,12 +1203,12 @@
   function mVal(m) {
     var r = G.runActive;
     switch (m.t) {
-      case 'dist': return Math.max(save.best, r ? G.score : 0);
-      case 'zone': return Math.max(save.bestZone, r ? G.zone : 0);
-      case 'orbsRun': return Math.max(save.recOrbs, r ? G.orbsRun - (G.zoneOrbs || 0) : 0);
-      case 'closeRun': return Math.max(save.recClose, r ? G.closeRun : 0);
-      case 'combo': return Math.max(save.recStreak, r ? G.bestStreak : 0);
-      case 'shield': return Math.max(save.recShield, r ? G.shieldsRun : 0);
+      case 'dist': return max(save.best, r ? G.score : 0);
+      case 'zone': return max(save.bestZone, r ? G.zone : 0);
+      case 'orbsRun': return max(save.recOrbs, r ? G.orbsRun - (G.zoneOrbs || 0) : 0);
+      case 'closeRun': return max(save.recClose, r ? G.closeRun : 0);
+      case 'combo': return max(save.recStreak, r ? G.bestStreak : 0);
+      case 'shield': return max(save.recShield, r ? G.shieldsRun : 0);
       case 'runs': return save.runs;
       case 'orbsTotal': return save.orbsTotal + (r ? G.orbsRun : 0);
       case 'closeTotal': return save.closeTotal + (r ? G.closeRun : 0);
@@ -1163,7 +1228,7 @@
     }
     refreshBadges();
   }
-  var toastBox = document.getElementById('toasts');
+  var toastBox = $('toasts');
   function toast(text, gold, reward) {
     var el = document.createElement('div');
     el.className = 'toast' + (gold ? ' gold' : '');
@@ -1180,12 +1245,12 @@
     G.t += dt;
     // beat pulse for the walls, on the game clock (about 132 bpm in play, 96 on the title)
     if (G.state === 'paused') G.beat = 0; // keep the scene behind the pause panel still
-    else { var ph = (G.t * (G.state === 'play' ? 2.2 : 1.6)) % 1; G.beat = Math.max(0, 1 - ph * 5); }
-    G.shake = Math.max(0, G.shake - dt * 45);
-    G.flash = Math.max(0, G.flash - dt * 2.2);
-    G.squash = Math.max(0, G.squash - dt * 5);
-    G.bump = Math.max(0, G.bump - dt * 5);
-    G.fovKick = Math.max(0, G.fovKick - dt * 1.6);
+    else { var ph = (G.t * (G.state === 'play' ? 2.2 : 1.6)) % 1; G.beat = max(0, 1 - ph * 5); }
+    G.shake = max(0, G.shake - dt * 45);
+    G.flash = max(0, G.flash - dt * 2.2);
+    G.squash = max(0, G.squash - dt * 5);
+    G.bump = max(0, G.bump - dt * 5);
+    G.fovKick = max(0, G.fovKick - dt * 1.6);
     G.orbStreakT -= dt;
     for (var i = pops.length - 1; i >= 0; i--) { pops[i].t += dt; if (pops[i].t >= pops[i].life) pops.splice(i, 1); }
     if (banner) { banner.t += dt; if (banner.t >= banner.life) banner = null; }
@@ -1201,10 +1266,10 @@
       G.rot += dt * 0.12;
       updateParts(dt);
       if (G.dispScore < G.score) {
-        G.dispScore = Math.min(G.score, G.dispScore + Math.max(1, G.score * dt * 1.6));
-        document.getElementById('oScore').textContent = Kit.fmt(G.dispScore);
+        G.dispScore = min(G.score, G.dispScore + max(1, G.score * dt * 1.6));
+        $('oScore').textContent = Kit.fmt(G.dispScore);
       }
-      if (G.wasBest && !reduced && Math.random() < dt * 14) confetti(1);
+      if (G.wasBest && !reduced && ran() < dt * 14) confetti(1);
     }
     if (G.state !== 'play') Wind.set(0);
     Kit.keys.endFrame();
@@ -1213,7 +1278,7 @@
   function updateStreaks() {
     for (var i = 0; i < STREAKS.length; i++) {
       var s = STREAKS[i];
-      if (s.d - G.D < NEAR) { s.d = G.D + rnd(FAR * 0.4, FAR); s.a = Math.random() * TAU; s.r = rnd(0.55, 0.95); }
+      if (s.d - G.D < NEAR) { s.d = G.D + rnd(FAR * 0.4, FAR); s.a = ran() * TAU; s.r = rnd(0.55, 0.95); }
     }
   }
 
@@ -1221,7 +1286,7 @@
     G.v += (11 * WS - G.v) * dt;
     var inp = botInput();
     var rm = rotMaxFor(G.v) * 0.8;
-    G.rotVel += (inp * rm - G.rotVel) * (1 - Math.exp(-dt * 10));
+    G.rotVel += (inp * rm - G.rotVel) * (1 - M.exp(-dt * 10));
     G.rot += G.rotVel * dt;
     G.D += G.v * dt;
     var k = zoneAt(G.D + ZS);
@@ -1256,38 +1321,43 @@
     var rm = rotMaxFor(G.v);
     if (inp !== 0 && inp !== G.lastInp) G.squash = 1;
     G.lastInp = inp;
-    G.rotVel += (inp * rm - G.rotVel) * (1 - Math.exp(-dt * (inp === 0 ? 20 : 24))); // snappy: full spin speed in ~0.1 s, quick stop
+    G.rotVel += (inp * rm - G.rotVel) * (1 - M.exp(-dt * (inp === 0 ? 20 : 24))); // snappy: full spin speed in ~0.1 s, quick stop
     G.rot += G.rotVel * dt;
-    Wind.set(Math.min(1, Math.abs(G.rotVel) / rm));
+    Wind.set(min(1, abs(G.rotVel) / rm));
     // drift sparks off the wing tip when spinning hard
-    if (Math.abs(G.rotVel) > rm * 0.7 && Math.random() < 0.6) {
+    if (abs(G.rotVel) > rm * 0.7 && ran() < 0.6) {
       var sgn = G.rotVel > 0 ? 1 : -1;
       part(SHIP_X + sgn * 30, SHIP_Y + 14, sgn * rnd(60, 200), rnd(40, 160), 0.3, rnd(3, 5), rgba(zoneCol(ZT[G.zone], 0, G.t), 1), 1);
     }
     // engine sparkles
     var sk = shipSkin();
-    if (Math.random() < 0.7) part(SHIP_X + rnd(-10, 10), SHIP_Y + 26, rnd(-30, 30), rnd(120, 260), 0.25, rnd(3, 6), sk.rainbow ? 'hsl(' + ((G.t * 300) % 360) + ',100%,60%)' : sk.flame[1], 0);
+    if (ran() < (G.bsT > 0 || G.ov > 0 ? 0.95 : 0.7)) {
+      var ecol = G.ov > 0 || sk.rainbow ? 'hsl(' + ((G.t * 320) % 360) + ',100%,62%)' : (G.bsT > 0 ? '#ffd23f' : sk.flame[1]);
+      part(SHIP_X + rnd(-10, 10), SHIP_Y + 26, rnd(-30, 30), rnd(120, G.bsT > 0 ? 360 : 260), 0.25, rnd(3, G.bsT > 0 ? 8 : 6), ecol, G.bsT > 0 ? 1 : 0);
+    }
 
     // speed and zones
+    if (G.ov > 0) { G.ov = max(0, G.ov - dt); if (!G.ov) G.ovS = false; }
+    if (G.bsT > 0) G.bsT = max(0, G.bsT - dt);
     var sD0 = G.D + ZS;
     var k = zoneAt(sD0);
     if (k !== G.zone) enterZone(k);
     var Z = ZT[k];
-    var tv = Z.v + clamp((sD0 - Z.start) / Z.len, 0, 1) * 1.5 * WS;
-    G.v += (tv - G.v) * (1 - Math.exp(-dt * 2.5));
+    var tv = Z.v + clamp((sD0 - Z.start) / Z.len, 0, 1) * 1.5 * WS + (G.bsT > 0 ? 7.5 * WS * (G.bsT / 1.6) : 0);
+    G.v += (tv - G.v) * (1 - M.exp(-dt * (G.bsT > 0 ? 6 : 2.5)));
     var prevS = sD0;
     G.D += G.v * dt;
     var sD = G.D + ZS, th = theta();
-    G.score = Math.floor(G.D / WS) + G.bonus;
+    G.score = flr(G.D / WS) + G.bonus;
     if (!G.passedBest && save.best >= 100 && G.score > save.best) {
       G.passedBest = true;
       // a near-miss bonus can break the record before the easing ring catches up: meet the ship now
-      G.ringD = Math.min(G.ringD, G.D + ZS);
+      G.ringD = min(G.ringD, G.D + ZS);
       showBanner('رقم قياسي جديد!', 'استمر!', '#ffd23f', 1.6);
       Sfx.newBest(); confetti(30);
     }
     // ease the gold ring toward the record so a near-miss bonus slides it closer instead of jumping
-    if (!G.passedBest) G.ringD += (bestRingD() - G.ringD) * (1 - Math.exp(-dt * 6));
+    if (!G.passedBest) G.ringD += (bestRingD() - G.ringD) * (1 - M.exp(-dt * 6));
     if (G.invuln > 0) G.invuln -= dt;
 
     while (gen.d < G.D + FAR + 16) genStep();
@@ -1313,14 +1383,17 @@
         if (G.state !== 'play') return;
         continue;
       }
-      var gd = Math.min(x - span - 2 * HIT, TAU - x);
+      var gd = min(x - span - 2 * HIT, TAU - x);
       if (gd < o.minGap) o.minGap = gd;
     }
     // pickups
     for (i = 0; i < pick.length; i++) {
       var p = pick[i];
-      if (p.taken || p.d > sD + 0.4 || p.d < prevS - 0.4) continue;
-      if (Math.abs(angDiff(p.a, th)) < 0.27) collect(p);
+      if (p.taken) continue;
+      if (G.ov > 0 && p.kind === 'orb' && p.d > prevS - 0.5 && p.d < sD + 9) p.a += angDiff(th, p.a) * min(1, dt * 11);
+      if (p.d > sD + 0.4 || p.d < prevS - 0.4) continue;
+      var rad = p.kind === 'boost' ? 0.34 : (G.ov > 0 ? 0.42 : 0.27);
+      if (abs(angDiff(p.a, th)) < rad) collect(p);
     }
     cleanup();
     updateStreaks();
@@ -1331,21 +1404,20 @@
 
   function confetti(n) {
     var cols = ['#ffd23f', '#ff5ad0', '#19e6ff', '#7dff3a', '#ffffff', '#ff7a1f'];
-    if (reduced) n = Math.min(n, 6);
+    if (reduced) n = min(n, 6);
     for (var i = 0; i < n; i++) {
       part(rnd(0, W), -10, rnd(-60, 60), rnd(80, 260), rnd(1.6, 2.6), rnd(7, 12), cols[i % cols.length], 3, 160, rnd(-6, 6));
     }
   }
 
   /* ------------------------------------------------------------------ UI */
-  var $ = function (id) { return document.getElementById(id); };
   var screens = ['title', 'hangar', 'missions', 'pause', 'over'];
   function hideAll() { screens.forEach(function (s) { $(s).hidden = true; }); G.modal = null; blurActive(); }
   function blurActive() { try { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); } catch (e) { /* ignore */ } }
 
   function showTitle() {
     hideAll();
-    G.state = 'title'; G.runActive = false;
+    G.state = 'title'; G.runActive = false; G.ov = 0; G.ovS = false; G.bsT = 0;
     resetWorld(11 * WS);
     PS.length = 0; pops.length = 0; banner = null;
     $('title').hidden = false;
@@ -1382,7 +1454,7 @@
     var line = $('oLine');
     line.className = 'oline';
     if (G.wasBest) line.textContent = G.prevBest > 0 ? 'رقمك السابق: ' + Kit.fmt(G.prevBest) + ' م' : 'أول رقم قياسي لك!';
-    else if (save.best - G.score <= Math.max(40, save.best * 0.15)) { line.textContent = 'قريب جدًا! ينقصك ' + Kit.fmt(save.best - G.score + 1) + ' م فقط لتحطيم رقمك!'; line.className = 'oline close'; }
+    else if (save.best - G.score <= max(40, save.best * 0.15)) { line.textContent = 'قريب جدًا! ينقصك ' + Kit.fmt(save.best - G.score + 1) + ' م فقط لتحطيم رقمك!'; line.className = 'oline close'; }
     else line.textContent = 'أفضل نتيجة: ' + Kit.fmt(save.best) + ' م';
     var Z = ZT[G.zone];
     $('oZone').textContent = G.zone;
@@ -1413,7 +1485,7 @@
       $('oUnlockText').innerHTML = ready ? 'يمكنك الآن فتح <b>' + c.name + '</b> من المتجر!'
         : 'باقٍ لك <b>' + Kit.fmt(c.price - save.orbs) + '</b> <i class="orb"></i> لتفتح <b>' + c.name + '</b>!';
       $('oUnlockFill').style.width = '0%';
-      setTimeout(function () { $('oUnlockFill').style.width = Math.min(100, save.orbs / c.price * 100).toFixed(1) + '%'; }, 60);
+      setTimeout(function () { $('oUnlockFill').style.width = min(100, save.orbs / c.price * 100).toFixed(1) + '%'; }, 60);
     } else u.hidden = true;
     if (G.wasBest && G.prevBest > 0) { Sfx.newBest(); confetti(60); }
     else if (G.wasBest) confetti(40);
@@ -1468,7 +1540,7 @@
       u.className = 'unlock' + (ready ? ' ready' : '');
       $('oUnlockText').innerHTML = ready ? 'يمكنك الآن فتح <b>' + c.name + '</b> من المتجر!'
         : 'باقٍ لك <b>' + Kit.fmt(c.price - save.orbs) + '</b> <i class="orb"></i> لتفتح <b>' + c.name + '</b>!';
-      $('oUnlockFill').style.width = Math.min(100, save.orbs / c.price * 100).toFixed(1) + '%';
+      $('oUnlockFill').style.width = min(100, save.orbs / c.price * 100).toFixed(1) + '%';
     } else u.hidden = true;
   }
   function renderHangar() {
@@ -1563,7 +1635,7 @@
       return;
     }
     act.forEach(function (idx) {
-      var m = TB.MISSIONS[idx], v = Math.min(mVal(m), m.n);
+      var m = TB.MISSIONS[idx], v = min(mVal(m), m.n);
       var row = document.createElement('div'); row.className = 'mission';
       row.innerHTML = '<div class="mnum">' + (idx + 1) + '</div><div class="mbody"><div class="mtext"></div>' +
         '<div class="mbar"><div class="mfill" style="width:' + (v / m.n * 100).toFixed(1) + '%"></div></div>' +
@@ -1643,17 +1715,19 @@
   /* -------------------------------------------------------------- debug */
   window.__game = {
     info: function () {
-      return { state: G.state, modal: G.modal, D: Math.round(G.D / WS), v: +(G.v / WS).toFixed(2), zone: G.zone, score: G.score,
-        orbsRun: G.orbsRun, closeRun: G.closeRun, shield: G.shield, obs: obs.length, pick: pick.length, parts: PS.length,
+      return { state: G.state, modal: G.modal, D: M.round(G.D / WS), v: +(G.v / WS).toFixed(2), zone: G.zone, score: G.score,
+        orbsRun: G.orbsRun, closeRun: G.closeRun, streak: G.streak, shield: G.shield, overdrive: +G.ov.toFixed(2),
+        overdriveShield: G.ovS, boostT: +G.bsT.toFixed(2), boostsRun: G.bsN, obs: obs.length, pick: pick.length, parts: PS.length,
         rot: +G.rot.toFixed(2), best: save.best, orbs: save.orbs, runs: save.runs, missionsDone: save.mdone.filter(Boolean).length,
         ring: +((G.ringD - G.D - ZS) / WS).toFixed(2) }; // metres from the ship to the gold record ring
     },
     save: function () { return JSON.parse(JSON.stringify(save)); },
-    autopilot: function (b, lagMs) { G.autopilot = b === 'sloppy' ? 'sloppy' : b !== false; G.lagN = Math.round((lagMs || 250) / 16.7); G.lagBuf = []; return G.autopilot; },
+    autopilot: function (b, lagMs) { G.autopilot = b === 'sloppy' ? 'sloppy' : b !== false; G.lagN = M.round((lagMs || 250) / 16.7); G.lagBuf = []; return G.autopilot; },
     invincible: function (b) { G.invincible = b !== false; return G.invincible; },
     setBest: function (m) { save.best = m; save.bestD = m * WS; persist(); return m; },
     addOrbs: function (n) { save.orbs += n; persist(); return save.orbs; },
     nearMiss: function () { if (G.state === 'play') nearMiss(); return G.closeRun; }, // as if a row was just dodged closely
+    spawnBoost: function () { if (G.state !== 'play') return false; addOrb(G.D + ZS + 1.8, theta(), 'boost'); return true; },
     skipZone: function () {
       if (G.state !== 'play') return false;
       var nz = ZT[G.zone + 1];
@@ -1663,7 +1737,7 @@
       return G.zone;
     },
     sim: function (sec) { // run game logic quickly (no drawing) for automated checks
-      var n = Math.round((sec || 1) * 60);
+      var n = M.round((sec || 1) * 60);
       for (var i = 0; i < n && (G.state === 'play' || G.state === 'title'); i++) update(1 / 60);
       var out = this.info();
       for (i = 0; i < 200 && G.state === 'dying'; i++) update(1 / 60);
@@ -1675,7 +1749,7 @@
       for (var i = 0; i < n; i++) render();
       return +((performance.now() - t0) / n).toFixed(2);
     },
-    zones: function () { return ZT.slice(1, 12).map(function (z) { return { k: z.k, start: Math.round(z.start / WS), v: z.vn }; }); }
+    zones: function () { return ZT.slice(1, 12).map(function (z) { return { k: z.k, start: M.round(z.start / WS), v: z.vn }; }); }
   };
 
   /* --------------------------------------------------------------- boot */

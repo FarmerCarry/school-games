@@ -1,133 +1,86 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#ffd56b"/>
-      <stop offset="55%" stop-color="#ff9f43"/>
-      <stop offset="100%" stop-color="#ff6f3c"/>
-    </linearGradient>
-    <radialGradient id="sun" cx="50%" cy="38%" r="55%">
-      <stop offset="0%" stop-color="#fff7c2" stop-opacity="0.95"/>
-      <stop offset="60%" stop-color="#ffd56b" stop-opacity="0.25"/>
-      <stop offset="100%" stop-color="#ff9f43" stop-opacity="0"/>
-    </radialGradient>
-    <linearGradient id="counter" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#f7b767"/>
-      <stop offset="100%" stop-color="#d47d32"/>
-    </linearGradient>
-    <linearGradient id="bunTop" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#ffd06b"/>
-      <stop offset="100%" stop-color="#e88a24"/>
-    </linearGradient>
-    <linearGradient id="titleGrad" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#fff8d6"/>
-      <stop offset="100%" stop-color="#ffd447"/>
-    </linearGradient>
-  </defs>
-
-  <!-- Warm sunlit canteen backdrop -->
-  <rect width="400" height="400" fill="url(#bg)"/>
-  <rect width="400" height="400" fill="url(#sun)"/>
-
-  <!-- Festive canteen awning stripes at top -->
-  <g>
-    <path d="M0 0 H400 V46 Q375 62 350 46 Q325 62 300 46 Q275 62 250 46 Q225 62 200 46 Q175 62 150 46 Q125 62 100 46 Q75 62 50 46 Q25 62 0 46 Z" fill="#ff4d5a"/>
-    <path d="M50 0 H100 V46 Q75 62 50 46 Z M150 0 H200 V46 Q175 62 150 46 Z M250 0 H300 V46 Q275 62 250 46 Z M350 0 H400 V46 Q375 62 350 46 Z" fill="#fff8e8"/>
-  </g>
-
-  <!-- Sparkle stars -->
-  <g fill="#fff8c4" opacity="0.9">
-    <path d="M56 104 L61 116 L73 121 L61 126 L56 138 L51 126 L39 121 L51 116 Z"/>
-    <path d="M342 92 L346 102 L356 106 L346 110 L342 120 L338 110 L328 106 L338 102 Z"/>
-    <circle cx="88" cy="176" r="6"/>
-    <circle cx="322" cy="172" r="5"/>
-  </g>
-
-  <!-- Chunky 3D-shaded smiling Kid Chef -->
-  <g transform="translate(200, 198)">
-    <!-- Tall puffy chef toque hat -->
-    <ellipse cx="0" cy="-98" rx="46" ry="30" fill="#ffffff" stroke="#3b261c" stroke-width="5"/>
-    <circle cx="-30" cy="-94" r="24" fill="#ffffff" stroke="#3b261c" stroke-width="5"/>
-    <circle cx="30" cy="-94" r="24" fill="#ffffff" stroke="#3b261c" stroke-width="5"/>
-    <circle cx="0" cy="-108" r="27" fill="#ffffff" stroke="#3b261c" stroke-width="5"/>
-    <rect x="-34" y="-86" width="68" height="30" rx="8" fill="#f7f4ee" stroke="#3b261c" stroke-width="5"/>
-    <rect x="-34" y="-66" width="68" height="11" rx="4" fill="#ff5a5f" stroke="#3b261c" stroke-width="4"/>
-
-    <!-- Big cute round head -->
-    <circle cx="-48" cy="-14" r="13" fill="#ffcca4" stroke="#3b261c" stroke-width="4.5"/>
-    <circle cx="48" cy="-14" r="13" fill="#ffcca4" stroke="#3b261c" stroke-width="4.5"/>
-    <circle cx="0" cy="-14" r="50" fill="#ffd9b5" stroke="#3b261c" stroke-width="5"/>
-    <!-- Warm hair tuft -->
-    <path d="M-40 -44 Q-16 -62 12 -52 Q30 -58 42 -40 Q18 -46 -6 -42 Q-26 -38 -40 -44 Z" fill="#5c3621"/>
-    <!-- Big glossy eyes -->
-    <circle cx="-18" cy="-14" r="9.5" fill="#2b1b17"/>
-    <circle cx="18" cy="-14" r="9.5" fill="#2b1b17"/>
-    <circle cx="-15" cy="-18" r="3.6" fill="#ffffff"/>
-    <circle cx="21" cy="-18" r="3.6" fill="#ffffff"/>
-    <!-- Rosy cheeks & big happy smile -->
-    <ellipse cx="-30" cy="-2" rx="9" ry="5.5" fill="#ff8383" opacity="0.72"/>
-    <ellipse cx="30" cy="-2" rx="9" ry="5.5" fill="#ff8383" opacity="0.72"/>
-    <path d="M-15 2 Q0 20 15 2 Z" fill="#c93b4b" stroke="#3b261c" stroke-width="3.5" stroke-linejoin="round"/>
-    <path d="M-8 10 Q0 15 8 10" fill="#ff8fa3"/>
-
-    <!-- Chunky chef body + bright coral apron -->
-    <rect x="-54" y="32" width="108" height="72" rx="28" fill="#ffffff" stroke="#3b261c" stroke-width="5"/>
-    <rect x="-36" y="38" width="72" height="66" rx="14" fill="#ff5a5f" stroke="#3b261c" stroke-width="4.5"/>
-    <rect x="-24" y="64" width="48" height="22" rx="8" fill="#ffe066" stroke="#3b261c" stroke-width="3.5"/>
-  </g>
-
-  <!-- Glossy Honey-Oak Counter top -->
-  <rect x="0" y="264" width="400" height="136" fill="#2ec4b6"/>
-  <rect x="0" y="256" width="400" height="32" fill="url(#counter)" stroke="#3b261c" stroke-width="5"/>
-
-  <!-- Left: Crispy Fries cup -->
-  <g transform="translate(80, 232) rotate(-8)">
-    <g fill="#ffd447" stroke="#3b261c" stroke-width="3.5">
-      <rect x="-22" y="-34" width="10" height="36" rx="3"/>
-      <rect x="-10" y="-42" width="10" height="44" rx="3"/>
-      <rect x="2" y="-38" width="10" height="40" rx="3"/>
-      <rect x="14" y="-30" width="10" height="32" rx="3"/>
-    </g>
-    <path d="M-28 -8 L28 -8 L21 36 L-21 36 Z" fill="#ff4757" stroke="#3b261c" stroke-width="4.5" stroke-linejoin="round"/>
-    <circle cx="0" cy="14" r="9" fill="#ffe066"/>
-  </g>
-
-  <!-- Center: Hero Big Juicy Cheeseburger on gleaming plate -->
-  <g transform="translate(200, 250)">
-    <ellipse cx="0" cy="24" rx="76" ry="18" fill="#ffffff" stroke="#3b261c" stroke-width="5"/>
-    <ellipse cx="0" cy="24" rx="58" ry="11" fill="#e6f7f5"/>
-    <!-- Bottom bun -->
-    <rect x="-50" y="2" width="100" height="20" rx="9" fill="#e89432" stroke="#3b261c" stroke-width="4.5"/>
-    <!-- Juicy patty -->
-    <rect x="-54" y="-12" width="108" height="19" rx="9" fill="#7c3a1d" stroke="#3b261c" stroke-width="4.5"/>
-    <!-- Melted cheddar cheese -->
-    <path d="M-54 -14 H54 L46 -2 L28 -10 L8 2 L-12 -10 L-34 0 L-54 -10 Z" fill="#ffd22e" stroke="#3b261c" stroke-width="4" stroke-linejoin="round"/>
-    <!-- Crisp green lettuce -->
-    <path d="M-55 -18 Q-40 -28 -25 -18 Q-10 -28 5 -18 Q20 -28 35 -18 Q48 -28 56 -18 L52 -11 H-52 Z" fill="#46d156" stroke="#3b261c" stroke-width="4" stroke-linejoin="round"/>
-    <!-- Top sesame bun -->
-    <path d="M-50 -18 C-50 -56 50 -56 50 -18 Z" fill="url(#bunTop)" stroke="#3b261c" stroke-width="5"/>
-    <g fill="#fff5cc">
-      <ellipse cx="-20" cy="-36" rx="5" ry="2.6" transform="rotate(-18 -20 -36)"/>
-      <ellipse cx="0" cy="-42" rx="5" ry="2.6"/>
-      <ellipse cx="22" cy="-35" rx="5" ry="2.6" transform="rotate(18 22 -35)"/>
-      <ellipse cx="-8" cy="-27" rx="4.5" ry="2.3"/>
-      <ellipse cx="14" cy="-26" rx="4.5" ry="2.3"/>
-    </g>
-  </g>
-
-  <!-- Right: Fruity Juice cup with straw -->
-  <g transform="translate(324, 232) rotate(7)">
-    <path d="M4 -48 L14 -12" stroke="#ff4d79" stroke-width="7" stroke-linecap="round"/>
-    <path d="M4 -48 L14 -12" stroke="#ffffff" stroke-width="2.5" stroke-dasharray="6 6" stroke-linecap="round"/>
-    <path d="M-24 -12 L24 -12 L18 36 L-18 36 Z" fill="#ff7f2a" stroke="#3b261c" stroke-width="4.5" stroke-linejoin="round"/>
-    <ellipse cx="0" cy="-12" rx="24" ry="7" fill="#ffd166" stroke="#3b261c" stroke-width="4"/>
-    <circle cx="-6" cy="14" r="6" fill="#fff4c4" opacity="0.55"/>
-  </g>
-
-  <!-- Chunky Arabic Title Ribbon -->
-  <g transform="translate(200, 344)">
-    <rect x="-156" y="-34" width="312" height="68" rx="24" fill="#3b261c" opacity="0.28" transform="translate(0, 6)"/>
-    <rect x="-156" y="-34" width="312" height="68" rx="24" fill="#ff4d5a" stroke="#3b261c" stroke-width="5"/>
-    <rect x="-148" y="-27" width="296" height="54" rx="18" fill="none" stroke="#ffd447" stroke-width="3" opacity="0.85"/>
-    <text x="0" y="13" text-anchor="middle" font-family="'Fredoka', 'Baloo Bhaijaan 2', 'Segoe UI', Tahoma, sans-serif" font-size="40" font-weight="700" fill="url(#titleGrad)" stroke="#3b261c" stroke-width="7" paint-order="stroke" stroke-linejoin="round">مطبخ الفسحة</text>
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+<defs>
+<linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0" stop-color="#fff4c4"/>
+<stop offset=".6" stop-color="#ffd07b"/>
+<stop offset="1" stop-color="#ff9947"/>
+</linearGradient>
+<linearGradient id="ctr" x1="0" y1="0" x2="0" y2="1">
+<stop offset="0" stop-color="#f2aa5c"/>
+<stop offset="1" stop-color="#b85c22"/>
+</linearGradient>
+<radialGradient id="glow" cx="50%" cy="42%" r="48%">
+<stop offset="0" stop-color="#fffbe6" stop-opacity=".9"/>
+<stop offset="1" stop-color="#ffd07b" stop-opacity="0"/>
+</radialGradient>
+</defs>
+<rect width="400" height="400" fill="url(#bg)"/>
+<rect width="400" height="400" fill="url(#glow)"/>
+<path d="M0 0H400V44Q375 60 350 44Q325 60 300 44Q275 60 250 44Q225 60 200 44Q175 60 150 44Q125 60 100 44Q75 60 50 44Q25 60 0 44Z" fill="#ff4d5a"/>
+<path d="M50 0H100V44Q75 60 50 44ZM150 0H200V44Q175 60 150 44ZM250 0H300V44Q275 60 250 44ZM350 0H400V44Q375 60 350 44Z" fill="#fff8ea"/>
+<rect y="316" width="400" height="84" fill="url(#ctr)"/>
+<rect y="312" width="400" height="14" fill="#e8eff7" stroke="#3b2416" stroke-width="4"/>
+<!-- Hungry coral lunchbox goal on right -->
+<g transform="translate(332 224)" stroke="#3b2416" stroke-width="5" stroke-linejoin="round">
+<rect x="6" y="10" width="70" height="80" rx="12" fill="#421024"/>
+<rect x="44" y="0" width="36" height="90" rx="10" fill="#ff525e"/>
+<g transform="rotate(14 48 6)">
+<rect x="-10" y="-18" width="84" height="26" rx="10" fill="#ff525e"/>
+<polygon points="8,8 16,20 24,8" fill="#fff"/>
+<polygon points="28,8 36,20 44,8" fill="#fff"/>
+<circle cx="14" cy="-22" r="10" fill="#fff"/>
+<circle cx="34" cy="-22" r="10" fill="#fff"/>
+<circle cx="11" cy="-21" r="4" fill="#3b2416" stroke="none"/>
+<circle cx="31" cy="-21" r="4" fill="#3b2416" stroke="none"/>
+</g>
+</g>
+<!-- Swooshing spatula motion arc -->
+<path d="M128 190 A92 92 0 0 1 224 134" fill="none" stroke="#5ad0ff" stroke-width="14" stroke-linecap="round" opacity=".75"/>
+<!-- Bouncy blue cartoon chef leaping -->
+<g transform="translate(116 250) rotate(-14)" stroke="#3b2416" stroke-width="5" stroke-linejoin="round">
+<!-- Giant spatula -->
+<g transform="translate(36 -8) rotate(28)">
+<rect x="-6" y="-44" width="12" height="44" rx="5" fill="#c97834"/>
+<rect x="-20" y="-82" width="40" height="42" rx="8" fill="#dde7f2"/>
+<rect x="-10" y="-74" width="5" height="24" fill="#6c7c94" stroke="none"/>
+<rect x="5" y="-74" width="5" height="24" fill="#6c7c94" stroke="none"/>
+</g>
+<circle cx="0" cy="14" r="44" fill="#29a8ff"/>
+<path d="M-28 14 H28 A28 28 0 0 1 -28 14 Z" fill="#fff9f0"/>
+<circle cx="0" cy="-22" r="32" fill="#ffd9b3"/>
+<circle cx="-10" cy="-26" r="8" fill="#fff"/><circle cx="12" cy="-26" r="8" fill="#fff"/>
+<circle cx="-8" cy="-26" r="3.8" fill="#3b2416" stroke="none"/><circle cx="14" cy="-26" r="3.8" fill="#3b2416" stroke="none"/>
+<circle cx="4" cy="-10" r="6" fill="#ff5964"/>
+<!-- Puffy chef toque hat -->
+<circle cx="-20" cy="-64" r="18" fill="#fff"/>
+<circle cx="20" cy="-64" r="18" fill="#fff"/>
+<circle cx="0" cy="-72" r="22" fill="#fff"/>
+<rect x="-26" y="-62" width="52" height="20" rx="6" fill="#fff8ef"/>
+</g>
+<!-- Giant flying burger with googly eyes -->
+<g transform="translate(242 148) rotate(16)" stroke="#3b2416" stroke-width="5" stroke-linejoin="round">
+<circle r="68" fill="#ffe259" fill-opacity=".28" stroke="none"/>
+<rect x="-46" y="16" width="92" height="26" rx="13" fill="#eda045"/>
+<rect x="-50" y="0" width="100" height="20" rx="10" fill="#783c1c"/>
+<polygon points="-46,2 46,2 22,20 0,8 -22,22" fill="#ffd93b"/>
+<rect x="-50" y="-12" width="100" height="14" rx="7" fill="#6ad94e"/>
+<path d="M-46 -8 A46 42 0 0 1 46 -8 Z" fill="#f4ad4c"/>
+<ellipse cx="-18" cy="-30" rx="6" ry="3.2" fill="#fff8dc" stroke="none"/>
+<ellipse cx="4" cy="-36" rx="6" ry="3.2" fill="#fff8dc" stroke="none"/>
+<ellipse cx="24" cy="-28" rx="6" ry="3.2" fill="#fff8dc" stroke="none"/>
+<circle cx="-11" cy="-8" r="8.5" fill="#fff"/><circle cx="13" cy="-8" r="8.5" fill="#fff"/>
+<circle cx="-9" cy="-8" r="3.5" fill="#3b2416" stroke="none"/><circle cx="15" cy="-8" r="3.5" fill="#3b2416" stroke="none"/>
+</g>
+<!-- Bouncy mini frosted donut -->
+<g transform="translate(310 92) rotate(-18)" stroke="#3b2416" stroke-width="4">
+<circle r="24" fill="#f2a854"/>
+<circle r="19" fill="#ff6eb8" stroke="none"/>
+<circle r="7.5" fill="#fff4c4"/>
+</g>
+<!-- Crisp sparkles -->
+<g fill="#fff">
+<path d="M180 80l3 9 9 3-9 3-3 9-3-9-9-3 9-3z"/>
+<path d="M72 132l2.5 7 7 2.5-7 2.5-2.5 7-2.5-7-7-2.5 7-2.5z"/>
+<path d="M294 218l2.5 7 7 2.5-7 2.5-2.5 7-2.5-7-7-2.5 7-2.5z"/>
+</g>
 </svg>

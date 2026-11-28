@@ -1,736 +1,785 @@
-/* Shortcut Factory (مصنع الاختصارات): the pure factory simulation.
- * Toys ride a conveyor belt from the toy machine (left) to the delivery box (right).
- * The child's real shortcuts copy, paste, cut, delete, undo, redo, select all and seal.
- * No DOM and no Kit here: game.js reads Kit.dda and passes the belt speed and tier in,
- * and the Node tests load this file on its own. */
-(function (root) {
+/* Shortcut Factory — Toy Claw Rush! Pure deterministic simulation engine.
+ * Zero DOM, zero Kit, zero Math.random. Runs identically in browser and Node. */
+(function (root, factory) {
+  var api = factory();
+  if (typeof module === 'object' && module.exports) module.exports = api;
+  else root.SF = api;
+})(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
-  var SF = {};
 
-  /* ------------------------------------------------------------ constants */
-  SF.KINDS = ['car', 'duck', 'robot', 'teddy', 'rocket'];
-  SF.COLORS = ['#ff4b5c', '#3d8bff', '#ffc928', '#35d07f', '#a66bff'];
-  // Belt coordinates (world x): toys appear at `start`, the robot arm pastes at `arm`,
-  // and a toy that passes `end` drops off into the delivery box.
-  SF.BELT = { start: -8.4, end: 4.3, arm: -1.2, gap: 1.2 };
-  SF.ACTIONS = ['copy', 'paste', 'cut', 'delete', 'undo', 'redo', 'selectAll', 'save'];
-  SF.KEY = { copy: 'KeyC', paste: 'KeyV', cut: 'KeyX', undo: 'KeyZ', redo: 'KeyY', selectAll: 'KeyA', save: 'KeyS', delete: 'Delete' };
-  SF.LETTER = { copy: 'C', paste: 'V', cut: 'X', undo: 'Z', redo: 'Y', selectAll: 'A', save: 'S', delete: 'Delete' };
-  SF.AR = { copy: 'نسخ', paste: 'لصق', cut: 'قص', delete: 'حذف', undo: 'تراجع', redo: 'إعادة', selectAll: 'تحديد الكل', save: 'حفظ' };
-  SF.CLIP_MAX = 4;
-  SF.UNDO_MAX = 20;
+  var W = 1280, H = 720;
+  var RAIL_Y = 92;
+  var CLAW_HOME_Y = 148;
+  var FLOOR_Y = 656;
+  var X_MIN = 150, X_MAX = 1130;
+  var SAVE_VERSION = 2;
+  var FEVER_STREAK = 3;
+  var FEVER_DUR = 6.0;
 
-  /* --------------------------------------------------------------- levels */
-  // boxes: one entry per delivery box, each a list of order lines [kind, colour, count].
-  // pre: toys already on the belt [x, kind, colour, broken]. first: seconds before the
-  // toy machine starts. stream: chances that a new toy is one the box needs, a broken one
-  // or one the NEXT box needs (the rest are other toys). teach: [shortcut, moment] lessons:
-  // when the moment comes the belt waits for that shortcut. par: seconds for the clock star
-  // (0 = no clock). seal: a full box waits for Ctrl+S. gremlin: Nattout's tricks.
-  SF.HALLS = [
-    { name: 'قاعة النسخ', color: '#ffb020' },
-    { name: 'قاعة التراجع', color: '#3d8bff' },
-    { name: 'قاعة الشحن', color: '#ff5fa2' }
+  var LANES = [
+    { idx: 0, y: 332, dir: 1, speedMul: 0.84, tint: '#4cc9f0' },
+    { idx: 1, y: 462, dir: -1, speedMul: 1.08, tint: '#ff9f1c' },
+    { idx: 2, y: 592, dir: 1, speedMul: 1.32, tint: '#ff5d8f' }
   ];
-  var B = SF.BELT, A = B.arm;
-  SF.LEVELS = [
-    // Hall 1: calm, no clock. The belt waits for each new shortcut.
-    { id: '1-1', hall: 0, keys: ['copy', 'paste'], fresh: ['copy', 'paste'], speed: [0.55, 0.75], gap: [4.6, 3.6],
-      boxes: [[[1, 2, 3]]], pre: [[A - 2.2, 1, 2]], first: 10, stream: { need: 0.15 },
-      teach: [['copy', 'needArm'], ['paste', 'clipNeed']], allow: 2 },
-    { id: '1-2', hall: 0, keys: ['copy', 'paste', 'delete'], fresh: ['delete'], speed: [0.55, 0.8], gap: [4.2, 3.4],
-      boxes: [[[0, 0, 3]], [[3, 1, 2]]], pre: [[A - 1.6, 0, 0], [A - 4.4, 3, 1, true]], first: 9, stream: { need: 0.25, broken: 0.3 },
-      teach: [['delete', 'brokenArm']], allow: 2 },
-    { id: '1-3', hall: 0, keys: ['copy', 'paste', 'delete', 'cut'], fresh: ['cut'], speed: [0.55, 0.8], gap: [4.2, 3.4],
-      boxes: [[[3, 4, 2]], [[4, 0, 2]]], pre: [[A + 1.6, 3, 4], [A - 0.4, 3, 4], [A - 2.6, 4, 0]], first: 12, stream: { need: 0.25, broken: 0.15, next: 0.15 },
-      teach: [['cut', 'nextArm'], ['paste', 'clipNeed']], allow: 2 },
-    { id: '1-4', hall: 0, keys: ['copy', 'paste', 'delete', 'cut'], fresh: [], speed: [0.6, 0.9], gap: [3.8, 3],
-      boxes: [[[2, 1, 2]], [[0, 3, 3]], [[1, 4, 2]]], pre: [[A - 1.8, 2, 1]], first: 4, stream: { need: 0.3, broken: 0.2, next: 0.15 }, allow: 2 },
-    // Hall 2: a clock star, Nattout the gremlin, select all.
-    { id: '2-1', hall: 1, keys: ['copy', 'paste', 'delete', 'undo'], fresh: ['undo'], speed: [0.65, 0.95], gap: [3.8, 2.9],
-      boxes: [[[3, 0, 3]], [[4, 2, 3]]], pre: [[A - 1.8, 3, 0]], first: 6, stream: { need: 0.3, broken: 0.15 },
-      gremlin: { type: 'steal', first: 7, every: [13, 18], grace: 5 }, teach: [['undo', 'stolen']], par: 95, allow: 2 },
-    { id: '2-2', hall: 1, keys: ['copy', 'paste', 'delete', 'selectAll'], fresh: ['selectAll'], speed: [0.65, 0.95], gap: [3.8, 2.9],
-      boxes: [[[1, 1, 3]], [[2, 0, 3]]], pre: [[A - 1.8, 1, 1], [A - 4.4, 0, 3, true], [A - 5.6, 2, 4, true], [A - 6.8, 4, 1, true]], first: 9,
-      stream: { need: 0.3, broken: 0.1, wave: [26, 24, 3] }, teach: [['selectAll', 'junk'], ['delete', 'junkSel']], par: 100, allow: 2 },
-    { id: '2-3', hall: 1, keys: ['selectAll', 'copy', 'paste', 'delete'], fresh: [], speed: [0.65, 0.95], gap: [3.8, 2.9],
-      boxes: [[[1, 2, 2], [0, 0, 2]], [[2, 1, 2], [3, 4, 2]]], pre: [[A - 1.6, 1, 2], [A - 2.9, 0, 0]], first: 9,
-      stream: { need: 0.35, broken: 0.15 }, teach: [['selectAll', 'pair'], ['copy', 'multiSel'], ['paste', 'clipNeed']], par: 100, allow: 2 },
-    { id: '2-4', hall: 1, keys: ['copy', 'paste', 'cut', 'delete', 'undo', 'selectAll'], fresh: [], speed: [0.7, 1.05], gap: [3.4, 2.6],
-      boxes: [[[0, 2, 2], [1, 1, 1]], [[4, 4, 3]], [[2, 3, 2], [3, 0, 1]]], pre: [[A - 1.8, 0, 2]], first: 4,
-      stream: { need: 0.32, broken: 0.15, next: 0.12, wave: [30, 28, 3] }, gremlin: { type: 'steal', first: 14, every: [15, 22], grace: 5 }, par: 140, allow: 3 },
-    // Hall 3: full boxes wait for Ctrl+S, Nattout presses Ctrl+Z on you, everything mixed.
-    { id: '3-1', hall: 2, keys: ['copy', 'paste', 'delete', 'save'], fresh: ['save'], speed: [0.7, 1.05], gap: [3.6, 2.8], seal: true,
-      boxes: [[[0, 1, 3]], [[4, 3, 2]], [[1, 0, 2]]], pre: [[A - 1.8, 0, 1]], first: 6, stream: { need: 0.3, broken: 0.15 },
-      teach: [['save', 'full']], par: 120, allow: 2 },
-    { id: '3-2', hall: 2, keys: ['copy', 'paste', 'delete', 'undo', 'redo', 'save'], fresh: ['redo'], speed: [0.7, 1.05], gap: [3.6, 2.8], seal: true,
-      boxes: [[[3, 2, 3]], [[2, 4, 3]], [[0, 0, 2]]], pre: [[A - 1.8, 3, 2]], first: 6, stream: { need: 0.28, broken: 0.15 },
-      gremlin: { type: 'undo', first: 3, every: [10, 16], grace: 5 }, teach: [['redo', 'gundo']], par: 130, allow: 2 },
-    { id: '3-3', hall: 2, keys: ['copy', 'paste', 'cut', 'delete', 'undo', 'redo', 'selectAll', 'save'], fresh: [], speed: [0.8, 1.15], gap: [3.2, 2.4], seal: true,
-      boxes: [[[1, 0, 2], [4, 1, 1]], [[2, 2, 3]], [[3, 3, 2], [0, 4, 2]]], pre: [[A - 1.8, 1, 0]], first: 4,
-      stream: { need: 0.32, broken: 0.15, next: 0.12, wave: [28, 26, 3] }, gremlin: { type: 'both', first: 12, every: [12, 18], grace: 4.5 }, par: 140, allow: 3 },
-    { id: '3-4', hall: 2, keys: ['copy', 'paste', 'cut', 'delete', 'undo', 'redo', 'selectAll', 'save'], fresh: [], speed: [0.85, 1.25], gap: [3, 2.2], seal: true,
-      boxes: [[[0, 2, 3]], [[1, 3, 2], [2, 1, 2]], [[4, 4, 3]], [[3, 1, 2], [0, 0, 2]]], pre: [[A - 1.8, 0, 2]], first: 4,
-      stream: { need: 0.32, broken: 0.18, next: 0.12, wave: [26, 24, 4] }, gremlin: { type: 'both', first: 10, every: [11, 16], grace: 4.5 }, par: 175, allow: 3 }
-  ];
-  SF.RUSH = { id: 'rush', hall: 3, rush: true, keys: ['copy', 'paste', 'cut', 'delete', 'undo', 'redo', 'selectAll', 'save'], fresh: [],
-    speed: [0.7, 1.0], gap: [3.4, 2.6], boxes: [], pre: [[A - 1.8, 1, 2]], first: 3, stream: { need: 0.32, broken: 0.16, next: 0.1 }, allow: 0 };
-  SF.COUNT = SF.LEVELS.length;
-  SF.MAX_STARS = SF.COUNT * 3;
-  SF.RUSH_AFTER = 3; // finishing 1-4 opens the rush
 
-  /* ------------------------------------------------------------- helpers */
-  function rng(seed) {
-    var s = (seed >>> 0) || 1;
-    return function () {
-      s = (s + 0x6D2B79F5) >>> 0;
-      var t = s;
-      t = Math.imul(t ^ (t >>> 15), t | 1);
-      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-    };
-  }
-  SF.rng = rng;
+  var TOYS = {
+    duck:    { id: 'duck',    name: 'بطة مطاطية',   pts: 20, coins: 12, r: 32, color: '#ffd93b' },
+    bear:    { id: 'bear',    name: 'دبدوب لطيف',   pts: 28, coins: 16, r: 35, color: '#d4874d' },
+    bunny:   { id: 'bunny',   name: 'أرنب قطني',    pts: 34, coins: 20, r: 34, color: '#ff99c8' },
+    dino:    { id: 'dino',    name: 'ديناصور صغير', pts: 42, coins: 25, r: 36, color: '#6ad94e' },
+    unicorn: { id: 'unicorn', name: 'يونيكورن نجمي', pts: 56, coins: 34, r: 37, color: '#c48bff' },
+    capsule: { id: 'capsule', name: 'كبسولة مفاجآت', pts: 70, coins: 45, r: 35, special: 'capsule', color: '#38e8ff' },
+    goldbot: { id: 'goldbot', name: 'روبوت ذهبي',   pts: 100, coins: 65, r: 38, special: 'goldbot', color: '#ffd23f' },
+    magnet:  { id: 'magnet',  name: 'كرة المغناطيس', pts: 40, coins: 26, r: 35, special: 'magnet', color: '#00d4ff' },
+    fizz:    { id: 'fizz',    name: 'صندوق الفوران', pts: 35, coins: 24, r: 35, special: 'fizz', color: '#ff7b24' },
+    boot:    { id: 'boot',    name: 'حذاء مطاطي',   pts: 0,  coins: 0,  r: 31, junk: true, color: '#6b8e4e' }
+  };
+
+  var WINGS = [
+    { id: 0, name: 'ورشة الدمى', bg1: '#e0f7ff', bg2: '#c2ecff', accent: '#2fb6ec' },
+    { id: 1, name: 'قاعة المغناطيس', bg1: '#f0e6ff', bg2: '#d8c8ff', accent: '#9b5de5' },
+    { id: 2, name: 'المصنع الذهبي', bg1: '#fff4d6', bg2: '#ffe1a1', accent: '#ff9f1c' }
+  ];
+
+  // 12 punchy 45-60s stages across 3 factory wings
+  var LEVELS = [
+    { idx: 0,  id: 'L1',  wing: 0, duration: 45, stars: [150, 280, 440],  beltSpeed: 135, clawSweep: 340, bootRate: 0.08, specialRate: 0.24 },
+    { idx: 1,  id: 'L2',  wing: 0, duration: 45, stars: [210, 360, 540],  beltSpeed: 150, clawSweep: 360, bootRate: 0.11, specialRate: 0.26 },
+    { idx: 2,  id: 'L3',  wing: 0, duration: 45, stars: [280, 450, 660],  beltSpeed: 165, clawSweep: 380, bootRate: 0.13, specialRate: 0.28 },
+    { idx: 3,  id: 'L4',  wing: 0, duration: 45, stars: [350, 560, 800],  beltSpeed: 180, clawSweep: 400, bootRate: 0.15, specialRate: 0.30 },
+    { idx: 4,  id: 'L5',  wing: 1, duration: 50, stars: [430, 680, 960],  beltSpeed: 195, clawSweep: 420, bootRate: 0.16, specialRate: 0.33 },
+    { idx: 5,  id: 'L6',  wing: 1, duration: 50, stars: [520, 800, 1120], beltSpeed: 210, clawSweep: 440, bootRate: 0.18, specialRate: 0.35 },
+    { idx: 6,  id: 'L7',  wing: 1, duration: 50, stars: [610, 940, 1300], beltSpeed: 222, clawSweep: 460, bootRate: 0.19, specialRate: 0.36 },
+    { idx: 7,  id: 'L8',  wing: 1, duration: 55, stars: [720, 1100, 1500], beltSpeed: 235, clawSweep: 475, bootRate: 0.20, specialRate: 0.38 },
+    { idx: 8,  id: 'L9',  wing: 2, duration: 55, stars: [840, 1260, 1720], beltSpeed: 248, clawSweep: 490, bootRate: 0.21, specialRate: 0.40 },
+    { idx: 9,  id: 'L10', wing: 2, duration: 55, stars: [960, 1440, 1960], beltSpeed: 260, clawSweep: 505, bootRate: 0.22, specialRate: 0.42 },
+    { idx: 10, id: 'L11', wing: 2, duration: 60, stars: [1100, 1640, 2220], beltSpeed: 272, clawSweep: 520, bootRate: 0.23, specialRate: 0.44 },
+    { idx: 11, id: 'L12', wing: 2, duration: 60, stars: [1260, 1860, 2500], beltSpeed: 285, clawSweep: 535, bootRate: 0.24, specialRate: 0.46 }
+  ];
+
+  var ENDLESS_CFG = { idx: -1, id: 'endless', wing: 2, duration: 60, stars: [300, 700, 1300], beltSpeed: 185, clawSweep: 400, bootRate: 0.16, specialRate: 0.36, endless: true };
+
+  var UPGRADES = [
+    { key: 'turbo',  name: 'مخلب توربو',   icon: '⚡', desc: 'نزول وسحب أسرع',     costs: [30, 65, 110, 170, 250] },
+    { key: 'grip',   name: 'قبضة واسعة',   icon: '🦾', desc: 'مساحة التقاط أكبر',  costs: [35, 75, 125, 190, 270] },
+    { key: 'magnet', name: 'مغناطيس خارق', icon: '🧲', desc: 'سحب ألعاب إضافية',   costs: [40, 85, 140, 210, 290] },
+    { key: 'gold',   name: 'حظ ذهبي',      icon: '🪙', desc: 'روبوتات وعملات أكثر', costs: [45, 95, 155, 230, 320] }
+  ];
+
   function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
-  function lerp(a, b, k) { return a + (b - a) * k; }
-  function same(a, b) { return !a.b && !b.b && a.k === b.k && a.c === b.c; }
-  function ev(w, e) { if (w.ev.length < 64) w.ev.push(e); return e; }
-  function snap(t) { return { id: t.id, k: t.k, c: t.c, b: t.b, x: t.x }; }
+  function lerp(a, b, t) { return a + (b - a) * t; }
 
-  /* --------------------------------------------------------------- create */
-  function makeBox(lines) {
-    return { lines: lines.map(function (l) { return { k: l[0], c: l[1], n: l[2], got: 0 }; }), state: 'open', bad: 0 };
+  function nextRng(w) {
+    w.rng = (w.rng + 0x6D2B79F5) >>> 0;
+    var t = Math.imul(w.rng ^ (w.rng >>> 15), 1 | w.rng);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   }
-  // opts: { speed: 0..1 difficulty level, tier: 1..5, seed }
-  SF.create = function (L, opts) {
-    opts = opts || {};
-    var lvl = clamp(typeof opts.level === 'number' ? opts.level : 0.35, 0, 1);
-    var w = {
-      L: L, rush: !!L.rush, rand: rng(opts.seed || 7), level: lvl, tier: opts.tier || 1,
-      speed: lerp(L.speed[0], L.speed[1], lvl), gap: lerp(L.gap[0], L.gap[1], lvl),
-      t: 0, anim: 0, toys: [], nextId: 1, sel: [], clip: null, clipCut: false,
-      boxes: [], box: 0, shipped: 0, undo: [], redo: [], ev: [],
-      lesson: 0, hold: null, spawnT: L.first == null ? 2 : L.first, waveT: L.stream && L.stream.wave ? L.stream.wave[0] : -1,
-      gremlin: null, gremT: L.rush ? 8 : L.gremlin ? L.gremlin.first : -1,
-      misses: 0, hits: 0, delivered: 0, coins: 0, score: 0, combo: 0, comboT: 0, bestCombo: 0, hearts: 3,
-      counts: { copy: 0, paste: 0, cut: 0, delete: 0, undo: 0, redo: 0, selectAll: 0, save: 0 },
-      done: false, won: false, lastPaste: -99
+
+  function pickToyKind(w, laneIdx) {
+    var cfg = w.cfg;
+    var upg = w.upg;
+    var r = nextRng(w);
+    // Lane 0 is welcoming plushies; Lane 1 mixes specials & boots; Lane 2 is rich gold/specials
+    var bootChance = laneIdx === 0 ? cfg.bootRate * 0.35 : (laneIdx === 1 ? cfg.bootRate : cfg.bootRate * 1.15);
+    // Forgiving DDA adjustment
+    bootChance *= lerp(0.72, 1.12, w.dda);
+    if (w.fever > 0) bootChance *= 0.25;
+    if (r < bootChance) return 'boot';
+
+    var specChance = cfg.specialRate + upg.magnet * 0.025 + upg.gold * 0.025 + (laneIdx === 2 ? 0.14 : laneIdx === 1 ? 0.06 : -0.05);
+    if (nextRng(w) < specChance) {
+      var sr = nextRng(w);
+      var goldWeight = 0.24 + upg.gold * 0.05 + (laneIdx === 2 ? 0.16 : 0);
+      var magWeight = 0.25 + upg.magnet * 0.04;
+      var fizzWeight = 0.24;
+      if (sr < goldWeight) return 'goldbot';
+      if (sr < goldWeight + magWeight) return 'magnet';
+      if (sr < goldWeight + magWeight + fizzWeight) return 'fizz';
+      return 'capsule';
+    }
+
+    // Plushies weighted by lane richness
+    var pr = nextRng(w);
+    if (laneIdx === 0) return pr < 0.42 ? 'duck' : (pr < 0.78 ? 'bear' : 'bunny');
+    if (laneIdx === 1) return pr < 0.28 ? 'bear' : (pr < 0.62 ? 'bunny' : 'dino');
+    return pr < 0.35 ? 'dino' : (pr < 0.78 ? 'unicorn' : 'goldbot');
+  }
+
+  function spawnToyOnLane(w, laneIdx, xOverride) {
+    var lane = LANES[laneIdx];
+    var kind = pickToyKind(w, laneIdx);
+    var def = TOYS[kind];
+    var x = xOverride != null ? xOverride : (lane.dir > 0 ? -48 : W + 48);
+    var toy = {
+      id: ++w.nextToyId,
+      kind: kind,
+      lane: laneIdx,
+      x: x,
+      y: lane.y,
+      r: def.r,
+      bobPhase: nextRng(w) * Math.PI * 2,
+      scale: 1,
+      pulled: false,
+      offX: 0,
+      offY: 0
     };
-    if (w.rush) { w.boxes.push(SF.rushBox(w, 0)); w.boxes.push(SF.rushBox(w, 1)); }
-    else w.boxes = L.boxes.map(makeBox);
-    (L.pre || []).forEach(function (p) { addToy(w, p[0], p[1], p[2], !!p[3]); });
-    return w;
-  };
-  function addToy(w, x, k, c, b) {
-    var t = { id: w.nextId++, k: k, c: c, b: !!b, x: x, born: w.anim };
-    w.toys.push(t);
-    return t;
-  }
-  SF.active = function (w) { return w.boxes[w.box] || null; };
-  SF.nextBox = function (w) { return w.boxes[w.box + 1] || null; };
-  SF.needsSeal = function (w) { return w.rush ? w.shipped >= 2 : !!w.L.seal; };
-  function lineFor(box, toy) {
-    if (!box || box.state !== 'open' || toy.b) return -1;
-    for (var i = 0; i < box.lines.length; i++) { var l = box.lines[i]; if (l.got < l.n && l.k === toy.k && l.c === toy.c) return i; }
-    return -1;
-  }
-  SF.lineFor = lineFor;
-  function boxDone(box) { for (var i = 0; i < box.lines.length; i++) if (box.lines[i].got < box.lines[i].n) return false; return true; }
-  // Toys still wanted by the active box after those already on the belt drop in.
-  SF.missing = function (w, box) {
-    box = box || SF.active(w);
-    var out = [];
-    if (!box || box.state !== 'open') return out;
-    box.lines.forEach(function (l) {
-      var onBelt = 0;
-      w.toys.forEach(function (t) { if (!t.b && t.k === l.k && t.c === l.c) onBelt++; });
-      var left = l.n - l.got - onBelt;
-      if (left > 0) out.push({ k: l.k, c: l.c, n: left });
-    });
-    return out;
-  };
-
-  /* ----------------------------------------------------------- the rush */
-  // An endless box: bigger and mixed orders as the shipped count and the tier grow.
-  SF.rushBox = function (w, i) {
-    var r = w.rand, step = Math.min(6, Math.floor(i / 2) + (w.tier - 1));
-    var lines = step >= 3 && r() < 0.5 + step * 0.06 ? 2 : 1, out = [], used = {};
-    for (var j = 0; j < lines; j++) {
-      var k, c, guard = 0;
-      do { k = Math.floor(r() * 5); c = Math.floor(r() * 5); } while (used[k * 5 + c] && guard++ < 20);
-      used[k * 5 + c] = 1;
-      out.push([k, c, lines === 2 ? 1 + Math.floor(r() * (step >= 5 ? 3 : 2)) : 2 + Math.floor(r() * (step >= 2 ? 2 : 1))]);
-    }
-    return makeBox(out);
-  };
-
-  /* ------------------------------------------------------------ placement */
-  function isFree(w, x, ignore) {
-    for (var i = 0; i < w.toys.length; i++) { var t = w.toys[i]; if (t !== ignore && Math.abs(t.x - x) < B.gap * 0.92) return false; }
-    return true;
-  }
-  // The free belt spot nearest to `target`, or null when the belt is packed there.
-  function place(w, target) {
-    var lo = B.start + 0.4, hi = B.end - 0.7;
-    for (var i = 0; i <= 28; i++) {
-      var d = i * 0.25;
-      var a = target - d, b = target + d;
-      if (a >= lo && a <= hi && isFree(w, a)) return a;
-      if (b >= lo && b <= hi && isFree(w, b)) return b;
-    }
-    return null;
-  }
-  function byId(w, id) { for (var i = 0; i < w.toys.length; i++) if (w.toys[i].id === id) return w.toys[i]; return null; }
-  SF.byId = byId;
-  function removeToy(w, t) {
-    var i = w.toys.indexOf(t);
-    if (i >= 0) w.toys.splice(i, 1);
-    var s = w.sel.indexOf(t.id);
-    if (s >= 0) w.sel.splice(s, 1);
-  }
-  function restore(w, list) {
-    var out = [];
-    list.forEach(function (s) {
-      var x = place(w, Math.min(s.x, B.end - 0.8));
-      if (x == null) return;
-      var t = { id: s.id, k: s.k, c: s.c, b: s.b, x: x, born: w.anim };
-      w.toys.push(t);
-      out.push(t);
-    });
-    return out;
-  }
-  function selected(w) {
-    var out = [];
-    w.toys.forEach(function (t) { if (w.sel.indexOf(t.id) >= 0) out.push(t); });
-    out.sort(function (a, b) { return b.x - a.x; }); // nearest the box first
-    return out;
-  }
-  SF.selected = selected;
-  function record(w, r) {
-    w.undo.push(r);
-    if (w.undo.length > SF.UNDO_MAX) w.undo.shift();
-    w.redo.length = 0;
+    w.toys.push(toy);
+    return toy;
   }
 
-  /* ------------------------------------------------------------- choosing */
-  SF.select = function (w, id) {
-    if (w.done) return false;
-    var t = id == null ? null : byId(w, id);
-    w.sel = t ? [t.id] : [];
-    ev(w, { t: 'select', id: t ? t.id : 0 });
-    return !!t;
-  };
-  // Arrow keys: the toy to the right (dir +1, towards the box) or to the left.
-  SF.selectStep = function (w, dir) {
-    if (w.done || !w.toys.length) return false;
-    var list = w.toys.slice().sort(function (a, b) { return a.x - b.x; }), cur = -1;
-    if (w.sel.length) {
-      var last = byId(w, w.sel[w.sel.length - 1]);
-      cur = list.indexOf(last);
-    }
-    var next;
-    if (cur < 0) {
-      next = list[0];
-      list.forEach(function (t) { if (Math.abs(t.x - A) < Math.abs(next.x - A)) next = t; });
-    } else next = list[clamp(cur + (dir > 0 ? 1 : -1), 0, list.length - 1)];
-    return SF.select(w, next.id);
-  };
-  SF.selectAll = function (w) {
-    if (w.done) return false;
-    if (!w.toys.length) { ev(w, { t: 'nothing', a: 'selectAll' }); return false; }
-    w.sel = w.toys.map(function (t) { return t.id; });
-    w.counts.selectAll++;
-    ev(w, { t: 'selectAll', ids: w.sel.slice() });
-    learnt(w, 'selectAll');
-    return true;
-  };
-
-  /* -------------------------------------------------------------- actions */
-  SF.copy = function (w) {
-    if (w.done) return false;
-    var list = selected(w).slice(0, SF.CLIP_MAX);
-    if (!list.length) { ev(w, { t: 'nothing', a: 'copy' }); return false; }
-    w.clip = list.map(function (t) { return { k: t.k, c: t.c, b: t.b }; });
-    w.clipCut = false;
-    w.counts.copy++;
-    ev(w, { t: 'copy', ids: list.map(function (t) { return t.id; }) });
-    learnt(w, 'copy');
-    return true;
-  };
-  SF.cut = function (w) {
-    if (w.done) return false;
-    var list = selected(w).slice(0, SF.CLIP_MAX);
-    if (!list.length) { ev(w, { t: 'nothing', a: 'cut' }); return false; }
-    var prev = w.clip, prevCut = w.clipCut, snaps = list.map(snap);
-    list.forEach(function (t) { removeToy(w, t); });
-    w.clip = snaps.map(function (t) { return { k: t.k, c: t.c, b: t.b }; });
-    w.clipCut = true;
-    record(w, { a: 'cut', toys: snaps, prev: prev, prevCut: prevCut });
-    w.counts.cut++;
-    ev(w, { t: 'cut', toys: snaps });
-    learnt(w, 'cut');
-    return true;
-  };
-  SF.paste = function (w) {
-    if (w.done) return false;
-    if (!w.clip || !w.clip.length) { ev(w, { t: 'nothing', a: 'paste' }); return false; }
-    var made = [];
-    for (var j = 0; j < w.clip.length; j++) {
-      var x = place(w, A - j * B.gap);
-      if (x == null) break;
-      var it = w.clip[j];
-      made.push(addToy(w, x, it.k, it.c, it.b));
-    }
-    if (!made.length) { ev(w, { t: 'blocked' }); return false; }
-    record(w, { a: 'paste', ids: made.map(function (t) { return t.id; }), toys: made.map(snap) });
-    w.counts.paste++;
-    w.lastPaste = w.t;
-    ev(w, { t: 'paste', ids: made.map(function (t) { return t.id; }) });
-    learnt(w, 'paste');
-    return true;
-  };
-  SF.del = function (w) {
-    if (w.done) return false;
-    var list = selected(w);
-    if (!list.length) { ev(w, { t: 'nothing', a: 'delete' }); return false; }
-    var snaps = list.map(snap), broken = 0;
-    list.forEach(function (t) { if (t.b) broken++; removeToy(w, t); });
-    record(w, { a: 'del', toys: snaps });
-    w.counts.delete++;
-    w.hits += broken;
-    ev(w, { t: 'delete', toys: snaps, broken: broken });
-    learnt(w, 'delete');
-    return true;
-  };
-  // Takes back one step: the last paste, cut or delete, or the toy Nattout took.
-  function unapply(w, r) {
-    if (r.a === 'paste') {
-      var gone = [];
-      r.ids.forEach(function (id) { var t = byId(w, id); if (t) { gone.push(snap(t)); removeToy(w, t); } });
-      if (!gone.length) return null;
-      r.toys = gone;
-      return { t: 'undo', a: 'paste', toys: gone };
-    }
-    if (r.a === 'cut' || r.a === 'del') {
-      var back = restore(w, r.toys);
-      if (!back.length) return null;
-      if (r.a === 'cut') { w.clip = r.prev; w.clipCut = r.prevCut; }
-      return { t: 'undo', a: r.a, ids: back.map(function (t) { return t.id; }) };
-    }
-    if (r.a === 'steal') {
-      var box = w.boxes[r.box], g = w.gremlin;
-      if (!box || box.state !== 'open' || w.box !== r.box || !g || g.rec !== r) return null;
-      box.lines[r.line].got++;
-      w.gremlin = { phase: 'bonk', t: 0, kind: 'steal' };
-      w.hits++;
-      return { t: 'undo', a: 'steal', foil: true, line: r.line };
-    }
-    return null;
-  }
-  SF.undo = function (w) {
-    if (w.done) return false;
-    // While Nattout runs off with a toy, Ctrl+Z brings that toy back first.
-    var g = w.gremlin, gi = g && g.kind === 'steal' && g.phase === 'hold' ? w.undo.indexOf(g.rec) : -1;
-    if (gi >= 0) { w.undo.splice(gi, 1); w.undo.push(g.rec); }
-    while (w.undo.length) {
-      var r = w.undo.pop(), e = unapply(w, r);
-      if (e) {
-        if (r.a !== 'steal') w.redo.push(r);
-        w.counts.undo++;
-        ev(w, e);
-        if (r.a === 'steal') ev(w, { t: 'foil' });
-        if (r.a === 'paste') checkFull(w);
-        learnt(w, 'undo');
-        return true;
-      }
-    }
-    ev(w, { t: 'nothing', a: 'undo' });
-    return false;
-  };
-  SF.redo = function (w) {
-    if (w.done) return false;
-    while (w.redo.length) {
-      var r = w.redo.pop(), done = null;
-      if (r.a === 'paste') {
-        var back = restore(w, r.toys.map(function (s) { return { id: w.nextId++, k: s.k, c: s.c, b: s.b, x: s.x }; }));
-        if (back.length) { r.ids = back.map(function (t) { return t.id; }); done = { t: 'redo', a: 'paste', ids: r.ids }; }
-      } else if (r.a === 'cut' || r.a === 'del') {
-        var gone = [];
-        r.toys.forEach(function (s) { var t = byId(w, s.id); if (t) { gone.push(snap(t)); removeToy(w, t); } });
-        if (gone.length) {
-          r.toys = gone;
-          if (r.a === 'cut') { w.clip = gone.map(function (t) { return { k: t.k, c: t.c, b: t.b }; }); w.clipCut = true; }
-          done = { t: 'redo', a: r.a, toys: gone };
+  function seedConveyors(w) {
+    // Populate all 3 belts right away so frame 1 is bursting with colorful toys!
+    for (var li = 0; li < LANES.length; li++) {
+      var spacing = li === 0 ? 225 : (li === 1 ? 215 : 230);
+      for (var x = 140 + li * 45; x < W - 90; x += spacing) {
+        var t = spawnToyOnLane(w, li, x + (nextRng(w) - 0.5) * 44);
+        // Never put a boot dead-center on frame 1 so the kid's very first grab is guaranteed joyful!
+        if (t.kind === 'boot' && Math.abs(t.x - W * 0.5) < 260) {
+          t.kind = li === 2 ? 'goldbot' : (li === 1 ? 'magnet' : 'duck');
+          t.r = TOYS[t.kind].r;
         }
       }
-      if (done) {
-        w.undo.push(r);
-        w.counts.redo++;
-        var g = w.gremlin;
-        if (g && g.kind === 'undo' && g.phase === 'hold' && g.rec === r) { w.gremlin = { phase: 'bonk', t: 0, kind: 'undo' }; w.hits++; done.foil = true; }
-        ev(w, done);
-        if (done.foil) ev(w, { t: 'foil' });
-        learnt(w, 'redo');
-        return true;
+    }
+  }
+
+  function create(opts) {
+    opts = opts || {};
+    var endless = !!opts.endless;
+    var levelIdx = endless ? -1 : clamp((opts.level | 0), 0, LEVELS.length - 1);
+    var cfg = endless ? ENDLESS_CFG : LEVELS[levelIdx];
+    var seed = (opts.seed != null ? opts.seed : (2027 + levelIdx * 97)) >>> 0;
+    var upg = opts.upg || { turbo: 0, grip: 0, magnet: 0, gold: 0 };
+    var w = {
+      seed: seed,
+      rng: seed || 1,
+      cfg: cfg,
+      level: levelIdx,
+      endless: endless,
+      demo: !!opts.demo,
+      dda: clamp(opts.dda != null ? opts.dda : 0.32, 0, 1),
+      upg: {
+        turbo: clamp(upg.turbo | 0, 0, 5),
+        grip: clamp(upg.grip | 0, 0, 5),
+        magnet: clamp(upg.magnet | 0, 0, 5),
+        gold: clamp(upg.gold | 0, 0, 5)
+      },
+      phase: 'play',
+      time: 0,
+      timeLeft: cfg.duration,
+      score: 0,
+      coinsEarned: 0,
+      target: cfg.stars[0],
+      stars: 0,
+      combo: 0,
+      bestCombo: 0,
+      fever: 0,
+      feverCount: 0,
+      grabs: 0,
+      drops: 0,
+      misses: 0,
+      bootsTossed: 0,
+      atStart: true,
+      over: false,
+      won: false,
+      nextToyId: 0,
+      beltOffset: [0, 0, 0],
+      spawnTimer: [0.6, 0.4, 0.5],
+      toys: [],
+      tossedBoots: [],
+      zaps: [],
+      goldRain: [],
+      rainCd: 0,
+      claw: {
+        x: W * 0.5,
+        y: CLAW_HOME_Y,
+        dir: 1,
+        sway: 0,
+        state: 'swing', // 'swing' | 'drop' | 'clamp' | 'reel' | 'fling'
+        stateT: 0,
+        jaw: 1, // 1 = open, 0 = clamped
+        bufT: 0,
+        caught: [],
+        flingBoot: false
+      },
+      demoThink: 0.7,
+      prevPress: false,
+      result: null
+    };
+    seedConveyors(w);
+    return w;
+  }
+
+  function currentStars(w) {
+    var st = w.cfg.stars;
+    if (w.score >= st[2]) return 3;
+    if (w.score >= st[1]) return 2;
+    if (w.score >= st[0]) return 1;
+    return 0;
+  }
+
+  function dropClaw(w, evs, isHuman) {
+    var cl = w.claw;
+    if (cl.state === 'swing') {
+      cl.state = 'drop';
+      cl.stateT = 0;
+      cl.sway = 0;
+      cl.jaw = 1;
+      cl.caught = [];
+      cl.flingBoot = false;
+      cl.bufT = 0;
+      w.drops++;
+      if (isHuman) w.atStart = false;
+      evs.push({ type: 'drop', x: cl.x, y: cl.y });
+      return true;
+    }
+    // Forgiving buffer near top of reel
+    if (cl.state === 'reel' && cl.y < CLAW_HOME_Y + 150) {
+      cl.bufT = 0.25;
+      if (isHuman) w.atStart = false;
+      return true;
+    }
+    return false;
+  }
+
+  function triggerMagnet(w, originToy, evs) {
+    var maxPull = 3 + Math.min(3, w.upg.magnet);
+    var radius = 350 + w.upg.magnet * 55;
+    var candidates = [];
+    for (var i = 0; i < w.toys.length; i++) {
+      var t = w.toys[i];
+      if (t.id === originToy.id || t.pulled) continue;
+      if (TOYS[t.kind].junk && w.fever <= 0) continue;
+      var dx = t.x - originToy.x, dy = t.y - originToy.y;
+      var d = Math.sqrt(dx * dx + dy * dy);
+      if (d <= radius) candidates.push({ toy: t, d: d });
+    }
+    candidates.sort(function (a, b) { return a.d - b.d; });
+    var count = Math.min(maxPull, candidates.length);
+    for (var k = 0; k < count; k++) {
+      var pulled = candidates[k].toy;
+      pulled.pulled = true;
+      var angle = ((k + 1) / (count + 1)) * Math.PI;
+      pulled.offX = Math.cos(angle) * 34;
+      pulled.offY = 18 + (k % 2) * 20;
+      w.claw.caught.push(pulled);
+      w.zaps.push({ x1: originToy.x, y1: originToy.y, x2: pulled.x, y2: pulled.y, life: 0.36, max: 0.36 });
+    }
+    if (count > 0) {
+      evs.push({ type: 'magnet', x: originToy.x, y: originToy.y, count: count });
+    }
+  }
+
+  function triggerFizz(w, originToy, evs) {
+    var radius = 290 + w.upg.magnet * 28;
+    var popped = 0;
+    var queue = [originToy];
+    var visited = {};
+    visited[originToy.id] = true;
+    while (queue.length) {
+      var src = queue.shift();
+      for (var i = w.toys.length - 1; i >= 0; i--) {
+        var t = w.toys[i];
+        if (visited[t.id] || t.pulled) continue;
+        var dx = t.x - src.x, dy = t.y - src.y;
+        if (dx * dx + dy * dy <= radius * radius) {
+          var def = TOYS[t.kind];
+          if (def.junk || def.special === 'fizz') {
+            visited[t.id] = true;
+            if (def.special === 'fizz') queue.push(t);
+            w.toys.splice(i, 1);
+            var mul = w.fever > 0 ? 2 : 1;
+            var pts = 28 * mul;
+            var coins = Math.round((20 + w.upg.gold * 4) * mul);
+            w.score += pts;
+            w.coinsEarned += coins;
+            popped++;
+            evs.push({ type: 'fizzPop', x: t.x, y: t.y, pts: pts, coins: coins });
+          }
+        }
       }
     }
-    ev(w, { t: 'nothing', a: 'redo' });
-    return false;
-  };
-  SF.seal = function (w) {
-    if (w.done) return false;
-    var box = SF.active(w);
-    if (!box || box.state !== 'full') { ev(w, { t: 'nothing', a: 'save' }); return false; }
-    w.counts.save++;
-    w.hits++;
-    ev(w, { t: 'seal', box: w.box });
-    learnt(w, 'save');
-    ship(w);
-    return true;
-  };
-  SF.act = function (w, name) {
-    switch (name) {
-      case 'copy': return SF.copy(w);
-      case 'paste': return SF.paste(w);
-      case 'cut': return SF.cut(w);
-      case 'delete': return SF.del(w);
-      case 'undo': return SF.undo(w);
-      case 'redo': return SF.redo(w);
-      case 'selectAll': return SF.selectAll(w);
-      case 'save': return SF.seal(w);
+    if (popped > 0) {
+      evs.push({ type: 'fizzBlast', x: originToy.x, y: originToy.y, count: popped });
     }
-    return false;
-  };
+  }
 
-  /* -------------------------------------------------------------- boxes */
-  function checkFull(w) {
-    var box = SF.active(w);
-    if (!box || box.state !== 'open' || !boxDone(box)) return;
-    if (SF.needsSeal(w)) { box.state = 'full'; ev(w, { t: 'full', box: w.box }); }
-    else ship(w);
+  function deliverCaught(w, evs) {
+    var cl = w.claw;
+    if (!cl.caught.length) return;
+    var goldMul = 1 + w.upg.gold * 0.14;
+    var feverMul = w.fever > 0 ? 2 : 1;
+    var totalPts = 0, totalCoins = 0;
+    var hadGood = false;
+
+    for (var i = 0; i < cl.caught.length; i++) {
+      var t = cl.caught[i];
+      var def = TOYS[t.kind];
+      // Remove from belt array if still present
+      var idx = w.toys.indexOf(t);
+      if (idx !== -1) w.toys.splice(idx, 1);
+
+      var pts = def.junk ? 40 : def.pts;
+      var coins = def.junk ? 28 : def.coins;
+      var comboBonus = Math.min(4, w.combo) * 5;
+      pts = Math.round((pts + comboBonus) * feverMul);
+      coins = Math.round(coins * goldMul * feverMul);
+
+      // Mystery capsule bonus!
+      if (def.special === 'capsule') {
+        if (!w.demo && w.timeLeft < w.cfg.duration - 8 && nextRng(w) < 0.45) {
+          w.timeLeft = Math.min(w.cfg.duration + 10, w.timeLeft + 5);
+          evs.push({ type: 'capsuleTime', x: cl.x, y: CLAW_HOME_Y + 12, sec: 5 });
+        } else {
+          pts += 35 * feverMul;
+          coins += 35;
+          evs.push({ type: 'capsuleJackpot', x: cl.x, y: CLAW_HOME_Y + 12, coins: 35 });
+        }
+      }
+
+      totalPts += pts;
+      totalCoins += coins;
+      hadGood = true;
+      w.grabs++;
+      w.combo++;
+      if (w.combo > w.bestCombo) w.bestCombo = w.combo;
+    }
+
+    w.score += totalPts;
+    w.coinsEarned += totalCoins;
+    w.stars = currentStars(w);
+    cl.caught = [];
+
+    evs.push({
+      type: 'deliver',
+      x: cl.x,
+      y: CLAW_HOME_Y + 10,
+      pts: totalPts,
+      coins: totalCoins,
+      combo: w.combo,
+      fever: w.fever > 0
+    });
+
+    // Ignite 6s «جنون المصنع! 🔥» Fever Mode on 3-grab chain!
+    if (hadGood && w.combo >= FEVER_STREAK && w.fever <= 0) {
+      w.fever = FEVER_DUR;
+      w.feverCount++;
+      if (w.endless) w.timeLeft += 6;
+      evs.push({ type: 'feverStart', x: cl.x, y: CLAW_HOME_Y + 30, endlessBonus: w.endless ? 6 : 0 });
+    }
+
+    // Early 3-star victory finish on normal stages so skilled kids finish punchy & fast!
+    if (!w.demo && !w.endless && w.score >= w.cfg.stars[2]) {
+      finishRound(w, evs);
+    }
   }
-  function ship(w) {
-    var box = SF.active(w);
-    box.state = 'shipped';
-    w.shipped++;
-    var bonus = 5 + Math.min(5, w.combo);
-    w.coins += bonus;
-    w.score += 10 + w.combo * 2;
-    ev(w, { t: 'ship', box: w.box, coins: bonus });
-    // A trick on a box that just left cannot be undone any more.
-    if (w.gremlin && w.gremlin.kind === 'steal' && w.gremlin.phase === 'hold') escape(w);
-    w.box++;
-    if (w.rush) {
-      w.boxes.push(SF.rushBox(w, w.boxes.length));
-      w.speed = Math.min(w.speed + 0.045, 1.9);
-      w.gap = Math.max(w.gap - 0.06, 1.7);
-    } else if (w.box >= w.boxes.length) finish(w, true);
+
+  function finishRound(w, evs) {
+    if (w.over) return;
+    w.over = true;
+    w.phase = 'over';
+    w.stars = currentStars(w);
+    w.won = w.endless ? true : w.stars >= 1;
+    var bonusCoins = w.endless ? 0 : (w.stars * 20);
+    var totalCoins = Math.max(10, w.coinsEarned + bonusCoins);
+    w.result = {
+      level: w.level,
+      endless: w.endless,
+      won: w.won,
+      stars: w.stars,
+      score: w.score,
+      target: w.target,
+      coins: totalCoins,
+      grabs: w.grabs,
+      bestCombo: w.bestCombo,
+      feverCount: w.feverCount
+    };
+    evs.push({ type: 'roundEnd', result: w.result });
   }
-  function drop(w, t) {
-    removeToy(w, t);
-    var box = SF.active(w), s = snap(t);
-    if (t.b) {
-      w.misses++;
-      if (box) box.bad++;
-      w.combo = 0;
-      if (w.rush) w.hearts--;
-      ev(w, { t: 'drop', res: 'bad', toy: s, box: w.box });
-      if (w.rush && w.hearts <= 0) finish(w, false);
+
+  function stepConveyors(w, dt) {
+    var speedRamp = w.endless ? (1 + Math.min(0.65, w.time * 0.008)) : 1;
+    var baseSpeed = w.cfg.beltSpeed * lerp(0.84, 1.08, w.dda) * speedRamp;
+
+    for (var li = 0; li < LANES.length; li++) {
+      var lane = LANES[li];
+      var vx = baseSpeed * lane.speedMul * lane.dir;
+      w.beltOffset[li] = (w.beltOffset[li] + vx * dt) % 64;
+
+      w.spawnTimer[li] -= dt;
+      if (w.spawnTimer[li] <= 0) {
+        // Ensure minimum clear spacing at entry chute before spawning
+        var entryX = lane.dir > 0 ? -48 : W + 48;
+        var clear = true;
+        for (var i = 0; i < w.toys.length; i++) {
+          var t = w.toys[i];
+          if (!t.pulled && t.lane === li && Math.abs(t.x - entryX) < 128) { clear = false; break; }
+        }
+        if (clear) {
+          spawnToyOnLane(w, li);
+          w.spawnTimer[li] = (185 / Math.abs(vx)) * (0.78 + nextRng(w) * 0.42);
+        } else {
+          w.spawnTimer[li] = 0.2;
+        }
+      }
+    }
+
+    for (var ti = w.toys.length - 1; ti >= 0; ti--) {
+      var toy = w.toys[ti];
+      if (toy.pulled) continue;
+      var ln = LANES[toy.lane];
+      var tvx = baseSpeed * ln.speedMul * ln.dir;
+      toy.x += tvx * dt;
+      toy.bobPhase += dt * 4.2;
+      toy.y = ln.y + Math.sin(toy.bobPhase) * 2.5;
+      if (toy.x < -90 || toy.x > W + 90) {
+        w.toys.splice(ti, 1);
+      }
+    }
+  }
+
+  function stepGoldRain(w, dt, evs) {
+    if (w.fever > 0) {
+      w.rainCd -= dt;
+      if (w.rainCd <= 0) {
+        w.rainCd = 0.22;
+        w.goldRain.push({
+          x: X_MIN + nextRng(w) * (X_MAX - X_MIN),
+          y: RAIL_Y + 20,
+          vy: 230 + nextRng(w) * 110,
+          r: 18
+        });
+      }
+    }
+    var cl = w.claw;
+    for (var i = w.goldRain.length - 1; i >= 0; i--) {
+      var g = w.goldRain[i];
+      g.y += g.vy * dt;
+      var dx = g.x - cl.x, dy = g.y - (cl.y + 24);
+      if (dx * dx + dy * dy < 58 * 58) {
+        w.score += 18;
+        w.coinsEarned += 12;
+        w.stars = currentStars(w);
+        evs.push({ type: 'rainCoin', x: g.x, y: g.y });
+        w.goldRain.splice(i, 1);
+        continue;
+      }
+      if (g.y > H + 30) w.goldRain.splice(i, 1);
+    }
+  }
+
+  function stepClaw(w, dt, evs) {
+    var cl = w.claw;
+    var turboMul = 1 + w.upg.turbo * 0.16;
+    var feverMul = w.fever > 0 ? 1.85 : 1;
+    var speedMul = turboMul * feverMul;
+    cl.bufT = Math.max(0, cl.bufT - dt);
+
+    if (cl.state === 'swing') {
+      // Smooth playful sweep along gantry rail (soft ease near ends so edges are easy!)
+      var sweepSp = w.cfg.clawSweep * (1 + w.upg.turbo * 0.06) * (w.fever > 0 ? 1.25 : 1);
+      var edgeDist = Math.min(cl.x - X_MIN, X_MAX - cl.x);
+      var ease = clamp(0.45 + edgeDist / 120, 0.45, 1);
+      cl.x += cl.dir * sweepSp * ease * dt;
+      if (cl.x >= X_MAX) { cl.x = X_MAX; cl.dir = -1; }
+      if (cl.x <= X_MIN) { cl.x = X_MIN; cl.dir = 1; }
+      cl.y = CLAW_HOME_Y;
+      cl.sway = -cl.dir * 0.14 * ease;
+      cl.jaw = lerp(cl.jaw, 1, Math.min(1, dt * 12));
+      if (cl.bufT > 0) {
+        dropClaw(w, evs, !w.demo);
+      }
       return;
     }
-    var li = lineFor(box, t);
-    if (li < 0) { ev(w, { t: 'drop', res: 'store', toy: s, box: w.box }); return; }
-    box.lines[li].got++;
-    w.delivered++;
-    w.hits++;
-    w.coins++;
-    w.combo = w.comboT > 0 ? w.combo + 1 : 1;
-    w.comboT = 3;
-    w.bestCombo = Math.max(w.bestCombo, w.combo);
-    w.score += 2 + w.combo;
-    ev(w, { t: 'drop', res: 'fill', toy: s, box: w.box, line: li, combo: w.combo });
-    checkFull(w);
-  }
-  function finish(w, won) {
-    if (w.done) return;
-    w.done = true;
-    w.won = won;
-    w.hold = null;
-    ev(w, { t: won ? 'win' : 'over' });
-  }
 
-  /* --------------------------------------------------------------- spawns */
-  function pickToy(w) {
-    var r = w.rand, s = w.L.stream || {}, box = SF.active(w), next = SF.nextBox(w);
-    var broken = (s.broken || 0) + (w.tier - 1) * 0.02, roll = r();
-    if (roll < broken) return { k: Math.floor(r() * 5), c: Math.floor(r() * 5), b: true };
-    roll -= broken;
-    var want = SF.missing(w, box);
-    if (want.length && roll < (s.need || 0)) { var m = want[Math.floor(r() * want.length)]; return { k: m.k, c: m.c, b: false }; }
-    roll -= s.need || 0;
-    if (next && roll < (s.next || 0)) { var l = next.lines[Math.floor(r() * next.lines.length)]; return { k: l.k, c: l.c, b: false }; }
-    // Any other toy: not one the active box asks for.
-    for (var g = 0; g < 12; g++) {
-      var k = Math.floor(r() * 5), c = Math.floor(r() * 5);
-      if (lineFor(box, { k: k, c: c, b: false }) < 0) return { k: k, c: c, b: false };
-    }
-    return { k: 0, c: 4, b: false };
-  }
-  function spawn(w, dt) {
-    w.spawnT -= dt;
-    if (w.waveT >= 0) {
-      w.waveT -= dt;
-      if (w.waveT <= 0 && isFree(w, B.start) ) {
-        var n = w.L.stream.wave[2];
-        for (var i = 0; i < n; i++) addToy(w, B.start - i * B.gap * 1.02, Math.floor(w.rand() * 5), Math.floor(w.rand() * 5), true);
-        ev(w, { t: 'wave', n: n });
-        w.waveT = w.L.stream.wave[1];
-        w.spawnT = Math.max(w.spawnT, w.gap + n * B.gap / w.speed);
+    if (cl.state === 'drop') {
+      var dropSp = 880 * speedMul;
+      cl.y += dropSp * dt;
+      cl.sway = 0;
+
+      // Forgiving grab check! Good toys ALWAYS take priority over rubber boots!
+      var gripReach = 46 * (1 + w.upg.grip * 0.13);
+      var bestGood = null, bestGoodD = 1e9;
+      var bestBoot = null, bestBootD = 1e9;
+      for (var i = 0; i < w.toys.length; i++) {
+        var t = w.toys[i];
+        if (t.pulled) continue;
+        var dx = Math.abs(t.x - cl.x);
+        var dy = Math.abs(t.y - (cl.y + 22));
+        var def = TOYS[t.kind];
+        if (!def.junk || w.fever > 0) {
+          if (dx <= gripReach + t.r * 0.65 && dy <= 34) {
+            if (dx < bestGoodD) { bestGoodD = dx; bestGood = t; }
+          }
+        } else {
+          // Tiny forgiving boot hurtbox
+          if (dx <= 22 + t.r * 0.42 && dy <= 24) {
+            if (dx < bestBootD) { bestBootD = dx; bestBoot = t; }
+          }
+        }
       }
-    }
-    if (w.spawnT > 0) return;
-    if (!isFree(w, B.start)) { w.spawnT = 0.3; return; }
-    var p = pickToy(w), t = addToy(w, B.start, p.k, p.c, p.b);
-    ev(w, { t: 'spawn', id: t.id, b: t.b });
-    w.spawnT = w.gap * (0.85 + w.rand() * 0.3);
-  }
 
-  /* -------------------------------------------------------------- Nattout */
-  function escape(w) {
-    var g = w.gremlin;
-    if (!g) return;
-    if (g.rec) { var i = w.undo.indexOf(g.rec); if (i >= 0) w.undo.splice(i, 1); }
-    w.misses++;
-    w.combo = 0;
-    if (w.rush) w.hearts--;
-    w.gremlin = { phase: 'run', t: 0, kind: g.kind };
-    ev(w, { t: 'escape', kind: g.kind });
-    if (w.rush && w.hearts <= 0) finish(w, false);
-  }
-  function gremlinType(w) {
-    var G = w.rush ? (w.shipped >= 3 ? { type: 'both' } : null) : w.L.gremlin;
-    if (!G) return null;
-    return G.type === 'both' ? (w.rand() < 0.5 ? 'steal' : 'undo') : G.type;
-  }
-  function gremlinStep(w, dt) {
-    var G = w.rush ? { every: [14, 20], grace: 4.5 } : w.L.gremlin;
-    var g = w.gremlin;
-    if (g) {
-      g.t += dt;
-      if (g.phase === 'hold' && g.t >= G.grace) escape(w);
-      else if ((g.phase === 'bonk' || g.phase === 'run') && g.t > 1.2) w.gremlin = null;
+      if (bestGood) {
+        bestGood.pulled = true;
+        bestGood.offX = 0;
+        bestGood.offY = 26;
+        cl.caught = [bestGood];
+        cl.state = 'clamp';
+        cl.stateT = 0.075;
+        cl.jaw = 0.15;
+        var bDef = TOYS[bestGood.kind];
+        evs.push({ type: 'snatch', x: bestGood.x, y: bestGood.y, kind: bestGood.kind, special: bDef.special || null });
+        if (bDef.special === 'magnet') triggerMagnet(w, bestGood, evs);
+        else if (bDef.special === 'fizz') triggerFizz(w, bestGood, evs);
+        return;
+      }
+
+      if (bestBoot) {
+        // Silly rubber boot! Fling it comically off-screen, never kills the run!
+        var bi = w.toys.indexOf(bestBoot);
+        if (bi !== -1) w.toys.splice(bi, 1);
+        w.tossedBoots.push({
+          x: bestBoot.x, y: bestBoot.y,
+          vx: (cl.x < W * 0.5 ? 1 : -1) * 520,
+          vy: -560,
+          rot: 0, vrot: 14
+        });
+        w.bootsTossed++;
+        w.misses++;
+        w.combo = 0;
+        cl.state = 'reel';
+        cl.flingBoot = true;
+        cl.jaw = 0.25;
+        evs.push({ type: 'boot', x: bestBoot.x, y: bestBoot.y });
+        return;
+      }
+
+      if (cl.y >= FLOOR_Y) {
+        cl.y = FLOOR_Y;
+        cl.state = 'reel';
+        cl.jaw = 0.4;
+        w.misses++;
+        if (w.fever <= 0) w.combo = 0;
+        evs.push({ type: 'miss', x: cl.x, y: cl.y });
+      }
       return;
     }
-    if (w.gremT < 0 || (w.rush && w.shipped < 3)) return;
-    w.gremT -= dt;
-    if (w.gremT > 0) return;
-    var kind = gremlinType(w), box = SF.active(w);
-    if (kind === 'steal') {
-      var li = -1;
-      if (box && box.state === 'open') for (var i = 0; i < box.lines.length; i++) if (box.lines[i].got > 0) li = i;
-      if (li < 0) { w.gremT = 1; return; }
-      box.lines[li].got--;
-      var r = { a: 'steal', box: w.box, line: li };
-      w.undo.push(r);
-      w.gremlin = { phase: 'hold', t: 0, kind: 'steal', rec: r, toy: { k: box.lines[li].k, c: box.lines[li].c } };
-      ev(w, { t: 'steal', line: li, toy: w.gremlin.toy });
-    } else {
-      // Ctrl+Z on the child's newest paste, while its toys are still on the belt.
-      var top = w.undo[w.undo.length - 1];
-      var alive = top && top.a === 'paste' && top.ids.some(function (id) { return !!byId(w, id); });
-      if (!alive || w.t - w.lastPaste > 6) { w.gremT = 0.5; return; }
-      w.undo.pop();
-      var e = unapply(w, top);
-      w.redo.length = 0;
-      w.redo.push(top);
-      w.gremlin = { phase: 'hold', t: 0, kind: 'undo', rec: top };
-      ev(w, { t: 'gundo', toys: e.toys });
-    }
-    w.gremT = G.every[0] + w.rand() * (G.every[1] - G.every[0]);
-  }
 
-  /* -------------------------------------------------------------- lessons */
-  function frontWhere(w, test) {
-    var best = null;
-    w.toys.forEach(function (t) { if (t.x >= A - 0.35 && t.x < B.end - 0.4 && test(t) && (!best || t.x > best.x)) best = t; });
-    return best;
-  }
-  // When does the lesson's moment come? Returns the toy to aim at, true, or false.
-  function moment(w, when) {
-    var box = SF.active(w), next = SF.nextBox(w), g = w.gremlin;
-    switch (when) {
-      case 'needArm': return frontWhere(w, function (t) { return lineFor(box, t) >= 0; }) || false;
-      case 'brokenArm': return frontWhere(w, function (t) { return t.b; }) || false;
-      case 'nextArm': return frontWhere(w, function (t) { return lineFor(box, t) < 0 && lineFor(next, t) >= 0; }) || false;
-      case 'clipNeed': return !!(w.clip && w.clip.length && box && box.state === 'open' && lineFor(box, w.clip[0]) >= 0);
-      case 'junk': {
-        var n = 0, front = null;
-        w.toys.forEach(function (t) { if (t.b) { n++; if (!front || t.x > front.x) front = t; } });
-        return n >= 3 && front && front.x >= A - 1.2;
+    if (cl.state === 'clamp') {
+      cl.stateT -= dt;
+      cl.jaw = 0.12;
+      for (var ci = 0; ci < cl.caught.length; ci++) {
+        cl.caught[ci].x = cl.x + cl.caught[ci].offX;
+        cl.caught[ci].y = cl.y + cl.caught[ci].offY;
       }
-      case 'junkSel': return w.sel.length >= 2 && selected(w).every(function (t) { return t.b; });
-      case 'pair': {
-        if (!box || box.lines.length < 2) return false;
-        var have = box.lines.every(function (l) { return w.toys.some(function (t) { return !t.b && t.k === l.k && t.c === l.c; }); });
-        var front2 = frontWhere(w, function (t) { return lineFor(box, t) >= 0; });
-        return have && !!front2;
+      if (cl.stateT <= 0) {
+        cl.state = 'reel';
       }
-      case 'multiSel': return w.sel.length >= 2;
-      case 'stolen': return !!(g && g.kind === 'steal' && g.phase === 'hold');
-      case 'gundo': return !!(g && g.kind === 'undo' && g.phase === 'hold');
-      case 'full': return !!(box && box.state === 'full');
+      return;
     }
-    return false;
-  }
-  function lessonCheck(w) {
-    var T = w.L.teach;
-    if (!T || w.lesson >= T.length || w.done) { if (w.hold) w.hold = null; return; }
-    var step = T[w.lesson], m = moment(w, step[1]);
-    if (!m) { if (w.hold) w.hold = null; return; }
-    if (!w.hold || w.hold.key !== step[0]) {
-      w.hold = { key: step[0], when: step[1], n: w.lesson };
-      if (m && typeof m === 'object' && (step[0] === 'copy' || step[0] === 'cut' || step[0] === 'delete')) w.sel = [m.id];
-      ev(w, { t: 'cue', key: step[0], lesson: w.lesson });
-    }
-  }
-  function learnt(w, key) {
-    var T = w.L.teach;
-    if (!T || w.lesson >= T.length || T[w.lesson][0] !== key) return;
-    w.lesson++;
-    w.hold = null;
-    ev(w, { t: 'learnt', key: key, lesson: w.lesson - 1 });
-  }
-  SF.lessonCheck = lessonCheck;
 
-  /* ----------------------------------------------------------------- step */
-  SF.step = function (w, dt) {
-    w.anim += dt;
-    if (w.done) return;
-    lessonCheck(w);
-    if (w.hold) return; // the belt, the clock and Nattout wait for the lesson
-    w.t += dt;
-    if (w.comboT > 0) { w.comboT -= dt; if (w.comboT <= 0) w.combo = 0; }
-    var end = B.end, mv = w.speed * dt;
-    for (var i = w.toys.length - 1; i >= 0; i--) w.toys[i].x += mv;
-    for (var j = w.toys.length - 1; j >= 0; j--) if (w.toys[j] && w.toys[j].x >= end) drop(w, w.toys[j]);
-    if (w.done) return;
-    spawn(w, dt);
-    gremlinStep(w, dt);
-    lessonCheck(w);
-  };
-
-  /* ------------------------------------------------------------- advice */
-  // The most useful next move, for the wordless coach: { key, id? }.
-  SF.advice = function (w) {
-    if (w.done) return null;
-    if (w.hold) return { key: w.hold.key };
-    var L = w.L, has = function (k) { return L.keys.indexOf(k) >= 0; }, g = w.gremlin, box = SF.active(w);
-    if (g && g.phase === 'hold') return { key: g.kind === 'steal' ? 'undo' : 'redo' };
-    if (box && box.state === 'full') return { key: 'save' };
-    var sel = selected(w), broken = w.toys.filter(function (t) { return t.b; }).sort(function (a, b) { return b.x - a.x; });
-    if (broken.length && has('delete')) {
-      if (sel.length && sel.every(function (t) { return t.b; })) return { key: 'delete' };
-      if (broken.length >= 3 && has('selectAll') && broken.length >= w.toys.length - 1) {
-        return sel.length === w.toys.length ? { key: 'delete' } : { key: 'selectAll' };
+    if (cl.state === 'reel') {
+      var emptyMul = cl.caught.length ? 1 : 1.35;
+      var reelSp = 960 * speedMul * emptyMul;
+      cl.y -= reelSp * dt;
+      for (var ri = 0; ri < cl.caught.length; ri++) {
+        cl.caught[ri].x = cl.x + cl.caught[ri].offX;
+        cl.caught[ri].y = cl.y + cl.caught[ri].offY;
       }
-      if (broken[0].x > A - 2.5) return { key: 'select', id: broken[0].id };
+      if (cl.y <= CLAW_HOME_Y) {
+        cl.y = CLAW_HOME_Y;
+        cl.state = 'swing';
+        cl.jaw = 1;
+        deliverCaught(w, evs);
+      }
     }
-    var miss = SF.missing(w, box);
-    var isMissing = function (t) { return !t.b && miss.some(function (m) { return m.k === t.k && m.c === t.c; }); };
-    if (miss.length) {
-      if (w.clip && w.clip.some(isMissing)) return { key: 'paste' };
-      if (sel.some(isMissing) || (sel.length && sel.some(function (t) { return lineFor(box, t) >= 0; }) && !(w.clip && w.clip.some(function (c) { return sel.some(function (t) { return same(c, t); }); })))) return { key: 'copy' };
-      var want = null;
-      w.toys.forEach(function (t) { if (lineFor(box, t) >= 0 && (!want || t.x > want.x)) want = t; });
-      if (want && w.sel.indexOf(want.id) < 0) return { key: 'select', id: want.id };
-    }
-    var next = SF.nextBox(w);
-    if (has('cut') && next) {
-      if (sel.length && sel.every(function (t) { return lineFor(box, t) < 0 && lineFor(next, t) >= 0; })) return { key: 'cut' };
-      var keep = null;
-      w.toys.forEach(function (t) { if (lineFor(box, t) < 0 && lineFor(next, t) >= 0 && t.x > A - 1 && (!keep || t.x > keep.x)) keep = t; });
-      if (keep && !(w.clip && w.clip.some(function (c) { return same(c, keep); }))) return { key: 'select', id: keep.id };
-    }
-    return null;
-  };
+  }
 
-  /* -------------------------------------------------------------- result */
-  SF.result = function (w) {
-    var L = w.L, stars = 3, par = L.par || 0;
-    if (w.misses > L.allow) stars--;
-    if (w.misses > L.allow * 2 + 2) stars--;
-    if (par && w.t > par) stars--;
-    stars = clamp(stars, 1, 3);
-    return { stars: stars, misses: w.misses, time: w.t, par: par, boxes: w.shipped, coins: w.coins + stars * 5, score: w.score, combo: w.bestCombo };
-  };
-  // A 0..1 outcome for the difficulty controller.
-  SF.outcome = function (w, r) {
-    if (w.rush) return clamp(w.shipped / 8, 0, 1);
-    return r.stars === 3 ? 1 : r.stars === 2 ? 0.7 : 0.35;
-  };
+  function step(w, dt, input) {
+    dt = clamp(dt || 0, 0, 0.05);
+    input = input || {};
+    var evs = [];
+    if (w.over) return evs;
 
-  /* ---------------------------------------------------------------- saves */
-  SF.SKINS = [
-    { id: 'orange', cost: 0, a: '#ff8a1f', b: '#ffd23f', c: '#3b4a6b' },
-    { id: 'mint', cost: 60, a: '#2fd6a3', b: '#e9fff7', c: '#25507a' },
-    { id: 'candy', cost: 120, a: '#ff6fb5', b: '#fff0f8', c: '#7a2d6b' },
-    { id: 'space', cost: 200, a: '#3b3fd6', b: '#7ef0ff', c: '#1b1f4b' },
-    { id: 'gold', cost: 320, a: '#ffc21f', b: '#fff6c8', c: '#8a5a00' },
-    { id: 'rainbow', cost: 500, a: '#ff4b5c', b: '#35d07f', c: '#3d8bff' }
-  ];
-  SF.STORE_KEY = 'factory3d';
-  SF.freshSave = function () {
-    var z = [];
-    for (var i = 0; i < SF.COUNT; i++) z.push(0);
-    return { v: 1, stars: z.slice(), best: z.slice(), coins: 0, skins: SF.SKINS.map(function (s, i) { return i === 0; }), skin: 0, rushBest: 0, coach: false };
-  };
-  // Anything odd (an old save, a hand-edited one) falls back to a fresh save, field by field.
-  SF.loadSave = function (raw) {
-    var s = SF.freshSave();
-    if (!raw || typeof raw !== 'object' || raw.v !== 1) return s;
-    var num = function (v, hi) { return typeof v === 'number' && v >= 0 && v <= hi && v === v ? Math.floor(v) : 0; };
-    if (Array.isArray(raw.stars)) for (var i = 0; i < SF.COUNT; i++) s.stars[i] = num(raw.stars[i], 3);
-    if (Array.isArray(raw.best)) for (var j = 0; j < SF.COUNT; j++) s.best[j] = num(raw.best[j], 1e7);
-    s.coins = num(raw.coins, 1e7);
-    if (Array.isArray(raw.skins)) for (var k = 1; k < SF.SKINS.length; k++) s.skins[k] = raw.skins[k] === true;
-    s.skin = s.skins[num(raw.skin, SF.SKINS.length - 1)] ? num(raw.skin, SF.SKINS.length - 1) : 0;
-    s.rushBest = num(raw.rushBest, 1e7);
-    s.coach = raw.coach === true;
+    w.time += dt;
+    if (w.fever > 0) {
+      w.fever = Math.max(0, w.fever - dt);
+      if (w.fever <= 0) evs.push({ type: 'feverEnd' });
+    }
+
+    // Decay visual lightning zaps & tossed rubber boots
+    for (var zi = w.zaps.length - 1; zi >= 0; zi--) {
+      w.zaps[zi].life -= dt;
+      if (w.zaps[zi].life <= 0) w.zaps.splice(zi, 1);
+    }
+    for (var bi = w.tossedBoots.length - 1; bi >= 0; bi--) {
+      var b = w.tossedBoots[bi];
+      b.vy += 1200 * dt;
+      b.x += b.vx * dt;
+      b.y += b.vy * dt;
+      b.rot += b.vrot * dt;
+      if (b.y > H + 100) w.tossedBoots.splice(bi, 1);
+    }
+
+    // Countdown timer
+    if (!w.demo) {
+      w.timeLeft = Math.max(0, w.timeLeft - dt);
+      if (w.timeLeft <= 0) {
+        // Wait briefly if claw is carrying a caught toy back up? No, score any carried toy cleanly!
+        if (w.claw.caught.length) deliverCaught(w, evs);
+        finishRound(w, evs);
+        return evs;
+      }
+    }
+
+    // Input processing (1-button drop!)
+    var held = !!input.drop;
+    var edge = (held && !w.prevPress) || !!input.dropPress;
+    w.prevPress = held;
+
+    if (w.demo) {
+      w.demoThink -= dt;
+      if (w.demoThink <= 0 && w.claw.state === 'swing') {
+        // Drop when over any good toy for lively title attract spectacle!
+        var hasTarget = w.toys.some(function (t) {
+          return !TOYS[t.kind].junk && Math.abs(t.x - w.claw.x) < 42;
+        });
+        if (hasTarget) {
+          dropClaw(w, evs, false);
+          w.demoThink = 0.85;
+        }
+      }
+    } else if (edge) {
+      dropClaw(w, evs, true);
+    }
+
+    stepConveyors(w, dt);
+    stepClaw(w, dt, evs);
+    stepGoldRain(w, dt, evs);
+    return evs;
+  }
+
+  function defaultSave() {
+    return {
+      v: SAVE_VERSION,
+      coins: 0,
+      stars: LEVELS.map(function () { return 0; }),
+      best: LEVELS.map(function () { return 0; }),
+      endlessBest: 0,
+      upg: { turbo: 0, grip: 0, magnet: 0, gold: 0 }
+    };
+  }
+
+  function loadSave(raw) {
+    var d = defaultSave();
+    if (!raw || typeof raw !== 'object' || raw.v !== SAVE_VERSION) return d;
+    d.coins = Math.max(0, raw.coins | 0);
+    d.endlessBest = Math.max(0, raw.endlessBest | 0);
+    if (Array.isArray(raw.stars)) {
+      for (var i = 0; i < LEVELS.length; i++) d.stars[i] = clamp(raw.stars[i] | 0, 0, 3);
+    }
+    if (Array.isArray(raw.best)) {
+      for (var j = 0; j < LEVELS.length; j++) d.best[j] = Math.max(0, raw.best[j] | 0);
+    }
+    if (raw.upg && typeof raw.upg === 'object') {
+      for (var k = 0; k < UPGRADES.length; k++) {
+        var uk = UPGRADES[k].key;
+        d.upg[uk] = clamp(raw.upg[uk] | 0, 0, 5);
+      }
+    }
+    return d;
+  }
+
+  function isUnlocked(save, idx) {
+    if (idx <= 0) return true;
+    if (idx >= LEVELS.length) return false;
+    return (save.stars[idx - 1] || 0) >= 1;
+  }
+
+  function nextLevel(save) {
+    for (var i = 0; i < LEVELS.length; i++) {
+      if ((save.stars[i] || 0) === 0) return i;
+    }
+    return LEVELS.length - 1;
+  }
+
+  function totalStars(save) {
+    var s = 0;
+    for (var i = 0; i < save.stars.length; i++) s += save.stars[i];
     return s;
-  };
-  SF.isOpen = function (save, i) { return i === 0 || (i > 0 && i < SF.COUNT && save.stars[i - 1] > 0); };
-  SF.rushOpen = function (save) { return save.stars[SF.RUSH_AFTER] > 0; };
-  SF.totalStars = function (save) { return save.stars.reduce(function (a, b) { return a + b; }, 0); };
-  SF.nextLevel = function (save) {
-    for (var i = 0; i < SF.COUNT; i++) if (!save.stars[i]) return i;
-    return SF.COUNT - 1;
-  };
-  // Writes a finished level into the save; returns what changed.
-  SF.apply = function (save, i, r) {
-    var prev = save.stars[i], prevBest = save.best[i];
-    var opened = !prev && i + 1 < SF.COUNT;
-    save.stars[i] = Math.max(prev, r.stars);
-    save.best[i] = Math.max(prevBest, r.score);
-    save.coins += r.coins;
-    return { stars: r.stars, coins: r.coins, best: r.score > prevBest && prevBest > 0, opened: opened, rushOpened: i === SF.RUSH_AFTER && !prev };
-  };
-  SF.applyRush = function (save, w) {
-    var prev = save.rushBest, coins = w.coins;
-    save.rushBest = Math.max(prev, w.score);
-    save.coins += coins;
-    return { coins: coins, best: w.score > prev && prev > 0, score: w.score };
-  };
-  SF.buy = function (save, i) {
-    var s = SF.SKINS[i];
-    if (!s) return 'none';
-    if (save.skins[i]) { save.skin = i; return 'wear'; }
-    if (save.coins < s.cost) return 'poor';
-    save.coins -= s.cost;
-    save.skins[i] = true;
-    save.skin = i;
-    return 'buy';
-  };
+  }
 
-  if (typeof module !== 'undefined' && module.exports) module.exports = SF;
-  else root.SF = SF;
-})(typeof window !== 'undefined' ? window : this);
+  function upgradeCost(save, key) {
+    var def = null;
+    for (var i = 0; i < UPGRADES.length; i++) if (UPGRADES[i].key === key) { def = UPGRADES[i]; break; }
+    if (!def) return -1;
+    var lv = save.upg[key] | 0;
+    if (lv >= def.costs.length) return -1;
+    return def.costs[lv];
+  }
+
+  function buyUpgrade(save, key) {
+    var cost = upgradeCost(save, key);
+    if (cost < 0) return 'max';
+    if (save.coins < cost) return 'poor';
+    save.coins -= cost;
+    save.upg[key] = (save.upg[key] | 0) + 1;
+    return 'buy';
+  }
+
+  function applyResult(save, res) {
+    save.coins += res.coins;
+    if (res.endless) {
+      if (res.score > save.endlessBest) save.endlessBest = res.score;
+    } else if (res.level >= 0 && res.level < LEVELS.length) {
+      if (res.stars > save.stars[res.level]) save.stars[res.level] = res.stars;
+      if (res.score > save.best[res.level]) save.best[res.level] = res.score;
+    }
+    return save;
+  }
+
+  function publicState(w, screen) {
+    return {
+      screen: screen,
+      phase: screen === 'play' || screen === 'pause' ? w.phase : screen,
+      paused: screen === 'pause',
+      level: w.level,
+      endless: w.endless,
+      time: +w.time.toFixed(3),
+      timeLeft: +w.timeLeft.toFixed(2),
+      score: w.score,
+      target: w.target,
+      stars: w.stars,
+      coins: w.coinsEarned,
+      combo: w.combo,
+      fever: w.fever > 0,
+      feverLeft: +w.fever.toFixed(2),
+      grabs: w.grabs,
+      drops: w.drops,
+      clawState: w.claw.state,
+      clawX: Math.round(w.claw.x),
+      clawY: Math.round(w.claw.y),
+      toys: w.toys.length,
+      atStart: w.atStart,
+      won: w.won
+    };
+  }
+
+  return {
+    W: W, H: H, RAIL_Y: RAIL_Y, CLAW_HOME_Y: CLAW_HOME_Y, FLOOR_Y: FLOOR_Y,
+    X_MIN: X_MIN, X_MAX: X_MAX,
+    SAVE_VERSION: SAVE_VERSION, FEVER_STREAK: FEVER_STREAK, FEVER_DUR: FEVER_DUR,
+    LANES: LANES, TOYS: TOYS, WINGS: WINGS, LEVELS: LEVELS, ENDLESS_CFG: ENDLESS_CFG, UPGRADES: UPGRADES,
+    create: create,
+    step: step,
+    dropClaw: dropClaw,
+    loadSave: loadSave,
+    isUnlocked: isUnlocked,
+    nextLevel: nextLevel,
+    totalStars: totalStars,
+    upgradeCost: upgradeCost,
+    buyUpgrade: buyUpgrade,
+    applyResult: applyResult,
+    publicState: publicState
+  };
+});

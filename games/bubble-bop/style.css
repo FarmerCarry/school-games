@@ -18,21 +18,21 @@ button, #scrGrip, #game.grab {
 #ui { position: fixed; left: 0; top: 0; width: 1280px; height: 720px; transform-origin: 0 0; pointer-events: none; z-index: 5; }
 #ui button { pointer-events: auto; }
 .screen { position: absolute; left: 0; top: 0; width: 1280px; height: 720px; }
-.screen[hidden], #hud[hidden], #ghost[hidden], .score[hidden], .newbest[hidden], .bb-btn[hidden], .halo[hidden] { display: none; }
+.screen[hidden], #hud[hidden], #ghost[hidden], .score[hidden], .newbest[hidden], .bb-btn[hidden], .halo[hidden], .party-hint[hidden] { display: none; }
 .screen.dim:not([hidden]) { display: flex; align-items: center; justify-content: center; background: rgba(28, 34, 80, 0.55); pointer-events: auto; }
 
 /* ------------------------------------------------------------- buttons */
 .bb-btn {
   position: relative; display: inline-flex; align-items: center; justify-content: center; padding: 0;
   font: inherit; font-weight: 700; color: #fff; background: #ff7eb6;
-  border: 5px solid var(--ink); border-radius: 999px; box-shadow: 0 7px 0 var(--ink);
+  border: 5px solid #1c2250; border-radius: 999px; box-shadow: 0 7px 0 #1c2250;
   transition: transform 0.08s ease, filter 0.08s ease;
 }
 .bb-btn svg { width: 54%; height: 54%; fill: currentColor; overflow: visible; pointer-events: none; }
 .bb-btn:hover { transform: translateY(-3px) scale(1.06); filter: brightness(1.06); }
-.bb-btn:active { transform: translateY(5px); box-shadow: 0 2px 0 var(--ink); }
+.bb-btn:active { transform: translateY(5px); box-shadow: 0 2px 0 #1c2250; }
 .bb-btn:focus-visible { outline: 6px solid #ffcc00; outline-offset: 5px; }
-.bb-round { width: 66px; height: 66px; background: #ffffff; color: var(--ink); }
+.bb-round { width: 66px; height: 66px; background: #fff; color: #1c2250; }
 .bb-round.big { width: 96px; height: 96px; }
 .bb-go { width: 150px; height: 150px; background: #3ddc84; }
 .bb-go svg, .bb-play svg { width: 58%; height: 58%; transform: translateX(7%); }
@@ -50,30 +50,32 @@ button, #scrGrip, #game.grab {
   direction: ltr; border-radius: 999px; background: rgba(28, 34, 80, 0.8); border: 4px solid #fff; color: #fff;
   font-size: 32px; font-weight: 700; pointer-events: none;
 }
-.chip svg { width: 40px; height: 40px; fill: #ffd23f; stroke: var(--ink); stroke-width: 4; }
+.chip svg { width: 40px; height: 40px; fill: #ffd23f; stroke: #1c2250; stroke-width: 4; }
 
 /* --------------------------------------------------------------- title */
 .logo { position: absolute; top: 14px; left: 0; right: 0; margin: 0; text-align: center; line-height: 1; pointer-events: none; }
 .logo span {
   display: block; font-weight: 700;
-  text-shadow: -5px -5px 0 var(--ink), 5px -5px 0 var(--ink), -5px 5px 0 var(--ink), 5px 5px 0 var(--ink),
-    0 -6px 0 var(--ink), 0 6px 0 var(--ink), -6px 0 0 var(--ink), 6px 0 0 var(--ink), 0 13px 0 var(--ink);
+  text-shadow: -5px -5px 0 #1c2250, 5px -5px 0 #1c2250, -5px 5px 0 #1c2250, 5px 5px 0 #1c2250,
+    0 -6px 0 #1c2250, 0 6px 0 #1c2250, -6px 0 0 #1c2250, 6px 0 0 #1c2250, 0 13px 0 #1c2250;
 }
-.logo .l1 { font-size: 96px; color: #ffffff; }
+.logo .l1 { font-size: 96px; color: #fff; }
 .logo .l2 { font-size: 150px; color: #ffd23f; margin-top: -34px; }
-.bb-play { position: absolute; left: 558px; top: 438px; width: 164px; height: 164px; background: #3ddc84; border-width: 7px; box-shadow: 0 10px 0 var(--ink); }
+.bb-play { position: absolute; left: 558px; top: 438px; width: 164px; height: 164px; background: #3ddc84; border-width: 7px; box-shadow: 0 10px 0 #1c2250; }
 .bb-play::after { inset: -20px; border-width: 9px; }
-.bb-party { position: absolute; left: 490px; top: 622px; width: 300px; height: 68px; padding: 0 22px; background: linear-gradient(180deg, #ffd23f 0%, #ff9f43 100%); color: var(--ink); font-size: 28px; letter-spacing: 0; white-space: nowrap; }
+.bb-party { position: absolute; left: 490px; top: 622px; width: 300px; height: 68px; padding: 0 22px; background: linear-gradient(180deg, #ffe55c 0%, #ff9f43 100%); color: #1c2250; font-size: 28px; letter-spacing: 0; white-space: nowrap; box-shadow: 0 7px 0 #1c2250, 0 0 22px rgba(255, 210, 63, 0.55); }
+.party-hint { margin: 0; font-size: 20px; font-weight: 700; color: #59628f; }
+.party-hint .sg-key { font-size: 16px; }
 .bb-side { position: absolute; top: 590px; width: 104px; height: 104px; }
 #btnCloset { left: 60px; background: #b48cff; }
-#btnTitleMap { left: 184px; background: #ffd23f; color: var(--ink); }
+#btnTitleMap { left: 184px; background: #ffd23f; color: #1c2250; }
 #btnHow { right: 60px; background: #4fd1ff; }
 
 /* --------------------------------------------------- how to hold cards */
 #scrGrip { background: rgba(28, 34, 80, 0.72); pointer-events: auto; }
 .grip-card {
   position: absolute; left: 300px; top: 26px; width: 680px; height: 510px; overflow: hidden; pointer-events: auto;
-  border: 7px solid var(--ink); border-radius: 36px; background: #c3e8ff; box-shadow: 0 11px 0 var(--ink);
+  border: 7px solid #1c2250; border-radius: 36px; background: #c3e8ff; box-shadow: 0 11px 0 #1c2250;
 }
 .grip-card img { display: block; width: 100%; height: 100%; pointer-events: none; }
 .halo {
@@ -98,32 +100,32 @@ button, #scrGrip, #game.grab {
 .isle:focus-visible { outline: 6px solid #ffcc00; outline-offset: 0; }
 .pebble {
   position: absolute; width: 62px; height: 62px; margin: -31px 0 0 -31px; padding: 0; border-radius: 50%;
-  background: #fff; color: var(--ink); border: 5px solid var(--ink); box-shadow: 0 5px 0 var(--ink);
+  background: #fff; color: #1c2250; border: 5px solid #1c2250; box-shadow: 0 5px 0 #1c2250;
   font: inherit; font-size: 32px; font-weight: 700; line-height: 1; direction: ltr; transition: transform 0.08s ease;
 }
 .pebble:hover { transform: translateY(-3px) scale(1.08); }
-.pebble:active { transform: translateY(3px); box-shadow: 0 2px 0 var(--ink); }
+.pebble:active { transform: translateY(3px); box-shadow: 0 2px 0 #1c2250; }
 .pebble:focus-visible { outline: 6px solid #ffcc00; outline-offset: 4px; }
-.pebble svg.ic { width: 70%; height: 70%; fill: #ffffff; }
+.pebble svg.ic { width: 70%; height: 70%; fill: #fff; }
 .pebble.party { background: #ffd23f; }
 .pebble .st { position: absolute; top: 56px; left: 50%; transform: translateX(-50%); display: flex; gap: 0; }
-.pebble .st svg { width: 17px; height: 17px; fill: rgba(255, 255, 255, 0.7); stroke: var(--ink); stroke-width: 6; }
+.pebble .st svg { width: 17px; height: 17px; fill: rgba(255, 255, 255, 0.7); stroke: #1c2250; stroke-width: 6; }
 .pebble .st svg.on { fill: #ffd23f; }
-.pebble .best { position: absolute; top: 60px; left: 50%; transform: translateX(-50%); padding: 0 8px; border-radius: 999px; background: #fff; border: 3px solid var(--ink); font-size: 18px; white-space: nowrap; }
+.pebble .best { position: absolute; top: 60px; left: 50%; transform: translateX(-50%); padding: 0 8px; border-radius: 999px; background: #fff; border: 3px solid #1c2250; font-size: 18px; white-space: nowrap; }
 .pebble.locked { background: #a9b0d4; color: #59628f; border-color: #59628f; box-shadow: 0 5px 0 #59628f; }
 .pebble.locked svg.ic { fill: #59628f; stroke: none; }
 .pebble.locked .st, .pebble.locked .best { display: none; }
 .pebble.done { background: #e9fff1; }
 .pebble[hidden], .isle[hidden] { display: none; }
 /* The big arrows that turn the map's two pages (worlds 1-5, worlds 6-11). */
-.page-btn { position: absolute; top: 188px; background: #ffd23f; color: #ffffff; }
+.page-btn { position: absolute; top: 188px; background: #ffd23f; color: #fff; }
 .page-btn svg { width: 62%; height: 62%; }
 #mapNext { left: 18px; }
 #mapPrev { right: 18px; }
 #mapPrev svg { transform: scaleX(-1); }
 
 /* --------------------------------------------------------------- pause */
-#scrPause .card { display: flex; flex-direction: column; align-items: center; gap: 28px; padding: 36px 56px; background: #ffffff; border: 7px solid var(--ink); border-radius: 44px; box-shadow: 0 11px 0 var(--ink); }
+#scrPause .card { display: flex; flex-direction: column; align-items: center; gap: 28px; padding: 36px 56px; background: #fff; border: 7px solid #1c2250; border-radius: 44px; box-shadow: 0 11px 0 #1c2250; }
 .row { display: flex; align-items: center; justify-content: center; gap: 34px; }
 #btnRestart { background: #ffd23f; }
 #btnMap, #resMap { background: #4fd1ff; color: #fff; }
@@ -131,19 +133,19 @@ button, #scrGrip, #game.grab {
 /* -------------------------------------------------------------- result */
 .card.result {
   position: absolute; left: 330px; top: 330px; width: 620px; height: 364px; display: flex; flex-direction: column; align-items: center; justify-content: space-evenly;
-  background: rgba(255, 255, 255, 0.96); border: 7px solid var(--ink); border-radius: 44px; box-shadow: 0 11px 0 var(--ink); pointer-events: auto; color: var(--ink);
+  background: rgba(255, 255, 255, 0.96); border: 7px solid #1c2250; border-radius: 44px; box-shadow: 0 11px 0 #1c2250; pointer-events: auto; color: #1c2250;
 }
 .stars3 { display: flex; gap: 18px; direction: ltr; }
-.stars3 svg { width: 104px; height: 104px; fill: #e3e6f3; stroke: var(--ink); stroke-width: 4; overflow: visible; }
+.stars3 svg { width: 104px; height: 104px; fill: #e3e6f3; stroke: #1c2250; stroke-width: 4; overflow: visible; }
 .stars3 svg.on { fill: #ffd23f; animation: bb-star 0.5s cubic-bezier(0.2, 1.8, 0.5, 1) both; }
 .stars3[hidden] { display: none; }
 @keyframes bb-star { from { transform: scale(0.3) rotate(-40deg); } to { transform: scale(1) rotate(0); } }
 .score { display: flex; align-items: center; gap: 26px; direction: ltr; }
-.score > b { font-size: 92px; line-height: 1; color: var(--ink); text-shadow: 0 5px 0 #ffd23f; }
+.score > b { font-size: 92px; line-height: 1; color: #1c2250; text-shadow: 0 5px 0 #ffd23f; }
 .score .best { display: flex; align-items: center; gap: 6px; font-size: 36px; color: #59628f; }
-.score .best svg, .newbest svg { width: 44px; height: 44px; fill: #ffd23f; stroke: var(--ink); stroke-width: 4; }
-.newbest { position: absolute; top: -34px; display: flex; align-items: center; gap: 8px; padding: 4px 20px 4px 14px; border-radius: 999px; background: #ff5d9e; color: #fff; border: 5px solid var(--ink); font-size: 26px; font-weight: 700; animation: bb-star 0.5s cubic-bezier(0.2, 1.8, 0.5, 1) both; }
-.gift { position: absolute; right: -150px; top: 60px; width: 150px; height: 170px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; background: #fff3b0; color: var(--ink); border-radius: 30px; font-size: 22px; animation: bb-star 0.5s cubic-bezier(0.2, 1.8, 0.5, 1) both; }
+.score .best svg, .newbest svg { width: 44px; height: 44px; fill: #ffd23f; stroke: #1c2250; stroke-width: 4; }
+.newbest { position: absolute; top: -34px; display: flex; align-items: center; gap: 8px; padding: 4px 20px 4px 14px; border-radius: 999px; background: #ff5d9e; color: #fff; border: 5px solid #1c2250; font-size: 26px; font-weight: 700; animation: bb-star 0.5s cubic-bezier(0.2, 1.8, 0.5, 1) both; }
+.gift { position: absolute; right: -150px; top: 60px; width: 150px; height: 170px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; background: #fff3b0; color: #1c2250; border-radius: 30px; font-size: 22px; animation: bb-star 0.5s cubic-bezier(0.2, 1.8, 0.5, 1) both; }
 .gift canvas { width: 116px; height: 116px; }
 #resAgain { background: #ffd23f; }
 
@@ -152,20 +154,20 @@ button, #scrGrip, #game.grab {
 #closetStars { left: 96px; }
 .closet-panel {
   position: absolute; left: 24px; top: 92px; width: 700px; padding: 16px 18px; display: flex; flex-direction: column; gap: 16px; pointer-events: auto;
-  background: rgba(255, 255, 255, 0.94); border: 7px solid var(--ink); border-radius: 40px; box-shadow: 0 11px 0 var(--ink);
+  background: rgba(255, 255, 255, 0.94); border: 7px solid #1c2250; border-radius: 40px; box-shadow: 0 11px 0 #1c2250;
 }
 /* 13 colours and 16 hats: seven to a row, every tile still a big button. */
 .shelf { display: grid; grid-template-columns: repeat(7, 84px); gap: 14px 12px; justify-content: center; }
 #colors { padding-bottom: 18px; border-bottom: 5px dashed #c8cfea; }
-.item { position: relative; width: 84px; height: 84px; border-radius: 24px; background: #eef1fb; color: var(--ink); box-shadow: 0 5px 0 var(--ink); }
+.item { position: relative; width: 84px; height: 84px; border-radius: 24px; background: #eef1fb; color: #1c2250; box-shadow: 0 5px 0 #1c2250; }
 .item canvas { width: 76px; height: 76px; }
 .item.on { background: #fff3b0; outline: 6px solid #ffcc00; outline-offset: 2px; }
 .item.locked { background: #d5d9ec; }
 .item.locked canvas { opacity: 0.3; filter: grayscale(1); }
-.item .need { position: absolute; bottom: -6px; left: 50%; transform: translateX(-50%); display: none; align-items: center; gap: 2px; padding: 0 8px 0 4px; border-radius: 999px; background: #fff; border: 3px solid var(--ink); font-size: 20px; line-height: 26px; direction: ltr; }
+.item .need { position: absolute; bottom: -6px; left: 50%; transform: translateX(-50%); display: none; align-items: center; gap: 2px; padding: 0 8px 0 4px; border-radius: 999px; background: #fff; border: 3px solid #1c2250; font-size: 20px; line-height: 26px; direction: ltr; }
 .item.locked .need { display: flex; }
-.item .need svg { width: 20px; height: 20px; fill: #ffd23f; stroke: var(--ink); stroke-width: 5; }
-.item .lockic { position: absolute; top: 6px; right: 6px; width: 26px; height: 26px; fill: var(--ink); display: none; }
+.item .need svg { width: 20px; height: 20px; fill: #ffd23f; stroke: #1c2250; stroke-width: 5; }
+.item .lockic { position: absolute; top: 6px; right: 6px; width: 26px; height: 26px; fill: #1c2250; display: none; }
 .item.locked .lockic { display: block; }
 
 /* ------------------------------------------------------------- HUD, coach */

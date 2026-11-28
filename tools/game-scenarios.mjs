@@ -275,22 +275,16 @@ export const scenarios = {
     for (const p of pts.slice(1)) await page.mouse.move(p.x, p.y, { steps: 4 });
     await page.mouse.up();
   }, '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.atStart`),
-  // Shortcut Factory 3D: a first visit starts hall 1-1 with a toy riding along the belt.
-  // Selecting a toy then pressing real Ctrl+C and Ctrl+V copies and pastes it onto the belt.
-  'shortcut-factory': defaults(['#btnPlay'], `${g}.state.screen === 'play' && ${g}.state.level === 0`, `[${g}.state.time,${g}.state.toys,${g}.state.clip,${g}.state.copies,${g}.state.pastes]`, async page => {
-      await page.keyboard.press('ArrowRight');
-      await page.keyboard.press('Control+KeyC');
-      await page.keyboard.press('Control+KeyV');
-    }, '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.copies === 0 && ${g}.state.pastes === 0 && ${g}.state.clip === 0`),
+  // Toy Claw Rush (shortcut-factory): 1-button factory claw over 3 conveyors. Space drops the claw.
+  'shortcut-factory': defaults(['#btnPlay'], `${g}.state.screen === 'play' && ${g}.state.level === 0`, `[${g}.state.time,${g}.state.clawX,${g}.state.clawY,${g}.state.drops,${g}.state.score]`, hold('Space', 140), '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.drops === 0 && ${g}.state.score === 0`),
   // Math Gates: a first visit starts level 1-1 in the middle lane. The crowd runs by itself;
   // only the child's keys (or mouse) change its lane. Restart begins the level again.
   'math-gates': defaults(['#btnPlay'], `${g}.state.screen === 'play'`, `[${g}.state.d,${g}.state.lane,${g}.state.count,${g}.state.t]`, hold('ArrowLeft'), '#btnPause', `${g}.state.screen === 'paused'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.attempt > 1 && ${g}.state.passed === 0 && ${g}.state.lane === 1`),
   // Splat Catapult: a first visit opens level 1-1 at the slingshot. Aim changes only when
   // the player drags or presses the aim keys; Restart returns to a fresh round with 0 shots.
   'splat-catapult': defaults(['#btnPlay'], `${g}.state.screen === 'play'`, `[${g}.state.time,${g}.state.aimAngle,${g}.state.shots,${g}.state.activeProjectile]`, hold('ArrowUp'), '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.shots === 0 && ${g}.state.time < 0.5`),
-  // Recess Kitchen 3D: a first visit opens School Snack Bar 1-1. Orders arrive by themselves, while
-  // Chef 1 moves only when the child holds movement keys; Restart resets chef position and score.
-  'recess-kitchen': defaults(['#btnPlay'], `${g}.state.screen === 'play' && ${g}.state.id === '1-1'`, `[${g}.state.time,${g}.state.timeLeft,${g}.state.chefs,${g}.state.orders]`, hold('ArrowRight'), '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.atStart && ${g}.state.served === 0`),
+  // Recess Kitchen: 1–2P 1-button spatula flip & bump party. Space leaps & spins Chef 1.
+  'recess-kitchen': defaults(['#btnPlay'], `${g}.state.screen === 'play'`, `[${g}.state.time,${g}.state.timeLeft,${g}.state.goals,${g}.state.jumps]`, hold('Space', 140), '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.atStart && ${g}.state.jumps === 0`),
   // Desk Karts: a first visit starts track 1-1. Rival karts race by themselves; Player 1's
   // kart accelerates from the grid only when the child holds gas or steers.
   'desk-karts': defaults(['#btnPlay'], `${g}.state.screen === 'play' && ${g}.state.id === '1-1'`, `[${g}.state.worldTime,${g}.state.p1Dist,${g}.state.karts]`, hold('ArrowUp'), '#btnPause', `${g}.state.screen === 'pause'`, '#btnRestart', `${g}.state.screen === 'play' && ${g}.state.p1Dist === 0 && ${g}.state.time === 0`),
@@ -334,7 +328,7 @@ const inputSnapshots = {
   'zoom-plus-one': `${g}.state.steps`,
   'sandwich-tower': `${g}.state.drops`, 'bonk-garden': `${g}.state.swings`, 'cloud-hop': `${g}.state.x`,
   'ball-storm': `${g}.state.paddle`, 'frog-pinball': `${g}.state.flipL`,
-  'shortcut-factory': `[${g}.state.copies,${g}.state.pastes]`,
+  'shortcut-factory': `${g}.state.drops`,
   'block-world': `${g}.player.x`, 'candy-rope': `${g}.world().ropes.filter(r => r.alive).length`,
   'maze-dash': `[${g}.state.px,${g}.state.py,${g}.state.dots]`,
   // Paint Grab's blob keeps moving; only the arrow keys or pointer set its steering target.
@@ -345,7 +339,7 @@ const inputSnapshots = {
   'steady-hand': `${g}.state.dragged`,
   'math-gates': `${g}.state.lane`,
   'splat-catapult': `${g}.state.aimAngle`,
-  'recess-kitchen': `${g}.state.chefs[0].x`,
+  'recess-kitchen': `${g}.state.jumps`,
   'desk-karts': `${g}.state.p1Dist`,
   'toy-castle': `${g}.state.p1Spawned`,
   'magic-crayon': `${g}.state.rolling`,
@@ -394,14 +388,14 @@ const inputSeen = {
   'keyboard-obby': `${g}.state.hops > sgInput.before`,
   // A spark sent home after a touch moves too; only a real drag adds to how far it was dragged.
   'steady-hand': `${g}.state.dragged > sgInput.before + 20`,
-  // The belt moves the toys by itself; only Ctrl+C then Ctrl+V pastes a copy onto the belt.
-  'shortcut-factory': `${g}.state.pastes > sgInput.before[1]`,
+  // The conveyors move by themselves; only Space/click drops the claw.
+  'shortcut-factory': `${g}.state.drops > sgInput.before`,
   // Egg Rush runners jog forward by themselves; only steering right moves p1 sideways.
   'egg-rush': `${g}.state.p1.x > sgInput.before + 0.05`,
   // The crowd runs forward by itself; only the child's keys or mouse move it to another lane.
   'math-gates': `${g}.state.lane !== sgInput.before`,
   'splat-catapult': `${g}.state.aimAngle > sgInput.before`,
-  'recess-kitchen': `${g}.state.chefs[0].x > sgInput.before`,
+  'recess-kitchen': `${g}.state.jumps > sgInput.before`,
   'desk-karts': `${g}.state.p1Dist > sgInput.before`,
   'toy-castle': `${g}.state.p1Spawned > sgInput.before`,
   'magic-crayon': `${g}.state.rolling === true`,
@@ -430,7 +424,7 @@ const heldKeys = {
   // Level 1-1 always starts with F: the key goes down once (the hero hops) and stays down
   // until the hop is seen, so a slow software-rendered frame cannot miss it.
   'keyboard-obby': 'KeyF',
-  'splat-catapult': 'ArrowUp', 'recess-kitchen': 'ArrowRight', 'desk-karts': 'ArrowUp',
+  'splat-catapult': 'ArrowUp', 'recess-kitchen': 'Space', 'shortcut-factory': 'Space', 'desk-karts': 'ArrowUp',
   'toy-castle': 'Digit1', 'magic-crayon': 'Space', 'juicy-drop': 'Space',
   'robo-swarm': 'ArrowRight', 'balloon-blast': 'ArrowRight', 'zoom-plus-one': 'ArrowUp',
   'sandwich-tower': 'Space', 'bonk-garden': 'KeyS', 'cloud-hop': 'ArrowRight', 'ball-storm': 'ArrowRight', 'frog-pinball': 'ArrowLeft'

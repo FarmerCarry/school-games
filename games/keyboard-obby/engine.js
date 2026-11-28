@@ -11,6 +11,7 @@
  * the key tops at 0. */
 (function () {
   'use strict';
+  var _M=Math,_sn=_M.sin,_cs=_M.cos,_mn=_M.min,_mx=_M.max,_ab=_M.abs,_fl=_M.floor,_rd=_M.round,_sq=_M.sqrt,_PI=_M.PI;
   var KO = window.KO = window.KO || {};
   KO.TIERS = 5;
   KO.KB_W = 15; KO.KB_ROWS = 5;
@@ -148,7 +149,7 @@
     par: [2.8, 2.2, 1.75, 1.4, 1.15]               // s per key for the time star
   };
   KO.HARDER = { rise: 1, crumble: -1, sink: -1, deep: 1, bump: 1, par: -1 };
-  function tierOf(t) { t = Math.round(Number(t)); return t >= 1 && t <= KO.TIERS ? t : 1; }
+  function tierOf(t) { t = _rd(Number(t)); return t >= 1 && t <= KO.TIERS ? t : 1; }
   KO.tierOf = tierOf;
   // opts: { tier, rise } - rise (from Kit.dda's level in game.js) may replace the tier's rise.
   KO.tuneAt = function (opts) {
@@ -171,6 +172,9 @@
   KO.QUEUE = 3;           // correct keys typed ahead of the hero
   KO.BAR_HIT = 0.44;      // a bar this close (key units) bonks a hero standing in its row
   KO.MERCY = 3;           // falls from one checkpoint before the hazards ease off one tier
+  KO.JET_STREAK = 5;      // clean consecutive keys to ignite the Streak Jetpack
+  KO.JET_FREEZE = 2;      // s the jelly freezes on a jetpack burst
+  KO.JET_COINS = 2;       // bonus coins awarded on each jetpack ignition
   KO.jellyY = function (h) { return KO.JELLY_LOW + KO.JELLY_SPAN * clamp(h, 0, 1); };
   KO.hopTime = function (d) { return clamp(0.3 + 0.05 * d, 0.3, 0.68); };
   KO.hopHeight = function (d) { return 0.75 + 0.17 * d; };
@@ -187,11 +191,11 @@
       return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
   };
-  function pick(rand, list) { return list[Math.floor(rand() * list.length)]; }
+  function pick(rand, list) { return list[_fl(rand() * list.length)]; }
   function unique(list) { var out = []; list.forEach(function (c) { if (out.indexOf(c) < 0) out.push(c); }); return out; }
   function count(list, c) { var n = 0; for (var i = 0; i < list.length; i++) if (list[i] === c) n++; return n; }
   function tripleAt(seq, i) {
-    for (var j = Math.max(0, i - 2); j <= i; j++) if (j + 2 < seq.length && seq[j] === seq[j + 1] && seq[j] === seq[j + 2]) return true;
+    for (var j = _mx(0, i - 2); j <= i; j++) if (j + 2 < seq.length && seq[j] === seq[j + 1] && seq[j] === seq[j + 2]) return true;
     return false;
   }
 
@@ -211,7 +215,7 @@
     if (pool.length + fresh.length <= n) pool.forEach(function (c) {
       if (seq.indexOf(c) >= 0) return;
       for (var tries = 0; tries < 200; tries++) {
-        var i = 2 * fresh.length + Math.floor(rand() * (seq.length - 2 * fresh.length)), old = seq[i];
+        var i = 2 * fresh.length + _fl(rand() * (seq.length - 2 * fresh.length)), old = seq[i];
         if (count(seq, old) < 2) continue;
         seq[i] = c;
         if (!tripleAt(seq, i)) return;
@@ -251,7 +255,7 @@
       for (var attempt = 0; attempt < 60 && !kind; attempt++) {
         var k = {}, left = cand.slice(), ok = true, nc = spec.crumble || 0;
         for (i = 0; i < nc + ns && left.length; i++) {
-          var j = Math.floor(rand() * left.length);
+          var j = _fl(rand() * left.length);
           k[left[j]] = i < nc ? 'crumble' : 'sink';
           left.splice(j, 1);
         }
@@ -261,9 +265,9 @@
     }
     kind = kind || {};
     // Checkpoints: about every five keys, on a plain key, never the last one.
-    var cps = [], m = Math.floor((n - 1) / 5);
+    var cps = [], m = _fl((n - 1) / 5);
     for (i = 1; i <= m; i++) {
-      var want = Math.round(n * i / (m + 1)) - 1, at = -1;
+      var want = _rd(n * i / (m + 1)) - 1, at = -1;
       // Not on the goal key either (its flag stands there), unless the path has no other key.
       for (var strict = 0; strict < 2 && at < 0; strict++) for (var d = 0; d < n && at < 0; d++) {
         [want - d, want + d].forEach(function (x) {
@@ -283,17 +287,17 @@
     // A key may hold more coins than one: each landing on it picks one up.
     var free = spots.filter(function (c) { return gems.indexOf(c) < 0; });
     if (!free.length) free = spots.slice();
-    for (i = free.length - 1; i > 0; i--) { var r = Math.floor(rand() * (i + 1)), tmp = free[i]; free[i] = free[r]; free[r] = tmp; }
+    for (i = free.length - 1; i > 0; i--) { var r = _fl(rand() * (i + 1)), tmp = free[i]; free[i] = free[r]; free[r] = tmp; }
     for (i = 0; i < (spec.coins || 0) && free.length; i++) coins.push(free[i % free.length]);
     // Bumper bars sweep along rows the path uses (never the space row), busiest rows first.
     var rows = [0, 1, 2, 3].map(function (r) { return { r: r, n: path.filter(function (c) { return KO.KEY[c].row === r; }).length }; })
       .filter(function (x) { return x.n > 0; }).sort(function (a, b) { return b.n - a.n || a.r - b.r; });
     var bumpers = [];
     for (i = 0; i < (spec.bump || 0) && rows.length; i++) {
-      bumpers.push({ row: rows[i % rows.length].r, speed: Math.round((0.85 + rand() * 0.3) * 100) / 100, phase: Math.round(rand() * 200) / 100 });
+      bumpers.push({ row: rows[i % rows.length].r, speed: _rd((0.85 + rand() * 0.3) * 100) / 100, phase: _rd(rand() * 200) / 100 });
     }
     var sinkPhase = {};
-    for (var c in kind) if (kind[c] === 'sink') sinkPhase[c] = Math.round(rand() * 100) / 100;
+    for (var c in kind) if (kind[c] === 'sink') sinkPhase[c] = _rd(rand() * 100) / 100;
     return { w: w, l: l, id: KO.levelId(w, l), lang: lang, name: KO.WORLDS[w].name, path: path, words: words, start: 'Space',
       kind: kind, sinkPhase: sinkPhase, cps: cps, coins: coins, gems: gems, bumpers: bumpers };
   };
@@ -304,8 +308,9 @@
     var w = {
       L: L, tune: tune, tier: tune.tier, n: L.path.length, t: 0, anim: 0, started: false, done: false,
       next: 0, at: -1, cp: -1, queue: [], jelly: 0, combo: 0, bestCombo: 0,
+      jet: false, jellyFreeze: 0, jetBursts: 0, runTimes: [],
       mistakes: 0, falls: 0, bonks: 0, hops: 0, presses: 0, cpFalls: 0, mercy: 0, coins: 0, gems: 0, coinsLeft: {}, gemsLeft: {},
-      par: Math.round((3 + L.path.length * tune.par + sinks * 1.2) * 10) / 10,
+      par: _rd((3 + L.path.length * tune.par + sinks * 1.2) * 10) / 10,
       keys: {}, bars: L.bumpers.map(function (b) { return { row: b.row, speed: b.speed, phase: b.phase, x: 0, z: b.row + 0.5 }; }),
       hero: { x: 0, y: 0, z: 0, phase: 'stand', t: 0, hop: null, face: 0, safe: 0, cause: '', push: 0, from: null, splashed: false },
       ev: []
@@ -393,10 +398,19 @@
       w.next++; w.presses++; w.combo++;
       if (w.combo > w.bestCombo) w.bestCombo = w.combo;
       w.ev.push({ t: 'ok', step: w.next - 1, code: code, combo: w.combo });
+      if (w.combo >= KO.JET_STREAK) {
+        w.jet = true;
+        if (w.combo % KO.JET_STREAK === 0) {
+          w.jellyFreeze = KO.JET_FREEZE;
+          w.coins += KO.JET_COINS;
+          w.jetBursts++;
+          w.ev.push({ t: 'jetpack', combo: w.combo, coins: KO.JET_COINS, freeze: KO.JET_FREEZE, x: h.x, y: h.y, z: h.z });
+        }
+      }
       if (h.phase === 'stand' || h.phase === 'oops' || h.phase === 'wait') go(w);
       return 'hop';
     }
-    w.mistakes++; w.combo = 0;
+    w.mistakes++; w.combo = 0; w.jet = false;
     w.ev.push({ t: 'wrong', code: code, want: want, x: h.x, y: h.y, z: h.z });
     if (h.phase === 'stand' || h.phase === 'oops') { h.phase = 'oops'; h.t = 0; }
     return 'wrong';
@@ -406,7 +420,7 @@
     var h = w.hero;
     if (!w.queue.length) { if (h.phase === 'wait') h.phase = 'stand'; return; }
     var step = w.queue[0], code = w.L.path[step];
-    var k = KO.KEY[code], from = { x: h.x, y: h.y, z: h.z }, dx = k.cx - h.x, dz = k.cz - h.z, d = Math.sqrt(dx * dx + dz * dz);
+    var k = KO.KEY[code], from = { x: h.x, y: h.y, z: h.z }, dx = k.cx - h.x, dz = k.cz - h.z, d = _sq(dx * dx + dz * dz);
     if (!canLand(w, code, KO.hopTime(d))) {
       if (h.phase !== 'wait') { h.phase = 'wait'; h.t = 0; w.ev.push({ t: 'wait', code: code }); }
       return;
@@ -423,6 +437,9 @@
     var h = w.hero, hop = h.hop, code = hop.code, k = w.keys[code];
     w.at = hop.step; h.hop = null; h.phase = 'stand'; h.t = 0;
     h.x = KO.KEY[code].cx; h.z = KO.KEY[code].cz; h.y = KO.keyY(w, code);
+    var cs = _mx(1, _rd(w.t * 100));
+    if (w.at > 0 && w.runTimes[w.at - 1] && cs <= w.runTimes[w.at - 1]) cs = w.runTimes[w.at - 1] + 1;
+    w.runTimes[w.at] = cs;
     w.ev.push({ t: 'land', step: w.at, code: code, d: hop.d, x: h.x, y: h.y, z: h.z, chain: w.queue.length > 0 });
     if (w.coinsLeft[code] > 0) { w.coinsLeft[code]--; w.coins++; w.ev.push({ t: 'coin', code: code, n: w.coins, left: w.coinsLeft[code], x: h.x, y: h.y, z: h.z }); }
     if (w.gemsLeft[code] > 0) { w.gemsLeft[code]--; w.gems++; w.ev.push({ t: 'gem', code: code, n: w.gems, x: h.x, y: h.y, z: h.z }); }
@@ -441,12 +458,12 @@
   // Into the jelly: the hero splashes and bounces back to the last checkpoint.
   function fall(w, cause, push) {
     var h = w.hero;
-    w.falls++; w.combo = 0; w.cpFalls++;
+    w.falls++; w.combo = 0; w.jet = false; w.cpFalls++;
     // Never stuck: falling again and again from one checkpoint makes the hazards (not the
     // time star) one tier gentler for the rest of the level.
     if (w.cpFalls >= KO.MERCY && w.tune.tier > 1) {
       var gentler = KO.tuneAt({ tier: w.tune.tier - 1 });
-      gentler.rise = Math.min(w.tune.rise, gentler.rise);
+      gentler.rise = _mn(w.tune.rise, gentler.rise);
       w.tune = gentler; w.cpFalls = 0; w.mercy++;
       w.ev.push({ t: 'mercy', tier: gentler.tier });
     }
@@ -471,40 +488,41 @@
       if (k.state === 'shake' && k.t >= w.tune.crumble) { k.state = 'drop'; k.t = 0; w.ev.push({ t: 'crumble', code: code }); }
       else if (k.state === 'drop') { k.y = -6 * k.t * k.t; if (k.y < -3.2) { k.y = -3.2; k.state = 'gone'; k.t = 0; } }
       else if (k.state === 'gone' && k.t >= 3.5) { k.state = 'rise'; k.t = 0; }
-      else if (k.state === 'rise') { k.y = -3.2 * (1 - Math.min(1, k.t / 0.7)); if (k.t >= 0.7) { k.state = 'solid'; k.y = 0; } }
-      else if (k.state === 'pop') { k.y = Math.min(0, k.y + dt * 14); if (k.y >= 0) { k.state = 'solid'; k.y = 0; } }
+      else if (k.state === 'rise') { k.y = -3.2 * (1 - _mn(1, k.t / 0.7)); if (k.t >= 0.7) { k.state = 'solid'; k.y = 0; } }
+      else if (k.state === 'pop') { k.y = _mn(0, k.y + dt * 14); if (k.y >= 0) { k.state = 'solid'; k.y = 0; } }
     }
     if (w.done) { h.t += dt; return w; }
     if (w.started) w.t += dt;
     if (h.safe > 0) h.safe -= dt;
-    if (w.started && h.phase !== 'fall' && h.phase !== 'back') w.jelly = Math.min(1, w.jelly + w.tune.rise * dt);
+    if (w.jellyFreeze > 0) w.jellyFreeze = _mx(0, w.jellyFreeze - dt);
+    if (w.started && h.phase !== 'fall' && h.phase !== 'back' && w.jellyFreeze <= 0) w.jelly = _mn(1, w.jelly + w.tune.rise * dt);
     h.t += dt;
     if (h.phase === 'hop') {
-      var hop = h.hop, p = Math.min(1, h.t / hop.dur), K = KO.KEY[hop.code], y1 = KO.keyY(w, hop.code);
+      var hop = h.hop, p = _mn(1, h.t / hop.dur), K = KO.KEY[hop.code], y1 = KO.keyY(w, hop.code);
       h.x = hop.from.x + (K.cx - hop.from.x) * p;
       h.z = hop.from.z + (K.cz - hop.from.z) * p;
       h.y = hop.from.y + (y1 - hop.from.y) * p + hop.lift * 4 * p * (1 - p);
       if (p >= 1) land(w);
     } else if (h.phase === 'fall') {
-      var jy = KO.jellyY(w.jelly), q = Math.min(1, h.t / KO.FALL_T);
+      var jy = KO.jellyY(w.jelly), q = _mn(1, h.t / KO.FALL_T);
       h.y = h.from.y + (jy - 0.2 - h.from.y) * q * q;
-      h.x = h.from.x + h.push * Math.sin(q * Math.PI / 2);
+      h.x = h.from.x + h.push * _sn(q * _PI / 2);
       if (!h.splashed && h.y <= jy) { h.splashed = true; w.ev.push({ t: 'splash', x: h.x, y: jy, z: h.z, cause: h.cause }); }
       if (q >= 1) {
         h.splashed = false;
         // Every crumbly key comes back, and the jelly settles lower before the bounce.
         for (code in w.keys) restore(w, code);
-        w.jelly = Math.min(w.jelly, 0.3);
+        w.jelly = _mn(w.jelly, 0.3);
         w.at = w.cp;
         h.phase = 'back'; h.t = 0; h.from = { x: h.x, y: h.y, z: h.z };
       }
     } else if (h.phase === 'bonk') {
       // Boing: up in the air (the bar sweeps by underneath) and down on the same key.
-      var bc = KO.standCode(w), bq = Math.min(1, h.t / KO.BONK_T);
+      var bc = KO.standCode(w), bq = _mn(1, h.t / KO.BONK_T);
       h.y = KO.keyY(w, bc) + 1.5 * 4 * bq * (1 - bq);
       if (bq >= 1) { h.phase = 'stand'; h.t = 0; h.safe = 1; h.y = KO.keyY(w, bc); go(w); }
     } else if (h.phase === 'back') {
-      var c = KO.standCode(w), B = KO.KEY[c], r = Math.min(1, h.t / KO.BACK_T), ty = KO.keyY(w, c);
+      var c = KO.standCode(w), B = KO.KEY[c], r = _mn(1, h.t / KO.BACK_T), ty = KO.keyY(w, c);
       h.x = h.from.x + (B.cx - h.from.x) * r;
       h.z = h.from.z + (B.cz - h.from.z) * r;
       h.y = h.from.y + (ty - h.from.y) * r + 2.6 * 4 * r * (1 - r);
@@ -526,8 +544,8 @@
         else if (h.safe <= 0) {
           for (var i = 0; i < w.bars.length; i++) {
             var b = w.bars[i];
-            if (b.on && b.row === row && Math.abs(b.x - h.x) < KO.BAR_HIT) {
-              h.phase = 'bonk'; h.t = 0; w.bonks++; w.combo = 0;
+            if (b.on && b.row === row && _ab(b.x - h.x) < KO.BAR_HIT) {
+              h.phase = 'bonk'; h.t = 0; w.bonks++; w.combo = 0; w.jet = false;
               w.ev.push({ t: 'bonk', x: h.x, y: h.y, z: h.z, bar: i });
               break;
             }
@@ -539,22 +557,54 @@
   };
   // How far along the path the hero is, 0..1.
   KO.progress = function (w) { return w.n ? (w.at + 1) / w.n : 0; };
+  // Best-run ghost helpers: compact centisecond hop timestamps per level.
+  KO.ghostKey = function (L) { return L.id + (L.words && L.words.length ? '_' + L.lang : ''); };
+  KO.sanitizeGhost = function (raw, n) {
+    if (!Array.isArray(raw) || raw.length !== n || n <= 0) return null;
+    var out = [], prev = 0;
+    for (var i = 0; i < n; i++) {
+      var v = raw[i];
+      if (typeof v !== 'number' || _fl(v) !== v || v < 1 || v > 3600000 || v < prev) return null;
+      out.push(v); prev = v;
+    }
+    return out;
+  };
+  // Interpolates the ghost keycap position along level L at time t (seconds).
+  KO.ghostAt = function (L, times, t) {
+    if (!L || !times || times.length !== L.path.length || !(t >= 0)) return null;
+    var n = times.length, cs = t * 100, prev = L.start, t0 = 0;
+    for (var i = 0; i < n; i++) {
+      var cur = L.path[i], t1 = times[i];
+      if (cs <= t1) {
+        var A = KO.KEY[prev], B = KO.KEY[cur], dx = B.cx - A.cx, dz = B.cz - A.cz, d = _sq(dx * dx + dz * dz);
+        var dur = _mn(_mx(1, t1 - t0), KO.hopTime(d) * 100), tHop = t1 - dur;
+        var face = d > 0.05 ? Math.atan2(dx, dz) : 0;
+        if (cs < tHop) return { x: A.cx, y: 0, z: A.cz, face: face, step: i - 1, hopping: false, done: false, progress: i / n };
+        var p = clamp((cs - tHop) / _mx(1, dur), 0, 1);
+        return { x: A.cx + dx * p, y: KO.hopHeight(d) * 4 * p * (1 - p), z: A.cz + dz * p, face: face, step: i, hopping: true, done: false, progress: (i + p) / n };
+      }
+      prev = cur; t0 = t1;
+    }
+    var G = KO.KEY[L.path[n - 1]];
+    return { x: G.cx, y: 0, z: G.cz, face: 0, step: n - 1, hopping: false, done: true, progress: 1 };
+  };
 
   /* ------------------------------------------------------ stars and DDA */
-  KO.allowed = function (n) { return Math.max(1, Math.floor(n / 8)); };
+  KO.allowed = function (n) { return _mx(1, _fl(n / 8)); };
   KO.result = function (w) {
-    return { id: w.L.id, n: w.n, time: Math.round(w.t * 10) / 10, par: w.par, mistakes: w.mistakes, falls: w.falls, bonks: w.bonks, coins: w.coins, gems: w.gems,
-      acc: Math.round(w.n / Math.max(1, w.n + w.mistakes) * 1000) / 1000, bestCombo: w.bestCombo, tier: w.tier, mercy: w.mercy };
+    return { id: w.L.id, n: w.n, time: _rd(w.t * 10) / 10, par: w.par, mistakes: w.mistakes, falls: w.falls, bonks: w.bonks, coins: w.coins, gems: w.gems,
+      acc: _rd(w.n / _mx(1, w.n + w.mistakes) * 1000) / 1000, bestCombo: w.bestCombo, tier: w.tier, mercy: w.mercy,
+      jetBursts: w.jetBursts || 0, times: w.runTimes.length === w.n ? w.runTimes.slice() : null };
   };
   // Finishing earns a star, one more for few wrong keys, one more for beating the time.
   KO.stars = function (r) { return 1 + (r.mistakes <= KO.allowed(r.n) ? 1 : 0) + (r.time <= r.par ? 1 : 0); };
   // 0..1 for Kit.dda: right keys, pace and staying out of the jelly.
   KO.outcome = function (r) {
-    var x = 0.45 * r.acc + 0.3 * Math.min(1, r.par / Math.max(0.1, r.time)) + 0.25 * Math.max(0, 1 - r.falls / 4);
-    return Math.round(clamp(x, 0, 1) * 1000) / 1000;
+    var x = 0.45 * r.acc + 0.3 * _mn(1, r.par / _mx(0.1, r.time)) + 0.25 * _mx(0, 1 - r.falls / 4);
+    return _rd(clamp(x, 0, 1) * 1000) / 1000;
   };
   // Coins a finished level pays: the coins picked up, 5 per gem and 3 per new star.
-  KO.payout = function (r, newStars) { return r.coins + 5 * r.gems + 3 * Math.max(0, newStars | 0); };
+  KO.payout = function (r, newStars) { return r.coins + 5 * r.gems + 3 * _mx(0, newStars | 0); };
 
   /* ---------------------------------------------------------------- shop */
   KO.COLORS = [
@@ -585,7 +635,7 @@
     return { v: 1, lang: 'ar', stars: stars, best: best, coins: 0, colors: KO.COLORS.map(function (c, i) { return i === 0; }),
       hats: KO.HATS.map(function (h, i) { return i === 0; }), color: 0, hat: 0, coach: false };
   };
-  function int(v, lo, hi) { return typeof v === 'number' && Math.floor(v) === v && v >= lo && v <= hi; }
+  function int(v, lo, hi) { return typeof v === 'number' && _fl(v) === v && v >= lo && v <= hi; }
   // Every field is checked: an old, damaged or hand-edited save always loads as a playable one.
   KO.loadSave = function (raw) {
     var s = KO.freshSave();
@@ -633,13 +683,13 @@
   };
   // Records a finished level; returns what changed for the celebration.
   KO.apply = function (s, w, l, r) {
-    var stars = KO.stars(r), before = s.stars[w][l], tenths = Math.max(1, Math.round(r.time * 10)), nx = KO.after(w, l);
+    var stars = KO.stars(r), before = s.stars[w][l], tenths = _mx(1, _rd(r.time * 10)), nx = KO.after(w, l);
     var wasOpen = nx ? KO.isOpen(s, nx.w, nx.l) : true;
-    var out = { stars: stars, before: before, newStars: Math.max(0, stars - before), best: !s.best[w][l] || tenths < s.best[w][l], prevBest: s.best[w][l], coins: 0, opened: false };
+    var out = { stars: stars, before: before, newStars: _mx(0, stars - before), best: !s.best[w][l] || tenths < s.best[w][l], prevBest: s.best[w][l], coins: 0, opened: false };
     if (stars > before) s.stars[w][l] = stars;
-    if (out.best) s.best[w][l] = Math.min(36000, tenths);
+    if (out.best) s.best[w][l] = _mn(36000, tenths);
     out.coins = KO.payout(r, out.newStars);
-    s.coins = Math.min(999999, s.coins + out.coins);
+    s.coins = _mn(999999, s.coins + out.coins);
     out.opened = !!nx && !wasOpen && KO.isOpen(s, nx.w, nx.l);
     return out;
   };

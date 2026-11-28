@@ -4,6 +4,8 @@
 (function () {
   'use strict';
   var DK = window.DK;
+  var M = Math, abs = M.abs, min = M.min, max = M.max, flr = M.floor, sin = M.sin, cos = M.cos, PI = M.PI; function ran() { return M.random(); }
+
   var W = 1280, H = 720;
   var store = Kit.store('drift-king');
   var GIFT_MS = 8 * 60 * 1000;
@@ -12,8 +14,8 @@
   function savedNumber(value, fractional) {
     var n = typeof value === 'number' || typeof value === 'string' ? Number(value) : 0;
     if (!isFinite(n) || n < 0) return 0;
-    n = Math.min(n, Number.MAX_SAFE_INTEGER);
-    return fractional ? n : Math.floor(n);
+    n = min(n, Number.MAX_SAFE_INTEGER);
+    return fractional ? n : flr(n);
   }
   function savedIds(value, known) {
     return Array.isArray(value) ? value.filter(function (id, i) {
@@ -123,9 +125,9 @@
   }
   function missionHTML(list, st, just) {
     return list.map(function (m) {
-      var v = Math.min(m.n, missionValue(m, st));
+      var v = min(m.n, missionValue(m, st));
       var done = save.done.indexOf(m.id) >= 0;
-      var pct = done ? 100 : Math.round(v / m.n * 100);
+      var pct = done ? 100 : M.round(v / m.n * 100);
       return '<div class="mis' + (done ? ' done' : '') + (just && just.indexOf(m.id) >= 0 ? ' just' : '') + '"><span class="chk"></span><div class="mt">' + m.text +
         (m.n > 1 && !done && m.type !== 'zone' && !m.noCount ? ' <span dir="ltr">(' + v + '/' + m.n + ')</span>' : '') +
         '<div class="mb"><i style="width:' + pct + '%"></i></div></div><span class="mr"><i class="coin sm"></i><span dir="ltr">' + (done ? '+' : '') + m.r + '</span></span></div>';
@@ -133,8 +135,10 @@
   }
 
   /* ------------------------------------------------------------ canvas */
-  var canvas = document.getElementById('c');
-  var ui = document.getElementById('ui');
+  function $(id) { return document.getElementById(id); }
+  function setT(id, v) { $(id).textContent = v; }
+  var canvas = $('c');
+  var ui = $('ui');
   var view = Kit.fit(canvas, W, H, {
     onResize: function (v) {
       var r = canvas.style;
@@ -148,7 +152,7 @@
   // Confetti gets its own layer above the DOM panels, so the big rewards
   // (new best, gift, new car) rain over the panel instead of behind it.
   // Small flat pieces need no HiDPI pixels.
-  var fxCanvas = document.getElementById('fx');
+  var fxCanvas = $('fx');
   var fxView = Kit.fit(fxCanvas, W, H, { maxDpr: 1 }), fx = fxView.ctx;
   canvas.addEventListener('contextrestored', view.resize);
   fxCanvas.addEventListener('contextrestored', fxView.resize);
@@ -161,11 +165,16 @@
     mode: 'title', time: 0, road: null, car: null, model: DK.carById(save.car),
     cam: { x: 0, y: 0, S: 50 }, shake: Kit.shake(), parts: [], popups: [],
     skids: { d: new Float32Array(900 * 4), cap: 900, n: 0, head: 0 },
-    carVis: { yaw: Math.PI, pitch: 0, roll: 0, sq: 1, sqv: 0 },
-    skyDist: 0, bestFlag: null, groundUnder: true, pal: null
+    carVis: { yaw: PI, pitch: 0, roll: 0, sq: 1, sqv: 0 },
+    skyDist: 0, bestFlag: null, groundUnder: true, pal: null, turbo: 0, ghost: null, run: null
   };
   window.__game = G;
   var run = null;          // per-run stats
+  var GHOST_HZ = 5, GHOST_MAX = 600, ghostRec = [], ghostData = null;
+  function loadGhost() {
+    var g = store.get('ghost', null);
+    ghostData = g && Array.isArray(g.d) && g.d.length >= 4 && g.d.length % 2 === 0 ? g : null;
+  }
   var armed = false;       // hold input must be released once after start
   var mouseDown = false;
   var overT = 0, fallT = 0, poofed = false;
@@ -182,7 +191,7 @@
   function spawn(x, y, z, vx, vy, vz, life, size, grow, col, type, extra) {
     var q = G.parts[pNext]; pNext = (pNext + 1) % G.parts.length;
     q.x = x; q.y = y; q.z = z; q.vx = vx; q.vy = vy; q.vz = vz; q.life = life; q.max = life;
-    q.size = size; q.grow = grow; q.col = col; q.type = type || 0; q.rot = Math.random() * 6; q.alpha = extra || 0.8;
+    q.size = size; q.grow = grow; q.col = col; q.type = type || 0; q.rot = ran() * 6; q.alpha = extra || 0.8;
     q.g = type === 2 ? -6 : (type === 4 ? 1.5 : 0.6);
     return q;
   }
@@ -195,7 +204,7 @@
     lastRear[0] = lastRear[1] = null;
     for (var k = 0; k < G.parts.length; k++) G.parts[k].life = 0;
     G.popups.length = 0;
-    G.carVis.yaw = Math.PI; G.carVis.pitch = 0; G.carVis.roll = 0; G.carVis.sq = 1; G.carVis.sqv = 0;
+    G.carVis.yaw = PI; G.carVis.pitch = 0; G.carVis.roll = 0; G.carVis.sq = 1; G.carVis.sqv = 0;
     G.skyDist = 0;
     snapCam();
   }
@@ -215,7 +224,6 @@
   function holdInput() { return Kit.keys.down('Space') || mouseDown; }
 
   /* -------------------------------------------------------------- DOM */
-  var $ = function (id) { return document.getElementById(id); };
   var el = {
     title: $('title'), garage: $('garage'), pause: $('pause'), over: $('over'), gift: $('gift'),
     btnPause: $('btnPause'), toast: $('toast')
@@ -235,8 +243,8 @@
   }
 
   function refreshTitle() {
-    $('tBest').textContent = Kit.fmt(save.best);
-    $('tCoins').textContent = Kit.fmt(save.coins);
+    setT('tBest', Kit.fmt(save.best));
+    setT('tCoins', Kit.fmt(save.coins));
     $('tMissions').innerHTML = missionHTML(activeMissions(), null);
     $('garageBadge').hidden = !canAffordNew();
     refreshGift();
@@ -254,7 +262,7 @@
     if (giftReady()) { b.classList.add('ready'); b.classList.remove('wait'); lbl.textContent = 'هدية مجانية!'; }
     else {
       b.classList.remove('ready'); b.classList.add('wait');
-      var ms = GIFT_MS - (Date.now() - save.giftAt), m = Math.floor(ms / 60000), s = Math.floor(ms / 1000) % 60;
+      var ms = GIFT_MS - (Date.now() - save.giftAt), m = flr(ms / 60000), s = flr(ms / 1000) % 60;
       lbl.innerHTML = 'هدية بعد <span dir="ltr">' + m + ':' + (s < 10 ? '0' : '') + s + '</span>';
     }
   }
@@ -268,7 +276,8 @@
     show(el.title, true); show(el.over, false); show(el.pause, false); show(el.garage, false); show(el.gift, false);
     show(el.btnPause, false);
     G.model = DK.carById(save.car);
-    newWorld((Math.random() * 1e9) | 0);
+    G.turbo = 0; G.ghost = null; G.run = null;
+    newWorld((ran() * 1e9) | 0);
     refreshTitle();
   }
 
@@ -279,12 +288,15 @@
     show(el.title, false); show(el.over, false); show(el.pause, false); show(el.garage, false); show(el.gift, false);
     show(el.btnPause, true);
     G.model = DK.carById(save.car);
-    newWorld((Math.random() * 1e9) | 0);
+    newWorld((ran() * 1e9) | 0);
     G.mode = 'play';
     // play stats: each run is a round; the hold/release coach starts on a fresh save
     Kit.stats.round('run');
     if (!save.runs && save.best < 60) Kit.stats.tutorial('start');
-    run = { score: 0, bonus: 0, coins: 0, gems: 0, combo: 0, maxCombo: 0, perfects: 0, jumps: 0, zone: 0, corners: 0, missionCoins: 0, beatBest: false, coinStreak: 0, coinStreakT: 0 };
+    run = { score: 0, bonus: 0, coins: 0, gems: 0, combo: 0, maxCombo: 0, cleanChain: 0, turbo: 0, mult: 1, multAcc: 0, prevProg: 0, t: 0,
+      perfects: 0, jumps: 0, zone: 0, corners: 0, missionCoins: 0, beatBest: false, coinStreak: 0, coinStreakT: 0 };
+    G.run = run; G.turbo = 0; ghostRec = []; loadGhost();
+    G.ghost = ghostData ? { x: 0, y: 0, z: 0, yaw: DK.ANG[0], vis: false, model: DK.carById(ghostData.car) } : null;
     armed = !holdInput();
     overT = 0; fallT = 0; poofed = false; bannerT = 0;
     G.bestFlag = null;
@@ -305,10 +317,10 @@
   // Runs and missions still count only at game over (no farming by restarting).
   function bankPausedRun() {
     if (G.mode !== 'paused' || !run || !G.car) return;
-    run.score = Math.floor(G.car.progress) + run.bonus;
+    run.score = flr(G.car.progress) + run.bonus;
     if (run.score <= save.best && G.car.progress <= save.bestDist) return;
-    save.best = Math.max(save.best, run.score);
-    save.bestDist = Math.max(save.bestDist, G.car.progress);
+    save.best = max(save.best, run.score);
+    save.bestDist = max(save.bestDist, G.car.progress);
     persist();
   }
   function resumeGame() {
@@ -328,10 +340,10 @@
     overT = 0;
     show(el.btnPause, false);
     var st = run;
-    st.score = Math.floor(G.car.progress) + st.bonus;
+    st.score = flr(G.car.progress) + st.bonus;
     Kit.stats.end('end', st.score);
     save.runs++;
-    var prevBest = save.best;
+    var prevBest = save.best, prevDist = save.bestDist;
     // Celebrate a new best, but not a tiny first score of a few points.
     var newBest = st.score > save.best && (prevBest > 0 ? true : st.score >= 30);
     if (st.score > save.best) save.best = st.score;
@@ -339,12 +351,15 @@
     overMissions = activeMissions();
     var justDone = checkMissions(st, true);
     persist();
-    $('oTitle').textContent = FALL_TITLES[(Math.random() * FALL_TITLES.length) | 0];
-    $('oScore').textContent = '0';
-    $('oDist').textContent = Math.floor(G.car.progress);
-    $('oPerf').textContent = st.perfects;
-    $('oCombo').textContent = st.maxCombo;
-    $('oCoins').textContent = '+' + (st.coins + st.missionCoins);
+    if ((st.score > prevBest || G.car.progress > prevDist) && ghostRec.length >= 4) {
+      store.set('ghost', { d: ghostRec, car: save.car });
+    }
+    setT('oTitle', FALL_TITLES[(ran() * FALL_TITLES.length) | 0]);
+    setT('oScore', '0');
+    setT('oDist', flr(G.car.progress));
+    setT('oPerf', st.perfects);
+    setT('oCombo', st.maxCombo);
+    setT('oCoins', '+' + (st.coins + st.missionCoins));
     var ob = $('oBest');
     ob.classList.remove('close');
     if (newBest) ob.textContent = prevBest > 0 ? 'الرقم السابق: ' + Kit.fmt(prevBest) : 'أول رقم قياسي لك!';
@@ -366,8 +381,8 @@
   function countUp(node, target, ms) {
     var t0 = performance.now();
     function f() {
-      var k = Math.min(1, (performance.now() - t0) / ms);
-      node.textContent = Kit.fmt(target * (1 - Math.pow(1 - k, 3)));
+      var k = min(1, (performance.now() - t0) / ms);
+      node.textContent = Kit.fmt(target * (1 - M.pow(1 - k, 3)));
       if (k < 1 && G.mode === 'over') requestAnimationFrame(f); else node.textContent = Kit.fmt(target);
     }
     f();
@@ -382,7 +397,7 @@
     var I = DK.ISO, b = { x0: 1e9, x1: -1e9, y0: 1e9, y1: -1e9 }, zh = car.hover ? 0.15 : 0;
     function add(x, y, z, r) {
       for (var a = 0; a < 12; a++) {
-        var yaw = a / 12 * Math.PI * 2, cy = Math.cos(yaw), sy = Math.sin(yaw);
+        var yaw = a / 12 * PI * 2, cy = cos(yaw), sy = sin(yaw);
         var X = cy * x - sy * y, Y = sy * x + cy * y;
         var px = (X - Y) * I.PX, py = (X + Y) * I.PY - (z + zh) * I.PZ;
         if (px - r < b.x0) b.x0 = px - r; if (px + r > b.x1) b.x1 = px + r;
@@ -393,7 +408,7 @@
       if (p.t === 'b') add(p.c[0], p.c[1], p.c[2], p.r);
       else p.v.forEach(function (v) { add(v[0], v[1], v[2], 0); });
     });
-    b.y1 = Math.max(b.y1, 0.5);   // leave room for the ground shadow
+    b.y1 = max(b.y1, 0.5);   // leave room for the ground shadow
     boundsCache[car.id] = b;
     return b;
   }
@@ -403,10 +418,10 @@
     c2.setTransform(1, 0, 0, 1, 0, 0);
     c2.clearRect(0, 0, cv.width, cv.height);
     var b = carBounds(car);
-    var S = Math.min(cv.width * 0.9 / (b.x1 - b.x0), cv.height * 0.9 / (b.y1 - b.y0));
+    var S = min(cv.width * 0.9 / (b.x1 - b.x0), cv.height * 0.9 / (b.y1 - b.y0));
     var ox = cv.width / 2 - (b.x0 + b.x1) / 2 * S, oy = cv.height / 2 - (b.y0 + b.y1) / 2 * S;
     c2.fillStyle = 'rgba(60,30,100,0.15)';
-    c2.beginPath(); c2.ellipse(ox, oy + S * 0.1, S * 1.0, S * 0.42, 0, 0, Math.PI * 2); c2.fill();
+    c2.beginPath(); c2.ellipse(ox, oy + S * 0.1, S * 1.0, S * 0.42, 0, 0, PI * 2); c2.fill();
     DK.drawCar(c2, car, { x: ox, y: oy, S: S, yaw: yaw, pitch: 0, roll: 0, sq: 1, z: car.hover ? 0.15 : 0 });
   }
   var gCards = [];
@@ -488,12 +503,12 @@
     var on = $('oNext');
     if (!nx) { on.innerHTML = ''; return; }
     var ready = save.coins >= nx.price;
-    var pct = Math.min(100, Math.round(save.coins / nx.price * 100));
+    var pct = min(100, M.round(save.coins / nx.price * 100));
     on.classList.toggle('ready', ready);
     on.innerHTML = '<canvas width="220" height="140"></canvas><div class="ntxt">' +
       (ready ? 'يمكنك شراء «' + nx.name + '» الآن!' : 'السيارة التالية: «' + nx.name + '»') +
       '<div class="nbar"><i style="width:' + pct + '%"></i></div></div>' +
-      '<div style="font-weight:700;direction:ltr;white-space:nowrap"><i class="coin sm"></i> ' + Kit.fmt(Math.min(save.coins, nx.price)) + ' / ' + Kit.fmt(nx.price) + '</div>';
+      '<div style="font-weight:700;direction:ltr;white-space:nowrap"><i class="coin sm"></i> ' + Kit.fmt(min(save.coins, nx.price)) + ' / ' + Kit.fmt(nx.price) + '</div>';
     drawPreview(on.querySelector('canvas'), nx, PREVIEW_YAW);
   }
 
@@ -511,8 +526,8 @@
   function crackGift() {
     if (giftOpened) return;
     giftOpened = true;
-    var amt = 30 + Math.floor(Math.random() * 6) * 10;
-    if (Math.random() < 0.15) amt = 150;
+    var amt = 30 + flr(ran() * 6) * 10;
+    if (ran() < 0.15) amt = 150;
     save.coins += amt; save.giftAt = Date.now(); persist();
     $('giftBox').classList.add('open');
     $('giftTitle').textContent = amt >= 150 ? 'جائزة كبرى!' : 'رائع!';
@@ -556,11 +571,11 @@
     var cols = ['#ff4d8d', '#ffd23f', '#3ddc84', '#3d8bff', '#b36bff', '#ff9a2e'], top = from === 'top';
     for (var k = 0; k < n; k++) {
       if (confetti.length > 240) confetti.shift();
-      var p = { x: W / 2 + (Math.random() - 0.5) * (top ? 800 : 300), y: top ? 60 : H * 0.35, vx: (Math.random() - 0.5) * 900, vy: top ? -150 - Math.random() * 350 : -300 - Math.random() * 600, fall: top ? 340 : 1e9, r: Math.random() * 6, vr: (Math.random() - 0.5) * 12, c: cols[k % cols.length], life: 2.2 + Math.random(), s: 6 + Math.random() * 6 };
+      var p = { x: W / 2 + (ran() - 0.5) * (top ? 800 : 300), y: top ? 60 : H * 0.35, vx: (ran() - 0.5) * 900, vy: top ? -150 - ran() * 350 : -300 - ran() * 600, fall: top ? 340 : 1e9, r: ran() * 6, vr: (ran() - 0.5) * 12, c: cols[k % cols.length], life: 2.2 + ran(), s: 6 + ran() * 6 };
       if (from === 'sides') {
         var side = k < n / 2 ? -1 : 1;
-        p.x = W / 2 + side * (215 + Math.random() * 30); p.y = 150;
-        p.vx = side * (40 + Math.random() * 200); p.vy = -150 - Math.random() * 400;
+        p.x = W / 2 + side * (215 + ran() * 30); p.y = 150;
+        p.vx = side * (40 + ran() * 200); p.vy = -150 - ran() * 400;
       }
       confetti.push(p);
     }
@@ -575,22 +590,22 @@
   function emitSmoke(x, y, intensity) {
     var st = G.model.smoke, cols = SMOKE[st] || SMOKE.puff;
     var rainbow = run && run.combo >= 5;
-    var vx = (Math.random() - 0.5) * 0.8, vy = (Math.random() - 0.5) * 0.8;
-    var col = rainbow ? RAINBOW[(G.time * 12 | 0) % RAINBOW.length] : cols[(Math.random() * cols.length) | 0];
+    var vx = (ran() - 0.5) * 0.8, vy = (ran() - 0.5) * 0.8;
+    var col = rainbow ? RAINBOW[(G.time * 12 | 0) % RAINBOW.length] : cols[(ran() * cols.length) | 0];
     if (st === 'fire') spawn(x, y, 0.15, vx, vy, 0.8, 0.5, 0.12, 0.3, col, rainbow ? 0 : 4);
     else if (st === 'sprinkle') {
       spawn(x, y, 0.1, vx, vy, 0.5, 0.7, 0.18, 0.5, rainbow ? col : '#ffffff', 0, 0.7);
-      if (Math.random() < 0.6) spawn(x, y, 0.3, vx * 2, vy * 2, 2.5, 0.8, 0.06, 0, cols[(Math.random() * 4) | 0], 2);
+      if (ran() < 0.6) spawn(x, y, 0.3, vx * 2, vy * 2, 2.5, 0.8, 0.06, 0, cols[(ran() * 4) | 0], 2);
     } else if (st === 'bubble') spawn(x, y, 0.2, vx, vy, 0.9, 0.9, 0.08, 0.2, rainbow ? col : cols[0], 3);
     else if (st === 'spark' || st === 'gold') {
       spawn(x, y, 0.2, vx, vy, 0.6, 0.6, 0.12, 0.35, rainbow ? col : cols[1], 0, 0.6);
-      if (Math.random() < 0.5) spawn(x, y, 0.3, vx * 1.5, vy * 1.5, 1.2, 0.6, 0.12, 0, cols[0], 1);
+      if (ran() < 0.5) spawn(x, y, 0.3, vx * 1.5, vy * 1.5, 1.2, 0.6, 0.12, 0, cols[0], 1);
     } else spawn(x, y, 0.12, vx, vy, 0.45, 0.75 + intensity * 0.3, st === 'dust' ? 0.22 : 0.16, st === 'dust' ? 0.75 : 0.55, col, 0, 0.85);
   }
   function burst(x, y, z, n, cols, type, spd, life, size) {
     for (var k = 0; k < n; k++) {
-      var a = Math.random() * Math.PI * 2, s = spd * (0.5 + Math.random() * 0.5);
-      spawn(x, y, z, Math.cos(a) * s, Math.sin(a) * s, (Math.random() * 0.8 + 0.4) * spd, life * (0.7 + Math.random() * 0.5), size, type === 0 ? size : 0, cols[k % cols.length], type);
+      var a = ran() * PI * 2, s = spd * (0.5 + ran() * 0.5);
+      spawn(x, y, z, cos(a) * s, sin(a) * s, (ran() * 0.8 + 0.4) * spd, life * (0.7 + ran() * 0.5), size, type === 0 ? size : 0, cols[k % cols.length], type);
     }
   }
   function addSkid(x1, y1, x2, y2) {
@@ -622,7 +637,7 @@
       }
       for (k = confetti.length - 1; k >= 0; k--) {
         var c = confetti[k];
-        c.life -= dt; c.vy = Math.min(c.fall, c.vy + 900 * dt); c.vx *= 0.99; c.x += c.vx * dt; c.y += c.vy * dt; c.r += c.vr * dt;
+        c.life -= dt; c.vy = min(c.fall, c.vy + 900 * dt); c.vx *= 0.99; c.x += c.vx * dt; c.y += c.vy * dt; c.r += c.vr * dt;
         if (c.life <= 0 || c.y > H + 40) confetti.splice(k, 1);
       }
     }
@@ -671,7 +686,7 @@
     G.hold = hold;
     DK.step(car, road, dt, hold);
     var attract = m === 'title' || m === 'garage' || m === 'gift';
-    if (attract && car.state === 'fall') { newWorld((Math.random() * 1e9) | 0); return; }
+    if (attract && car.state === 'fall') { newWorld((ran() * 1e9) | 0); return; }
 
     // events
     var ev = car.events;
@@ -680,10 +695,10 @@
 
     var seg = road.get(car.seg);
     // skids + smoke
-    var slip = Math.abs(car.slip);
+    var slip = abs(car.slip);
     var vis = G.carVis;
     if (car.state === 'drive') {
-      var cy = Math.cos(car.head), sy = Math.sin(car.head);
+      var cy = cos(car.head), sy = sin(car.head);
       var r = G.model.rear;
       for (var w = 0; w < 2; w++) {
         var lx = r[0], ly = w ? r[1] : -r[1];
@@ -691,47 +706,80 @@
         if (slip > 0.1 && !car.air && car.z < 0.05) {
           if (!G.model.hover && lastRear[w]) addSkid(lastRear[w][0], lastRear[w][1], wx, wy);
           if (lastRear[w]) { lastRear[w][0] = wx; lastRear[w][1] = wy; } else lastRear[w] = [wx, wy];
-          if (Math.random() < Math.min(0.9, slip * 2.2)) emitSmoke(wx, wy, slip);
+          if (ran() < min(0.9, slip * 2.2)) emitSmoke(wx, wy, slip);
         } else lastRear[w] = null;
       }
-      if (G.model.smoke === 'fire' && Math.random() < 0.5) {
-        var bx = car.x - Math.cos(car.head) * 0.9, by = car.y - Math.sin(car.head) * 0.9;
-        spawn(bx, by, car.z + 0.35, -Math.cos(car.vel) * 1.5, -Math.sin(car.vel) * 1.5, 0.3, 0.3, 0.1, 0.15, '#fff27a', 4);
+      if (G.turbo > 0 && ran() < (G.turbo > 1 ? 0.9 : 0.65)) {
+        var bx2 = car.x - cos(car.head) * 0.92, by2 = car.y - sin(car.head) * 0.92;
+        spawn(bx2, by2, car.z + 0.25, -cos(car.vel) * 2.2, -sin(car.vel) * 2.2, 0.25, 0.3, 0.12, 0.12, ['#29c8ff', '#8ff4ff', '#ffffff'][(ran() * 3) | 0], 0, 0.9);
       }
-      if (G.model.hover && Math.random() < 0.3) spawn(car.x, car.y, car.z + 0.1, 0, 0, -0.3, 0.5, 0.1, 0.1, '#9cf5c8', 1);
+      if (G.model.smoke === 'fire' && ran() < 0.5) {
+        var bx = car.x - cos(car.head) * 0.9, by = car.y - sin(car.head) * 0.9;
+        spawn(bx, by, car.z + 0.35, -cos(car.vel) * 1.5, -sin(car.vel) * 1.5, 0.3, 0.3, 0.1, 0.15, '#fff27a', 4);
+      }
+      if (G.model.hover && ran() < 0.3) spawn(car.x, car.y, car.z + 0.1, 0, 0, -0.3, 0.5, 0.1, 0.1, '#9cf5c8', 1);
     }
     // car visual pose
     if (car.state === 'drive') {
       var ty = car.head + car.slip * 0.28;
-      vis.yaw += DK.wrap(ty - vis.yaw) * Math.min(1, dt * 20);
-      vis.roll += ((-car.slip * 0.32) - vis.roll) * Math.min(1, dt * 10);
-      vis.pitch += ((car.air ? -0.12 : 0) - vis.pitch) * Math.min(1, dt * 6);
+      vis.yaw += DK.wrap(ty - vis.yaw) * min(1, dt * 20);
+      vis.roll += ((-car.slip * 0.32) - vis.roll) * min(1, dt * 10);
+      vis.pitch += ((car.air ? -0.12 : 0) - vis.pitch) * min(1, dt * 6);
     } else {
       vis.yaw = car.head; vis.pitch = car.fall.pitch; vis.roll = car.fall.roll;
     }
-    vis.sqv += (1 - vis.sq) * 260 * dt; vis.sqv *= Math.pow(0.001, dt); vis.sq += vis.sqv * dt;
-    vis.sq = Math.max(0.6, Math.min(1.4, vis.sq));
+    vis.sqv += (1 - vis.sq) * 260 * dt; vis.sqv *= M.pow(0.001, dt); vis.sq += vis.sqv * dt;
+    vis.sq = max(0.6, min(1.4, vis.sq));
     G.groundUnder = !car.air || DK.inSeg(seg, car.x, car.y, 0) && !(seg.gap && DK.along(seg, car.x, car.y) > seg.gap.a && DK.along(seg, car.x, car.y) < seg.gap.b);
 
-    // coins
+    // coins, slipstream multiplier, and best-run ghost
     if (car.state === 'drive' && run && m === 'play') {
+      run.t += dt;
+      var dp = car.progress - run.prevProg;
+      if (dp > 0) {
+        run.prevProg = car.progress;
+        if (run.mult > 1) {
+          run.multAcc += dp * (run.mult - 1);
+          var add = flr(run.multAcc);
+          if (add > 0) { run.bonus += add; run.multAcc -= add; }
+        }
+      }
+      if (ghostRec.length < GHOST_MAX * 2) {
+        var gn = flr(run.t * GHOST_HZ);
+        while (ghostRec.length / 2 <= gn) ghostRec.push(M.round(car.progress * 10), M.round(DK.lateral(seg, car.x, car.y) * 100));
+      }
+      if (G.ghost && ghostData) {
+        var gd = ghostData.d, gf = run.t * GHOST_HZ, gi = flr(gf), gk = gf - gi, gcnt = gd.length / 2;
+        if (run.t > 0.15 && gi < gcnt - 1) {
+          var gpr = (gd[gi * 2] + (gd[gi * 2 + 2] - gd[gi * 2]) * gk) / 10;
+          var glt = (gd[gi * 2 + 1] + (gd[gi * 2 + 3] - gd[gi * 2 + 1]) * gk) / 100;
+          var gp = road.pointAtDist(gpr, glt);
+          if (gp) { G.ghost.x = gp.x; G.ghost.y = gp.y; G.ghost.z = gp.z; G.ghost.yaw = gp.yaw; G.ghost.vis = true; }
+          else G.ghost.vis = false;
+        } else G.ghost.vis = false;
+      }
       var coins = road.coins;
       for (k = 0; k < coins.length; k++) {
         var c = coins[k];
-        if (c.taken || Math.abs(c.seg - car.seg) > 2) continue;
-        var dx = c.x - car.x, dy = c.y - car.y, dz = c.z - (car.z + 0.4);
-        if (dx * dx + dy * dy < 0.62 && Math.abs(dz) < 0.9) collectCoin(c);
+        if (c.taken || abs(c.seg - car.seg) > 2) continue;
+        var dx = c.x - car.x, dy = c.y - car.y, dz = c.z - (car.z + 0.4), d2 = dx * dx + dy * dy;
+        if (run.turbo > 0 && d2 < 12.25) {
+          var pull = min(1, dt * 13);
+          c.x -= dx * pull; c.y -= dy * pull; c.z += (car.z + 0.4 - c.z) * pull;
+          dx = c.x - car.x; dy = c.y - car.y; dz = c.z - (car.z + 0.4); d2 = dx * dx + dy * dy;
+        }
+        if (d2 < 0.62 && abs(dz) < 0.9) collectCoin(c);
       }
       if (run.coinStreakT > 0) { run.coinStreakT -= dt; if (run.coinStreakT <= 0) run.coinStreak = 0; }
       // score + best flag
-      var sc = Math.floor(car.progress) + run.bonus;
+      var sc = flr(car.progress) + run.bonus;
       run.score = sc;
       if (!run.beatBest && save.best >= 50 && sc > save.best) {
         run.beatBest = true;
         popup('رقم قياسي!', car.x, car.y, 1.8, '#ffd23f', 50, null, 1.6);
         DK.snd.best(); burstConfetti(50, 'sides'); flashScreen(0.6);
       }
-      var z = Math.floor(car.progress / DK.ZONE_LEN);
+      var z = flr(car.progress / DK.ZONE_LEN);
       if (z > run.zone) {
         run.zone = z;
         bannerT = BANNER_T; bannerText = DK.zoneName(z); bannerSub = 'المنطقة ' + (z + 1) + '  •  \u2066+10\u2069';
@@ -762,11 +810,11 @@
     var c = G.cam;
     if (car.state === 'drive') {
       var look = 1.6, back = (m === 'title' || m === 'garage' || m === 'gift') ? 1.4 : -1.2;
-      var tx = car.x + Math.cos(car.vel) * look + back, ty2 = car.y + Math.sin(car.vel) * look + back;
-      c.x += (tx - c.x) * Math.min(1, dt * 4.5);
-      c.y += (ty2 - c.y) * Math.min(1, dt * 4.5);
+      var tx = car.x + cos(car.vel) * look + back, ty2 = car.y + sin(car.vel) * look + back;
+      c.x += (tx - c.x) * min(1, dt * 4.5);
+      c.y += (ty2 - c.y) * min(1, dt * 4.5);
       var targetS = 50 - (car.v - 6.8) * 1.5;
-      c.S += (targetS - c.S) * Math.min(1, dt * 1.5);
+      c.S += (targetS - c.S) * min(1, dt * 1.5);
       G.skyDist = car.progress;
     }
     if (m === 'title' || m === 'garage' || m === 'gift') c.S = 54;
@@ -797,17 +845,29 @@
         if (!play) break;
         // the coach is done the first time a run clears 6 corners while its hints still show
         if (++run.corners === 6 && save.best < 60 && save.runs < 12) Kit.stats.tutorial('done');
+        if (e.q !== 'close' && (e.minEdge == null || e.minEdge >= 0.15)) {
+          run.cleanChain++;
+          var nt = run.cleanChain >= 10 ? 2 : run.cleanChain >= 5 ? 1 : 0;
+          run.mult = nt + 1;
+          if (nt > run.turbo) {
+            run.turbo = nt; G.turbo = nt;
+            DK.snd.turbo(nt);
+            popup(nt > 1 ? 'توربو خارق! ×3' : 'انزلاق توربو! ×2', car.x, car.y, 2.0, '#6ff0ff', 44, 'مغناطيس عملات ⚡', 1.3);
+            burst(car.x, car.y, 0.5, 16, ['#35e0ff', '#8ff4ff', '#ffffff'], 1, 4.2, 0.6, 0.15);
+            flashScreen(0.4);
+          } else { run.turbo = nt; G.turbo = nt; }
+        } else { run.cleanChain = 0; run.turbo = 0; run.mult = 1; G.turbo = 0; }
         if (e.q === 'perfect') {
           run.combo++; run.perfects++;
-          run.maxCombo = Math.max(run.maxCombo, run.combo);
-          var mult = Math.min(run.combo, 10);
-          var bonus = 3 * mult;
+          run.maxCombo = max(run.maxCombo, run.combo);
+          var mult = min(run.combo, 10);
+          var bonus = 3 * mult * run.mult;
           run.bonus += bonus;
           var words = ['ممتاز!', 'رائع!', 'مذهل!', 'خارق!', 'أسطوري!'];
-          var wd = words[Math.min(words.length - 1, Math.floor((run.combo - 1) / 3))];
-          popup(wd, car.x, car.y, 1.6, run.combo >= 5 ? '#ff7ad1' : '#ffe14d', 44 + Math.min(run.combo, 10) * 1.5, '+' + bonus + (run.combo > 1 ? '  x' + run.combo : ''));
+          var wd = words[min(words.length - 1, flr((run.combo - 1) / 3))];
+          popup(wd, car.x, car.y, 1.6, run.combo >= 5 ? '#ff7ad1' : '#ffe14d', 44 + min(run.combo, 10) * 1.5, '+' + bonus + (run.combo > 1 ? '  x' + run.combo : ''));
           DK.snd.perfect(run.combo);
-          burst(car.x, car.y, 0.4, 8 + Math.min(run.combo, 10), ['#ffe14d', '#ffffff', '#ff7ad1'], 1, 3.5, 0.55, 0.13);
+          burst(car.x, car.y, 0.4, 8 + min(run.combo, 10), ['#ffe14d', '#ffffff', '#ff7ad1'], 1, 3.5, 0.55, 0.13);
           comboPop = 1; hudPop = 1;
           if (run.combo === 5 || run.combo === 10 || run.combo === 20) { flashScreen(0.5); burstConfetti(30, 'sides'); }
         } else {
@@ -819,15 +879,16 @@
       case 'jump':
         if (play) run.jumps++;
         DK.snd.jump();
-        G.carVis.sqv = 3;
-        burst(car.x, car.y, 0.4, 8, ['#ffffff', '#ffe14d'], 0, 2, 0.5, 0.15);
+        G.carVis.sqv = 3.2; G.shake.add(2.5);
+        burst(car.x, car.y, 0.4, 12, ['#35e0ff', '#b6f6ff', '#ffffff'], 1, 3.2, 0.55, 0.14);
         break;
       case 'land':
         DK.snd.land();
         G.carVis.sqv = -5.5;
-        G.shake.add(4);
-        burst(car.x, car.y, 0.05, 14, ['#ffffff', '#f4ecff'], 0, 3, 0.55, 0.2);
-        if (play) { run.bonus += 10; popup('قفزة!', car.x, car.y, 1.5, '#8fffb0', 40, '+10'); }
+        G.shake.add(5.5);
+        burst(car.x, car.y, 0.12, 16, ['#35e0ff', '#ffe14d', '#ffffff'], 1, 4.2, 0.55, 0.15);
+        burst(car.x, car.y, 0.05, 8, ['#ffffff', '#c6f6ff'], 0, 2.5, 0.45, 0.18);
+        if (play) { var jb = 10 * run.mult; run.bonus += jb; popup('قفزة السماء!', car.x, car.y, 1.5, '#6ff0ff', 42, '+' + jb); }
         break;
       case 'fall':
         if (!play) break;
@@ -836,7 +897,7 @@
         DK.snd.stopEngine();
         DK.snd.fall();
         G.shake.add(6);
-        run.combo = 0;
+        run.combo = 0; run.cleanChain = 0; run.turbo = 0; run.mult = 1; G.turbo = 0;
         break;
     }
   }
@@ -885,7 +946,7 @@
     for (var k = 0; k < confetti.length; k++) {
       var c = confetti[k];
       fx.save(); fx.translate(c.x, c.y); fx.rotate(c.r);
-      fx.globalAlpha = Math.min(1, c.life);
+      fx.globalAlpha = min(1, c.life);
       fx.fillStyle = c.c; fx.fillRect(-c.s / 2, -c.s / 4, c.s, c.s / 2);
       fx.restore();
     }
@@ -898,43 +959,45 @@
     ctx.fillStyle = fill; ctx.fillText(s, x, y);
   }
   function coinIcon(x, y, r) {
-    ctx.fillStyle = '#e59a12'; ctx.beginPath(); ctx.arc(x + 1.5, y + 1.5, r, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#ffd23f'; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#fff09a'; ctx.beginPath(); ctx.arc(x - r * 0.25, y - r * 0.25, r * 0.45, 0, Math.PI * 2); ctx.fill();
+    var d = function (cx, cy, rr, c) { ctx.fillStyle = c; ctx.beginPath(); ctx.arc(cx, cy, rr, 0, PI * 2); ctx.fill(); };
+    d(x + 1.5, y + 1.5, r, '#e59a12'); d(x, y, r, '#ffd23f'); d(x - r * 0.25, y - r * 0.25, r * 0.45, '#fff09a');
   }
 
   function drawHUD() {
     var sc = run ? run.score : 0;
-    var p = 1 + Math.max(0, hudPop) * 0.18;
+    var p = 1 + max(0, hudPop) * 0.18;
     ctx.save();
     ctx.translate(W / 2, 52); ctx.scale(p, p);
     txt(Kit.fmt(sc), 0, 0, 64, '#ffffff', 'center', 'rgba(60,20,100,0.75)', 12);
     ctx.restore();
-    if (save.best > 0) txt('الأفضل ' + Kit.fmt(Math.max(save.best, sc)), W / 2, 100, 20, '#ffffff', 'center', 'rgba(60,20,100,0.6)', 6);
+    if (save.best > 0) txt('الأفضل ' + Kit.fmt(max(save.best, sc)), W / 2, 100, 20, '#ffffff', 'center', 'rgba(60,20,100,0.6)', 6);
     // combo (the zone banner takes its place for a moment)
     if (run && run.combo >= 2 && !bannerOn()) {
-      var cp = 1 + Math.max(0, comboPop) * 0.3;
+      var cp = 1 + max(0, comboPop) * 0.3;
       ctx.save(); ctx.translate(W / 2, 138); ctx.scale(cp, cp);
       var col = run.combo >= 10 ? '#ff7ad1' : run.combo >= 5 ? '#ffb13b' : '#ffe14d';
       txt('سلسلة ممتازة \u2066x' + run.combo + '\u2069', 0, 0, 28, col, 'center', 'rgba(60,20,100,0.75)', 7);
       ctx.restore();
+    }
+    if (run && run.turbo > 0 && !bannerOn()) {
+      txt('توربو السحب \u2066×' + run.mult + '\u2069 ⚡', W / 2, run.combo >= 2 ? 172 : 138, 24, '#6ff0ff', 'center', 'rgba(20,50,110,0.85)', 6);
     }
     // coins (top-left)
     ctx.fillStyle = 'rgba(40,20,80,0.45)';
     roundRect(16, 14, 170, 50, 25); ctx.fill();
     coinIcon(44, 39, 15);
     ctx.save(); ctx.translate(70, 40);
-    var cps = 1 + Math.max(0, hudPop) * 0.15; ctx.scale(cps, cps);
+    var cps = 1 + max(0, hudPop) * 0.15; ctx.scale(cps, cps);
     txt(Kit.fmt(save.coins), 0, 0, 30, '#ffe14d', 'left', 'rgba(60,20,100,0.7)', 6);
     ctx.restore();
     // zone progress
     if (G.car) {
-      var zl = DK.ZONE_LEN, pr = G.car.progress, z = Math.floor(pr / zl), f = (pr - z * zl) / zl;
+      var zl = DK.ZONE_LEN, pr = G.car.progress, z = flr(pr / zl), f = (pr - z * zl) / zl;
       ctx.fillStyle = 'rgba(40,20,80,0.45)';
       roundRect(16, 72, 170, 38, 19); ctx.fill();
       txt(DK.zoneName(z), 101, 84, 17, '#ffffff', 'center');
       ctx.fillStyle = 'rgba(255,255,255,0.3)'; roundRect(30, 96, 142, 7, 4); ctx.fill();
-      ctx.fillStyle = DK.palOf(z + 1).curb; roundRect(30, 96, Math.max(7, 142 * f), 7, 4); ctx.fill();
+      ctx.fillStyle = DK.palOf(z + 1).curb; roundRect(30, 96, max(7, 142 * f), 7, 4); ctx.fill();
     }
   }
   function roundRect(x, y, w, h, r) {
@@ -951,7 +1014,7 @@
   function drawBanner() {
     var t = BANNER_T - bannerT;
     var a = t < 0.3 ? t / 0.3 : bannerT < 0.4 ? bannerT / 0.4 : 1;
-    var sc = t < 0.3 && !Kit.motion.reduced() ? 0.6 + t / 0.3 * 0.4 + Math.sin(t / 0.3 * Math.PI) * 0.15 : 1;
+    var sc = t < 0.3 && !Kit.motion.reduced() ? 0.6 + t / 0.3 * 0.4 + sin(t / 0.3 * PI) * 0.15 : 1;
     ctx.save();
     ctx.globalAlpha = a;
     ctx.translate(W / 2, 150); ctx.scale(sc, sc);
@@ -977,7 +1040,7 @@
     else if (!want && holding) { msg = 'اترك الزر!'; now = true; }
     else if (nxt) msg = nxt.dir === 1 ? 'اضغط عند المنعطف' : 'اترك عند المنعطف';
     if (!msg) return;
-    var pulse = now ? 1.08 + Math.sin(G.time * 14) * 0.08 : 1;
+    var pulse = now ? 1.08 + sin(G.time * 14) * 0.08 : 1;
     ctx.save(); ctx.translate(X, Y - 20); ctx.scale(pulse, pulse);
     ctx.fillStyle = now ? '#ff4d8d' : 'rgba(40,20,80,0.72)';
     roundRect(-150, -30, 300, 60, 30); ctx.fill();
@@ -1002,7 +1065,7 @@
   // debug / test hook
   G.debug = {
     start: startRun,
-    skip: function (d) { if (G.mode !== 'play') return; var car = G.car, road = G.road; while (road.last().d0 < car.progress + d + 50) road.addSeg(); var target = car.progress + d; var p = road.pointAtDist(target); if (p) { car.x = p.x; car.y = p.y; car.seg = p.seg.i; car.head = car.vel = DK.ANG[p.seg.dir]; car.progress = target; car.corner = null; car.air = null; car.z = 0; road.ensure(car.seg); snapCam(); G.bestFlag = null; } },
+    skip: function (d) { if (G.mode !== 'play') return; var car = G.car, road = G.road; while (road.last().d0 < car.progress + d + 50) road.addSeg(); var target = car.progress + d; var p = road.pointAtDist(target); if (p) { car.x = p.x; car.y = p.y; car.seg = p.seg.i; car.head = car.vel = DK.ANG[p.seg.dir]; car.progress = target; if (run) run.prevProg = target; car.corner = null; car.air = null; car.z = 0; road.ensure(car.seg); snapCam(); G.bestFlag = null; } },
     autopilot: false,
     stepN: function (n) { stepping = true; for (var k = 0; k < n; k++) update(1 / 60); stepping = false; return G.mode; },
     frozen: false,
