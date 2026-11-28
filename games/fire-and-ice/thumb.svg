@@ -37,10 +37,6 @@
       <stop offset="55%" stop-color="#22c8ff"/>
       <stop offset="100%" stop-color="#0b77cc"/>
     </linearGradient>
-    <linearGradient id="goldTxt" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#fff4b8"/>
-      <stop offset="100%" stop-color="#ffaa22"/>
-    </linearGradient>
   </defs>
 
   <!-- Ancient sunlit temple chamber -->
@@ -143,8 +139,4 @@
     <ellipse cx="22" cy="-5" rx="5.5" ry="3.2" fill="#ffb86b"/>
     <path d="M-9,-1 Q0,8 9,-1" fill="none" stroke="#3d140a" stroke-width="3.2" stroke-linecap="round"/>
   </g>
-
-  <!-- Crisp Arabic Title Banner -->
-  <rect x="34" y="324" width="332" height="58" rx="22" fill="#241320" fill-opacity="0.92" stroke="#ffcf54" stroke-width="3.5"/>
-  <text x="200" y="365" text-anchor="middle" direction="rtl" font-family="Fredoka, 'Baloo Bhaijaan 2', Tahoma, sans-serif" font-size="34" font-weight="700" fill="url(#goldTxt)">النار والجليد</text>
 </svg>

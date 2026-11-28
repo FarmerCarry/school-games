@@ -86,7 +86,8 @@
   sun.castShadow = false;
   scene.add(sun); scene.add(sun.target);
   var SUN_OFF = new THREE.Vector3(-9, 11, 3);
-  var shadows = Kit.webgl.blobShadowPool(scene, 140, { opacity: 0.34, yOffset: 0.025 });
+  var shadows = Kit.webgl.blobShadowPool(scene, 96, { opacity: 0.6, yOffset: 0.03 });
+  var decoShadows = Kit.webgl.blobShadowPool(scene, 420, { opacity: 0.44, yOffset: 0.025 });
 
   var matVC = new THREE.MeshLambertMaterial({ vertexColors: true });
   var matCoin = new THREE.MeshLambertMaterial({ vertexColors: true, emissive: 0x5a3a00 });
@@ -187,6 +188,7 @@
   function rebuildDeco() {
     var k;
     for (k in decoIM) decoIM[k].count = 0;
+    if (decoShadows) decoShadows.reset();
     for (var r = laneMin; r <= laneMax; r++) {
       var L = lanes[r];
       if (!L) continue;
@@ -201,6 +203,7 @@
         _q.setFromAxisAngle(_up, (L.theme === 4 && d.k === 'tree2' ? 0 : d.rot) * Math.PI / 2); _p.set(d.x, 0, -r);
         _m4.compose(_p, _q, _s);
         im.setMatrixAt(im.count++, _m4);
+        if (decoShadows && Math.abs(d.x) < 14) decoShadows.add(d.x + 0.18, 0, -r - 0.06, 0.96, 0.88);
       }
     }
     for (k in decoIM) {
@@ -208,6 +211,7 @@
       dm.visible = dm.count > 0;
       if (dm.count > 0) Kit.webgl.uploadRange(dm.instanceMatrix, dm.count * 16);
     }
+    if (decoShadows) decoShadows.commit();
     decoDirty = false;
   }
 
@@ -939,28 +943,28 @@
       var pL = lanes[P.row];
       if (!pL || pL.type !== 'river' || P.log) {
         var gy = surfaceY(pL, P.log), hgt = Math.max(0, P.y - gy);
-        var ps = Kit.clamp(0.92 - hgt * 0.3, 0.45, 0.95);
-        shadows.add(P.x, gy, P.z, ps, ps);
+        var ps = Kit.clamp(1.14 - hgt * 0.32, 0.52, 1.16);
+        shadows.add(P.x + 0.2, gy, P.z - 0.08, ps, ps * 0.94);
       }
     }
     if (eagle.visible) {
       var eh = Math.max(0, eagle.position.y), es = Kit.clamp(1.7 - eh * 0.09, 0.7, 1.7);
-      shadows.add(eagle.position.x, 0.02, eagle.position.z, es * 1.35, es);
+      shadows.add(eagle.position.x + 0.15, 0.02, eagle.position.z - 0.05, es * 1.35, es);
     }
     for (var r = laneMin; r <= laneMax; r++) {
       var L = lanes[r];
-      if (!L || Math.abs(-r - camZ) > 15) continue;
+      if (!L || Math.abs(-r - camZ) > 14) continue;
       if (L.vehicles) {
         for (var i = 0; i < L.vehicles.length; i++) {
           var v = L.vehicles[i];
-          if (Math.abs(v.x - camX) < 13) shadows.add(v.x, -0.02, -r, v.len * 1.05, 0.92);
+          if (Math.abs(v.x - camX) < 13) shadows.add(v.x + 0.24, -0.02, -r - 0.08, v.len * 1.18, 1.1);
         }
       }
       if (L.rail && L.train && L.train.visible && Math.abs(L.rail.x - camX) < 18) {
-        shadows.add(L.rail.x, 0.03, -r, TL * 0.98, 1.05);
+        shadows.add(L.rail.x + 0.22, 0.03, -r - 0.08, TL * 1.02, 1.16);
       }
       if (L.coin && L.coin.m && Math.abs(L.coin.c - camX) < 12) {
-        shadows.add(L.coin.c, surfaceY(L), -r, 0.52, 0.52);
+        shadows.add(L.coin.c + 0.08, surfaceY(L), -r - 0.04, 0.62, 0.56);
       }
     }
     shadows.commit();
@@ -1093,7 +1097,7 @@
     S.click();
     try { canvas.focus({ preventScroll: true }); } catch (e) { /* ignore */ }
   }
-  function pauseGame() { if (state !== 'play') return; if (persistDirty) persist(); state = 'paused'; redraw = true; setWarn(false); $('pScore').textContent = score; showScreen('pause'); S.click(); }
+  function pauseGame() { if (state !== 'play') return; if (persistDirty) persist(); state = 'paused'; redraw = true; setWarn(false); $('pScore').textContent = score; if ($('pMissions')) renderMissions($('pMissions')); showScreen('pause'); S.click(); }
   function resumeGame() { if (state !== 'paused') return; state = 'play'; showScreen(null); S.click(); K.reset(); }
   // Leaving a run from the pause menu still keeps its best score and the unlock it
   // earned (coins are saved as they are picked up).
@@ -1226,7 +1230,7 @@
     $('tCharCount').textContent = save.owned.length + '/' + CHARS.length;
     $('machBadge').hidden = !(save.coins >= 100 && machineLeft().length);
     $('tGift').hidden = !giftReady();
-    renderMissions($('tMissions'));
+    if ($('tMissions')) renderMissions($('tMissions'));
     $('cpName').textContent = CHAR_BY[save.sel].name;
   }
   function placeCharpick() {

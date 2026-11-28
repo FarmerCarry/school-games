@@ -722,7 +722,8 @@
     // Exactly one canvas pixel per screen pixel: no resampling blur, and the live
     // trap tiles line up with the baked ground without a hairline.
     ctx.drawImage(sc, 0, 0, sc.width / game.staticRes, sc.height / game.staticRes);
-    Art.drawSkyBits(ctx, t, K.art.quality.tier);
+    Art.drawSkyBits(ctx, t, K.art.quality.tier, w);
+    if (game.demo && mode === 'title') Art.drawTitleDiorama(ctx, pal, t);
     // Kit.fit can round the canvas a device pixel past the baked image, and the
     // canvas is never cleared: paint that edge like the walls.
     var dk = view.scale * view.dpr / game.staticRes, ex = Math.round(sc.width * dk), ey = Math.round(sc.height * dk);
@@ -834,22 +835,28 @@
     // death counter (left, next to the pause button); a level may take it over (noPill)
     if (!lv.noPill) {
       var dtext = 'السقطات: ' + game.deaths;
-      var dw = tw(dtext, 26) + 64;
-      Art.rr(ctx, 64, 12, dw, 44, 22); ctx.fillStyle = 'rgba(255,255,255,0.14)'; ctx.fill();
-      // little splat icon
+      var dw = tw(dtext, 24) + 68;
+      Art.rr(ctx, 64, 12, dw, 44, 22); ctx.fillStyle = 'rgba(28,18,38,0.58)'; ctx.fill();
+      ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(255,255,255,0.28)'; ctx.stroke();
+      // little splat icon cleanly spaced away from text
       ctx.fillStyle = '#ff4d6d';
-      ctx.beginPath(); ctx.arc(90, 34, 11, 0, Math.PI * 2); ctx.fill();
-      for (var i = 0; i < 6; i++) { var an = i / 6 * Math.PI * 2 + 0.3; ctx.beginPath(); ctx.arc(90 + Math.cos(an) * 13, 34 + Math.sin(an) * 13, 4, 0, Math.PI * 2); ctx.fill(); }
-      ctx.fillStyle = '#ffffff'; ctx.fillRect(84, 29, 3, 3); ctx.fillRect(93, 29, 3, 3);
-      txt(dtext, 110, 35, 26, '#ffffff', 'left');
+      ctx.beginPath(); ctx.arc(86, 34, 9, 0, Math.PI * 2); ctx.fill();
+      for (var i = 0; i < 6; i++) { var an = i / 6 * Math.PI * 2 + 0.3; ctx.beginPath(); ctx.arc(86 + Math.cos(an) * 11, 34 + Math.sin(an) * 11, 3.2, 0, Math.PI * 2); ctx.fill(); }
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(82, 30, 2.6, 2.6); ctx.fillRect(88, 30, 2.6, 2.6);
+      txt(dtext, 112, 35, 24, '#ffffff', 'left');
     }
-    // level name (center); hudName lets a level pretend to be another
-    var name = lv.hudName || 'المرحلة ' + (game.li + 1) + ': ' + lv.name;
-    txt(name, 640, 36, 30, '#ffffff', 'center', { stroke: pal.ink, lw: 6 });
-    // world chip + best (right, left of the mute button)
+    // level name (center); hidden while the intro title banner is active to prevent duplicate stage text
+    if (game.introT <= 0.15) {
+      var name = lv.hudName || 'المرحلة ' + (game.li + 1) + ': ' + lv.name;
+      txt(name, 640, 36, 30, '#ffffff', 'center', { stroke: pal.ink, lw: 6 });
+    }
+    // world chip + best (right, left of the mute button, wrapped in a subtle dark pill)
     var best = save.best[game.li];
     var rtext = best == null ? WORLDS[WOF[game.li]].name : 'أقل سقطات: ' + best;
-    txt(rtext, 1200, 35, 22, 'rgba(255,255,255,0.85)', 'right', { w: 500 });
+    var rw = tw(rtext, 22, 700) + 32;
+    Art.rr(ctx, 1212 - rw, 14, rw, 40, 20); ctx.fillStyle = 'rgba(28,18,38,0.58)'; ctx.fill();
+    ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(255,255,255,0.28)'; ctx.stroke();
+    txt(rtext, 1212 - rw / 2, 35, 22, '#ffffff', 'center', { w: 700 });
     // reversed controls
     if (w.revT > 0) {
       bubble('التحكم معكوس! ' + w.revT.toFixed(1), 640, 92, 24, 1, 1 + 0.06 * Math.sin(game.t * 18));

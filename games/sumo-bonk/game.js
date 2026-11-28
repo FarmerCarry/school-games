@@ -319,9 +319,10 @@
     if (skyTheme !== arena.theme) skyDirty = true;
     for (var i = 0; i < 2; i++) {
       var sx = arena.start[i], top = platTopAt(sx) || 440;
-      resetPlayer(P[i], sx, top - R - 300 - i * 30, i ? -1 : 1);
+      resetPlayer(P[i], sx, demo ? top - R : top - R - 300 - i * 30, i ? -1 : 1);
+      if (demo) P[i].grounded = true;
     }
-    phase = 'intro'; phaseT = 0; roundT = 0; endT = 0; resolved = false; roundWinner = -1;
+    phase = demo ? 'fight' : 'intro'; phaseT = 0; roundT = 0; endT = 0; resolved = false; roundWinner = -1;
     timeScale = 1; slowT = 0; popups.length = 0; labelA = 0;
     for (var q = 0; q < PMAX; q++) { var pq = parts[q]; if (pq.on && (pq.kind === 'snow' || pq.kind === 'leaf' || pq.kind === 'streak' || pq.kind === 'crumb')) pq.on = false; }
     cam.x = W / 2; cam.y = H / 2; cam.z = 1;
@@ -1140,7 +1141,9 @@
     SA.rrect(ctx, x - w / 2, y - 15, w, 30, 7);
     ctx.fillStyle = '#9aa3c7'; ctx.save(); ctx.translate(0, 4); ctx.fill(); ctx.restore();
     SA.rrect(ctx, x - w / 2, y - 15, w, 30, 7); SA.fs(ctx, '#ffffff', OUT, 2.5);
-    ctx.font = '700 18px ' + FONT; ctx.direction = 'ltr'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#1d2340'; ctx.fillText(label, x, y + 1);
+    ctx.font = '700 ' + (w > 40 ? 15 : 18) + 'px ' + FONT;
+    ctx.direction = AR_RE.test(label) ? 'rtl' : 'ltr';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#1d2340'; ctx.fillText(label, x, y + 1);
   }
 
   function drawHUD() {
@@ -1178,7 +1181,7 @@
       var q = P[j]; if (q.out || q.splashed) continue;
       var z = cam.z + cam.punch;
       var sx = (q.x - cam.x) * z + W / 2 + shake.x, sy = (q.y - cam.y) * z + H / 2 + shake.y;
-      var ty = sy - (q.hat ? 172 : 140);
+      var ty = sy - (q.hat ? 188 : 148);
       if (sy < -40) {
         // off-screen arrow
         var ax = clamp(sx, 30, W - 30);
@@ -1188,15 +1191,21 @@
       // labels and keycaps fade out while a banner is up, so the words never stack on each other;
       // a high jump stops the keycap bubble below the arena name, and the label below the bubble
       var bubble = labelA > 0 && (showKeys || hint[j] > 0) && !q.cpu;
-      ty = Math.max(ty, bubble ? 166 : 150);
+      ty = Math.max(ty, bubble ? 192 : 154);
       if (bubble) {
         var arrowKeys = mode === 1 ? hintArrows : j === 1;
-        var k1 = arrowKeys ? '↑' : 'W', k2 = arrowKeys ? '↓' : 'S';
-        var bob = Math.sin(T * 5) * 3;
+        var bob = Math.sin(T * 5) * 3, bx = clamp(sx, 140, W - 140), by = ty - 86 + bob;
         ctx.save(); ctx.globalAlpha = labelA;
-        SA.rrect(ctx, sx - 100, ty - 66 + bob, 200, 50, 14); SA.fs(ctx, 'rgba(255,255,255,0.92)', OUT, 3);
-        drawKey(sx + 76, ty - 41 + bob, k1); text('قفز', sx + 52, ty - 39 + bob, 19, '#2b1d3a', 'right', 0);
-        drawKey(sx - 8, ty - 41 + bob, k2); text('هجوم', sx - 32, ty - 39 + bob, 19, '#2b1d3a', 'right', 0);
+        if (mode === 1 && !arrowKeys) {
+          SA.rrect(ctx, bx - 126, by, 252, 50, 14); SA.fs(ctx, 'rgba(255,255,255,0.94)', OUT, 3);
+          drawKey(bx + 100, by + 25, 'W', 32); drawKey(bx + 50, by + 25, 'مسافة', 56); text('قفز', bx + 14, by + 27, 19, '#2b1d3a', 'right', 0);
+          drawKey(bx - 40, by + 25, 'S', 32); text('هجوم', bx - 64, by + 27, 19, '#2b1d3a', 'right', 0);
+        } else {
+          var k1 = arrowKeys ? '↑' : 'W', k2 = arrowKeys ? '↓' : 'S';
+          SA.rrect(ctx, bx - 100, by, 200, 50, 14); SA.fs(ctx, 'rgba(255,255,255,0.94)', OUT, 3);
+          drawKey(bx + 76, by + 25, k1); text('قفز', bx + 52, by + 27, 19, '#2b1d3a', 'right', 0);
+          drawKey(bx - 8, by + 25, k2); text('هجوم', bx - 32, by + 27, 19, '#2b1d3a', 'right', 0);
+        }
         ctx.restore();
       }
       if (q.action === 'windup') {
@@ -1300,7 +1309,6 @@
     hype = Math.max(0, hype - dt * 0.6);
     if (scr === 'over') { overStep(dt); Kit.keys.endFrame(); return; }
     if (scr === 'select') drawPreviews(dt);
-    if (scr === 'title') drawHatBar();
     shake.update(dt);
     for (var i = 0; i < popups.length; i++) popups[i].t += dt;
     while (popups.length && popups[0].t > popups[0].life) popups.shift();
@@ -1323,7 +1331,7 @@
 
   /* ================================================================== UI */
   var $ = function (id) { return document.getElementById(id); };
-  var screens = { title: $('scr-title'), select: $('scr-select'), pause: $('scr-pause'), over: $('scr-over') };
+  var screens = { title: $('scr-title'), hats: $('scr-hats'), select: $('scr-select'), pause: $('scr-pause'), over: $('scr-over') };
   var btnPause = $('bPause');
   function showScreen(name) {
     for (var k in screens) screens[k].hidden = k !== name;
@@ -1338,18 +1346,19 @@
   }
 
   function refreshTitle() {
+    var cnt = unlockedCount() + ' / ' + HATS.length;
     $('tStars').textContent = save.stars;
-    $('tHats').textContent = unlockedCount() + ' / ' + HATS.length;
+    $('tHats').textContent = cnt;
+    $('bHatsSub').textContent = cnt;
     var nh = nextHat();
     if (nh) {
       var prev = 0;
       HATS.forEach(function (h) { if (!h.special && h.stars <= save.stars && h.stars > prev) prev = h.stars; });
-      $('tNext').innerHTML = 'القبعة التالية: <b>' + nh.name + '</b> عند <span dir="ltr">★ ' + nh.stars + '</span>';
+      $('tNext').innerHTML = 'التالية: <b>' + nh.name + '</b> (<span dir="ltr">★ ' + nh.stars + '</span>)';
       $('tBar').style.width = Math.round(100 * (save.stars - prev) / Math.max(1, nh.stars - prev)) + '%';
     } else { $('tNext').textContent = 'فتحت كل قبعات النجوم!'; $('tBar').style.width = '100%'; }
-    $('tRecord').textContent = save.bestStreak ? 'أطول سلسلة انتصارات: ' + save.bestStreak : '';
-    $('tMedals').textContent = medals() + ' / 24';
-    hatBarDirty = true;
+    $('tRecord').textContent = save.bestStreak ? 'أطول سلسلة: ' + save.bestStreak : '';
+    $('tMedals').textContent = medals() + '/24';
   }
 
   // ---- select screen
@@ -1474,32 +1483,44 @@
     }
   }
 
-  // ---- title hat collection bar
-  var hatBarDirty = true, hatBarCtx = null, hatTick = 0;
-  function drawHatBar() {
-    if (!hatBarCtx) return;
-    // the little hat wobbles look fine at 20 fps; a change or resize repaints straight away
-    if (!hatBarDirty && ++hatTick % 3) return;
-    hatBarDirty = false;
-    var cv = hatBarCtx.canvas, s = cv.width / 900, c = hatBarCtx;
-    c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, cv.width, cv.height);
-    c.setTransform(s, 0, 0, s, 0, 0);
-    var n = HATS.length - 1;
-    for (var i = 1; i < HATS.length; i++) {
-      var x = 26 + (i - 1) * (848 / (n - 1)), y = 50, ok = hatUnlocked(i);
-      SA.circ(c, x, 44, 24); SA.fs(c, ok ? 'rgba(255,255,255,0.95)' : 'rgba(20,16,40,0.55)', ok ? OUT : 'rgba(255,255,255,0.35)', 3);
-      c.save(); c.translate(x, y); c.scale(0.5, 0.5);
-      if (!ok) c.globalAlpha = 0.35;
-      SA.drawHat(c, HATS[i].id, T + i);
-      c.restore();
-      if (!ok) {
-        c.font = '700 13px ' + FONT; c.textAlign = 'center'; c.textBaseline = 'middle';
-        c.lineWidth = 4; c.strokeStyle = OUT; c.fillStyle = '#ffe14a';
-        var lab = HATS[i].special ? HATS[i].short : '★' + HATS[i].stars;
-        c.direction = HATS[i].special === 'crown' ? 'rtl' : 'ltr';
-        c.strokeText(lab, x, 80); c.fillText(lab, x, 80);
+  // ---- hats collection modal
+  function openHats() {
+    scr = 'hats';
+    buildHatGrid();
+    showScreen('hats');
+  }
+  function buildHatGrid() {
+    $('hStat').textContent = unlockedCount() + ' / ' + HATS.length + '  •  ★ ' + save.stars;
+    var grid = $('hatGrid');
+    grid.innerHTML = '';
+    HATS.forEach(function (h, i) {
+      var ok = hatUnlocked(i), eq = save.picks.h0 === i;
+      var d = document.createElement('div');
+      d.className = 'hcard' + (eq ? ' eq' : '') + (ok ? '' : ' locked');
+      var cv = document.createElement('canvas'); cv.width = 168; cv.height = 148;
+      var c = cv.getContext('2d');
+      c.save(); c.translate(84, 118); c.scale(1.5, 1.5);
+      if (h.id === 'none') {
+        SA.circ(c, 0, -28, 22); SA.fs(c, '#ffffff', OUT, 3);
+        c.strokeStyle = '#ff5a5f'; c.lineWidth = 4; SA.line(c, -14, -42, 14, -14);
+      } else {
+        if (!ok) c.globalAlpha = 0.4;
+        SA.drawHat(c, h.id, 0.5);
       }
-    }
+      c.restore();
+      d.appendChild(cv);
+      var nm = document.createElement('div'); nm.className = 'hnm'; nm.textContent = h.name; d.appendChild(nm);
+      var bdg = document.createElement('div'); bdg.className = 'hbdg';
+      if (eq) bdg.textContent = 'مُرتداة ✔';
+      else if (ok) bdg.textContent = 'اختر';
+      else bdg.textContent = h.special ? h.short : '★ ' + h.stars;
+      d.appendChild(bdg);
+      d.addEventListener('click', function () {
+        if (!ok) { SFX.locked(); return; }
+        save.picks.h0 = i; persist('picks'); SFX.tick(); buildHatGrid();
+      });
+      grid.appendChild(d);
+    });
   }
 
   // ---- game over screen
@@ -1548,6 +1569,8 @@
       if (ok) { SFX.click(); toSelect(mode); }
       else if (k.pressed('Digit1') || k.pressed('Numpad1')) { SFX.click(); toSelect(1); }
       else if (k.pressed('Digit2') || k.pressed('Numpad2')) { SFX.click(); toSelect(2); }
+    } else if (scr === 'hats') {
+      if (k.pressed('Escape')) { SFX.click(); goTitle(); }
     } else if (scr === 'select') {
       if (ok) { SFX.click(); startMatch(); return; }
       if (k.pressed('Escape')) { SFX.click(); goTitle(); return; }
@@ -1591,6 +1614,8 @@
   function onClick(id, fn) { $(id).addEventListener('click', function (e) { e.preventDefault(); Kit.audio.unlock(); fn(e); if (e.detail > 0) this.blur(); }); }
   onClick('b1p', function () { SFX.click(); toSelect(1); });
   onClick('b2p', function () { SFX.click(); toSelect(2); });
+  onClick('bHats', function () { SFX.click(); openHats(); });
+  onClick('bHatsBack', function () { SFX.click(); goTitle(); });
   onClick('bFight', function () { SFX.click(); startMatch(); });
   onClick('bBack', function () { SFX.click(); goTitle(); });
   onClick('bResume', function () { SFX.click(); pause(false); });
@@ -1615,13 +1640,11 @@
   muteBtn.setAttribute('aria-label', 'تشغيل الصوت أو كتمه');
   muteBtn.title = 'الصوت (M)';
 
-  // mini canvases (previews + hat bar) sized for crisp drawing
+  // mini canvases (previews) sized for crisp drawing
   sizeMiniCanvases = function () {
     var s = view.scale * view.dpr;
     ['pv0', 'pv1'].forEach(function (id, i) { var c = $(id); c.width = Math.round(220 * s); c.height = Math.round(220 * s); pvCtx[i] = c.getContext('2d'); });
     var rv = $('rivals'); rv.width = Math.round(360 * s); rv.height = Math.round(64 * s); rivalsCtx = rv.getContext('2d');
-    var hb = $('hatbar'); hb.width = Math.round(900 * s); hb.height = Math.round(96 * s); hatBarCtx = hb.getContext('2d');
-    hatBarDirty = true;
   };
   sizeMiniCanvases();
   onResize(view);

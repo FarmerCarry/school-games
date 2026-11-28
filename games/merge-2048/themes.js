@@ -44,7 +44,7 @@
       ]
     },
     {
-      id: 'fruit', name: 'فواكه', req: 512, style: 'emoji', icon: 64,
+      id: 'fruit', name: 'فواكه', req: 0, style: 'emoji', icon: 64,
       bg: ['#5ff0d2', '#1aa7c9'], page: '#2bbccb', deco: 'dots',
       board: '#fff7e8', boardLip: '#d99a52', cell: '#fbe2c4',
       emoji: ['🍒', '🍓', '🍇', '🍋', '🍊', '🍎', '🍑', '🍍', '🥥', '🍉', '🎂', '🍦', '🍭', '🍩', '🏆', '💎'],

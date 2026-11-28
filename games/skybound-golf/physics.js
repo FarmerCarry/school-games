@@ -418,20 +418,20 @@
       scenery.push({ kind: 'pine', x: 14, y: rawHeight(course, 14), z: -8.5, scale: 1.15 });
       scenery.push({ kind: 'roundTree', x: 26, y: rawHeight(course, 26), z: -9.5, scale: 1.3 });
       scenery.push({ kind: 'flag', x: 38, y: rawHeight(course, 38), z: -3.2, scale: 1 });
-      scenery.push({ kind: 'cloud', x: -6, y: 12.5, z: -22, scale: 1.05 });
-      scenery.push({ kind: 'cloud', x: 14, y: 13.5, z: -20, scale: 1.25 });
-      scenery.push({ kind: 'cloud', x: 36, y: 24, z: -22, scale: 1.1 });
-      // Guaranteed first-shot friendly coins & trampoline so first shot feels awesome!
+      scenery.push({ kind: 'cloud', x: -7, y: 11.4, z: -22, scale: 0.95 });
+      scenery.push({ kind: 'cloud', x: 26, y: 11.8, z: -22, scale: 1.0 });
+      scenery.push({ kind: 'cloud', x: 48, y: 21, z: -24, scale: 1.05 });
+      // Guaranteed first-shot friendly coins & trampoline framed cleanly below top HUD!
       trampolines.push({ id: 'tr0', x: 38, y: rawHeight(course, 38) + 0.55, r: 2.7 });
       for (var f0 = 0; f0 < 5; f0++) {
         var fu = (f0 - 2) / 2;
-        stars.push({ id: 'c0_' + f0, x: 11 + f0 * 4.2, y: 12.2 + (1 - fu * fu) * 4.6, value: f0 === 2 ? 3 : 1, star: f0 === 2 });
+        stars.push({ id: 'c0_' + f0, x: 8.5 + f0 * 3.1, y: 7.4 + (1 - fu * fu) * 2.5, value: f0 === 2 ? 3 : 1, star: f0 === 2 });
       }
       for (var f1 = 0; f1 < 3; f1++) {
-        stars.push({ id: 'c0b_' + f1, x: 14 + f1 * 4.5, y: 6.8 + (f1 === 1 ? 2.2 : 0), value: 1, star: false });
+        stars.push({ id: 'c0b_' + f1, x: 10.5 + f1 * 3.3, y: 4.9 + (f1 === 1 ? 1.5 : 0), value: 1, star: false });
       }
-      balloons.push({ id: 'bal0_0', x: 24, y: 15.5, r: 3.8, colorIdx: 0 });
-      balloons.push({ id: 'bal0_1', x: 44, y: 26, r: 3.8, colorIdx: 1 });
+      balloons.push({ id: 'bal0_0', x: 24.8, y: 10.6, r: 3.8, colorIdx: 0 });
+      balloons.push({ id: 'bal0_1', x: 48, y: 24, r: 3.8, colorIdx: 1 });
     }
 
     var chunk = {

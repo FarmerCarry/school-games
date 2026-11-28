@@ -337,7 +337,7 @@
       if (key === 'diff') p.classList.toggle('off', f.bots === 0);
     });
     var lu = $('lineup'); lu.innerHTML = '';
-    var hints = ['W A S D + Q', '↑ ← ↓ → + /', 'I J K L + U'];
+    var hints = ['WASD + Q/Space', '↑←↓→ + / / Enter', 'IJKL + U'];
     freePreview().forEach(function (pl) {
       var d = document.createElement('div'); d.className = 'lu';
       d.innerHTML = '<canvas width="180" height="136"></canvas><b></b><span></span>';

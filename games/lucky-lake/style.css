@@ -17,11 +17,11 @@ html,body{background:#0d4f7a}#game{cursor:crosshair}[hidden]{display:none!import
 .wig{animation:lw .4s}@keyframes lw{25%{translate:-8px}75%{translate:8px}}
 .ch{top:14px;left:14px;height:60px;padding:0 18px 0 12px;gap:8px;background:rgba(28,34,80,.82);border-color:#fff;color:#fff;font-size:27px}
 .cn{width:28px;height:28px;background:#ffd23f;flex:none}
-.lg{top:4px;inset-inline:0;margin:0;text-align:center;line-height:1}.lg span,.s span,.place .st,.f.st,.s3 span{paint-order:stroke fill}
-.lg span{display:block;-webkit-text-stroke:11px var(--k);text-shadow:0 11px 0 var(--k)}.l1{font-size:84px;color:#fff}.l2{font-size:130px;color:#ffd23f;margin-top:-26px}
-.py{left:550px;top:326px;width:180px;height:180px;background:#3ddc84;border-width:7px;font-size:82px;padding-left:8px}
-.sd{inset-inline:0;top:564px;gap:50px}.s{width:96px;height:96px;font-size:42px}
-.s span{position:absolute;top:100%;margin-top:8px;left:50%;transform:translateX(-50%);white-space:nowrap;font-size:21px;color:#fff;-webkit-text-stroke:6px var(--k)}
+.lg{top:10px;inset-inline:0;margin:0;text-align:center;line-height:1}.lg span,.place .st,.f.st,.s3 span{paint-order:stroke fill}
+.lg span{display:block;-webkit-text-stroke:10px var(--k);text-shadow:0 9px 0 var(--k)}.l1{font-size:74px;color:#fff}.l2{font-size:112px;color:#ffd23f;margin-top:-12px}
+.py{left:556px;top:316px;width:168px;height:168px;background:linear-gradient(#52ee98,#29c86f);border-width:7px;font-size:78px;padding-left:8px}
+.sd{inset-inline:0;top:562px;gap:42px}.s{width:92px;height:92px;font-size:40px}
+.s span{position:absolute;top:100%;margin-top:8px;left:50%;transform:translateX(-50%);white-space:nowrap;font-size:19px;color:#fff;background:rgba(20,30,72,.88);padding:2px 13px 4px;border-radius:99px;border:3px solid #fff;box-shadow:0 4px 0 var(--k)}
 #btnBook{background:#ff8a3d}#btnDuo{background:#fff}#btnRods{background:#b48cff}
 #mapHome,#bookBack,#rodsBack,#btnPause{top:14px;left:14px}#mapCoins,#rodsCoins,#bookCount{left:96px}
 .place,.tile{flex-direction:column;justify-content:flex-start;border-radius:34px;background:#fff8e8;color:var(--k)}
@@ -49,7 +49,8 @@ html,body{background:#0d4f7a}#game{cursor:crosshair}[hidden]{display:none!import
 .pl .sg-key{font-size:26px;min-width:52px;padding:4px 10px;margin:3px}.pl .wd{min-width:164px}
 .pl .ok{bottom:-24px;left:50%;width:54px;height:54px;margin-left:-27px;background:#3ddc84;color:#fff;font-size:30px;display:none}.pl.ready{box-shadow:0 0 0 6px #3ddc84}
 .md{flex-direction:column;gap:6px}.ck{font-size:42px;padding:0 16px;background:#fff}.fc{font-size:64px}
-#hud{inset:0 auto auto 0;z-index:3}#btnBasket{top:14px;left:94px;background:#fff3d6;font-size:34px}
-#btnBasket b{bottom:-12px;right:-10px;min-width:34px;height:34px;padding:0 6px;background:#ff5d9e;color:#fff;font-size:20px;line-height:26px}
+#hud{inset:0 auto auto 0;z-index:3}#btnPause{width:58px;height:58px;font-size:24px}
+#btnBasket{top:82px;left:14px;height:50px;padding:0 12px;gap:7px;background:#fff5da;color:var(--k);font-size:20px;border-width:4px;box-shadow:0 5px 0 var(--k)}
+#btnBasket b{position:static;min-width:28px;height:28px;padding:0 7px;background:#ff5d9e;color:#fff;font-size:17px;line-height:22px;border-width:3px}
 #ghost{inset:0 auto auto 0;font-size:62px;line-height:1;z-index:30}
 html[data-sg-motion="reduce"] :is(.rg::after,.place.next::after){animation:none}

@@ -12,14 +12,17 @@
 <canvas id="game" tabindex="0" aria-label="هجوم الروبوتات"></canvas>
 
 <div id="ui">
-  <div id="xpTrack" hidden><i id="xpFill"></i></div>
-  <button type="button" id="btnPause" hidden aria-label="إيقاف مؤقت">❚❚</button>
+  <button type="button" id="btnPause" hidden aria-label="إيقاف مؤقت"><svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><rect x="3" y="2" width="5" height="16" rx="2"/><rect x="12" y="2" width="5" height="16" rx="2"/></svg></button>
+  <div id="xpTrack" hidden>
+    <span id="xpLvl">مستوى 1</span>
+    <span class="rs-xp-rail"><i id="xpFill"></i></span>
+  </div>
 
   <div id="hud" hidden>
-    <div class="rs-pill" id="hudWave">موجة 1 · 0:00</div>
+    <div class="rs-pill" id="hudWave">⚡ 1/3 · 0:00</div>
     <div class="rs-pill rs-hearts" id="hudHearts">♥♥♥♥♥♥</div>
-    <div class="rs-pill" id="hudScore">⚙️ 0 · م 1</div>
-    <div class="rs-pill rs-combo" id="hudCombo" hidden>سلسلة 3×</div>
+    <div class="rs-pill" id="hudScore">⚙️ 0</div>
+    <div class="rs-pill rs-combo" id="hudCombo" hidden>🔥 سلسلة 3×</div>
   </div>
 
   <div id="bossBar" hidden>
@@ -30,47 +33,40 @@
   <div id="banner" hidden></div>
 </div>
 
-<div class="sg-overlay rs-overlay" id="scrTitle">
-  <div class="rs-title-card">
-    <div class="rs-header">
-      <div class="rs-badge">ساحة الآليين الخارقة</div>
-      <h1 class="rs-logo"><span class="a">هجوم</span> <span class="b">الروبوتات</span></h1>
-      <p class="rs-sub">التقط كبسولات الأسلحة الفورية ودمّر الزعيم الآلي خلال 90 ثانية!</p>
-    </div>
+<div class="sg-overlay rs-overlay rs-title-screen" id="scrTitle">
+  <div class="rs-hero-top">
+    <div class="rs-badge">ساحة الآليين الخارقة</div>
+    <h1 class="rs-logo"><span class="a">هجوم</span> <span class="b">الروبوتات</span></h1>
+    <p class="rs-sub">التقط كبسولات الأسلحة ودمّر الزعيم الآلي خلال 90 ثانية!</p>
+  </div>
 
-    <div class="rs-controls-grid">
-      <div class="rs-group">
-        <span class="rs-label">اللاعبون</span>
-        <div class="rs-chips">
-          <button type="button" class="rs-chip on" id="btn1p">لاعب 1</button>
-          <button type="button" class="rs-chip" id="btn2p">لاعبان</button>
-        </div>
-      </div>
-      <div class="rs-group">
-        <span class="rs-label">الصعوبة</span>
-        <div class="rs-chips" id="diffRow">
-          <button type="button" class="rs-chip on" data-diff="easy">سهل</button>
-          <button type="button" class="rs-chip" data-diff="normal">متوسط</button>
-          <button type="button" class="rs-chip" data-diff="hero">بطل</button>
-        </div>
-      </div>
-    </div>
-
-    <div class="rs-arenas" id="arenaRow"></div>
-
+  <div class="rs-hero-bottom">
     <div class="rs-cta-row">
-      <button type="button" class="sg-btn rs-play" id="btnPlay">انطلق للمعركة!</button>
+      <button type="button" class="sg-btn rs-play" id="btnPlay">▶ انطلق للمعركة!</button>
       <button type="button" class="sg-btn secondary rs-garage-btn" id="btnGarage">ورشة الآليين · ⚙️ <b id="coinLbl">0</b></button>
+    </div>
+
+    <div class="rs-dock-bar">
+      <div class="rs-group">
+        <button type="button" class="rs-chip on" id="btn1p">لاعب 1</button>
+        <button type="button" class="rs-chip" id="btn2p">لاعبان</button>
+      </div>
+      <div class="rs-group" id="diffRow">
+        <button type="button" class="rs-chip on" data-diff="easy">سهل</button>
+        <button type="button" class="rs-chip" data-diff="normal">متوسط</button>
+        <button type="button" class="rs-chip" data-diff="hero">بطل</button>
+      </div>
+      <div class="rs-arenas" id="arenaRow"></div>
     </div>
 
     <div class="rs-howto" id="howto1p">
       <span>الحركة: <span class="sg-key" dir="ltr">WASD</span> أو الأسهم أو الفأرة</span>
-      <span>الاندفاع الصاعق: <span class="sg-key" dir="ltr">Space</span> أو <span class="sg-key" dir="ltr">Shift</span> أو الزر الأيمن</span>
+      <span>الاندفاع: <span class="sg-key">مسافة</span> أو <span class="sg-key" dir="ltr">Shift</span></span>
       <span>إيقاف: <span class="sg-key" dir="ltr">P</span></span>
     </div>
     <div class="rs-howto" id="howto2p" hidden>
-      <span>لاعب 1: <span class="sg-key" dir="ltr">WASD</span> + <span class="sg-key" dir="ltr">Space</span></span>
-      <span>لاعب 2: الأسهم + <span class="sg-key" dir="ltr">Enter</span></span>
+      <span>لاعب 1: <span class="sg-key" dir="ltr">WASD</span> + <span class="sg-key">مسافة</span></span>
+      <span>لاعب 2: الأسهم + <span class="sg-key">إدخال</span></span>
       <span>المس حلقة زميلك لإنعاشه!</span>
     </div>
   </div>

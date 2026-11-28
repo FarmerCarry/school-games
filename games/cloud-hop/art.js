@@ -167,13 +167,30 @@
       }
       c.lineWidth = 4; c.strokeStyle = INK; c.lineJoin = 'round';
       if (i === 0) {
-        // a smiley sun
-        c.fillStyle = 'rgba(255,248,180,0.35)'; blob(c, 1080, 118, 112, 112); c.fill();
-        c.fillStyle = 'rgba(255,248,180,0.45)'; blob(c, 1080, 118, 86, 86); c.fill();
-        blob(c, 1080, 118, 62, 62); c.fillStyle = '#ffe766'; c.fill(); c.stroke();
-        c.lineWidth = 4; c.beginPath(); c.arc(1060, 112, 8, M.PI * 1.1, M.PI * 1.9); c.stroke(); c.beginPath(); c.arc(1100, 112, 8, M.PI * 1.1, M.PI * 1.9); c.stroke();
-        c.beginPath(); c.arc(1080, 128, 20, 0.15 * M.PI, 0.85 * M.PI); c.stroke();
-        c.fillStyle = '#ffb37a'; blob(c, 1046, 132, 9, 5); c.fill(); blob(c, 1114, 132, 9, 5); c.fill();
+        // soft pastel rainbow band & distant pillowy cloud horizon for airy depth
+        var rb = ['#ff8ec4', '#ffb77a', '#ffe67a', '#7ee8b2', '#7fd4ff', '#b99cff'];
+        c.save(); c.globalAlpha = 0.24; c.lineCap = 'round';
+        for (var ri = 0; ri < rb.length; ri++) {
+          c.beginPath(); c.arc(640, 810, 660 - ri * 15, M.PI * 1.15, M.PI * 1.85);
+          c.lineWidth = 15; c.strokeStyle = rb[ri]; c.stroke();
+        }
+        c.globalAlpha = 0.48; c.fillStyle = '#eff9ff';
+        for (var rc = -1; rc <= 8; rc++) {
+          blob(c, rc * 170 + 60, 668 + (rc % 2) * 18, 128, 72); c.fill();
+        }
+        c.globalAlpha = 0.62; c.fillStyle = '#ffffff';
+        for (var rc2 = 0; rc2 <= 9; rc2++) {
+          blob(c, rc2 * 148, 706 + (rc2 % 2) * 12, 108, 56); c.fill();
+        }
+        c.restore();
+        // a smiley sun positioned cleanly below the top-right candy chip and above title chips
+        var sx0 = 1062, sy0 = 144;
+        c.fillStyle = 'rgba(255,248,180,0.34)'; blob(c, sx0, sy0, 96, 96); c.fill();
+        c.fillStyle = 'rgba(255,248,180,0.46)'; blob(c, sx0, sy0, 74, 74); c.fill();
+        blob(c, sx0, sy0, 54, 54); c.fillStyle = '#ffe766'; c.fill(); c.stroke();
+        c.lineWidth = 4; c.beginPath(); c.arc(sx0 - 17, sy0 - 5, 7, M.PI * 1.1, M.PI * 1.9); c.stroke(); c.beginPath(); c.arc(sx0 + 17, sy0 - 5, 7, M.PI * 1.1, M.PI * 1.9); c.stroke();
+        c.beginPath(); c.arc(sx0, sy0 + 9, 17, 0.15 * M.PI, 0.85 * M.PI); c.stroke();
+        c.fillStyle = '#ffb37a'; blob(c, sx0 - 29, sy0 + 12, 8, 4.5); c.fill(); blob(c, sx0 + 29, sy0 + 12, 8, 4.5); c.fill();
       } else if (i === 1) {
         // a big low sun and floating lollipops
         c.fillStyle = 'rgba(255,245,190,0.45)'; blob(c, 260, 560, 190, 190); c.fill();
@@ -752,11 +769,18 @@
       var hit = v.calm ? 9 : since;
       put(ctx, platSprite('cloud', 250), cx, cy + (hit < 0.3 ? 6 * M.exp(-hit * 10) : 0));
       springEyes(o.dt || 0, M.sin(t * 1.7) * 0.6, ph < 0.5 ? 0.5 : -0.5);
+      // Orbiting candies depth-sorted around Marshy's waist/feet so back-arc passes behind him and front-arc never crosses his eyes
+      var oy = (cy - hgt) - 22, cIdx, ca;
+      for (cIdx = 0; cIdx < 5; cIdx++) {
+        ca = t * (v.calm ? 0 : 1.2) + cIdx * TAU / 5;
+        if (M.sin(ca) >= 0) continue;
+        ctx.save(); ctx.globalAlpha = 0.88; ctx.translate(cx + M.cos(ca) * 164, oy + M.sin(ca) * 48); put(ctx, candySprite(cIdx), 0, 0, 0.78, 0.78); ctx.restore();
+      }
       CH.drawChar(ctx, o.char, cx, cy - hgt, 150, { t: t, sq: v.calm ? 0 : sq, eyes: v.eyes, mood: ph > 0.45 && ph < 0.6 ? 'wow' : 'happy', arms: ph < 0.5 ? 0.9 : 0.3 });
-      // candies circling for flavour
-      for (var c = 0; c < 5; c++) {
-        var a = t * (v.calm ? 0 : 1.2) + c * TAU / 5;
-        ctx.save(); ctx.translate(cx + M.cos(a) * 150, 300 + M.sin(a) * 40); put(ctx, candySprite(c), 0, 0, 0.9, 0.9); ctx.restore();
+      for (cIdx = 0; cIdx < 5; cIdx++) {
+        ca = t * (v.calm ? 0 : 1.2) + cIdx * TAU / 5;
+        if (M.sin(ca) < 0) continue;
+        ctx.save(); ctx.translate(cx + M.cos(ca) * 164, oy + M.sin(ca) * 48); put(ctx, candySprite(cIdx), 0, 0, 0.9, 0.9); ctx.restore();
       }
     };
     return v;

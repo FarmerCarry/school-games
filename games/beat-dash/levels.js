@@ -41,25 +41,19 @@
     id: 'first-song', name: 'أغنيتي الأولى', diff: 'سهل جدًا', face: 'starter', bpm: 128,
     // always played at 80% (an easy 102 bpm), and the difficulty slows it to 60% at most
     pace: 0.8, slowest: 0.75,
-    theme: { bg1: '#0b3d2e', bg2: '#1f8a5b', ground1: '#1a6b47', ground2: '#0a2e1f', line: '#b6ff7a',
-      block: '#0c3324', blockLine: '#b6ff7a', spike: '#ffcf3d', accent: '#ffcf3d', deco: '#3fbf7f' },
+    theme: { bg1: '#160b4f', bg2: '#5c24bd', ground1: '#2e1582', ground2: '#12063a', line: '#3df2ff',
+      block: '#211060', blockLine: '#3df2ff', spike: '#ff4fa3', accent: '#ffe14d', deco: '#ff5ad1' },
     song: { root: 60, scale: 'major', prog: [0, 3, 4, 0], chill: true },
-    // The very first level, made after the play statistics showed most children crashing on the
-    // first spikes of Neon Steps: a slower song (128 bpm played at 80%), a long run-up, only single spikes
-    // and one-block steps, every jump from the ground and at least three beats apart, and
-    // checkpoint flags (see game.js "checkpoint flags") so a crash never sends a child back to
-    // the start. Checked by tools/tests/beat-dash-engine.test.mjs. One star lies on the road,
-    // one floats over a spike and one waits on the long step.
-    tutorial: [{ x: 50, text: 'اقفز الآن!' }, { x: 66, text: 'مرة أخرى!' }, { x: 82, text: 'اقفز فوق المكعب!' }],
-    signs: [{ x: 7, y: 3.6, text: 'اضغط مسافة أو انقر لتقفز!', col: '#b6ff7a' },
-            { x: 112, y: 3.4, text: 'الأعلام تحفظ مكانك!', col: '#ffcf3d' }],
+    tutorial: [{ x: 18, text: 'اقفز الآن!' }, { x: 34, text: 'مرة أخرى!' }, { x: 50, text: 'اقفز فوق المكعب!' }],
+    signs: [{ x: 9.8, y: 3.9, text: 'اضغط مسافة أو انقر لتقفز!', col: '#3df2ff' },
+            { x: 80, y: 3.4, text: 'الأعلام تحفظ مكانك!', col: '#ffe14d' }],
     chunks: [
-      // intro: a long run-up (about 6 s) to read the sign and get ready
-      ['....|....|....|....|....|....|....|....|....|....|....|....'],
+      // brisk intro (~2.6s) with glowing collectible star & first spike visible right at launch!
+      ['....|....|...*|....'],
       // the tutorial: a spike, another spike, a low block to hop onto
       ['..^.|....|....|....|..^.|....|....|....|..##|....|....|....'],
-      // a free star on the road, then single spikes four beats apart
-      ['....|..*.|....|....|..^.|....|....|....|..^.|....|....|....'],
+      // single spikes four beats apart
+      ['....|....|....|....|..^.|....|....|....|..^.|....|....|....'],
       // a star over a spike: jump on the beat to take it
       ['....|....|..*.|....|....|....|....|....',
        '....|....|....|....|....|....|....|....',

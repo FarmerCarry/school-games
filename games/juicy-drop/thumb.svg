@@ -42,8 +42,9 @@
     <rect x="20" y="20" width="60" height="60" rx="10"/><rect x="160" y="20" width="60" height="60" rx="10"/><rect x="300" y="20" width="60" height="60" rx="10"/>
     <rect x="90" y="95" width="60" height="60" rx="10"/><rect x="230" y="95" width="60" height="60" rx="10"/>
   </g>
-  <rect x="0" y="334" width="400" height="66" fill="#d4843d"/>
-  <rect x="0" y="334" width="400" height="10" fill="#e6a15c"/>
+  <rect x="0" y="296" width="400" height="104" fill="#d4843d"/>
+  <rect x="0" y="296" width="400" height="10" fill="#e6a15c"/>
+  <g transform="translate(0 -38)">
   <!-- Cute cloud dropper -->
   <g transform="translate(200 132)">
     <g fill="#ffffff" stroke="#2c2448" stroke-width="5" stroke-linejoin="round">
@@ -106,6 +107,5 @@
     <path d="M44 174 L50 188 L64 194 L50 200 L44 214 L38 200 L24 194 L38 188 Z"/>
     <path d="M356 206 L360 216 L370 220 L360 224 L356 234 L352 224 L342 220 L352 216 Z"/>
   </g>
-  <!-- Bold Arabic title -->
-  <text x="200" y="76" text-anchor="middle" direction="rtl" font-family="Fredoka, 'Baloo Bhaijaan 2', Tahoma, sans-serif" font-size="64" font-weight="700" fill="#ff7a1f" stroke="#2c2448" stroke-width="13" stroke-linejoin="round" paint-order="stroke fill">سلّة الفواكه</text>
+  </g>
 </svg>

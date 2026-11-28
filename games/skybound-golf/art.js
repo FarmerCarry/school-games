@@ -23,14 +23,14 @@
     scene.fog = new T.Fog(0x88dcff, 48, 170);
 
     var camera = new T.PerspectiveCamera(42, 16 / 9, 0.5, 290);
-    var camPos = new T.Vector3(4, 7.2, 23);
-    var camLook = new T.Vector3(6, 5.2, 0);
+    var camPos = new T.Vector3(4.2, 8.6, 22.0);
+    var camLook = new T.Vector3(5.6, 6.8, 0);
     camera.position.copy(camPos);
     camera.lookAt(camLook);
 
-    // Warm cartoon hemisphere + directional sunlight
-    var hemi = new T.HemisphereLight(0xfffbe6, 0x3ba86b, 1.38);
-    var sunLight = new T.DirectionalLight(0xfff4d4, 1.95);
+    // Joyful sunlit cartoon hemisphere + directional sunlight
+    var hemi = new T.HemisphereLight(0xfffdf2, 0x62d478, 1.52);
+    var sunLight = new T.DirectionalLight(0xfff6dc, 2.05);
     sunLight.position.set(16, 28, 22);
     scene.add(hemi, sunLight);
 
@@ -74,8 +74,8 @@
 
     /* ------------------------------------------------ Altitude Sky Palette */
     var SKY_STOPS = [
-      { y: 0,   sky: new T.Color(0x47bfff), fog: new T.Color(0x88dcff), hemiTop: new T.Color(0xfffbe6), hemiBot: new T.Color(0x3ca868), sunI: 1.95, fogFar: 175 },
-      { y: 55,  sky: new T.Color(0x2e9dff), fog: new T.Color(0x7acbff), hemiTop: new T.Color(0xf0f8ff), hemiBot: new T.Color(0x4ba0e0), sunI: 1.90, fogFar: 195 },
+      { y: 0,   sky: new T.Color(0x54cbff), fog: new T.Color(0xa6e8ff), hemiTop: new T.Color(0xfffdf2), hemiBot: new T.Color(0x64d67a), sunI: 2.05, fogFar: 185 },
+      { y: 55,  sky: new T.Color(0x32a4ff), fog: new T.Color(0x88d6ff), hemiTop: new T.Color(0xf4faff), hemiBot: new T.Color(0x5bb2ee), sunI: 1.95, fogFar: 200 },
       { y: 125, sky: new T.Color(0x1b58c8), fog: new T.Color(0x4780e6), hemiTop: new T.Color(0xdbeaff), hemiBot: new T.Color(0x284e9c), sunI: 1.80, fogFar: 220 },
       { y: 220, sky: new T.Color(0x181c5e), fog: new T.Color(0x2f2978), hemiTop: new T.Color(0x9eeeff), hemiBot: new T.Color(0x2c1b59), sunI: 1.65, fogFar: 245 },
       { y: 330, sky: new T.Color(0x07091f), fog: new T.Color(0x121036), hemiTop: new T.Color(0xbcd8ff), hemiBot: new T.Color(0x1b1544), sunI: 1.55, fogFar: 270 }
@@ -164,7 +164,7 @@
     // 92 slices * 1.75 m = 161 m span, 5 cross-section bands = 4 quads/slice = 8 tris/slice
     var SLICES = 92;
     var STEP_X = 1.75;
-    var Z_PROF = [-18, -7.2, -3.2, 3.2, 7.6];
+    var Z_PROF = [-22, -8.4, -3.4, 3.4, 10.6];
     var BANDS = Z_PROF.length - 1;
     var VERTS_PER_SLICE = BANDS * 6;
     var TOTAL_VERTS = (SLICES - 1) * VERTS_PER_SLICE;
@@ -197,7 +197,7 @@
         sliceSurfs[i] = sf === 'water' ? 2 : sf === 'sand' ? 1 : 0;
       }
 
-      var yOff = [3.6, 0.9, 0.0, 0.0, -5.2];
+      var yOff = [4.2, 1.0, 0.0, 0.0, -1.65];
       for (i = 0; i < SLICES - 1; i++) {
         var x0 = snapX + i * STEP_X;
         var x1 = x0 + STEP_X;
@@ -216,22 +216,22 @@
           var ay0 = h0 + yoA0, ay1 = h1 + yoA1;
           var by0 = h0 + yoB0, by1 = h1 + yoB1;
 
-          // Pick crisp stylized cartoon color for each diorama band
+          // Sunlit terraced meadow fairway bands (zero dead brown dirt wall!)
           var hex;
           if (b === 3) {
-            // Foreground diorama earth cliff skirt (warm sunlit terracotta!)
-            hex = sf0 === 2 ? 0x1ca4c8 : (stripe ? 0xc2834b : 0xb3743e);
+            // Foreground terraced emerald lawn bank + sparkling shore
+            hex = sf0 === 2 ? 0x20b5d8 : (sf0 === 1 ? 0xe8c468 : (stripe ? 0x45cc4e : 0x39bd45));
           } else if (b === 2) {
             // Main playable sunlit fairway strip!
             if (sf0 === 2) hex = stripe ? 0x26d8ff : 0x3ce4ff;
             else if (sf0 === 1) hex = stripe ? 0xffe082 : 0xf7d168;
-            else hex = stripe ? 0x5be856 : 0x49d44a;
+            else hex = stripe ? 0x67f05c : 0x52de50;
           } else if (b === 1) {
             // Lush sunlit apron behind fairway
-            hex = sf0 === 2 ? 0x45d68a : (stripe ? 0x46cc4f : 0x3cbd48);
+            hex = sf0 === 2 ? 0x45d68a : (stripe ? 0x4fd456 : 0x42c44d);
           } else {
-            // Far sunlit hillside bank
-            hex = stripe ? 0x3cb857 : 0x33a84d;
+            // Far sunlit hillside meadow
+            hex = stripe ? 0x49c65c : 0x3eb853;
           }
           C.setHex(hex);
 
@@ -286,12 +286,12 @@
 
     /* ----------------------------------------- Starting Tee & Chunky Golfer */
     var teeGroup = new T.Group();
-    // Wooden tee box + emerald mat + white markers + tee peg
-    addPart(teeGroup, new T.BoxGeometry(7.2, 0.65, 5.2), MAT_WOOD, -0.8, 1.98, 0);
+    // Wooden tee box + emerald mat + flat red wooden tee markers + tee peg
+    addPart(teeGroup, new T.BoxGeometry(7.2, 0.56, 5.2), MAT_WOOD, -0.8, 2.02, 0);
     addPart(teeGroup, new T.BoxGeometry(6.6, 0.22, 4.6), MAT_GRASS_DARK, -0.8, 2.34, 0);
-    addPart(teeGroup, new T.SphereGeometry(0.24, 10, 8), MAT_WHITE, -1.8, 2.52, 1.5);
-    addPart(teeGroup, new T.SphereGeometry(0.24, 10, 8), MAT_WHITE, -1.8, 2.52, -1.5);
-    addPart(teeGroup, new T.CylinderGeometry(0.08, 0.05, 0.52, 8), MAT_GOLD_GLOW, 0, 2.48, 0);
+    addPart(teeGroup, new T.BoxGeometry(0.46, 0.14, 0.26), MAT_RED, -1.5, 2.50, 1.55);
+    addPart(teeGroup, new T.BoxGeometry(0.46, 0.14, 0.26), MAT_RED, -1.5, 2.50, -1.55);
+    addPart(teeGroup, new T.CylinderGeometry(0.07, 0.045, 0.44, 8), MAT_GOLD_GLOW, 0, 2.48, 0);
     // Starting corner flagpole
     addPart(teeGroup, new T.CylinderGeometry(0.07, 0.07, 4.4, 8), MAT_WHITE, -3.5, 4.3, -1.9);
     var teePennant = addPart(teeGroup, new T.ConeGeometry(0.68, 1.7, 4), MAT_RED, -2.7, 6.0, -1.9, 0, 0, -M.PI / 2);
@@ -493,12 +493,17 @@
     });
     function makeBalloon(ci) {
       var g = new T.Group();
-      var env = addPart(g, new T.SphereGeometry(2.9, 14, 12), BAL_MATS[ci % BAL_MATS.length], 0, 0.6, 0, 0, 0, 0, 1, 1.15, 1);
-      addPart(g, new T.TorusGeometry(2.82, 0.22, 6, 18), MAT_GOLD_GLOW, 0, 0.55, 0, M.PI / 2, 0, 0);
-      addPart(g, new T.BoxGeometry(1.35, 1.0, 1.35), MAT_WOOD, 0, -3.5, 0);
-      addPart(g, new T.CylinderGeometry(0.06, 0.06, 1.5, 5), MAT_WHITE, -0.5, -2.5, 0.5);
-      addPart(g, new T.CylinderGeometry(0.06, 0.06, 1.5, 5), MAT_WHITE, 0.5, -2.5, -0.5);
+      var env = addPart(g, new T.SphereGeometry(1.92, 16, 12), BAL_MATS[ci % BAL_MATS.length], 0, 0.55, 0, 0, 0, 0, 1, 1.08, 1);
+      var skirt = addPart(g, new T.CylinderGeometry(1.36, 0.62, 0.92, 14), BAL_MATS[ci % BAL_MATS.length], 0, -0.95, 0);
+      addPart(g, new T.TorusGeometry(1.90, 0.13, 6, 18), MAT_GOLD_GLOW, 0, 0.52, 0, M.PI / 2, 0, 0);
+      addPart(g, new T.TorusGeometry(1.91, 0.12, 6, 18), MAT_WHITE, 0, 0.55, 0, 0, 0, 0, 1, 1.08, 1);
+      addPart(g, new T.TorusGeometry(1.91, 0.12, 6, 18), MAT_WHITE, 0, 0.55, 0, 0, M.PI / 2, 0, 1, 1.08, 1);
+      addPart(g, new T.SphereGeometry(0.22, 8, 6), MAT_GOLD_GLOW, 0, -1.62, 0);
+      addPart(g, new T.BoxGeometry(0.96, 0.72, 0.96), MAT_WOOD, 0, -2.65, 0);
+      addPart(g, new T.CylinderGeometry(0.05, 0.05, 1.15, 5), MAT_WHITE, -0.36, -1.9, 0.36);
+      addPart(g, new T.CylinderGeometry(0.05, 0.05, 1.15, 5), MAT_WHITE, 0.36, -1.9, -0.36);
       g.userData.env = env;
+      g.userData.skirt = skirt;
       g.visible = false;
       scene.add(g);
       return g;
@@ -549,18 +554,28 @@
     bigStarInst.frustumCulled = false;
     scene.add(bigStarInst);
 
-    // Trees (Instanced trunks + lush 2-tier pine & round crowns)
+    // Trees (Instanced trunks + stylized 3-tier vibrant pines & multi-puff leafy trees)
     var MAX_TREES = 30;
-    var trunkInst = new T.InstancedMesh(new T.CylinderGeometry(0.34, 0.48, 2.2, 7), MAT_WOOD, MAX_TREES);
-    var pineInst = new T.InstancedMesh(new T.ConeGeometry(2.0, 3.6, 8), new T.MeshLambertMaterial({ color: 0x2fb84d }), MAX_TREES);
-    var pineTopInst = new T.InstancedMesh(new T.ConeGeometry(1.35, 2.7, 8), new T.MeshLambertMaterial({ color: 0x45d65a }), MAX_TREES);
-    var roundCrownInst = new T.InstancedMesh(new T.IcosahedronGeometry(1.85, 1), new T.MeshLambertMaterial({ color: 0x52e05b }), MAX_TREES);
-    trunkInst.frustumCulled = pineInst.frustumCulled = pineTopInst.frustumCulled = roundCrownInst.frustumCulled = false;
-    scene.add(trunkInst, pineInst, pineTopInst, roundCrownInst);
+    var trunkInst = new T.InstancedMesh(new T.CylinderGeometry(0.32, 0.48, 2.3, 8), MAT_WOOD, MAX_TREES);
+    var pineInst = new T.InstancedMesh(new T.ConeGeometry(2.15, 2.4, 9), new T.MeshLambertMaterial({ color: 0x2cb553 }), MAX_TREES);
+    var pineMidInst = new T.InstancedMesh(new T.ConeGeometry(1.65, 2.2, 9), new T.MeshLambertMaterial({ color: 0x42cf5c }), MAX_TREES);
+    var pineTopInst = new T.InstancedMesh(new T.ConeGeometry(1.08, 1.9, 9), new T.MeshLambertMaterial({ color: 0x6ce86a }), MAX_TREES);
+    var roundCrownInst = new T.InstancedMesh(new T.IcosahedronGeometry(1.72, 1), new T.MeshLambertMaterial({ color: 0x48d658 }), MAX_TREES);
+    var roundSideInst = new T.InstancedMesh(new T.IcosahedronGeometry(1.18, 1), new T.MeshLambertMaterial({ color: 0x76ef6d }), MAX_TREES);
+    trunkInst.frustumCulled = pineInst.frustumCulled = pineMidInst.frustumCulled = pineTopInst.frustumCulled = roundCrownInst.frustumCulled = roundSideInst.frustumCulled = false;
+    scene.add(trunkInst, pineInst, pineMidInst, pineTopInst, roundCrownInst, roundSideInst);
 
-    // Fluffy 3D Clouds (3 puffs per cloud = 90 spheres in 1 draw call!)
-    var MAX_CLOUDS = 96;
-    var cloudInst = new T.InstancedMesh(new T.IcosahedronGeometry(1, 1), new T.MeshLambertMaterial({ color: 0xf7fbff, emissive: 0x222c3c }), MAX_CLOUDS);
+    // Cheerful Foreground Meadow Daisies (rounded blossom petals + golden center!)
+    var MAX_FLOWERS = 54;
+    var flowerInst = new T.InstancedMesh(new T.CylinderGeometry(0.28, 0.22, 0.08, 7), new T.MeshBasicMaterial({ color: 0xffffff }), MAX_FLOWERS);
+    var flowerCoreInst = new T.InstancedMesh(new T.CylinderGeometry(0.11, 0.11, 0.11, 6), MAT_GOLD_GLOW, MAX_FLOWERS);
+    flowerInst.frustumCulled = flowerCoreInst.frustumCulled = false;
+    scene.add(flowerInst, flowerCoreInst);
+    var FLOWER_COLS = [0xfff4a3, 0xffffff, 0xff80a8, 0xffd23f, 0x99ecff];
+
+    // Bright Fluffy 3D Clouds (warm sunlit white/cream, never storm-grey!)
+    var MAX_CLOUDS = 128;
+    var cloudInst = new T.InstancedMesh(new T.IcosahedronGeometry(1, 1), new T.MeshLambertMaterial({ color: 0xffffff, emissive: 0xdceeff, emissiveIntensity: 0.62 }), MAX_CLOUDS);
     cloudInst.frustumCulled = false;
     scene.add(cloudInst);
 
@@ -661,10 +676,10 @@
     }
 
     /* ----------------------------------------- Pooled VFX (Shadows, Trail, Particles, Shockwaves) */
-    var MAX_SHADOWS = 28;
+    var MAX_SHADOWS = 56;
     var shadowGeo = new T.CircleGeometry(1, 14);
     shadowGeo.rotateX(-M.PI / 2);
-    var shadowInst = new T.InstancedMesh(shadowGeo, new T.MeshBasicMaterial({ color: 0x0a1c14, transparent: true, opacity: 0.28, depthWrite: false }), MAX_SHADOWS);
+    var shadowInst = new T.InstancedMesh(shadowGeo, new T.MeshBasicMaterial({ color: 0x0a2414, transparent: true, opacity: 0.34, depthWrite: false }), MAX_SHADOWS);
     shadowInst.frustumCulled = false;
     scene.add(shadowInst);
 
@@ -785,24 +800,24 @@
         shakeY = (M.random() - 0.5) * 2 * shakePower * 0.45;
       }
 
-      // Camera framing: hero view on tee -> wide dynamic side-follower in flight!
+      // Camera framing: vibrant sunlit fairway hero view (no dead dirt margin!) -> dynamic side-follower!
       var targetCamX, targetCamY, targetCamZ, targetLookX, targetLookY;
       if (!ball || phase === 'title' || phase === 'aim' || phase === 'power') {
         targetCamX = phase === 'title' ? 4.2 : 5.5;
-        targetCamY = phase === 'title' ? 7.6 : 7.0;
-        targetCamZ = phase === 'title' ? 21.5 : 22.8;
-        targetLookX = phase === 'title' ? 3.5 : 6.2;
-        targetLookY = phase === 'title' ? 5.6 : 5.4;
+        targetCamY = phase === 'title' ? 8.8 : 8.4;
+        targetCamZ = phase === 'title' ? 21.8 : 22.8;
+        targetLookX = phase === 'title' ? 3.8 : 6.2;
+        targetLookY = phase === 'title' ? 6.9 : 6.7;
       } else {
         var spd = M.hypot(ball.vx, ball.vy);
         var pullBack = P.clamp(spd * 0.24 + P.clamp(ball.y * 0.045, 0, 14), 0, 26);
         var leadX = P.clamp(ball.vx * 0.26, 3.5, 16);
         var leadY = P.clamp(ball.vy * 0.08, -3, 5);
         targetCamX = ball.x + leadX * 0.45;
-        targetCamY = M.max(P.heightAt(course, ball.x) + 5.2, ball.y + 1.8 + leadY * 0.4);
+        targetCamY = M.max(P.heightAt(course, ball.x) + 6.4, ball.y + 2.4 + leadY * 0.4);
         targetCamZ = 22.5 + pullBack;
         targetLookX = ball.x + leadX * 0.72;
-        targetLookY = M.max(P.heightAt(course, ball.x) + 3.0, ball.y + leadY * 0.35);
+        targetLookY = M.max(P.heightAt(course, ball.x) + 4.4, ball.y + 0.6 + leadY * 0.35);
       }
 
       if (state.snap) {
@@ -824,8 +839,8 @@
       var spaceMix = P.clamp((camPos.y - 175) / 145, 0, 1);
       var sunVis = 1 - P.clamp((camPos.y - 120) / 100, 0, 1);
       sunGroup.visible = sunVis > 0.02;
-      sunGroup.position.set(camPos.x + 34, camPos.y + 18 - (1 - sunVis) * 16, -68);
-      sunGroup.scale.setScalar(0.8 + sunVis * 0.3);
+      sunGroup.position.set(camPos.x + 27, camPos.y + 11.8 - (1 - sunVis) * 16, -68);
+      sunGroup.scale.setScalar(0.75 + sunVis * 0.28);
 
       moonBackdrop.visible = spaceMix > 0.05;
       moonBackdrop.position.set(camPos.x + 36, camPos.y + 16, -78);
@@ -855,18 +870,18 @@
       var snapX = M.floor((camPos.x - 36) / STEP_X) * STEP_X;
       rebuildTerrain(course, snapX);
 
-      // Background parallax hills (2 depth layers)
+      // Background parallax hills (2 warm sunlit depth layers)
       var hillStep = 28;
       var hBase = M.floor((camPos.x - 95) / hillStep);
       for (var hi = 0; hi < MAX_HILLS; hi++) {
         var row = hi < 12 ? 0 : 1;
         var slot = hBase + (hi % 12);
         var hx = slot * hillStep + (row === 1 ? 14 : 0);
-        var hr = 15 + P.hash(slot, 301 + row) * 14;
-        var hh = (row === 0 ? 10 : 18) + P.hash(slot, 305 + row) * (row === 0 ? 7 : 12);
-        var hz = row === 0 ? -24 : -42;
-        setInst(hillInst, hi, hx, -3.5, hz, hr, hh, hr * 0.65, 0, 0, 0);
-        hillInst.setColorAt(hi, C.setHex(row === 0 ? 0x3ec265 : 0x3da89c));
+        var hr = 16 + P.hash(slot, 301 + row) * 13;
+        var hh = (row === 0 ? 8.5 : 13.5) + P.hash(slot, 305 + row) * (row === 0 ? 5.5 : 7.5);
+        var hz = row === 0 ? -26 : -45;
+        setInst(hillInst, hi, hx, -2.5, hz, hr, hh, hr * 0.65, 0, 0, 0);
+        hillInst.setColorAt(hi, C.setHex(row === 0 ? 0x56d468 : 0x62cbb4));
       }
       hillInst.instanceMatrix.needsUpdate = true;
       if (hillInst.instanceColor) hillInst.instanceColor.needsUpdate = true;
@@ -919,17 +934,18 @@
         pwrNeedle.rotation.z = nAng;
       }
 
-      // Ball mesh + squash & stretch + rocket flame + trail!
+      // Ball mesh + crisp golf proportions (0.68x visual scale) + squash & stretch + rocket flame + trail!
+      var VIS_BALL = 0.68;
       var bx = ball ? ball.x : 0;
-      var by = ball ? ball.y : P.heightAt(course, 0) + P.BALL_R + 0.08;
+      var by = ball ? (ball.y - P.BALL_R * (1 - VIS_BALL)) : (P.heightAt(course, 0) + 0.54 + P.BALL_R * VIS_BALL);
       ballRoot.position.set(bx, by, 0);
 
       if (ball) {
         ballSpin.rotation.z -= (ball.spin || 0) * dt;
         var sq = ball.squash || 0;
-        var stretchX = 1 + sq * 0.36 + (ball.boosting ? 0.16 : 0);
-        var stretchY = 1 - sq * 0.28;
-        ballSpin.scale.set(stretchX, stretchY, 1);
+        var stretchX = (1 + sq * 0.36 + (ball.boosting ? 0.16 : 0)) * VIS_BALL;
+        var stretchY = (1 - sq * 0.28) * VIS_BALL;
+        ballSpin.scale.set(stretchX, stretchY, VIS_BALL);
 
         flameGroup.visible = !!ball.boosting;
         if (ball.boosting) {
@@ -954,7 +970,7 @@
           }
         }
       } else {
-        ballSpin.scale.set(1, 1, 1);
+        ballSpin.scale.set(VIS_BALL, VIS_BALL, VIS_BALL);
         ballSpin.rotation.z = 0;
         flameGroup.visible = false;
         diveRing.visible = false;
@@ -1034,7 +1050,9 @@
         if (hitIds[o.id]) continue;
         var bm = poolBal[idx++];
         bm.visible = true;
-        bm.userData.env.material = BAL_MATS[o.colorIdx % BAL_MATS.length];
+        var bMat = BAL_MATS[o.colorIdx % BAL_MATS.length];
+        bm.userData.env.material = bMat;
+        if (bm.userData.skirt) bm.userData.skirt.material = bMat;
         var bobB = calm ? 0 : M.sin(t * 1.8 + o.x * 0.3) * 0.9;
         bm.position.set(o.x, o.y + bobB, 0);
         bm.rotation.z = calm ? 0 : M.sin(t * 1.4 + o.x) * 0.07;
@@ -1090,19 +1108,23 @@
       bigStarInst.count = bsIdx;
       bigStarInst.instanceMatrix.needsUpdate = true;
 
-      // Scenery Parallax (Trees, Flags, Clouds, Biplanes, Blimps, Satellites, Planets, Asteroids)
+      // Scenery Parallax (3-tier Stylized Pines, Multi-puff Leafy Trees, Flags, Fluffy Clouds, Flyers, Space)
       var trIdx = 0, pnIdx = 0, rdIdx = 0, clIdx = 0, flIdx = 0, bpIdx = 0, blpIdx = 0, satIdx = 0, plIdx = 0, astIdx = 0;
       for (i = 0; i < feat.scenery.length; i++) {
         o = feat.scenery[i];
         if (o.kind === 'pine' || o.kind === 'roundTree') {
           if (trIdx < MAX_TREES) {
             setInst(trunkInst, trIdx++, o.x, o.y + 1.05 * o.scale, o.z, o.scale, o.scale, o.scale, 0, 0, 0);
+            if (shIdx < MAX_SHADOWS) setInst(shadowInst, shIdx++, o.x, o.y + 0.12, o.z, 1.85 * o.scale, 1, 1.45 * o.scale, 0, 0, 0);
             if (o.kind === 'pine' && pnIdx < MAX_TREES) {
-              setInst(pineInst, pnIdx, o.x, o.y + 3.0 * o.scale, o.z, o.scale, o.scale, o.scale, 0, o.x, 0);
-              setInst(pineTopInst, pnIdx, o.x, o.y + 4.7 * o.scale, o.z, o.scale, o.scale, o.scale, 0, o.x + 0.5, 0);
+              setInst(pineInst, pnIdx, o.x, o.y + 2.55 * o.scale, o.z, o.scale, o.scale, o.scale, 0, o.x, 0);
+              setInst(pineMidInst, pnIdx, o.x, o.y + 3.85 * o.scale, o.z, o.scale, o.scale, o.scale, 0, o.x + 0.6, 0);
+              setInst(pineTopInst, pnIdx, o.x, o.y + 5.05 * o.scale, o.z, o.scale, o.scale, o.scale, 0, o.x + 1.2, 0);
               pnIdx++;
             } else if (o.kind === 'roundTree' && rdIdx < MAX_TREES) {
-              setInst(roundCrownInst, rdIdx++, o.x, o.y + 3.3 * o.scale, o.z, o.scale, o.scale, o.scale, 0, o.x, 0);
+              setInst(roundCrownInst, rdIdx, o.x, o.y + 3.1 * o.scale, o.z, o.scale * 1.08, o.scale * 0.96, o.scale, 0, o.x, 0);
+              setInst(roundSideInst, rdIdx, o.x + 0.85 * o.scale, o.y + 3.75 * o.scale, o.z + 0.35 * o.scale, o.scale, o.scale * 0.92, o.scale, 0, o.x + 1, 0);
+              rdIdx++;
             }
           }
         } else if (o.kind === 'flag' && flIdx < poolFlags.length) {
@@ -1110,12 +1132,13 @@
           flm.visible = true;
           flm.position.set(o.x, o.y, o.z);
           flm.rotation.y = calm ? 0 : M.sin(t * 4.5 + o.x) * 0.25;
-        } else if (o.kind === 'cloud' && clIdx + 3 <= MAX_CLOUDS) {
+        } else if (o.kind === 'cloud' && clIdx + 4 <= MAX_CLOUDS) {
           var cx = o.x + (calm ? 0 : M.sin(t * 0.35 + o.x) * 2.2);
-          var cs = o.scale * 2.5;
-          setInst(cloudInst, clIdx++, cx, o.y, o.z, cs * 1.15, cs * 0.72, cs * 0.82, 0, 0, 0);
-          setInst(cloudInst, clIdx++, cx - cs * 0.9, o.y - cs * 0.12, o.z + 0.3, cs * 0.85, cs * 0.58, cs * 0.72, 0, 0, 0);
-          setInst(cloudInst, clIdx++, cx + cs * 0.95, o.y - cs * 0.10, o.z + 0.2, cs * 0.82, cs * 0.55, cs * 0.70, 0, 0, 0);
+          var cs = o.scale * 2.4;
+          setInst(cloudInst, clIdx++, cx, o.y, o.z, cs * 1.18, cs * 0.72, cs * 0.85, 0, 0, 0);
+          setInst(cloudInst, clIdx++, cx - cs * 0.92, o.y - cs * 0.14, o.z + 0.3, cs * 0.86, cs * 0.56, cs * 0.72, 0, 0, 0);
+          setInst(cloudInst, clIdx++, cx + cs * 0.96, o.y - cs * 0.12, o.z + 0.2, cs * 0.84, cs * 0.54, cs * 0.70, 0, 0, 0);
+          setInst(cloudInst, clIdx++, cx + cs * 0.22, o.y + cs * 0.38, o.z + 0.1, cs * 0.68, cs * 0.52, cs * 0.62, 0, 0, 0);
         } else if (o.kind === 'biplane' && bpIdx < poolBiplanes.length) {
           var bpm = poolBiplanes[bpIdx++];
           bpm.visible = true;
@@ -1142,10 +1165,37 @@
           setInst(asteroidInst, astIdx++, o.x, o.y, o.z, o.scale, o.scale * 0.85, o.scale, calm ? 0 : t + o.x, calm ? 0 : t * 0.7, 0);
         }
       }
+      // Scatter cheerful sunlit wildflowers along foreground & background meadow edges!
+      var flwIdx = 0;
+      if (camPos.y < 60) {
+        var fBase = M.floor((camPos.x - 24) / 3.5);
+        for (var fi = 0; fi < MAX_FLOWERS; fi++) {
+          var fSlot = fBase + fi;
+          var fx = fSlot * 3.5 + P.hash(fSlot, 901) * 2.4;
+          if (P.surfaceAt(course, fx) !== 'turf') continue;
+          var nearEdge = (fSlot & 1) === 0;
+          var fz = nearEdge ? (4.0 + P.hash(fSlot, 902) * 3.8) : (-4.2 - P.hash(fSlot, 902) * 2.8);
+          var fDrop = nearEdge ? -((fz - 3.4) / 7.2) * 1.65 : ((M.abs(fz) - 3.4) / 5.0) * 1.0;
+          var fy = P.heightAt(course, fx) + fDrop + 0.18;
+          var fs = 0.68 + P.hash(fSlot, 903) * 0.55;
+          setInst(flowerInst, flwIdx, fx, fy, fz, fs, 1, fs, 0, fSlot, 0);
+          setInst(flowerCoreInst, flwIdx, fx, fy + 0.05, fz, fs, 1, fs, 0, fSlot, 0);
+          flowerInst.setColorAt(flwIdx, C.setHex(FLOWER_COLS[M.abs(fSlot) % FLOWER_COLS.length]));
+          flwIdx++;
+        }
+      }
+      flowerInst.count = flwIdx;
+      flowerInst.instanceMatrix.needsUpdate = true;
+      if (flowerInst.instanceColor) flowerInst.instanceColor.needsUpdate = true;
+      flowerCoreInst.count = flwIdx;
+      flowerCoreInst.instanceMatrix.needsUpdate = true;
+
       trunkInst.count = trIdx; trunkInst.instanceMatrix.needsUpdate = true;
       pineInst.count = pnIdx; pineInst.instanceMatrix.needsUpdate = true;
+      pineMidInst.count = pnIdx; pineMidInst.instanceMatrix.needsUpdate = true;
       pineTopInst.count = pnIdx; pineTopInst.instanceMatrix.needsUpdate = true;
       roundCrownInst.count = rdIdx; roundCrownInst.instanceMatrix.needsUpdate = true;
+      roundSideInst.count = rdIdx; roundSideInst.instanceMatrix.needsUpdate = true;
       cloudInst.count = clIdx; cloudInst.instanceMatrix.needsUpdate = true;
       asteroidInst.count = astIdx; asteroidInst.instanceMatrix.needsUpdate = true;
       while (flIdx < poolFlags.length) poolFlags[flIdx++].visible = false;

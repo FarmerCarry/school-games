@@ -301,7 +301,7 @@
     } else hill(g, w, h, y0, amp, layer ? 4 : 3);
     if (!layer && kind !== 'stars' && kind !== 'ghosts') {
       g.globalAlpha = 0.9; g.fillStyle = '#fff3b0';
-      g.beginPath(); g.arc(w * 0.8, h * 0.18, kind === 'snow' ? 16 : 26, 0, TAU); g.fill();
+      g.beginPath(); g.arc(w * 0.8, h * 0.29, kind === 'snow' ? 16 : 26, 0, TAU); g.fill();
     }
     g.restore();
   }
@@ -327,8 +327,8 @@
     return BD;
   };
   var CLOUD = null;
-  Art.drawSkyBits = function (ctx, t, tier) {
-    var reduced, drift, i, x, y, s, c;
+  Art.drawSkyBits = function (ctx, t, tier, w) {
+    var reduced, drift, i, x, y, s, c, r, col, topR = 3;
     if (!tier) return;
     reduced = window.Kit.motion && window.Kit.motion.reduced();
     if (!CLOUD || !CLOUD.canvas) CLOUD = window.Kit.art.sprite('tl-cloud', 86, 36, function (g) {
@@ -338,12 +338,58 @@
     c = CLOUD; if (!c || !c.canvas) return;
     drift = reduced ? 0 : Math.sin(t * 0.18) * 28;
     ctx.save();
+    if (w && w.grid) {
+      ctx.beginPath();
+      for (r = 0; r < 9; r++) {
+        for (col = 0; col < E.COLS; col++) if (!w.grid[r * E.COLS + col]) ctx.rect(col * T, r * T, T, T);
+      }
+      ctx.clip();
+      while (topR < 7 && w.grid[topR * E.COLS + 16]) topR++;
+    }
     for (i = 0; i < (tier > 1 ? 4 : 2); i++) {
-      x = ((i * 320 + drift * (0.55 + (i % 2) * 0.7)) % 1480 + 1480) % 1480 - 90;
-      y = 54 + (i % 3) * 34; s = 0.85 + (i % 2) * 0.28;
+      x = ((i * 310 + 90 + drift * (0.55 + (i % 2) * 0.7)) % 1340 + 1340) % 1340 - 60;
+      y = topR * T + 16 + (i % 3) * 32; s = 0.85 + (i % 2) * 0.25;
       ctx.globalAlpha = 0.75;
       ctx.drawImage(c.canvas, x, y, 86 * s, 36 * s);
     }
+    ctx.restore();
+  };
+  Art.drawTitleDiorama = function (ctx, pal, t) {
+    var bob = Math.sin(t * 2.5) * 6, ink = pal.ink, i;
+    ctx.save();
+    ctx.beginPath(); ctx.rect(T, 4 * T, E.W - 2 * T, 9 * T); ctx.clip();
+    // distant arched cave silhouettes + swaying string lanterns
+    for (i = 0; i < 2; i++) {
+      var px = i ? 1050 : 120, lx = i ? 985 : 265, ly = 246 + Math.sin(t * 2 + i) * 4;
+      ctx.fillStyle = 'rgba(180,82,18,0.16)';
+      ctx.beginPath(); ctx.moveTo(px, 520); ctx.lineTo(px, 290); ctx.arc(px + 55, 290, 55, Math.PI, 0); ctx.lineTo(px + 110, 520); ctx.fill();
+      ctx.strokeStyle = 'rgba(140,62,14,0.4)'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(lx, 160); ctx.lineTo(lx, ly); ctx.stroke();
+      ctx.fillStyle = '#ffe588'; ctx.beginPath(); ctx.arc(lx, ly + 8, 9, 0, TAU); ctx.fill();
+    }
+    // mischievous '?' block with cheeky peeking eyes
+    var bx = 640, by = 326 + bob;
+    rr(ctx, bx - 30, by - 30, 60, 60, 12);
+    ctx.fillStyle = '#ffd23f'; ctx.fill(); ctx.lineWidth = 4; ctx.strokeStyle = ink; ctx.stroke();
+    ctx.fillStyle = '#ff9a1f'; ctx.fillRect(bx - 24, by + 18, 48, 8);
+    ctx.fillStyle = ink; ctx.font = '700 38px ' + FONT; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('?', bx, by - 4);
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(bx - 11, by - 34, 6, 0, TAU); ctx.arc(bx + 11, by - 34, 6, 0, TAU); ctx.fill();
+    ctx.lineWidth = 2.5; ctx.stroke();
+    ctx.fillStyle = ink; ctx.beginPath(); ctx.arc(bx - 9, by - 34, 2.5, 0, TAU); ctx.arc(bx + 13, by - 34, 2.5, 0, TAU); ctx.fill();
+    // cheeky "آمن 100%!" wooden signpost + 3 mischievous peeking spikes right beside it
+    var sx = 350, sy = 520;
+    ctx.fillStyle = ink; ctx.strokeStyle = 'rgba(255,255,255,0.75)'; ctx.lineWidth = 2;
+    for (i = 0; i < 3; i++) {
+      ctx.beginPath(); ctx.moveTo(sx + 44 + i * 16, sy); ctx.lineTo(sx + 52 + i * 16, sy - 20); ctx.lineTo(sx + 60 + i * 16, sy); ctx.closePath();
+      ctx.fill(); ctx.stroke();
+    }
+    ctx.fillStyle = '#9c5626'; ctx.fillRect(sx - 5, sy - 76, 10, 76);
+    ctx.strokeStyle = ink; ctx.lineWidth = 3; ctx.strokeRect(sx - 5, sy - 76, 10, 76);
+    ctx.translate(sx, sy - 78); ctx.rotate(-0.08);
+    rr(ctx, -56, -21, 112, 40, 10);
+    ctx.fillStyle = '#fff3cf'; ctx.fill(); ctx.lineWidth = 3.5; ctx.stroke();
+    ctx.fillStyle = ink; ctx.font = '700 20px ' + FONT; ctx.direction = 'rtl'; ctx.fillText('آمن 100%!', 0, 1);
     ctx.restore();
   };
 

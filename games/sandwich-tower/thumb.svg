@@ -75,10 +75,4 @@
     <path d="M70 70 L52 66 M68 88 L46 88 M74 52 L60 42" fill="none" stroke="#fff" stroke-width="6"/>
   </g>
   <text x="226" y="128" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-weight="bold" font-size="22" fill="#3a2216" transform="rotate(-10 226 128)">z</text>
-
-  <!-- title -->
-  <g font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-weight="bold" text-anchor="middle" direction="rtl">
-    <text x="200" y="389" font-size="56" fill="#3a2216" stroke="#3a2216" stroke-width="16" stroke-linejoin="round">برج السندويش</text>
-    <text x="200" y="382" font-size="56" stroke="#3a2216" stroke-width="9" stroke-linejoin="round" paint-order="stroke"><tspan fill="#ffe14f">برج</tspan> <tspan fill="#fff">السندويش</tspan></text>
-  </g>
 </svg>

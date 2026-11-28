@@ -45,12 +45,12 @@ test('every level has fixed build pads clear of roads, 3 turrets, and auto-place
   }
 });
 
-test('Wave 1 spawns automatically after 1.5s without pressing Start Wave', () => {
+test('Wave 1 spawns automatically after 0.8s without pressing Start Wave', () => {
   const world = CG.create(CG.LEVELS[0]);
   assert.equal(world.wave, 0);
-  run(world, 1.0);
-  assert.equal(world.wave, 0, 'still in 1.5s intro');
-  run(world, 0.7);
+  run(world, 0.5);
+  assert.equal(world.wave, 0, 'still in 0.8s intro');
+  run(world, 0.5);
   assert.equal(world.phase, 'wave');
   assert.equal(world.wave, 1);
   assert.ok(world.enemies.length >= 1, 'jelly blobs already marching');

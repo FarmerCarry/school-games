@@ -288,28 +288,62 @@
       });
       // counter top (planks), front edge and cabinets
       for (var p = -8; p < 8; p++) B.box(p % 2 ? wood : C.set(wood).multiplyScalar(0.93).getHex(), p * 5 + 2.5, -0.65, -2.5, 5, 0.6, 15);
-      B.box(C.set(wood).multiplyScalar(0.8).getHex(), 0, -1.05, 5.05, 80, 0.25, 0.3);
+      B.box(C.set(wood).multiplyScalar(0.8).getHex(), 0, -1.25, 5.05, 80, 0.7, 0.3);
       B.box(0x8fdcc8, 0, -4.2, 4.6, 80, 6, 0.6);
       for (var d = -9; d <= 9; d++) {
         B.box(0x7ccbb6, d * 4.4, -4.2, 4.95, 0.18, 5.6, 0.1);
         B.add(sph, 0xffffff, d * 4.4 + 1.4, -2.2, 5.0, 0.18, 0.18, 0.12);
       }
-      // a fruit bowl on the left of the counter, a juice glass on the right
+      // a fruit bowl on the left of the counter, a juice glass tucked beside the jar (clear of corner buttons)
       var bowl = new T.SphereGeometry(1, 24, 10, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2);
       B.add(bowl, 0x4fb4ff, -9.6, 0.95, 2.2, 2.2, 1.25, 1.6);
       B.add(new T.TorusGeometry(1, 0.06, 6, 30), 0xffffff, -9.6, 0.95, 2.2, 2.2, 1.6, 1, Math.PI / 2, 0, 0);
-      B.add(cyl, 0xffffff, 9.4, 0.85, 2.6, 0.62, 2.4, 0.62).add(cyl, 0xffb23d, 9.4, 0.6, 2.6, 0.55, 1.75, 0.55)
-        .add(cyl, 0xff5d8f, 9.7, 2.3, 2.6, 0.06, 1.8, 0.06, 0, 0, -0.35)
-        .add(new T.TorusGeometry(0.62, 0.06, 6, 24), 0xffffff, 9.4, 2.05, 2.6, 1, 1, 1, Math.PI / 2, 0, 0);
-      B.add(sph, 0xffe14d, 9.95, 2.0, 2.6, 0.32, 0.32, 0.1);
-      // the fruit chain board on the left wall
-      B.add(cyl, C.set(wood).multiplyScalar(1.05).getHex(), -8.8, 5.5, -1.75, 3.05, 0.3, 3.05, Math.PI / 2, 0, 0);
-      B.add(new T.TorusGeometry(3.05, 0.14, 8, 40), C.set(wood).multiplyScalar(0.8).getHex(), -8.8, 5.5, -1.58, 1, 1, 1, 0, 0, 0);
+      B.add(cyl, 0xffffff, 7.0, 0.82, 1.6, 0.56, 2.25, 0.56).add(cyl, 0xffb23d, 7.0, 0.58, 1.6, 0.49, 1.65, 0.49)
+        .add(cyl, 0xff5d8f, 7.26, 2.18, 1.6, 0.055, 1.65, 0.055, 0, 0, -0.35)
+        .add(new T.TorusGeometry(0.56, 0.055, 6, 24), 0xffffff, 7.0, 1.94, 1.6, 1, 1, 1, Math.PI / 2, 0, 0);
+      B.add(sph, 0xffe14d, 7.48, 1.9, 1.6, 0.28, 0.28, 0.09);
+      // bright honey-gold rim for the pastel fruit evolution wheel on the left wall
+      B.add(cyl, 0xffd27a, -8.8, 5.5, -1.85, 3.16, 0.28, 3.16, Math.PI / 2, 0, 0);
+      B.add(new T.TorusGeometry(3.16, 0.16, 8, 44), 0xe69538, -8.8, 5.5, -1.68, 1, 1, 1, 0, 0, 0);
       cyl.dispose(); sph.dispose(); bowl.dispose();
       return B.build();
     }
     var kitchen = new T.Mesh(buildKitchen(0), woodMat);
     scene.add(kitchen);
+    // Luminous pastel fruit-evolution chart face with subtle clockwise progression arrows
+    var wheelTex = (function () {
+      var c = canvas2d(256, 256), g = c.getContext('2d');
+      var gr = g.createRadialGradient(128, 128, 12, 128, 128, 126);
+      gr.addColorStop(0, '#fffef7');
+      gr.addColorStop(0.62, '#fff5db');
+      gr.addColorStop(1, '#ffe4ad');
+      g.fillStyle = gr;
+      g.beginPath(); g.arc(128, 128, 126, 0, Math.PI * 2); g.fill();
+      // Soft pastel dashed fruit-order ring + tiny clockwise chevrons
+      g.strokeStyle = 'rgba(255, 154, 44, 0.34)';
+      g.lineWidth = 4;
+      g.setLineDash([7, 7]);
+      g.beginPath(); g.arc(128, 128, 88, 0, Math.PI * 2); g.stroke();
+      g.setLineDash([]);
+      g.strokeStyle = 'rgba(232, 122, 34, 0.55)';
+      g.lineWidth = 3.2;
+      g.lineCap = 'round';
+      g.lineJoin = 'round';
+      for (var ai = 0; ai < F.length; ai++) {
+        var a = -Math.PI / 2 + (ai + 0.5) / F.length * Math.PI * 2;
+        g.save();
+        g.translate(128 + Math.cos(a) * 88, 128 + Math.sin(a) * 88);
+        g.rotate(a + Math.PI / 2);
+        g.beginPath(); g.moveTo(-4, -5); g.lineTo(4, 0); g.lineTo(-4, 5); g.stroke();
+        g.restore();
+      }
+      var t = new T.CanvasTexture(c);
+      t.colorSpace = T.SRGBColorSpace;
+      return t;
+    })();
+    var wheelFace = new T.Mesh(new T.CircleGeometry(3.04, 44), new T.MeshBasicMaterial({ map: wheelTex, fog: false }));
+    wheelFace.position.set(-8.8, 5.5, -1.67);
+    scene.add(wheelFace);
     // Sunbeams from the window (additive, very faint).
     var beamMat = new T.MeshBasicMaterial({ color: 0xfff2b0, transparent: true, opacity: 0.11, blending: T.AdditiveBlending, depthWrite: false, fog: false });
     var beams = new T.Group();
@@ -401,9 +435,23 @@
       return new T.Mesh(B.build(), LAMBERT_VC);
     })();
     scene.add(cloud);
-    // The bubble that shows the next fruit.
-    var bubble = new T.Mesh(new T.SphereGeometry(1.15, 28, 18), new T.MeshPhongMaterial({ color: 0xffffff, transparent: true, opacity: 0.22, shininess: 140, specular: 0xffffff, depthWrite: false }));
-    bubble.position.set(7.6, 9.55, 0.2); bubble.renderOrder = 9;
+    // Framed cream-and-espresso circular medallion showing the next fruit cleanly beneath #scoreBox.
+    var bubble = new T.Group();
+    bubble.position.set(10.55, 8.2, 0.5);
+    (function () {
+      var sh = new T.Mesh(new T.CircleGeometry(1.56, 36), new T.MeshBasicMaterial({ color: 0x4a2a12, fog: false }));
+      sh.position.set(0, -0.14, -0.22);
+      var rimOuter = new T.Mesh(new T.CircleGeometry(1.56, 36), new T.MeshBasicMaterial({ color: 0x4a2a12, fog: false }));
+      rimOuter.position.set(0, 0, -0.16);
+      var disc = new T.Mesh(new T.CircleGeometry(1.38, 36), new T.MeshBasicMaterial({ color: 0xfff8ea, fog: false }));
+      disc.position.set(0, 0, -0.10);
+      var innerRing = new T.Mesh(new T.RingGeometry(1.16, 1.32, 36), new T.MeshBasicMaterial({ color: 0xffe2a3, fog: false }));
+      innerRing.position.set(0, 0, -0.06);
+      var glass = new T.Mesh(new T.SphereGeometry(1.26, 24, 16), new T.MeshPhongMaterial({ color: 0xffffff, transparent: true, opacity: 0.14, shininess: 140, specular: 0xffffff, depthWrite: false }));
+      glass.position.set(0, 0, 0.22);
+      glass.renderOrder = 9;
+      bubble.add(sh, rimOuter, disc, innerRing, glass);
+    })();
     scene.add(bubble);
 
     /* ------------------------------------------------------- the fruit */
@@ -621,7 +669,7 @@
 
     /* ----------------------------------------------------------- camera */
     var shakeT = 0, shakeP = 0, cloudX = 0, cloudSquash = 0, skin = -1, frameT = 0;
-    var CAM = new T.Vector3(0, 7.4, 26.5), LOOK = new T.Vector3(0, 5.15, 0);
+    var CAM = new T.Vector3(0, 7.85, 29.6), LOOK = new T.Vector3(0, 5.85, 0);
     camera.position.copy(CAM); camera.lookAt(LOOK);
     view.shake = function (p) { if (!view.calm) { shakeP = Math.max(shakeP, p); shakeT = 0.35; } };
     view.setSkin = function (i) {
@@ -664,40 +712,42 @@
         var q = gh.t / 0.1;
         put(gh.lv, gh.x + (gh.tx - gh.x) * q - HALF, gh.y + (gh.ty - gh.y) * q, 0.05, gh.r * (1 - q * 0.6), 0, 0, 0, 2, 1.3, 1.3, 1.3);
       }
-      // the dropper and the fruit it holds
+      // the dropper and the fruit it holds (hung cleanly above the jar rim)
       var ax = S.aim - HALF;
       cloudX += (ax - cloudX) * Math.min(1, dt * 18);
       if (S.mode === 'title' && !w) cloudX = ax;
       cloudSquash = Math.max(0, cloudSquash - dt * 4);
-      var bob = calm ? 0 : Math.sin(t * 2.2) * 0.12;
+      var bob = calm ? 0 : Math.sin(t * 2.2) * 0.10;
+      var heldR = F[Math.max(0, S.held)].r;
+      var heldY = Math.max(E.DROP_Y, E.JH + heldR + 0.34);
       cloud.visible = S.held >= 0;
-      cloud.position.set(cloudX, E.DROP_Y + F[Math.max(0, S.held)].r + 0.95 + bob, 0.3);
+      cloud.position.set(cloudX, heldY + heldR + 0.80 + bob, 0.3);
       cloud.scale.set(1 + cloudSquash * 0.15, 1 - cloudSquash * 0.2, 1);
       if (S.held >= 0 && S.heldPop > 0) {
-        put(S.held, ax, E.DROP_Y + bob * 0.4, 0, F[S.held].r, calm ? 0 : Math.sin(t * 1.7) * 0.12, 0, (1 - S.heldPop) * -0.6, ((t * 0.9) % 3.1) < 0.13 ? 1 : 0, 1, 1, 1);
+        put(S.held, ax, heldY + bob * 0.4, 0, heldR, calm ? 0 : Math.sin(t * 1.7) * 0.12, 0, (1 - S.heldPop) * -0.6, ((t * 0.9) % 3.1) < 0.13 ? 1 : 0, 1, 1, 1);
       }
       // the aiming guide from the held fruit down to where it will land
       if (S.guide && w && S.held >= 0 && S.heldPop >= 1) {
-        var r = F[S.held].r, y0 = E.DROP_Y - r, y1 = E.landingY(w, S.aim, r) - r, len = Math.max(0.01, y0 - y1);
+        var r = F[S.held].r, y0 = heldY - r, y1 = E.landingY(w, S.aim, r) - r, len = Math.max(0.01, y0 - y1);
         guide.visible = len > 0.3;
         guide.position.set(ax, (y0 + y1) / 2, -0.2);
         guide.scale.set(1, len, 1);
         guideTex.repeat.set(1, len * 2.2);
         guideTex.offset.y = calm ? 0 : -t * 1.2;
       } else guide.visible = false;
-      // the next fruit in its bubble
+      // the next fruit inside its framed cream medallion
       bubble.visible = S.next >= 0;
       if (S.next >= 0) {
-        var nr = Math.min(0.85, F[S.next].r * 1.1 + 0.15);
-        bubble.position.y = 9.55 + (calm ? 0 : Math.sin(t * 1.8 + 1) * 0.1);
-        put(S.next, bubble.position.x, bubble.position.y, bubble.position.z, nr, calm ? 0 : Math.sin(t * 1.3) * 0.25, 0, 0, ((t * 0.8 + 1.3) % 3.4) < 0.13 ? 1 : 0, 1, 1, 1);
+        var nr = Math.min(0.84, F[S.next].r * 1.05 + 0.18);
+        bubble.position.y = 8.2 + (calm ? 0 : Math.sin(t * 1.8 + 1) * 0.08);
+        put(S.next, bubble.position.x, bubble.position.y - 0.08, bubble.position.z + 0.32, nr, calm ? 0 : Math.sin(t * 1.3) * 0.22, 0, 0, ((t * 0.8 + 1.3) % 3.4) < 0.13 ? 1 : 0, 1, 1, 1);
       }
-      // the fruit chain on the board: known fruit in colour, the others as shadows
+      // the luminous pastel fruit-evolution wheel on the left wall
       for (i = 0; i < F.length; i++) {
         var ang = Math.PI / 2 - i / F.length * Math.PI * 2, known = i <= S.top, star = i === S.runTop && S.mode !== 'title';
-        var cr = 0.26 + i * 0.043, hop = star && !calm ? Math.abs(Math.sin(t * 4)) * 0.18 : 0;
+        var cr = 0.27 + i * 0.042, hop = star && !calm ? Math.abs(Math.sin(t * 4)) * 0.18 : 0;
         put(i, CHAIN.x + Math.cos(ang) * CHAIN.r, CHAIN.y + Math.sin(ang) * CHAIN.r + hop, CHAIN.z, cr, 0, 0, star ? 0.12 : 0, known ? 0 : -1,
-          known ? 1 : 0.16, known ? 1 : 0.13, known ? 1 : 0.2);
+          known ? 1.06 : 0.82, known ? 1.06 : 0.82, known ? 1.06 : 0.86);
       }
       // a few fruit resting in the bowl on the counter
       put(6, -10.3, 1.55, 2.3, 0.75, 0.3, 0, 0, -1, 1, 1, 1);
@@ -711,7 +761,7 @@
       lineTex.offset.x = calm ? 0 : t * 0.4;
       // camera: a gentle sway on the title, a shake on big moments
       camera.position.copy(CAM);
-      if (S.mode === 'title' && !calm) { camera.position.x += Math.sin(t * 0.25) * 1.2; camera.position.y += Math.sin(t * 0.33) * 0.3; }
+      if (S.mode === 'title' && !calm) { camera.position.x += Math.sin(t * 0.25) * 1.0; camera.position.y += Math.sin(t * 0.33) * 0.18; }
       if (shakeT > 0 && !calm) {
         shakeT -= dt;
         var k2 = Math.max(0, shakeT / 0.35) * shakeP;
@@ -740,7 +790,7 @@
       V.set(x, y, z).project(camera);
       return { x: (V.x + 1) / 2 * 1280, y: (1 - V.y) / 2 * 720 };
     };
-    view.bubblePoint = function () { return view.projectWorld(bubble.position.x, bubble.position.y + 1.25, bubble.position.z); };
+    view.bubblePoint = function () { return view.projectWorld(bubble.position.x, bubble.position.y + 1.54, bubble.position.z); };
     // The jar x under a point of the 1280x720 picture (on the plane of the fruit).
     view.jarX = function (lx, ly) {
       V.set(lx / 1280 * 2 - 1, 1 - ly / 720 * 2, 0.5).unproject(camera);

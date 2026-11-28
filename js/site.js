@@ -90,7 +90,8 @@
     titleNotFound: 'لم نجد اللعبة',
     gameFallback: 'لعبة',
     starterTitle: 'أول مرة مع الفأرة؟',
-    starterAge: '(5–7 سنوات)',
+    starterAge: '\u20665–7\u2069 سنوات',
+    starterHint: '✨ بلا خسارة وبلا وقت · 11 عالمًا',
     starterGo: 'ابدأ الآن',
     starterBadge: 'نقطة البداية',
     mute: 'كتم الصوت',
@@ -438,10 +439,11 @@
     });
     items.push({ href: '#/favorites', on: route.name === 'favorites', cc: '#c2185b', ico: '❤️', lbl: T.favs, cnt: favCount });
     var simpleOn = route.name === 'quick' && route.id === 'simple';
-    items.push({ href: simpleOn ? '#/' : '#/quick/simple', on: simpleOn, cc: '#384d91', ico: '👆', lbl: T.oneButton, cls: 'chip-toggle' });
+    items.push({ href: simpleOn ? '#/' : '#/quick/simple', on: simpleOn, cc: '#384d91', ico: '👆', lbl: T.oneButton, cls: 'chip-toggle', sep: true });
 
     return items.map(function (it) {
-      return '<a class="chip' + (it.cls ? ' ' + it.cls : '') + (it.on ? ' on' : '') + '" href="' + it.href + '" style="--cc:' + it.cc + '"' + (it.on ? ' aria-current="page"' : '') + '>' +
+      return (it.sep ? '<span class="chip-sep" aria-hidden="true"></span>' : '') +
+        '<a class="chip' + (it.cls ? ' ' + it.cls : '') + (it.on ? ' on' : '') + '" href="' + it.href + '" style="--cc:' + it.cc + '"' + (it.on ? ' aria-current="page"' : '') + '>' +
         '<span class="chip-ico" aria-hidden="true">' + it.ico + '</span><span>' + esc(it.lbl) + '</span>' +
         (it.cnt ? '<span class="chip-cnt">' + it.cnt + '</span>' : '') + '</a>';
     }).join('');
@@ -479,11 +481,25 @@
       .concat(list.filter(function (g) { return !g.hot && !g.starter; }))
       .concat(list.filter(function (g) { return g.starter; }));
   }
+  var STARTER_ART = '<svg class="starter-bubbles" viewBox="0 0 184 42" width="184" height="42" aria-hidden="true">' +
+    '<circle cx="24" cy="23" r="14" fill="#63d8ff" fill-opacity=".42" stroke="#1c88c9" stroke-width="2.2"/>' +
+    '<path d="M16 18 A9 9 0 0 1 22 13" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/>' +
+    '<circle cx="70" cy="16" r="11" fill="#ff7dc0" fill-opacity=".38" stroke="#d93b88" stroke-width="2"/>' +
+    '<path d="M64 12 A6 6 0 0 1 68 9" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/>' +
+    '<circle cx="114" cy="25" r="12" fill="#90eb54" fill-opacity=".42" stroke="#2c9e38" stroke-width="2"/>' +
+    '<path d="M107 20 A7 7 0 0 1 112 16" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/>' +
+    '<circle cx="152" cy="18" r="8.5" fill="#c794ff" fill-opacity=".42" stroke="#7c45d4" stroke-width="1.9"/>' +
+    '<circle cx="149" cy="15" r="2" fill="#fff"/>' +
+    '<path d="M172 19 l2.4 5.2 5.2 2.4 -5.2 2.4 -2.4 5.2 -2.4 -5.2 -5.2 -2.4 5.2 -2.4 z" fill="#ffbe0b" stroke="#9e6d00" stroke-width="1.2" stroke-linejoin="round"/>' +
+    '<path d="M46 30 l1.8 3.8 3.8 1.8 -3.8 1.8 -1.8 3.8 -1.8 -3.8 -3.8 -1.8 3.8 -1.8 z" fill="#ffbe0b"/>' +
+    '<path d="M92 7 l1.6 3.5 3.5 1.6 -3.5 1.6 -1.6 3.5 -1.6 -3.5 -3.5 -1.6 3.5 -1.6 z" fill="#ff9f1c"/>' +
+    '</svg>';
   function starterCard(g) {
     if (!g) return '';
     return '<a class="starter" href="#/play/' + enc(g.slug) + '" data-slug="' + esc(g.slug) + '">' +
-      '<span class="starter-ico" aria-hidden="true">🖱️</span>' +
-      '<span class="starter-copy"><b>' + T.starterTitle + '</b> <span class="starter-age">' + T.starterAge + '</span> <span class="starter-sep" aria-hidden="true">—</span> <span class="starter-game">' + esc(g.title) + '</span></span>' +
+      '<span class="starter-ico" aria-hidden="true"><img src="' + thumbSrc(g.slug) + '" alt="" loading="eager" decoding="async" draggable="false" onerror="this.style.display=\'none\'"></span>' +
+      '<span class="starter-copy"><b>' + T.starterTitle + '</b> <span class="starter-age">🖱️ ' + T.starterAge + '</span> <span class="starter-sep" aria-hidden="true">·</span> <span class="starter-game">' + esc(g.title) + '</span> <span class="starter-hint">' + T.starterHint + '</span></span>' +
+      STARTER_ART +
       '<span class="starter-go">' + T.starterGo + ' ▶</span></a>';
   }
 

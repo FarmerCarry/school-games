@@ -74,7 +74,10 @@
     this.p.push(wx, wy, wz);
     this.n.push(tx / l, ty / l, tz / l);
     var k = 1;
-    if (this.ao && wy < 0.45) k = 0.74 + 0.26 * Math.max(0, wy) / 0.45;
+    if (this.ao) {
+      if (wy < 0.7) k *= 0.72 + 0.28 * Math.max(0, wy) / 0.7;
+      if (Math.abs(ny) < 0.5) k *= (Math.abs(nx) > 0.5 ? 0.94 : 1.0) * (0.92 + 0.1 * Math.min(1, wy / 3.2));
+    }
     var r = col[0] * k, g = col[1] * k, b = col[2] * k;
     if (this.tint) { r *= this.tint[0]; g *= this.tint[1]; b *= this.tint[2]; }
     this.c.push(r, g, b);

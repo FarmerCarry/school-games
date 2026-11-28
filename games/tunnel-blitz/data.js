@@ -8,7 +8,7 @@
   // One entry per zone. After zone 8 the list loops with higher speed.
   // col = main neon, alt = second neon (bars / spirals), bg = far background, N = tunnel sides.
   TB.ZDEF = [
-    { name: 'الاندفاع السماوي', col: [25, 235, 255],  alt: [60, 130, 255],  bg: [4, 14, 34],  N: 6 },
+    { name: 'الاندفاع السماوي', col: [25, 235, 255],  alt: [60, 130, 255],  bg: [6, 18, 42],  N: 6 },
     { name: 'المتاهة الوردية', col: [255, 70, 230],  alt: [160, 90, 255],  bg: [28, 4, 36],  N: 8 },
     { name: 'البرق الأخضر', col: [150, 255, 60],  alt: [30, 230, 160],  bg: [6, 26, 10], N: 12 },
     { name: 'العاصفة الشمسية', col: [255, 160, 40],  alt: [255, 80, 60],   bg: [34, 13, 3],  N: 6 },

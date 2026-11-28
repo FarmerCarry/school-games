@@ -162,14 +162,17 @@
     }
     // smile
     b.push().translate(0, 1.2, -0.375).rotX(0.35); b.sphere(0, 0, 0, 0.075, 0x7a1f3d, { sy: 0.45, sz: 0.35, seg: 8, rings: 5 }); b.pop();
-    // goggles pushed up on the forehead + strap
-    b.cyl(0, 1.47, 0, 0.405, 0.085, acc, { seg: 14, cap: false, smooth: true });
-    for (var g = -1; g <= 1; g += 2) {
-      b.push().translate(g * 0.14, 1.53, -0.33).rotX(Math.PI / 2 - 0.35);
-      b.cyl(0, -0.05, 0, 0.1, 0.1, acc, { seg: 10, top: 0x8fe8ff });
-      b.pop();
+    // goggles pushed up on forehead only when headwear doesn't sit over the brow (prevents cap/goggle clipping)
+    var hId = opts.hat || 'none';
+    if (hId !== 'cap' && hId !== 'propeller' && hId !== 'viking') {
+      b.cyl(0, 1.47, 0, 0.405, 0.085, acc, { seg: 14, cap: false, smooth: true });
+      for (var g = -1; g <= 1; g += 2) {
+        b.push().translate(g * 0.14, 1.53, -0.33).rotX(Math.PI / 2 - 0.35);
+        b.cyl(0, -0.05, 0, 0.1, 0.1, acc, { seg: 10, top: 0x8fe8ff });
+        b.pop();
+      }
     }
-    hat(b, opts.hat || 'none', col);
+    hat(b, hId, col);
     return b.geometry();
   };
   SS.footGeo = function () {

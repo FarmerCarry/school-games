@@ -168,7 +168,7 @@
     } else if (S.deco === 'beach') {
       circle(g, 900, b - 30, 120); fill(g, alpha(S.sun, 0.35)); circle(g, 900, b - 30, 86); fill(g, S.sun); ink(g, 5);
     } else {
-      circle(g, 1050, b * 0.3, 70); fill(g, alpha(S.sun, 0.35)); circle(g, 1050, b * 0.3, 48); fill(g, S.sun); ink(g, 5);
+      circle(g, 975, b * 0.36, 64); fill(g, alpha(S.sun, 0.35)); circle(g, 975, b * 0.36, 44); fill(g, S.sun); ink(g, 5);
     }
     if (S.deco === 'castle') {
       A.RAINBOW.forEach(function (c, i) { g.beginPath(); g.arc(380, b + 60, 330 - i * 16, Math.PI, TAU); g.lineWidth = 16; g.strokeStyle = alpha(c, 0.75); g.stroke(); });
@@ -631,7 +631,11 @@
     var na = a0 + (a1 - a0) * k + (still ? 0 : Math.sin(time * 30) * 0.03 * k);
     ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(na) * (r - 20), Math.sin(na) * (r - 20)); ink(ctx, 5, INK);
     circle(ctx, 0, 0, 7); fill(ctx, INK);
-    text(ctx, '+' + steps, 0, r * 0.52, r * 0.46, INK);
+    text(ctx, '+' + steps, 0, r * 0.38, r * 0.44, INK);
+    if (r >= 44) {
+      rr(ctx, -38, r * 0.68, 76, 24, 12); fill(ctx, INK); ink(ctx, 3, '#ffffff');
+      text(ctx, 'السرعة', 0, r * 0.68 + 12, 16, '#ffd23f');
+    }
     ctx.restore();
   };
   A.progress = function (ctx, x, y, w, p, color, hat, others) {

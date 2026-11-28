@@ -8,14 +8,14 @@
 
 .rk-hud {
   position: fixed;
-  top: 10px;
+  top: 8px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 8;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 16px;
   pointer-events: none;
 }
 .rk-hud[hidden], .rk-pause[hidden], .rk-title[hidden] { display: none; }
@@ -60,14 +60,19 @@
 .timer-pill.urgent { background: #ff4757; color: #fff; }
 
 .mod-pill {
-  background: rgba(20, 16, 38, 0.86);
+  background: rgba(20, 16, 38, 0.9);
   border: 2.5px solid #ffd23f;
   border-radius: 999px;
-  padding: 3px 16px;
+  padding: 4px 18px;
   font-weight: 700;
   font-size: 16px;
   color: #fff;
-  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.3);
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.32);
+  transition: opacity 0.35s ease, transform 0.35s ease;
+}
+.mod-pill.out {
+  opacity: 0;
+  transform: translateY(-6px);
 }
 
 .rk-pause {
@@ -78,14 +83,21 @@
   width: 46px;
   height: 46px;
   border-radius: 50%;
-  border: 2.5px solid #fff5;
-  background: rgba(20, 16, 38, 0.72);
+  border: 3px solid #fff;
+  background: rgba(24, 18, 44, 0.9);
+  box-shadow: 0 3px 0 #3b2416, 0 0 0 2px #3b2416;
   color: #fff;
   font-size: 20px;
   cursor: pointer;
 }
-.rk-pause:hover { background: rgba(20, 16, 38, 0.92); }
+.rk-pause:hover { background: rgba(24, 18, 44, 0.98); }
 .rk-pause:focus-visible { outline: 3px solid #ffd23f; outline-offset: 2px; }
+
+.sg-mute {
+  background: rgba(24, 18, 44, 0.9) !important;
+  border: 3px solid #fff !important;
+  box-shadow: 0 3px 0 #3b2416, 0 0 0 2px #3b2416 !important;
+}
 
 .rk-title {
   position: fixed;
@@ -95,9 +107,9 @@
   flex-direction: column;
   justify-content: space-between;
   align-items: center;
-  padding: 20px 16px 22px;
+  padding: 14px 16px 14px;
   pointer-events: none;
-  background: linear-gradient(180deg, rgba(28,16,8,0.42) 0%, rgba(28,16,8,0.06) 44%, rgba(28,16,8,0.52) 100%);
+  background: linear-gradient(180deg, rgba(38,20,8,0.18) 0%, rgba(38,20,8,0.0) 38%, rgba(38,20,8,0.24) 100%);
 }
 .title-top, .title-bottom {
   display: flex;
@@ -106,20 +118,26 @@
   text-align: center;
   pointer-events: auto;
 }
-.title-pills { display: flex; gap: 10px; margin-bottom: 6px; }
+.title-pills { display: flex; gap: 10px; margin-bottom: 10px; }
 .rk-logo {
   margin: 0;
-  font-size: clamp(44px, 7.5vw, 76px);
-  line-height: 1.05;
+  font-size: clamp(44px, 7.0vw, 68px);
+  line-height: 1.04;
   color: #fff8dc;
-  text-shadow: 0 6px 0 #4a2310, 0 12px 28px rgba(0, 0, 0, 0.45);
+  -webkit-text-stroke: 8px #4a2310;
+  paint-order: stroke fill;
+  text-shadow: 0 6px 0 #4a2310, 0 12px 24px rgba(0, 0, 0, 0.35);
 }
 .rk-tag {
   margin: 6px 0 0;
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 700;
-  color: #fff;
-  text-shadow: 0 3px 0 #3b2010;
+  color: #2b1a3d;
+  background: rgba(255, 250, 238, 0.95);
+  border: 3px solid #3b2416;
+  border-radius: 999px;
+  padding: 3px 18px;
+  box-shadow: 0 4px 0 rgba(59, 36, 22, 0.55);
 }
 
 .cta-row {

@@ -20,8 +20,8 @@
 
   function tones(base) {
     return {
-      base: base, light: mix(base, WHITE, 0.38), dark: mix(base, BLACK, 0.2), shade: mix(base, BLACK, 0.34),
-      ink: mix(base, BLACK, 0.55), flash: mix(base, WHITE, 0.72)
+      base: base, light: mix(base, WHITE, 0.38), gloss: mix(base, WHITE, 0.52), dark: mix(base, BLACK, 0.2), shade: mix(base, BLACK, 0.34),
+      rim: mix(base, BLACK, 0.42), ink: mix(base, BLACK, 0.55), flash: mix(base, WHITE, 0.72)
     };
   }
 
@@ -37,14 +37,14 @@
       pattern: (PG.PATTERNS[patIdx] || PG.PATTERNS[0]).id,
       rgb: t,
       c: { base: css(t.base), light: css(t.light), dark: css(t.dark), ink: css(t.ink), trail: css(t.light, 0.82), trailEdge: css(t.base, 0.9) },
-      u: { base: u32(t.base), light: u32(t.light), dark: u32(t.dark), shade: u32(t.shade), flash: u32(t.flash) },
+      u: { base: u32(t.base), light: u32(t.light), gloss: u32(t.gloss), dark: u32(t.dark), shade: u32(t.shade), rim: u32(t.rim), flash: u32(t.flash) },
       brows: extra && extra.brows || null
     };
     if (sk.special === 'rainbow') {
       sk.rainbow = [];
       for (var i = 0; i < 60; i++) {
         var rb = tones(hsl(i * 6, 90, 68));
-        sk.rainbow.push({ base: u32(rb.base), light: u32(rb.light), dark: u32(rb.dark), shade: u32(rb.shade), flash: u32(rb.flash) });
+        sk.rainbow.push({ base: u32(rb.base), light: u32(rb.light), gloss: u32(rb.gloss), dark: u32(rb.dark), shade: u32(rb.shade), rim: u32(rb.rim), flash: u32(rb.flash) });
       }
     }
     if (sk.special === 'gold') {
@@ -75,6 +75,8 @@
     return k === 1 ? U.light : k === 2 ? U.dark : U.base;
   };
   Art.shadeOf = function (sk, cx, cy) { return sk.rainbow ? sk.rainbow[((cx + cy) >> 1) % 60].shade : sk.u.shade; };
+  Art.glossOf = function (sk, cx, cy) { return sk.rainbow ? sk.rainbow[((cx + cy) >> 1) % 60].gloss : sk.u.gloss; };
+  Art.rimOf = function (sk, cx, cy) { return sk.rainbow ? sk.rainbow[((cx + cy) >> 1) % 60].rim : sk.u.rim; };
   Art.flashOf = function (sk, cx, cy) { return sk.rainbow ? sk.rainbow[((cx + cy) >> 1) % 60].flash : sk.u.flash; };
   Art.baseOf = function (sk, cx, cy) { return sk.rainbow ? sk.rainbow[((cx + cy) >> 1) % 60].base : sk.u.base; };
 

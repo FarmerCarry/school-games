@@ -74,6 +74,14 @@
       starEls[i].classList.toggle('on', world.stars > i);
     }
 
+    var streakEl = $('hudStreak');
+    var lit = world.fever > 0 ? 3 : Math.min(3, world.combo);
+    streakEl.classList.toggle('fever', world.fever > 0);
+    var pips = streakEl.querySelectorAll('i');
+    for (var pi = 0; pi < 3; pi++) {
+      pips[pi].classList.toggle('lit', pi < lit);
+    }
+
     var feverEl = $('hudFever');
     if (world.fever > 0) {
       feverEl.hidden = false;

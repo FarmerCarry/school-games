@@ -1,7 +1,7 @@
 /* Lucky Lake: 5 scenic biomes, 33 species, 4 junk, 1-click/Enter/Space launch, dual controls, S++ juice/hitstop & debounced saves. */
 (() => {
   'use strict';
-  const LL = window.LL, J = Kit.juice, W = 1280, H = 720, M = Math, PI = M.PI, TAU = PI * 2, sin = M.sin, cos = M.cos, min = M.min, max = M.max, INK = '#1c2250', P1 = '#ff9a1f', P2 = '#e05cff', SS = 2;
+  const LL = window.LL, J = Kit.juice, O = Object.assign, W = 1280, H = 720, M = Math, PI = M.PI, TAU = PI * 2, sin = M.sin, cos = M.cos, min = M.min, max = M.max, INK = '#1c2250', P1 = '#ff9a1f', P2 = '#e05cff', SS = 2;
   const $ = id => document.getElementById(id), tx = (id, v) => { $(id).textContent = String(v); }, hid = (id, v) => { $(id).hidden = !!v; };
   const cl = (el, k, v) => (typeof el === 'string' ? $(el) : el).classList.toggle(k, v), gc = c => c.getContext('2d'), qs = (el, s) => el.querySelector(s), calm = () => Kit.motion.reduced();
   let cache = {}, bgs = {};
@@ -76,67 +76,110 @@
   });
 
   const SC = [
-    [['#5ec8ff', '#e9fbff'], ['#62dcd6', '#2aa8c0', '#16627f'], '#d1aa6c', '#b58e55', '#3fbf5a', '#8fd46a'],
-    [['#62c3ff', '#effcff'], ['#6fd0f6', '#2f8fd0', '#174f88'], '#9aa3ad', '#7c8590', '#4cc36b', '#7ccf73'],
-    [['#3fb6ff', '#e2f8ff'], ['#45d6ff', '#1596dc', '#0b4f9e'], '#f4d690', '#ddb96c', '#3fd08a', '#2f8fe0'],
-    [['#8fd2ff', '#f4fbff'], ['#86d8f2', '#3a8fc4', '#1b4a7c'], '#8a96a8', '#6c788c', '#58b8a8', '#c6dcf2'],
-    [['#140f45', '#4a3a9a'], ['#4646b8', '#25218a', '#0f0b46'], '#3a2c74', '#2a1f5c', '#3df5c8', '#2a2068']
+    [['#42b5ff', '#9ee4ff', '#fff4d8'], ['#5ee0d8', '#259fb8', '#115472'], '#ddb572', '#b3864b', '#38b85a', '#7fd15d'],
+    [['#4eb8ff', '#a8e6ff', '#f3fcff'], ['#6ad0f6', '#2a88ca', '#13487d'], '#a2abb6', '#7b8491', '#45be68', '#74ca6d'],
+    [['#33acff', '#9adfff', '#e6f9ff'], ['#45d8ff', '#1390d8', '#094a96'], '#f6d993', '#d8b263', '#39cc86', '#2a88db'],
+    [['#7ec8ff', '#cbeaff', '#f5fbff'], ['#82d6f2', '#3489bf', '#174474'], '#8f9cae', '#687488', '#52b4a4', '#c2daf2'],
+    [['#100b3b', '#2d2274', '#5641a8'], ['#4746ba', '#231f85', '#0d0940'], '#3d2f7a', '#271c58', '#3df5c8', '#2c226d']
   ];
-  const pine = (g, x, y, s, col, sn) => { fr(g, '#8a5a2b', x - 4 * s, y - 14 * s, 8 * s, 16 * s); P(g, [x, y - 58 * s, x + 22 * s, y - 14 * s, x - 22 * s, y - 14 * s], col, 3 * s, al(INK, .35)); if (sn) P(g, [x, y - 58 * s, x + 9 * s, y - 42 * s, x - 9 * s, y - 42 * s], '#fff'); };
-  const mush = (g, x, y, s, col) => { R(g, x - 5 * s, y - 26 * s, 10 * s, 28 * s, 4 * s, '#efe6ff', 3 * s); C(g, x, y - 24 * s, 22 * s, col, 3 * s, INK, PI, 0); };
+  const wa = a => `rgba(255,255,255,${a})`, ka = a => al(INK, a);
+  const pine = (g, x, y, s, col, sn) => T(g, x, y, s, () => { E(g, 0, 2, 18, 5, ka(.18)); fr(g, '#7c4e24', -4, -16, 8, 18); P(g, [0, -62, 23, -14, -23, -14], col, 3, ka(.35)); P(g, [0, -62, 10, -14, -23, -14], wa(.12)); if (sn) P(g, [0, -62, 10, -42, -10, -42], '#fff'); });
+  const mush = (g, x, y, s, col) => T(g, x, y, s, () => { E(g, 0, 2, 18, 5, ka(.28)); R(g, -5, -26, 10, 28, 4, '#efe6ff', 3); C(g, 0, -24, 22, col, 3, INK, PI, 0); C(g, -7, -34, 4, wa(.6)); });
+  const tree = (g, x, y, s = 1) => T(g, x, y, s, () => { E(g, 0, 3, 20, 6, ka(.18)); R(g, -5, -26, 10, 28, 3, '#7d4d24', 2.5, ka(.45)); C(g, -11, -34, 17, '#369e46', 2.5, ka(.38)); C(g, 11, -33, 16, '#369e46', 2.5, ka(.38)); C(g, 0, -46, 21, '#4ac455', 2.5, ka(.38)); C(g, -6, -52, 11, '#7ce374'); });
+  const reed = (g, x, y, h) => T(g, x, y, 1, () => { Q(g, [0, 0, -5, -h * .5, -8, -h], 0, 3.5, '#3b9b49', 1); Q(g, [4, 0, 8, -h * .6, 12, -h * .85], 0, 3, '#52b859', 1); P(g, [2, 0, 2, -h * .9], 0, 3, '#338840', 1); E(g, 2, -h * .78, 4, 10, '#7c4824', 2, ka(.5)); });
   const weed = (g, x, y, h, col, lw, b) => { g.beginPath(); g.moveTo(x, y); g.bezierCurveTo(x + b, y - h * .35, x - b, y - h * .65, x + b * .5, y - h); sk(g, lw + 4); sk(g, lw, col); };
   function bg(i, p0) {
     const key = i + ':' + p0; if (bgs[key]) return bgs[key];
     const c = cv(W * p0, H * p0), g = gc(c), S = SC[i], P0 = LL.PLACES[i], top = P0.surface, bed = P0.bed, r = rng(17 + i * 101); let k;
     g.scale(p0, p0); fr(g, vg(g, S[0], 0, top), 0, 0, W, top + 4);
-    if (P0.night) { for (k = 0; k < 24; k++) C(g, r() * W, r() * (top - 36), 1.8, '#fff'); C(g, 1010, 78, 42, '#fff6c8', 4); }
-    else C(g, 1060, 70, 40, '#ffe066', 4, al(INK, .3));
-    if (i === 0) { P(g, [0, top - 28, 320, top - 72, 680, top - 20, 1020, top - 64, W, top - 20, W, top, 0, top], S[5]); R(g, 730, top - 88, 60, 40, 4, '#fff3d6', 3); P(g, [722, top - 86, 760, top - 116, 798, top - 86], '#ff6b5a', 3); [540, 930, 1180].forEach(x => { fr(g, '#8a5a2b', x - 4, top - 40, 9, 24); C(g, x, top - 56, 22, '#4cb84f', 3, al(INK, .4)); }); }
-    else if (i === 1) { P(g, [0, top - 30, 420, top - 86, 860, top - 25, W, top - 72, W, top, 0, top], S[5]); for (k = 0; k < 6; k++) pine(g, 430 + k * 140, top - 12, 1, k & 1 ? '#2f9a55' : '#3fae5f'); }
-    else if (i === 2) { fr(g, '#2f8fe0', 0, top - 34, W, 40); P(g, [1120, top - 36, 1180, top - 36, 1168, top - 22, 1132, top - 22], '#ff6b5a', 3); P(g, [1152, top - 80, 1176, top - 44, 1152, top - 44], '#fff', 3); }
-    else if (i === 3) { P(g, [300, top - 10, 480, top - 160, 680, top - 65, 860, top - 170, 1060, top - 55, W, top - 120, W, top, 300, top], S[5], 4, al(INK, .3)); for (k = 0; k < 5; k++) pine(g, 400 + k * 180, top - 10, .85, '#3d8f88', 1); }
-    else { P(g, [0, top - 30, 460, top - 82, 900, top - 24, W, top - 70, W, top, 0, top], S[5]); for (k = 0; k < 5; k++) mush(g, 440 + k * 170, top - 14, .85, k & 1 ? '#ff5df0' : '#3df5ff'); }
+    if (P0.night) { for (k = 0; k < 28; k++) C(g, r() * W, r() * (top - 32), 1.4 + r() * 1.4, '#fff'); di(g, glow('#fff6c8'), 940, 8, 140, 140); C(g, 1010, 78, 38, '#fff6c8', 3.5, ka(.35)); }
+    else { di(g, glow('#fff099'), 1016, -6, 156, 156); C(g, 1094, 72, 34, vg(g, ['#fff7b8', '#ffd23f'], 38, 106), 3.5, ka(.28)); }
+    if (i === 0) {
+      P(g, [0, top - 34, 210, top - 88, 500, top - 44, 820, top - 82, 1140, top - 46, W, top - 70, W, top, 0, top], 'rgba(116,198,157,.48)');
+      P(g, [0, top - 24, 260, top - 66, 590, top - 24, 965, top - 68, 1065, top - 64, W, top - 22, W, top, 0, top], vg(g, ['#a6e872', '#52ba55'], top - 70, top));
+      T(g, 972, top - 60, 1, () => {
+        E(g, 35, 4, 44, 9, ka(.22)); R(g, 48, -66, 12, 26, 3, '#c8604a', 3);
+        R(g, 0, -42, 70, 44, 5, vg(g, ['#fff7e0', '#ebd4a2'], -42, 2), 3.5);
+        P(g, [-9, -39, 35, -74, 79, -39], vg(g, ['#ff7a5c', '#db4b3b'], -74, -39), 3.5);
+        R(g, 11, -25, 18, 27, 8, '#9b5c2c', 3); C(g, 24, -11, 2.2, '#ffd23f');
+        R(g, 38, -29, 20, 18, 4, '#ffe885', 3); P(g, [48, -29, 48, -11], 0, 2, INK, 1); P(g, [38, -20, 58, -20], 0, 2, INK, 1);
+        E(g, 6, 2, 12, 6, '#58c057'); E(g, 66, 1, 13, 6, '#4cb24e');
+      });
+      [[396, 45, 1.05], [1148, 43, .95], [1236, 27, .85]].forEach(a => tree(g, a[0], top - a[1], a[2]));
+      [[350, 42], [895, 34], [1104, 38]].forEach(a => reed(g, a[0], top + 2, a[1]));
+    } else if (i === 1) {
+      P(g, [0, top - 42, 340, top - 98, 760, top - 42, 1100, top - 90, W, top - 50, W, top, 0, top], 'rgba(105,190,145,.45)');
+      P(g, [0, top - 28, 420, top - 82, 860, top - 25, W, top - 70, W, top, 0, top], vg(g, ['#8ee07e', '#43a858'], top - 84, top));
+      for (k = 0; k < 6; k++) pine(g, 425 + k * 145, top - 14, 1, k & 1 ? '#2c9350' : '#3dad5d');
+    } else if (i === 2) {
+      fr(g, vg(g, ['#3aa2f0', '#2178cc'], top - 34, top + 4), 0, top - 34, W, 40);
+      P(g, [1116, top - 34, 1184, top - 34, 1170, top - 19, 1130, top - 19], '#ff6b5a', 3); P(g, [1152, top - 82, 1178, top - 42, 1152, top - 42], '#fff', 3);
+    } else if (i === 3) {
+      P(g, [280, top - 10, 480, top - 160, 680, top - 65, 860, top - 170, 1060, top - 55, W, top - 120, W, top, 280, top], vg(g, ['#eef7ff', S[5]], top - 170, top), 3.5, ka(.25));
+      for (k = 0; k < 5; k++) pine(g, 400 + k * 180, top - 10, .88, '#368a84', 1);
+    } else {
+      P(g, [0, top - 30, 460, top - 82, 900, top - 24, W, top - 70, W, top, 0, top], vg(g, ['#463694', S[5]], top - 82, top));
+      for (k = 0; k < 5; k++) mush(g, 440 + k * 170, top - 14, .85, k & 1 ? '#ff5df0' : '#3df5ff');
+    }
     fr(g, vg(g, S[1], top, bed), 0, top, W, H - top);
-    for (k = 0; k < 4; k++) { P(g, [420 + k * 230, top, 480 + k * 230, top, 570 + k * 230, bed - 40, 460 + k * 230, bed - 40], 'rgba(255,255,255,.05)'); weed(g, 420 + k * 220, bed + 6, 95, al(S[4], .5), 7, 18); }
+    for (k = 0; k < 4; k++) { P(g, [410 + k * 230, top, 480 + k * 230, top, 585 + k * 230, bed - 34, 465 + k * 230, bed - 34], wa(.07)); weed(g, 415 + k * 235, bed + 6, 86, al(S[4], .42), 6, 16); }
     P(g, [0, top + 160, 290, bed - 32, 640, bed - 18, 960, bed - 28, W, bed - 16, W, H, 0, H], vg(g, [S[2], S[3]], bed - 40, H), 5);
+    P(g, [285, bed - 26, 640, bed - 12, 960, bed - 22, W, bed - 10], 0, 5, wa(.22), 1);
+    for (k = 0; k < 14; k++) E(g, 280 + r() * 960, bed - 4 + r() * 34, 8 + r() * 12, 4 + r() * 4, k & 1 ? al(S[3], .65) : wa(.28));
     if (i === 4) [480, 880, 1180].forEach((cx, j) => P(g, [cx - 12, bed + 10, cx, bed - 38, cx + 12, bed + 10], ['#3df5ff', '#ff5df0', '#b48cff'][j], 3));
-    P(g, [0, top - 30, 155, top - 16, 165, top + 45, 0, top + 250], ['#7bd35c', '#7bd35c', '#f6dc96', '#f4fbff', '#3c2f86'][i], 5);
+    P(g, [0, top - 30, 155, top - 16, 165, top + 45, 0, top + 250], vg(g, i === 2 ? ['#fae2a2', '#dfb86a'] : i === 3 ? ['#fff', '#cce3f6'] : i === 4 ? ['#4c3ca0', '#2a1f66'] : ['#8de068', '#4cb852'], top - 30, top + 250), 5);
+    if (i < 2) [[28, -12, '#ff6fa5'], [68, -2, '#ffd23f'], [104, -8, '#fff']].forEach(a => C(g, a[0], top + a[1], 4.5, a[2], 2, ka(.4)));
     if (i === 2) { Q(g, [40, top - 30, 30, top - 110, 70, top - 180], 0, 14, '#b5793f', 1); for (k = 0; k < 4; k++) { const a = -2.5 + k * .65; Q(g, [70, top - 180, 70 + cos(a) * 50, top - 200 + sin(a) * 30, 70 + cos(a) * 85, top - 170 + sin(a + .4) * 40], 0, 10, '#3fbf5a', 1); } }
     else if (i === 4) mush(g, 52, top - 26, 1.2, '#3df5ff');
     const dy = top - 30;
-    if (i !== 3) { [150, 230, 300].forEach(px => R(g, px - 9, dy, 18, bed - dy, 6, i === 4 ? '#5a4a9a' : '#8a5a2b', 4)); R(g, 110, dy - 8, 214, 22, 6, i === 4 ? '#7a68c0' : '#c98a4a', 5); if (i === 4) R(g, 288, dy - 66, 24, 28, 6, '#ffe14d', 4); }
-    else { R(g, 160, dy - 2, 70, 12, 5, '#c98a4a', 4); R(g, 248, dy + 2, 30, 28, 6, '#5aa9ff', 4); }
+    if (i !== 3) {
+      const pcol = i === 4 ? '#5a4a9a' : '#855329', dcol = i === 4 ? '#7c6bc4' : '#d2914d';
+      P(g, [152, dy + 42, 300, dy + 128, 300, dy + 144, 152, dy + 58], i === 4 ? '#4a3b82' : '#6f421f', 3);
+      [150, 226, 302].forEach(px => { R(g, px - 9, dy, 18, bed - dy, 6, pcol, 4); fr(g, wa(.16), px - 5, dy + 14, 4, top - dy - 14); fr(g, ka(.24), px - 7, top, 14, bed - top - 4); E(g, px, top + 2, 16, 4.5, wa(.45)); });
+      R(g, 110, dy - 8, 218, 24, 6, dcol, 4.5); fr(g, wa(.3), 116, dy - 4, 206, 5);
+      for (k = 148; k < 318; k += 32) P(g, [k, dy - 6, k, dy + 14], 0, 2.5, ka(.38), 1);
+      R(g, 308, dy - 22, 16, 18, 4, pcol, 3.5);
+      if (i === 4) R(g, 288, dy - 66, 24, 28, 6, '#ffe14d', 4);
+    } else { R(g, 160, dy - 2, 70, 12, 5, '#c98a4a', 4); R(g, 248, dy + 2, 30, 28, 6, '#5aa9ff', 4); }
     return (bgs[key] = c);
   }
   const iceSp = () => sp('ice', W, 70, g => { const hs = LL.PLACES[3].holes; P(g, [130, 12, W + 10, 10, W + 10, 50, 130, 46], '#dff5ff'); g.globalCompositeOperation = 'destination-out'; hs.forEach(x => E(g, x, 28, 52, 16, '#000')); g.globalCompositeOperation = 'source-over'; P(g, [130, 12, W + 10, 10, W + 10, 50, 130, 46], 0, 4); hs.forEach(x => E(g, x, 28, 52, 16, 0, 4)); });
   const front = (g, i, t, st) => {
     const P0 = LL.PLACES[i], S = SC[i], top = P0.surface, amp = i === 2 ? 5 : 2.5, ph = st ? 0 : t * 2, pts = [];
-    [[460, 110], [760, 95], [1040, 120]].forEach(([wx, wh], k) => weed(g, wx, P0.bed + 8, wh, S[4], 8, 12 + (st ? 0 : sin(t * 1.4 + k * 2) * 14)));
+    [[356, 106], [1072, 112], [1192, 92]].forEach(([wx, wh], k) => weed(g, wx, P0.bed + 8, wh, S[4], 7.5, 11 + (st ? 0 : sin(t * 1.4 + k * 2) * 13)));
     for (let x = 0; x <= W; x += 40) pts.push(x, top + sin(x * .03 + ph) * amp);
-    P(g, pts.concat([W, top + 12, 0, top + 12]), P0.night ? 'rgba(160,150,255,.45)' : 'rgba(255,255,255,.5)'); P(g, pts, 0, 3, P0.night ? '#c8beff' : '#fff', 1);
-    if (i === 0) [520, 880, 1210].forEach((lx, k) => { const x = lx + (st ? 0 : sin(t * .8 + k) * 4); E(g, x, top + 2, 32, 9, '#45c35a', 3); if (k === 1) C(g, x - 8, top - 4, 7, '#ff8fd0', 2.5); });
+    P(g, pts.concat([W, top + 12, 0, top + 12]), P0.night ? 'rgba(160,150,255,.45)' : wa(.52)); P(g, pts, 0, 3, P0.night ? '#c8beff' : '#fff', 1);
+    for (let k = 0; k < 5; k++) fr(g, wa(.38), 370 + k * 195 + (st ? 0 : sin(t * 1.3 + k * 2) * 18), top + 16 + (k & 1) * 10, 44 - k * 3, 4);
+    if (i === 0) [500, 865, 1205].forEach((lx, k) => { const x = lx + (st ? 0 : sin(t * .8 + k) * 4); E(g, x, top + 3, 33, 9, '#3fbc54', 3); if (k === 1) { C(g, x - 6, top - 5, 7, '#ff7ec6', 2.5); C(g, x - 6, top - 6, 3, '#ffe57f'); } });
     if (P0.holes) di(g, iceSp(), 0, top - 24, W, 70);
   };
   const badge = (g, x, y, s, col, r) => { C(g, x, y, r, col, 3.5); ct(g, s, x, y + 1, r * 1.35, '#fff', 4); };
   const coin = (g, x, y, r) => { C(g, x, y, r, '#ffd23f', max(2, r * .22)); C(g, x, y, r * .6, 0, max(1.5, r * .14), '#e0a400'); };
   const drawBk = (g, i, p0, t, st) => {
     const P0 = LL.PLACES[i]; di(g, bg(i, p0), 0, 0, W, H);
-    for (let k = 0; k < 3; k++) E(g, ((st ? 0 : t) * (8 + k * 4) + k * 460 + i * 130) % (W + 300) - 150, 44 + k * 34, 46 - k * 6, 20 - k * 2, P0.night ? 'rgba(120,110,200,.5)' : '#fff', 3, al(INK, .22));
-    if (P0.current && !st) for (let k = 0; k < 5; k++) { const sx = (t * (65 + k * 8) + k * 230) % (W + 200) - 100, sy = P0.surface + 70 + (k * 71) % (P0.bed - P0.surface - 110); Q(g, [sx, sy, sx + 30, sy - 5, sx + 60, sy], 0, 3, 'rgba(255,255,255,.35)', 1); }
+    for (let k = 0; k < 3; k++) T(g, ((st ? 0 : t) * (7 + k * 3) + k * 460 + i * 130 + 80) % (W + 300) - 150, 46 + k * 30, 1 - k * .12, () => {
+      const col = P0.night ? 'rgba(120,110,200,.42)' : wa(.92);
+      E(g, 0, 5, 44, 16, P0.night ? 'rgba(90,80,165,.35)' : 'rgba(180,224,250,.55)');
+      C(g, -22, 2, 17, col); C(g, 22, 3, 15, col); C(g, 0, -6, 22, col);
+    });
+    if (i === 0 && !st) for (let k = 0; k < 2; k++) { const ph = (t * .38 + k * .5) % 1; C(g, 1026 + sin(ph * 4) * 6, P0.surface - 130 - ph * 26, 4 + ph * 6, wa((.55 * (1 - ph)).toFixed(2))); }
+    if (P0.current && !st) for (let k = 0; k < 5; k++) { const sx = (t * (65 + k * 8) + k * 230) % (W + 200) - 100, sy = P0.surface + 70 + (k * 71) % (P0.bed - P0.surface - 110); Q(g, [sx, sy, sx + 30, sy - 5, sx + 60, sy], 0, 3, wa(.35), 1); }
   };
   const drawPlr = (g, w, p, col, m, ca, t, st) => {
-    const i = p.i, sp0 = i ? { x: 1132, y: w.P.surface - 10, sit: 1 } : { x: 196, y: w.P.surface - 38, sit: 0 }, d = p.side, top = w.P.surface, hop = m === 'happy' && !st ? M.abs(sin(t * 9)) * 14 : 0;
+    const i = p.i, sp0 = i ? { x: 1132, y: w.P.surface - 10, sit: 1 } : { x: 224, y: w.P.surface - 38, sit: 0 }, d = p.side, top = w.P.surface, hop = m === 'happy' && !st ? M.abs(sin(t * 9)) * 14 : 0;
     if (i) T(g, 1150, top + 6, 1, () => { P(g, [-110, -26, 110, -26, 95, 22, -95, 22], '#ff7a5a', 5); fr(g, '#fff', -104, -16, 208, 7); });
-    const hx = sp0.x + d * 30, hy = sp0.y - 60 - hop; let tx0 = p.rod.x, ty = p.rod.y - hop, bend = 0;
+    const hx = sp0.x + d * 28, hy = sp0.y - 60 - hop; let tx0 = p.rod.x, ty = p.rod.y - hop, bend = 0;
     if (ca > 0) { const a = -d * sin(ca * PI) * 1.1, dx = tx0 - hx, dy = ty - hy; tx0 = hx + dx * cos(a) - dy * sin(a); ty = hy + dx * sin(a) + dy * cos(a); }
     if (p.state === 'reel') { bend = .7 + (st ? 0 : .3 * sin(t * 9)); tx0 += (p.hook.x - tx0) * .1 * bend; ty += 26 * bend; } else if (p.state === 'bite' && !st) ty += sin(t * 40) * 3;
+    if (!sp0.sit) E(g, sp0.x, sp0.y + 1, 24, 6, 'rgba(28,34,80,.24)');
     T(g, sp0.x, sp0.y - hop, 1, () => {
-      const hy0 = -112, eo = m === 'bite' ? 1.35 : 1, mx = d * 8, my = hy0 + 14;
-      if (!sp0.sit) { R(g, -16, -30, 13, 30, 6, col.pants, 4); R(g, 3, -30, 13, 30, 6, col.pants, 4); }
-      g.rotate((p.state === 'reel' ? -1 : 0) * .2 * d); R(g, -24, -82, 48, 56, 18, col.shirt, 4.5); R(g, -24, -50, 48, 24, 10, col.pants, 4); C(g, d * 2, hy0, 30, '#ffd2a8', 4.5);
-      [-1, 1].forEach(k => { const ex = d * 8 + k * 11; m === 'happy' ? C(g, ex, hy0, 6, 0, 3.5, INK, PI * 1.1, PI * 1.9) : (E(g, ex, hy0 - 2, 6.5 * eo, 8 * eo, '#fff', 3), C(g, ex + d * 2, hy0 - 2, 3.8 * eo, INK)); });
+      const hy0 = -110, eo = m === 'bite' ? 1.35 : 1, mx = d * 8, my = hy0 + 13;
+      if (!sp0.sit) { R(g, -15, -28, 12, 28, 5, col.pants, 4); R(g, 3, -28, 12, 28, 5, col.pants, 4); }
+      g.rotate((p.state === 'reel' ? -1 : 0) * .2 * d); R(g, -23, -80, 46, 55, 17, col.shirt, 4.5); R(g, -18, -75, 14, 24, 7, 'rgba(255,255,255,.22)'); R(g, -23, -49, 46, 23, 10, col.pants, 4); C(g, d * 2, hy0, 29, '#ffd2a8', 4.5);
+      E(g, d * 2 - 14, hy0 + 7, 5.5, 3.5, 'rgba(255,105,130,.38)'); E(g, d * 2 + 16, hy0 + 7, 5.5, 3.5, 'rgba(255,105,130,.38)');
+      [-1, 1].forEach(k => { const ex = d * 8 + k * 10.5; m === 'happy' ? C(g, ex, hy0, 6, 0, 3.5, INK, PI * 1.1, PI * 1.9) : (E(g, ex, hy0 - 2, 6 * eo, 7.5 * eo, '#fff', 3), C(g, ex + d * 2, hy0 - 2, 3.5 * eo, INK), C(g, ex + d * 2 - 1.5, hy0 - 4.5, 1.5, '#fff')); });
       m === 'bite' ? E(g, mx, my, 5, 6, '#7a1f3d', 3) : C(g, mx, my + (m === 'sad' ? 6 : -2), 6, 0, 3.2, INK, m === 'sad' ? PI * 1.15 : .3, m === 'sad' ? PI * 1.85 : PI - .3);
-      E(g, d * 2, hy0 - 20, 42, 11, col.hat, 4); Q(g, [d * 2 - 27, hy0 - 20, d * 2 - 26, hy0 - 50, d * 2, hy0 - 50, d * 2 + 26, hy0 - 50, d * 2 + 27, hy0 - 20], col.hat, 4); R(g, d * 2 - 27, hy0 - 25, 54, 7, 3, col.band, 3);
+      E(g, d * 2, hy0 - 19, 40, 10.5, col.hat, 4); Q(g, [d * 2 - 26, hy0 - 19, d * 2 - 25, hy0 - 48, d * 2, hy0 - 48, d * 2 + 25, hy0 - 48, d * 2 + 26, hy0 - 19], col.hat, 4); R(g, d * 2 - 26, hy0 - 24, 52, 7, 3, col.band, 3);
     });
     Q(g, [hx, hy, (hx + tx0) / 2 - (ty - hy) * .12 * bend, (hy + ty) / 2 + M.abs(tx0 - hx) * .25 * bend, tx0, ty], 0, 9, INK, 1); sk(g, 4.5, i ? '#ff7ae0' : '#c98a4a'); C(g, hx, hy, 8, '#ffd2a8', 3.5);
     const ln = (x1, y1, x2, y2, sag) => { sag ? Q(g, [x1, y1, (x1 + x2) / 2, max(y1, y2) + sag, x2, y2], 0, 2, '#fff', 1) : P(g, [x1, y1, x2, y2], 0, 2, '#fff', 1); sk(g, 1, al(INK, .5)); };
@@ -168,7 +211,7 @@
   const canvas = $('game'), ui = $('ui'), ghostEl = $('ghost'); let dirty = 1;
   const view = Kit.fit(canvas, W, H, { maxDpr: 1.5, onResize: v => { ui.style.left = canvas.style.left; ui.style.top = canvas.style.top; ui.style.transform = `scale(${v.scale})`; dirty = 1; } });
   const fx = Kit.particles(), shake = Kit.shake(), ps = () => min(2, max(.5, M.round(view.scale * view.dpr * 4) / 4));
-  const bu = (x, y, colors, count = 20, speed = 300, gravity = 300, o) => fx.burst(x, y, Object.assign({ count, colors, speed, life: .8, size: 8, gravity }, o));
+  const bu = (x, y, colors, count = 20, speed = 300, gravity = 300, o) => fx.burst(x, y, O({ count, colors, speed, life: .8, size: 8, gravity }, o));
   const GO = ['Space', 'Enter', 'NumpadEnter'], PRAISE = ['رائع!', 'ممتاز!', 'مذهل!'];
   const COLS = [{ hat: '#ffd23f', band: '#ff5d6c', shirt: '#ff7a3d', pants: '#3f6fd8' }, { hat: '#ff7ae0', band: '#fff', shirt: '#9b5cff', pants: '#2a3a7a' }];
 
@@ -310,7 +353,7 @@
   }
   function inputs() {
     const K = Kit.keys;
-    if (!solo()) return !duo || duo.phase !== 'go' || keyLock ? [{}, {}] : [Object.assign(kdir(K, ['KeyA'], ['KeyD'], ['KeyW'], ['KeyS']), { press: K.pressed('Space'), hold: K.down('Space') }), Object.assign(kdir(K, ['ArrowLeft'], ['ArrowRight'], ['ArrowUp'], ['ArrowDown']), { press: K.anyPressed(['Enter', 'NumpadEnter']), hold: K.anyDown(['Enter', 'NumpadEnter']) })];
+    if (!solo()) return !duo || duo.phase !== 'go' || keyLock ? [{}, {}] : [O(kdir(K, ['KeyA'], ['KeyD'], ['KeyW'], ['KeyS']), { press: K.pressed('Space'), hold: K.down('Space') }), O(kdir(K, ['ArrowLeft'], ['ArrowRight'], ['ArrowUp'], ['ArrowDown']), { press: K.anyPressed(['Enter', 'NumpadEnter']), hold: K.anyDown(['Enter', 'NumpadEnter']) })];
     if (card || keyLock) { pressQ = 0; return [{}]; }
     const inp = kdir(K, ['ArrowLeft', 'KeyA'], ['ArrowRight', 'KeyD'], ['ArrowUp', 'KeyW'], ['ArrowDown', 'KeyS']);
     inp.press = !!pressQ || K.anyPressed(GO); inp.hold = !!ptr.down || K.anyDown(GO);
@@ -358,7 +401,7 @@
   }
 
   const ghost = { on: false, t: 0, dur: 2, sx: 0, sy: 0, get: null, bite: 0 };
-  const startG = (sx, sy0, get, dur, bite) => { Object.assign(ghost, { on: true, t: 0, dur, sx, sy: sy0, get, bite: !!bite }); hid('ghost', 0); };
+  const startG = (sx, sy0, get, dur, bite) => { O(ghost, { on: true, t: 0, dur, sx, sy: sy0, get, bite: !!bite }); hid('ghost', 0); };
   function stopG() { ghost.on = false; hid('ghost', 1); coach.target = 0; }
   function coachStep(dt) {
     const p = world.players[0]; if (ghost.on && ghost.bite && p.state !== 'bite') stopG();
@@ -450,14 +493,17 @@
   }
   function drawHud(ctx) {
     if (solo()) {
-      const P0 = LL.PLACES[place], G = P0.goals, st0 = save.places[place], s = LL.byId[G.sp];
-      for (let k = 0; k < 3; k++) T(ctx, 340 + (2 - k) * 210 + 90, 44, 1 + (goalBump[k] || 0) * .25, () => {
-        const done = st0.g[k]; R(ctx, -92, -30, 184, 60, 30, done ? 'rgba(255,246,190,.95)' : 'rgba(255,255,255,.9)', 4.5);
-        if (k === 0) { species(ctx, LL.SPECIES[P0.species[0]], 34, 0, -1, .85, 0, 1); ct(ctx, `${min(st0.n, G.n)}/${G.n}`, -24, 2, 28, INK, 0); }
-        else if (k === 1) species(ctx, s, 10, 0, -1, min(1, 92 / (s.len * 1.3)), 0, 1, 0, 0, 0, !save.book[s.id]);
-        else ct(ctx, `${LL.weightText(G.w).replace('.0', '')} كغ ⚖`, 0, 2, 26, INK, 0);
-        stp(ctx, -78, -22, 17, 8, done ? '#ffd23f' : '#d6dbee', 3.5);
+      const P0 = LL.PLACES[place], G = P0.goals, st0 = save.places[place], s = LL.byId[G.sp], p0 = world.players[0];
+      for (let k = 0; k < 3; k++) T(ctx, 435 + (2 - k) * 212, 42, 1 + (goalBump[k] || 0) * .25, () => {
+        const done = st0.g[k];
+        R(ctx, -96, -24, 192, 56, 28, 'rgba(28,34,80,.28)');
+        R(ctx, -96, -28, 192, 56, 28, done ? '#fff3b8' : 'rgba(255,255,255,.94)', 4);
+        if (k === 0) { species(ctx, LL.SPECIES[P0.species[0]], 52, 0, -1, .76, 0, 1); ct(ctx, `صيد ${min(st0.n, G.n)}/${G.n}`, -24, 1, 22, INK, 0); }
+        else if (k === 1) { species(ctx, s, 54, 0, -1, min(.68, 62 / (s.len * 1.25)), 0, 1, 0, 0, 0, !save.book[s.id]); ct(ctx, s.name, -34, 1, s.name.length > 9 ? 16 : 19, INK, 0); }
+        else { ct(ctx, `وزن ${LL.weightText(G.w).replace('.0', '')} كغ`, 0, 1, 22, INK, 0); }
+        stp(ctx, -84, -20, 16, 7.5, done ? '#ffd23f' : '#d6dbee', 3.5);
       });
+      if (!card && p0.casts === 0 && p0.state === 'ready') { const by = P0.surface - 52 + (calm() ? 0 : sin(time * 4) * 3); R(ctx, 515, by - 22, 250, 44, 22, 'rgba(28,34,80,.82)', 3.5, '#fff'); ct(ctx, 'اضغط في الماء للرمي!', 640, by + 1, 21, '#ffd23f', 0); }
       T(ctx, 1212, 42, 1 + coinBump * .2, () => { const t = String(M.round(coinShown)), w = 70 + t.length * 16; R(ctx, -w, -26, w, 52, 26, 'rgba(28,34,80,.82)', 4, '#fff'); coin(ctx, -w + 28, 0, 16); ct(ctx, t, -w + 52, 2, 28, '#fff', 0, 'left'); });
       flyers.forEach(f => { if (f.t >= 0) { const k = f.t, e = 1 - (1 - k) * (1 - k); coin(ctx, f.x + (1160 - f.x) * e, f.y + (42 - f.y) * e - sin(k * PI) * 80, 14); } });
       if (banner) { R(ctx, 400, 250, 480, 100, 50, '#ff5d9e', 6); ct(ctx, 'مكان جديد!', 700, 302, 48); badge(ctx, 470, 300, String(banner.place + 1), '#4fd1ff', 30); }

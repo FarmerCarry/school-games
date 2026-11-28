@@ -233,9 +233,13 @@
 
     /* ---------------------------------------------------- Static Stadium Environment */
     var envBoxes = [];
-    // Surrounding sunny park ground & court deck curb
+    // Surrounding sunny park ground, mowed turf stripes & court deck curb
     envBoxes.push([0, -0.32, -3.5, 68, 0.5, 34, 0, 0, 0x3ec96b, false]);
+    for (var gs = 0; gs < 5; gs++) {
+      envBoxes.push([0, -0.06, 5.9 + gs * 1.4, 42, 0.04, 1.35, 0, 0, gs % 2 === 0 ? 0x34b85e : 0x4cd476, false]);
+    }
     envBoxes.push([0, -0.14, -0.3, 25.4, 0.24, 11.2, 0, 0, 0x264378, false]);
+    envBoxes.push([0, 0.01, 5.26, 25.4, 0.08, 0.24, 0, 0, 0xe2e8f0, false]);
 
     // Colorful court sideline boards & streetball banners
     var bannerColors = [0xff7a18, 0x2589ff, 0xffcf26, 0xec4899, 0x22d36b, 0x8b5cf6];
@@ -277,13 +281,16 @@
     for (var ki = 0; ki < bldg.length; ki++) {
       var bd = bldg[ki];
       envBoxes.push([bd[0], bd[1], bd[2], bd[3], bd[4], bd[5], 0, 0, bd[6], false]);
+      envBoxes.push([bd[0], bd[1] + bd[4] * 0.5 + 0.16, bd[2], bd[3] + 0.3, 0.32, bd[5] + 0.2, 0, 0, 0xf8fafc, false]);
+      for (var wr = 0; wr < 2; wr++) {
+        envBoxes.push([bd[0], bd[1] + 0.8 + wr * 1.7, bd[2] + bd[5] * 0.5 + 0.05, bd[3] * 0.68, 0.65, 0.1, 0, 0, 0xe0f2fe, true]);
+      }
     }
 
-    // Fluffy stylized low-poly sunlit clouds in the sky
+    // Fluffy stylized low-poly sunlit clouds in the sky (framing the open center for HUD)
     var clouds = [
-      [-11, 10.6, -17, 4.2, 1.1, 1.6],
-      [-2, 11.4, -19, 5.0, 1.2, 1.8],
-      [9.5, 10.3, -16, 4.4, 1.0, 1.5]
+      [-10.5, 9.8, -17, 4.4, 1.1, 1.6],
+      [10.2, 9.5, -16, 4.4, 1.0, 1.5]
     ];
     for (var ci = 0; ci < clouds.length; ci++) {
       var cl = clouds[ci];
@@ -298,55 +305,8 @@
       envBoxes.push([fl * 11.75, 9.2, -5.68, 1.9, 0.65, 0.14, fl * -0.25, 0, 0xfff8c4, true]);
     }
 
-    // Overhead Jumbotron truss & frame
-    envBoxes.push([0, 9.0, -5.8, 6.4, 1.9, 0.7, 0, 0, 0x172042, false]);
-    envBoxes.push([-2.6, 10.6, -5.8, 0.25, 1.6, 0.25, 0, 0, 0x64748b, false]);
-    envBoxes.push([2.6, 10.6, -5.8, 0.25, 1.6, 0.25, 0, 0, 0x64748b, false]);
-
     var envMesh = new T.Mesh(buildMergedBoxes(envBoxes), [MAT_LIT, MAT_GLOW]);
     scene.add(envMesh);
-
-    // Dynamic Jumbotron celebration light panels with lively LED graphic texture
-    function makeJumboTex() {
-      var cv = document.createElement('canvas');
-      cv.width = 512;
-      cv.height = 128;
-      var ctx = cv.getContext('2d');
-      ctx.fillStyle = '#0f172a';
-      ctx.fillRect(0, 0, 512, 128);
-      // Glowing blue & red team edge bars
-      ctx.fillStyle = '#38bdf8';
-      ctx.fillRect(10, 12, 118, 104);
-      ctx.fillStyle = '#ff5a5f';
-      ctx.fillRect(384, 12, 118, 104);
-      // Central golden star/basketball emblem
-      ctx.fillStyle = '#1e293b';
-      ctx.fillRect(140, 12, 232, 104);
-      ctx.fillStyle = '#ff9f1c';
-      ctx.beginPath();
-      ctx.arc(256, 64, 38, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = '#fff5cc';
-      ctx.lineWidth = 4;
-      ctx.beginPath();
-      ctx.arc(256, 64, 38, 0, Math.PI * 2);
-      ctx.moveTo(218, 64); ctx.lineTo(294, 64);
-      ctx.moveTo(256, 26); ctx.lineTo(256, 102);
-      ctx.stroke();
-      // Decorative LED dots across top and bottom
-      ctx.fillStyle = '#ffe066';
-      for (var d = 0; d < 20; d++) {
-        ctx.fillRect(16 + d * 25, 3, 12, 5);
-        ctx.fillRect(16 + d * 25, 120, 12, 5);
-      }
-      var tex = new T.CanvasTexture(cv);
-      if (T.SRGBColorSpace) tex.colorSpace = T.SRGBColorSpace;
-      return tex;
-    }
-    var jumboPanelMat = new T.MeshBasicMaterial({ map: makeJumboTex(), color: 0xffffff });
-    var jumboPanel = new T.Mesh(new T.PlaneGeometry(5.6, 1.25), jumboPanelMat);
-    jumboPanel.position.set(0, 9.0, -5.42);
-    scene.add(jumboPanel);
 
     /* ---------------------------------------------------- InstancedMesh Crowd */
     var CROWD_COUNT = 54;
@@ -1019,17 +979,7 @@
         posAttr.needsUpdate = true;
       }
 
-      // 2. Jumbotron Scoreboard Strobe Lights
-      if (match.flashT > 0) {
-        var blink = Math.floor(t * 18) % 2 === 0;
-        jumboPanelMat.color.setHex(blink ? 0xffe066 : (match.flashSide === 0 ? 0x7dd3fc : 0xff8b8b));
-      } else if (match.overtime) {
-        jumboPanelMat.color.setHex(Math.floor(t * 6) % 2 === 0 ? 0xffcf26 : 0xff6b6b);
-      } else {
-        jumboPanelMat.color.setHex(0xffffff);
-      }
-
-      // 3. Animated Spectators in Bleachers
+      // 2. Animated Spectators in Bleachers
       var excite = match.crowdExcite;
       for (var ci = 0; ci < CROWD_COUNT; ci++) {
         var cd = crowdData[ci];

@@ -204,7 +204,7 @@
     doorIcons = L.gates.map(d => spotBeside(L, d, d.half + 46));
     carryIcons = L.carry.map(c => { const p = SH.at(L, c[0]); return spotBeside(L, p, p.hw + 44); });
     swBadges = L.switches.map(sw => sw.dur > 0 ? spotBeside(L, { x: sw.gx, y: sw.gy, nx: sw.gnx, ny: sw.gny }, sw.ghw + 30) : null);
-    intro = 2.6;
+    intro = 3.6;
     setScreen('play');
     J.whoosh(0.5);
     say(L.R.id + ' ' + L.R.name);
@@ -645,47 +645,52 @@
     const L = world.L, wd = SH.WORLDS[L.world], mode = L.mode === 'drag' ? 'اضغط واسحب' : 'بلا ضغط', par = '/' + L.par;
     const mW = (n, s) => (ctx.font = hudFont(n), ctx.measureText(s).width);
     if (!hudW) hudW = [mW(20, par), mW(34, L.R.name), mW(26, mode)];
-    // The pill at the top, read right to left: the level, the touches, the coins, the
-    // clock (green while the time star can still be won). Cached between whole-second ticks.
-    const x0 = 404, w = 472, R = x0 + w, late = world.clock > L.par, tx = R - 330, sec = Math.floor(world.clock);
+    // The pill at the top, read right to left: the level, wall-touch misses (red hazard badge),
+    // the coins, and the clock (green while the time star can still be won). Cached between ticks.
+    const x0 = 374, w = 532, R = x0 + w, late = world.clock > L.par, tx = R - 384, sec = Math.floor(world.clock);
     const hk = ps + '|' + L.i + '|' + world.touches + '|' + world.got + '|' + sec + '|' + (late ? 1 : 0);
     if (hudKey !== hk) {
-      let g; [hudC, g] = pic(hudC, 480, 66, ps); hudKey = hk;
-      g.translate(-400, -6);
-      A.rr(g, x0, 10, w, 58, 29); g.fillStyle = 'rgba(10,14,44,0.82)'; g.fill(); g.lineWidth = 4; g.strokeStyle = wd.color; g.stroke();
+      let g; [hudC, g] = pic(hudC, 540, 66, ps); hudKey = hk;
+      g.translate(-370, -6);
+      A.rr(g, x0, 10, w, 58, 29); g.fillStyle = 'rgba(10,14,44,0.88)'; g.fill(); g.lineWidth = 4; g.strokeStyle = wd.color; g.stroke();
       A.rr(g, R - 92, 16, 84, 46, 23); g.fillStyle = wd.color; g.fill();
       A.text(g, L.R.id, R - 50, 40, L.R.id.length > 3 ? 25 : 30, A.INK, { stroke: false });
-      g.save(); g.translate(R - 116, 39); g.scale(0.55, 0.55);
-      g.beginPath(); g.moveTo(6, -28); g.lineTo(-20, 4); g.lineTo(-3, 4); g.lineTo(-10, 28); g.lineTo(20, -8); g.lineTo(2, -8); g.closePath();
-      g.fillStyle = world.touches ? A.HOT : '#ffd23f'; g.fill(); g.lineWidth = 5; g.strokeStyle = '#fff'; g.stroke();
-      g.restore();
-      A.text(g, String(world.touches), R - 134, 40, 30, world.touches ? '#ffb3c6' : '#fff', { align: 'right', stroke: false });
+      // Red/coral hazard pill for wall touches so kids never mistake it for collectible energy.
+      A.rr(g, R - 230, 18, 128, 42, 21);
+      g.fillStyle = world.touches ? 'rgba(255,77,122,0.34)' : 'rgba(255,77,122,0.16)'; g.fill();
+      g.lineWidth = 2.5; g.strokeStyle = A.HOT; g.stroke();
+      A.circle(g, R - 122, 39, 13); g.fillStyle = A.HOT; g.fill(); g.lineWidth = 2.5; g.strokeStyle = '#fff'; g.stroke();
+      g.beginPath(); g.moveTo(R - 127, 34); g.lineTo(R - 117, 44); g.moveTo(R - 117, 34); g.lineTo(R - 127, 44);
+      g.lineWidth = 3.5; g.lineCap = 'round'; g.strokeStyle = '#fff'; g.stroke();
+      A.text(g, String(world.touches), R - 142, 40, 26, world.touches ? '#ffd1dd' : '#fff', { align: 'right', stroke: false });
+      A.text(g, 'أخطاء', R - 166, 40, 17, '#ffb3c6', { align: 'right', stroke: false });
       if (L.coins.length) {
-        A.coin(g, R - 214, 39, 0, true);
-        A.text(g, world.got + '/' + L.coins.length, R - 236, 40, 28, '#ffe98a', { align: 'right', stroke: false });
+        A.coin(g, R - 262, 39, 0, true);
+        A.text(g, world.got + '/' + L.coins.length, R - 284, 40, 28, '#ffe98a', { align: 'right', stroke: false });
       }
       A.circle(g, tx, 39, 15); g.fillStyle = late ? '#8a90b8' : '#3ddc84'; g.fill(); g.lineWidth = 3; g.strokeStyle = '#fff'; g.stroke();
       g.textAlign = 'right'; g.textBaseline = 'middle'; g.direction = 'ltr';
-      g.font = hudFont(20); g.fillStyle = 'rgba(255,255,255,0.55)'; g.fillText(par, tx - 22, 44);
+      g.font = hudFont(20); g.fillStyle = 'rgba(255,255,255,0.62)'; g.fillText(par, tx - 22, 44);
       g.font = hudFont(28); g.fillStyle = late ? '#9aa0c8' : '#fff'; g.fillText(String(sec), tx - 24 - hudW[0], 41);
     }
-    ctx.drawImage(hudC, 400, 6, 480, 66);
+    ctx.drawImage(hudC, 370, 6, 540, 66);
     const ang = -Math.PI / 2 + Math.min(1, world.clock / L.par) * Math.PI * 2;
     ctx.beginPath(); ctx.moveTo(tx, 39); ctx.lineTo(tx + Math.cos(ang) * 10, 39 + Math.sin(ang) * 10); ctx.lineWidth = 3; ctx.strokeStyle = A.INK; ctx.stroke();
-    // The level's name and how it is played, for a moment at the start.
+    // The level's name and how it is played, crisp high-contrast before smoothly fading out.
     if (intro > 0 && !world.done) {
-      const bw = Math.ceil(hudW[1] + hudW[2] + 130), bx = 640 - bw / 2, ik = ps + '|' + L.i + '|' + bw;
+      const bw = Math.ceil(hudW[1] + hudW[2] + 148), bx = 640 - bw / 2, ik = ps + '|' + L.i + '|' + bw;
       if (introKey !== ik) {
         let g; [introC, g] = pic(introC, bw + 8, 76, ps); introKey = ik;
         g.translate(4 - bx, 38);
-        A.rr(g, bx, -34, bw, 68, 34); g.fillStyle = 'rgba(10,14,44,0.86)'; g.fill(); g.lineWidth = 4; g.strokeStyle = wd.color; g.stroke();
-        A.text(g, L.R.name, bx + bw - 32, 1, 34, '#fff', { stroke: false, align: 'right' });
-        A.text(g, mode, bx + bw - 66 - hudW[1], 1, 26, L.mode === 'drag' ? '#ffd23f' : '#8dff5a', { stroke: false, align: 'right' });
-        A.mouseIcon(g, bx + 40, 4, 0.55, L.mode === 'drag', '#ffd23f');
+        A.rr(g, bx, -31, bw, 62, 31); g.fillStyle = 'rgba(12,18,58,0.95)'; g.fill(); g.lineWidth = 4; g.strokeStyle = wd.color; g.stroke();
+        A.text(g, L.R.name, bx + bw - 30, 1, 32, '#fff', { stroke: false, align: 'right' });
+        A.circle(g, bx + bw - 50 - hudW[1], 1, 3.5); g.fillStyle = 'rgba(255,255,255,0.5)'; g.fill();
+        A.text(g, mode, bx + bw - 70 - hudW[1], 1, 26, L.mode === 'drag' ? '#ffe14d' : '#8dff5a', { stroke: false, align: 'right' });
+        A.mouseIcon(g, bx + 42, 4, 0.55, L.mode === 'drag', '#ffe14d');
       }
-      const a = Math.min(1, intro / 0.5, (2.6 - intro) / 0.25 + 0.2);
+      const a = Math.min(1, intro / 0.35, (3.6 - intro) / 0.2 + 0.2);
       ctx.globalAlpha = clamp(a, 0, 1);
-      ctx.drawImage(introC, bx - 4, 74 + (still ? 0 : Math.max(0, intro - 2.3) * 60), bw + 8, 76);
+      ctx.drawImage(introC, bx - 4, 74 + (still ? 0 : Math.max(0, intro - 3.35) * 60), bw + 8, 76);
       ctx.globalAlpha = 1;
     }
     // "Hold the button here", after the spark stopped at a carry stretch.

@@ -167,9 +167,10 @@
     b.push().rotY(Math.PI / 4); b.cyl(0, 5.25, 0, 5.3, 0.12, YEL, { seg: 4 }); b.pop();
     m.coll(-3.6, 5.3, -3.6, 3.6, 6.2, 3.6);
     b.cyl(0, 7.5, 0, 0.05, 1.0, WHT, { seg: 4 }); b.box(0, 8.1, -0.02, 0.8, 8.5, 0.02, YEL);
-    // ramp east (low end at x = 9)
+    // ramp east (low end at x = 9) with cheerful white & gold trim rails
     m.ramp(3.5, -1.2, 9, 1.2, 0, 0, H, 1, 0x7a5cff, { top: 0xb9a6ff });
     b.box(3.5, 0, -1.35, 9, 0.35, -1.2, WHT); b.box(3.5, 0, 1.2, 9, 0.35, 1.35, WHT);
+    b.wedge(3.5, -1.3, 9, -1.2, 0, 0.25, H + 0.2, 1, YEL); b.wedge(3.5, 1.2, 9, 1.3, 0, 0.25, H + 0.2, 1, YEL);
     // slide west (low end at x = -9.5) with raised lips
     m.ramp(-9.5, -0.9, -3.5, 0.9, 0, 0, H, 0, YEL, { top: 0xffe07a });
     b.wedge(-9.5, -1.1, -3.5, -0.9, 0, 0.25, H + 0.25, 0, ORA);
@@ -304,12 +305,11 @@
       var n = (Math.sin(x * 1.3) + Math.cos(z * 1.7)) > 0.4;
       return ((Math.floor(x / 2) + Math.floor(z / 2)) & 1) ? (n ? 0x80d160 : 0x7ccd5c) : (n ? 0x75c655 : 0x71c252);
     });
-    // spawns (team 1 = blue north, team 2 = orange south)
-    [[-17, -8, 1], [17, -8, 1], [-8, -18, 1], [8, -18, 1], [-12.5, -12.5, 1], [12.5, -14.5, 1],
-     [17, 8, 2], [-17, 8, 2], [8, 18, 2], [-8, 18, 2], [12.5, 12.5, 2], [-12.5, 14.5, 2],
-     [0, -8, 0], [0, 8, 0], [-5.5, 2.5, 0], [5.5, -2.5, 0],
-     // sheltered spots (behind the fences / walls) so free-for-all always has somewhere quiet to come back
-     [-5.5, -16.5, 1], [5.5, 16.5, 2], [-18.5, -5.5, 1], [18.5, 5.5, 2], [-9.5, -11.5, 1], [9.5, 11.5, 2], [-13.5, 2.5, 0, 1], [13.5, -2.5, 0, 1]].forEach(function (s) { m.spawn(s[0], s[1], s[2], 0, s[3]); });
+    // spawns (team 1 = blue north, team 2 = orange south) — generous wall clearance
+    [[-16.2, -10.2, 1], [16.2, -9.2, 1], [-8, -17.2, 1], [8, -17.2, 1], [-12.5, -13, 1], [12.5, -14.5, 1],
+     [16.2, 10.2, 2], [-16.2, 9.2, 2], [8, 17.2, 2], [-8, 17.2, 2], [12.5, 13, 2], [-12.5, 14.5, 2],
+     [0, -8.2, 0], [0, 8.2, 0], [-6.2, 3.8, 0], [6.2, -3.8, 0],
+     [-5.8, -16.5, 1], [5.8, 16.5, 2], [-17.5, -5.5, 1], [17.5, 5.5, 2], [-9.5, -11.5, 1], [9.5, 11.5, 2], [-13.5, 3.2, 0, 1], [13.5, -3.2, 0, 1]].forEach(function (s) { m.spawn(s[0], s[1], s[2], 0, s[3]); });
     m.pick('hp', -15.5, 0); m.pick('hp', 15.5, 0);
     m.pick('ammo', -6, -12.5); m.pick('ammo', 6, 12.5);
     m.pick('ammo', 0, -15, H); m.pick('ammo', 0, 15, H);

@@ -39,7 +39,7 @@
     <div id="ammobox">
       <div id="wpnName">رشّاش الفقاعات</div>
       <div class="ammo"><span id="ammoNum">30</span><span class="res">/ <span id="ammoRes">150</span></span></div>
-      <div id="slots"><span class="slot" data-w="0">1</span><span class="slot" data-w="1">2</span><span class="slot" data-w="2">3</span><span class="slot bal"><span class="bl-ico"></span><span id="balN">2</span></span></div>
+      <div id="slots"><span class="slot" data-w="0">1 ●</span><span class="slot" data-w="1">2 ✦</span><span class="slot" data-w="2">3 ◎</span><span class="slot bal"><span class="bl-ico"></span><span id="balN">2</span></span></div>
     </div>
     <div id="powerBox" hidden><span class="star">&#9733;</span> طلاء خارق &times;2 <b id="powT">12</b></div>
     <div id="dead" hidden>
@@ -58,19 +58,19 @@
     <div class="tpanel">
       <div class="logo"><span class="l1">ضربة</span><span class="l2">الطلاء</span></div>
       <div class="tagline">معركة طلاء ثلاثية الأبعاد! صوّب، لطّخ، واربح!</div>
-      <div class="playrow"><button id="playBtn" class="sg-btn play" type="button">&#9654; العب</button><span class="orpress">أو اضغط <span class="sg-key">Enter</span></span></div>
-      <div class="opt-h">طريقة اللعب</div>
-      <div class="seg" id="modeSeg">
-        <button type="button" data-v="ffa">&#127919; الكل ضد الكل</button>
-        <button type="button" data-v="team">&#129309; فرق 5 ضد 5</button>
-      </div>
-      <div class="opt-h">الساحة</div>
-      <div class="maps" id="mapSeg"></div>
-      <div class="opt-h">الصعوبة</div>
-      <div class="seg" id="diffSeg">
-        <button type="button" data-v="0">&#128578; سهل</button>
-        <button type="button" data-v="1">&#128526; عادي</button>
-        <button type="button" data-v="2">&#128293; صعب</button>
+      <div class="playrow"><button id="playBtn" class="sg-btn play" type="button">&#9654; العب</button></div>
+      <button id="matchOptBtn" class="opt-pill" type="button" aria-expanded="false"><span id="matchSummary">🏫 ساحة المدرسة · 🎯 الكل ضد الكل · 🙂 سهل</span><b>▾</b></button>
+      <div id="matchPop" class="mpop" hidden>
+        <div class="seg" id="modeSeg">
+          <button type="button" data-v="ffa">&#127919; الكل ضد الكل</button>
+          <button type="button" data-v="team">&#129309; فرق 5 ضد 5</button>
+        </div>
+        <div class="maps" id="mapSeg"></div>
+        <div class="seg" id="diffSeg">
+          <button type="button" data-v="0">&#128578; سهل</button>
+          <button type="button" data-v="1">&#128526; عادي</button>
+          <button type="button" data-v="2">&#128293; صعب</button>
+        </div>
       </div>
       <div class="trow">
         <button id="lockerBtn" class="sg-btn secondary" type="button">&#127912; الخزانة</button>

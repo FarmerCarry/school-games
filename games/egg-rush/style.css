@@ -115,7 +115,7 @@ kbd.wide { min-width: 96px; font-size: 24px; }
 
 /* ------------------------------------------------ HUD */
 #btnPause { position: absolute; top: 18px; left: 18px; }
-.place { position: absolute; top: 14px; left: 108px; display: flex; align-items: baseline; gap: 2px; padding: 0 22px 6px 18px; border-radius: 34px; background: #ffd23f; color: #1c2250; outline: 5px solid #1c2250; box-shadow: 0 6px 0 #1c2250; transition: transform .2s; }
+.place { position: absolute; top: 14px; left: 108px; direction: ltr; unicode-bidi: isolate; display: flex; align-items: baseline; gap: 2px; padding: 0 22px 6px 18px; border-radius: 34px; background: #ffd23f; color: #1c2250; outline: 5px solid #1c2250; box-shadow: 0 6px 0 #1c2250; transition: transform .2s; }
 .place b { font-size: 64px; line-height: 1.05; font-weight: 800; }
 .place small { font-size: 30px; font-weight: 700; opacity: .7; }
 .place.r2 { background: #dfe6f0; } .place.r3 { background: #f0a868; } .place.r4 { background: #9fd8ff; }
@@ -131,19 +131,19 @@ kbd.wide { min-width: 96px; font-size: 24px; }
 #hud.duo .chips { display: none; }
 .chips .chip { font-size: 30px; padding: 4px 18px 4px 12px; }
 .chips .chip svg { width: 32px; height: 32px; }
-.meter { position: absolute; bottom: 8px; left: 490px; width: 300px; height: 160px; }
+.meter { position: absolute; bottom: 4px; left: 490px; width: 300px; height: 152px; transform: scale(.9); transform-origin: center bottom; }
 .meter.m0.duo { left: 170px; } .meter.m1 { left: 810px; }
-.meter .arc { width: 300px; height: 160px; overflow: visible; }
-.meter .needle { position: absolute; left: 150px; top: 150px; width: 0; height: 0; transform: rotate(0deg); }
-.meter .egg { position: absolute; width: 60px; height: 60px; left: -30px; top: -152px; fill: #fffaf0; stroke: #1c2250; stroke-width: 5; }
+.meter .arc { width: 300px; height: 152px; overflow: visible; }
+.meter .needle { position: absolute; left: 150px; top: 146px; width: 0; height: 0; transform: rotate(0deg); }
+.meter .egg { position: absolute; width: 58px; height: 58px; left: -29px; top: -148px; fill: #fffaf0; stroke: #1c2250; stroke-width: 5; }
 .meter.warn .egg { animation: er-shake .16s linear infinite; fill: #fff0c0; }
 .meter .kc { position: absolute; bottom: 4px; width: 52px; height: 52px; border-radius: 12px; background: #fff; color: #1c2250; font-size: 34px; font-weight: 800; line-height: 50px; text-align: center; box-shadow: 0 5px 0 #9aa3c7; opacity: 0; transition: opacity .15s; }
 .meter .kc.l { left: -48px; } .meter .kc.r { right: -48px; }
 .meter .kc.on { opacity: 1; background: #ffd23f; box-shadow: 0 5px 0 #1c2250; animation: er-pulse .5s ease-in-out infinite; }
-.meter .shields { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); display: flex; gap: 10px; }
-.meter .shields .sh { display: block; width: 20px; height: 26px; border-radius: 50% 50% 45% 45%; background: #fffaf0; border: 3px solid #1c2250; box-shadow: 0 3px 0 #1c2250; transition: transform .2s, opacity .2s, background .2s; }
-.meter[data-cracks="1"] .shields .sh:last-child { background: #ff9f1c; opacity: .38; transform: scale(.8) rotate(14deg); }
-.meter[data-cracks="2"] .shields .sh { background: #ff4d4d; opacity: .28; transform: scale(.75); }
+.meter .shields { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; padding: 5px 14px; border-radius: 999px; background: rgba(28, 34, 80, .78); border: 3px solid #fff; box-shadow: 0 4px 0 #1c2250; }
+.meter .shields .sh { display: block; width: 30px; height: 32px; fill: #ffd23f; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, .35)); transition: transform .2s, opacity .2s, fill .2s; }
+.meter[data-cracks="1"] .shields .sh:last-child { fill: #ff9f1c; opacity: .35; transform: scale(.8) rotate(14deg); }
+.meter[data-cracks="2"] .shields .sh { fill: #ff4d4d; opacity: .28; transform: scale(.75); }
 @keyframes er-shake { 0%, 100% { margin-left: 0; } 25% { margin-left: -4px; } 75% { margin-left: 4px; } }
 .tag { position: absolute; top: 96px; width: 52px; height: 52px; border-radius: 50%; color: #fff; font-size: 30px; font-weight: 800; display: flex; align-items: center; justify-content: center; outline: 4px solid #1c2250; }
 .tag.t0 { left: 120px; } .tag.t1 { right: 120px; }

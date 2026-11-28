@@ -896,10 +896,10 @@
     }
     A.coin(ctx, 920, 46, 18, time, true);
     A.text(ctx, String(w.coins), 948, 48, 32, '#ffffff', { stroke: 6, align: 'left' });
-    A.gauge(ctx, 1146, 96, 56, w.steps, w.tune.maxSteps, gaugeBump, time, still);
+    A.gauge(ctx, 1188, 126, 50, w.steps, w.tune.maxSteps, gaugeBump, time, still);
     if (w.combo >= 3) {
-      A.rr(ctx, 1096, 164, 100, 42, 21); ctx.fillStyle = '#ff5d6c'; ctx.fill(); A.ink(ctx, 4);
-      A.text(ctx, '×' + w.combo, 1146, 186, 28, '#ffffff', { stroke: 5 });
+      A.rr(ctx, 1138, 194, 100, 40, 20); ctx.fillStyle = '#ff5d6c'; ctx.fill(); A.ink(ctx, 4);
+      A.text(ctx, '×' + w.combo, 1188, 215, 27, '#ffffff', { stroke: 5 });
     }
   }
   function drawCalls(ctx, y) {
@@ -912,22 +912,23 @@
       ctx.restore();
     }
   }
-  // At a level's start: the new keys of the lesson, big, as they look on the keyboard.
+  // At a level's start: sleek top sky banner showing the lesson's new keys, clear above Zozo's lane.
   function drawIntro(ctx) {
     if (!intro || !intro.keys || !intro.keys.length) return;
-    const t = intro.t, a = Math.min(1, t * 4, (2.2 - t) * 3), n = intro.keys.length, size = 112, gap = 26;
-    const total = n * size + (n - 1) * gap + (intro.keys.indexOf('Space') >= 0 ? 120 : 0), x0 = 640 - total / 2, y = 100;
+    const t = intro.t, a = Math.min(1, t * 4, (2.2 - t) * 3), n = intro.keys.length, size = 54, gap = 14, tagW = 112;
+    const keysW = n * size + (n - 1) * gap + (intro.keys.indexOf('Space') >= 0 ? 58 : 0);
+    const total = keysW + gap + tagW, x0 = 600 - total / 2, y = 86;
     ctx.save(); ctx.globalAlpha = Math.max(0, a);
-    A.rr(ctx, x0 - 34, y - 26, total + 68, size + 60, 34); ctx.fillStyle = 'rgba(28,34,80,0.82)'; ctx.fill(); A.ink(ctx, 5, '#ffffff');
+    A.rr(ctx, x0 - 20, y - 12, total + 40, size + 24, 28); ctx.fillStyle = 'rgba(28,34,80,0.84)'; ctx.fill(); A.ink(ctx, 4, '#ffffff');
     let x = x0;
     intro.keys.forEach((code, i) => {
-      const wd = code === 'Space' ? size + 120 : size, bob = calm() ? 0 : Math.sin(t * 6 + i) * 5;
-      A.glow(ctx, x + wd / 2, y + size / 2 + bob, wd, size, '#ffe14d', 0.6);
-      A.rr(ctx, x, y + bob, wd, size, 22); ctx.fillStyle = '#d99a00'; ctx.fill(); A.ink(ctx, 5);
-      A.rr(ctx, x + 7, y + 5 + bob, wd - 14, size - 22, 18); ctx.fillStyle = '#ffe14d'; ctx.fill();
-      A.legends(ctx, KR.KEY[code], x + 8, y + 6 + bob, wd - 16, size - 24, 1, save.label, A.INK, false);
+      const wd = code === 'Space' ? size + 58 : size, bob = calm() ? 0 : Math.sin(t * 6 + i) * 3;
+      A.rr(ctx, x, y + bob, wd, size, 13); ctx.fillStyle = '#d99a00'; ctx.fill(); A.ink(ctx, 3.5);
+      A.rr(ctx, x + 4, y + 3 + bob, wd - 8, size - 13, 10); ctx.fillStyle = '#ffe14d'; ctx.fill();
+      A.legends(ctx, KR.KEY[code], x + 5, y + 4 + bob, wd - 10, size - 15, 1, save.label, A.INK, false);
       x += wd + gap;
     });
+    A.text(ctx, 'مفاتيح جديدة', x + tagW / 2 - 4, y + size / 2 + 1, 21, '#ffd23f', { stroke: 4 });
     ctx.restore();
   }
   const DECK_TOP = KB.y - Math.round(KB.u * 0.32) - 8;

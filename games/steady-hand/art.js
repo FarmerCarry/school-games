@@ -72,26 +72,71 @@
 
   /* --------------------------------------------------------- background */
   function background(g, wd, seed) {
-    var gr = g.createLinearGradient(0, 0, W * 0.4, H);
+    var gr = g.createLinearGradient(0, 0, W * 0.45, H);
     gr.addColorStop(0, wd.bg0); gr.addColorStop(1, wd.bg1);
     g.fillStyle = gr; g.fillRect(0, 0, W, H);
-    // A faint circuit board: lines with corners and little solder dots.
-    var rnd = seeded(seed), i;
+    // Warm ambient electronics-lab glow pools behind the board.
+    var gl1 = g.createRadialGradient(W * 0.5, H * 0.52, 40, W * 0.5, H * 0.52, W * 0.56);
+    gl1.addColorStop(0, rgba(wd.color, 0.14)); gl1.addColorStop(0.55, rgba(wd.deep, 0.08)); gl1.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = gl1; g.fillRect(0, 0, W, H);
+    var gl2 = g.createRadialGradient(W * 0.86, H * 0.54, 10, W * 0.86, H * 0.54, 280);
+    gl2.addColorStop(0, 'rgba(255,214,80,0.09)'); gl2.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = gl2; g.fillRect(0, 0, W, H);
+    // Fine PCB dot grid for tactile depth.
+    var gx, gy;
+    g.fillStyle = rgba(wd.color, 0.1);
+    for (gy = 20; gy < H; gy += 40) for (gx = 20; gx < W; gx += 40) { g.fillRect(gx - 1, gy - 1, 2, 2); }
+    // Glowing layered arcade circuit board: bus traces, chamfered turns, solder pads & IC chips.
+    var rnd = seeded(seed), i, k;
     g.lineCap = 'round'; g.lineJoin = 'round';
-    for (i = 0; i < 46; i++) {
-      var x = Math.round(rnd() * 32) * 40, y = Math.round(rnd() * 18) * 40, len = 40 + Math.round(rnd() * 4) * 40, dir = rnd() < 0.5;
+    for (i = 0; i < 58; i++) {
+      var x = Math.round(rnd() * 32) * 40, y = Math.round(rnd() * 18) * 40, len = 40 + Math.round(rnd() * 5) * 40, dir = rnd() < 0.5;
+      var hi = i % 4 === 0;
       g.beginPath(); g.moveTo(x, y);
       var x2 = dir ? x + len : x, y2 = dir ? y : y + len;
       g.lineTo(x2, y2);
-      var turn = rnd() < 0.6;
-      if (turn) { g.lineTo(x2 + (dir ? 20 : 20 * (rnd() < 0.5 ? 1 : -1)), y2 + (dir ? 20 * (rnd() < 0.5 ? 1 : -1) : 20)); }
-      g.lineWidth = 3; g.strokeStyle = rgba(wd.color, 0.07); g.stroke();
-      A.circle(g, x, y, 4.5); g.fillStyle = rgba(wd.color, 0.1); g.fill();
+      var turn = rnd() < 0.68, x3 = x2, y3 = y2;
+      if (turn) {
+        var sgn = rnd() < 0.5 ? 1 : -1;
+        x3 = x2 + (dir ? 24 : 24 * sgn); y3 = y2 + (dir ? 24 * sgn : 24);
+        g.lineTo(x3, y3);
+        if (rnd() < 0.45) {
+          var len2 = 40 + Math.round(rnd() * 2) * 40;
+          x3 += dir ? len2 : 0; y3 += dir ? 0 : len2;
+          g.lineTo(x3, y3);
+        }
+      }
+      g.lineWidth = hi ? 4 : 2.5; g.strokeStyle = rgba(wd.color, hi ? 0.22 : 0.14); g.stroke();
+      // Solder pad / via rings at trace endpoints.
+      A.circle(g, x, y, hi ? 6 : 4.5); g.fillStyle = rgba(wd.color, hi ? 0.34 : 0.2); g.fill();
+      A.circle(g, x, y, hi ? 2.4 : 1.8); g.fillStyle = hi ? 'rgba(255,255,255,0.55)' : wd.bg0; g.fill();
+      if (turn && hi) {
+        A.circle(g, x3, y3, 5); g.fillStyle = rgba(wd.color, 0.28); g.fill();
+        A.circle(g, x3, y3, 2); g.fillStyle = 'rgba(255,255,255,0.45)'; g.fill();
+      }
     }
-    // Twinkles.
-    for (i = 0; i < 60; i++) { A.circle(g, rnd() * W, rnd() * H, 0.8 + rnd() * 1.6); g.fillStyle = 'rgba(255,255,255,' + (0.1 + rnd() * 0.25).toFixed(2) + ')'; g.fill(); }
-    var v = g.createRadialGradient(W / 2, H / 2, H * 0.35, W / 2, H / 2, W * 0.75);
-    v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,0.38)');
+    // Stylized IC-chip silhouettes with metallic legs & soft status LEDs.
+    var chips = [[84, 154, 68, 44], [1110, 146, 74, 46], [116, 594, 64, 42], [1124, 590, 72, 46], [608, 608, 66, 38], [292, 134, 52, 34], [932, 132, 54, 34]];
+    for (i = 0; i < chips.length; i++) {
+      var ch = chips[i], cx = ch[0], cy = ch[1], cw = ch[2], chh = ch[3];
+      g.strokeStyle = rgba(wd.color, 0.26); g.lineWidth = 3;
+      for (k = 10; k <= cw - 10; k += 14) {
+        g.beginPath(); g.moveTo(cx + k, cy - 8); g.lineTo(cx + k, cy); g.moveTo(cx + k, cy + chh); g.lineTo(cx + k, cy + chh + 8); g.stroke();
+      }
+      A.rr(g, cx, cy, cw, chh, 8); g.fillStyle = rgba(wd.bg1, 0.72); g.fill();
+      g.lineWidth = 2; g.strokeStyle = rgba(wd.color, 0.28); g.stroke();
+      A.rr(g, cx + 6, cy + 6, cw - 12, chh - 12, 4); g.strokeStyle = rgba(wd.color, 0.14); g.lineWidth = 1.5; g.stroke();
+      var led = i % 3 === 0 ? '#3df0ff' : i % 3 === 1 ? '#ffd23f' : '#8dff5a';
+      A.circle(g, cx + cw - 13, cy + 12, 6); g.fillStyle = rgba(led, 0.22); g.fill();
+      A.circle(g, cx + cw - 13, cy + 12, 2.5); g.fillStyle = rgba(led, 0.78); g.fill();
+    }
+    // Soft glowing sparks / bokeh dust.
+    for (i = 0; i < 65; i++) {
+      var sx = rnd() * W, sy = rnd() * H, sr = 0.9 + rnd() * 1.9;
+      A.circle(g, sx, sy, sr); g.fillStyle = i % 5 === 0 ? rgba(wd.color, 0.35) : 'rgba(255,255,255,' + (0.14 + rnd() * 0.28).toFixed(2) + ')'; g.fill();
+    }
+    var v = g.createRadialGradient(W / 2, H / 2, H * 0.42, W / 2, H / 2, W * 0.78);
+    v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,0.24)');
     g.fillStyle = v; g.fillRect(0, 0, W, H);
   }
   // Strokes the centre line in runs of equal width (round joins make the union of the
@@ -136,8 +181,9 @@
   // The wire track: glowing electric walls around a dark, safe channel.
   function drawTrack(g, L, wd, ps) {
     g.lineCap = 'round'; g.lineJoin = 'round';
-    flatRuns(g, L, ps, 46, wd.deep, 0.16);
-    flatRuns(g, L, ps, 26, wd.deep, 0.3);
+    flatRuns(g, L, ps, 96, wd.color, 0.08);
+    flatRuns(g, L, ps, 46, wd.deep, 0.2);
+    flatRuns(g, L, ps, 26, wd.deep, 0.32);
     g.strokeStyle = wd.color; runs(g, L, 12);
     g.strokeStyle = mix(wd.color, '#ffffff', 0.92); runs(g, L, 4);
     g.strokeStyle = '#0a0e2c'; runs(g, L, 0);

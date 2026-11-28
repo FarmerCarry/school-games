@@ -103,10 +103,4 @@
   <g fill="#35c957" stroke="#2a2240" stroke-width="3">
     <circle cx="206" cy="196" r="6"/><circle cx="196" cy="182" r="4"/><circle cx="216" cy="210" r="4"/>
   </g>
-
-  <!-- logo -->
-  <g font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-weight="bold" text-anchor="middle">
-    <text x="200" y="376" font-size="60" fill="#2a2240" stroke="#2a2240" stroke-width="16" stroke-linejoin="round">دبابات الألوان</text>
-    <text x="200" y="370" font-size="60" fill="#ffd21f" stroke="#2a2240" stroke-width="10" stroke-linejoin="round" paint-order="stroke">دبابات الألوان</text>
-  </g>
 </svg>

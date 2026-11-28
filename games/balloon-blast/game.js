@@ -84,23 +84,73 @@
     bakedArenaId = ''; skyCache = {};
     ['sand', 'soda', 'soap'].forEach(function (aid) {
       var a = D.ARENAS[aid];
+      // Pre-bake joyful water-park / poolside tiled backdrop around the arena!
+      skyCache[aid] = makeSprite('bg_' + aid, W, H, function (c) {
+        var gr = c.createLinearGradient(0, 0, 0, H);
+        var topC = aid === 'sand' ? '#1cb5e0' : aid === 'soda' ? '#38bdf8' : '#9333ea';
+        var botC = aid === 'sand' ? '#0ea5e9' : aid === 'soda' ? '#6366f1' : '#ec4899';
+        gr.addColorStop(0, topC); gr.addColorStop(1, botC);
+        c.fillStyle = gr; c.fillRect(0, 0, W, H);
+        // Sparkling swimming-pool mosaic tiles
+        c.strokeStyle = 'rgba(255,255,255,0.16)'; c.lineWidth = 2;
+        for (var gx = 0; gx <= W; gx += 48) { c.beginPath(); c.moveTo(gx, 0); c.lineTo(gx, H); c.stroke(); }
+        for (var gy = 0; gy <= H; gy += 48) { c.beginPath(); c.moveTo(0, gy); c.lineTo(W, gy); c.stroke(); }
+        // Sunlit water caustics & shimmering pool ripples in side margins
+        var rings = [[96, 360, 56], [118, 575, 42], [1175, 410, 58], [1160, 615, 40], [340, 44, 34], [940, 46, 36]];
+        for (var ri = 0; ri < rings.length; ri++) {
+          var rg = rings[ri];
+          c.strokeStyle = 'rgba(255,255,255,0.22)'; c.lineWidth = 4;
+          c.beginPath(); c.arc(rg[0], rg[1], rg[2], 0, 6.283); c.stroke();
+          c.strokeStyle = 'rgba(255,255,255,0.14)'; c.lineWidth = 2.5;
+          c.beginPath(); c.arc(rg[0], rg[1], rg[2] * 0.6, 0, 6.283); c.stroke();
+        }
+        // Cute floating poolside swim-ring decorations in lower corners!
+        var floats = [[96, 610, '#fb7185', '#fff'], [1184, 595, '#fbbf24', '#fff']];
+        for (var fi = 0; fi < floats.length; fi++) {
+          var fl = floats[fi];
+          c.save(); c.translate(fl[0], fl[1]);
+          c.fillStyle = 'rgba(15,41,66,0.2)'; c.beginPath(); c.ellipse(0, 10, 38, 16, 0, 0, 6.283); c.fill();
+          c.strokeStyle = fl[2]; c.lineWidth = 15; c.beginPath(); c.arc(0, 0, 26, 0, 6.283); c.stroke();
+          c.strokeStyle = fl[3]; c.setLineDash([14, 18]); c.beginPath(); c.arc(0, 0, 26, 0, 6.283); c.stroke();
+          c.setLineDash([]); c.strokeStyle = '#0f2942'; c.lineWidth = 3;
+          c.beginPath(); c.arc(0, 0, 33.5, 0, 6.283); c.stroke();
+          c.beginPath(); c.arc(0, 0, 18.5, 0, 6.283); c.stroke();
+          c.restore();
+        }
+        // Soft sunlit deck glow behind the arena coping
+        rr(c, OX - 24, OY - 24, D.COLS * TILE + 48, D.ROWS * TILE + 48, 30);
+        c.fillStyle = 'rgba(255,255,255,0.22)'; c.fill();
+      });
+
       SPR['fl_' + aid] = makeSprite('fl_' + aid, TILE, TILE, function (c) {
         c.fillStyle = a.floor[0]; c.fillRect(0, 0, TILE, TILE);
         c.fillStyle = a.floor[1]; c.fillRect(0, 0, 32, 32); c.fillRect(32, 32, 32, 32);
-        c.fillStyle = 'rgba(255,255,255,0.3)'; c.beginPath(); c.arc(16, 16, 4, 0, 6.283); c.fill();
+        c.strokeStyle = 'rgba(255,255,255,0.25)'; c.lineWidth = 1.5; c.strokeRect(1, 1, TILE - 2, TILE - 2);
+        c.fillStyle = 'rgba(255,255,255,0.38)'; c.beginPath(); c.arc(16, 16, 3.5, 0, 6.283); c.fill();
       });
       SPR['pl_' + aid] = makeSprite('pl_' + aid, TILE, TILE, function (c) {
+        // Grounded shadow + sculpted glossy water-castle block
+        c.fillStyle = 'rgba(15,41,66,0.22)'; rr(c, 5, 10, TILE - 8, TILE - 10, 12); c.fill();
         rr(c, 4, 6, TILE - 8, TILE - 8, 12); c.fillStyle = a.pillarDk; c.fill();
-        rr(c, 4, 3, TILE - 8, TILE - 12, 12); c.fillStyle = a.pillar; c.fill();
+        rr(c, 4, 3, TILE - 8, TILE - 13, 12); c.fillStyle = a.pillar; c.fill();
         c.lineWidth = 3; c.strokeStyle = '#0f2942'; c.stroke();
-        rr(c, 10, 8, TILE - 20, 12, 6); c.fillStyle = a.pillarHi; c.fill();
+        // Inner castle stone facet + crisp specular highlight
+        rr(c, 11, 10, TILE - 22, TILE - 26, 7); c.fillStyle = 'rgba(255,255,255,0.22)'; c.fill();
+        rr(c, 10, 7, TILE - 20, 9, 5); c.fillStyle = a.pillarHi; c.fill();
+        c.fillStyle = 'rgba(255,255,255,0.75)'; c.beginPath(); c.arc(16, 11, 2.5, 0, 6.283); c.fill();
       });
       SPR['cr_' + aid] = makeSprite('cr_' + aid, TILE, TILE, function (c) {
+        c.fillStyle = 'rgba(15,41,66,0.22)'; rr(c, 6, 10, TILE - 10, TILE - 10, 10); c.fill();
         rr(c, 5, 7, TILE - 10, TILE - 10, 10); c.fillStyle = a.crateDk; c.fill();
         rr(c, 5, 4, TILE - 10, TILE - 12, 10); c.fillStyle = a.crate; c.fill();
         c.lineWidth = 3; c.strokeStyle = '#0f2942'; c.stroke();
-        c.strokeStyle = a.crateHi; c.lineWidth = 4;
-        c.beginPath(); c.moveTo(13, 12); c.lineTo(TILE - 13, TILE - 16); c.moveTo(TILE - 13, 12); c.lineTo(13, TILE - 16); c.stroke();
+        c.strokeStyle = a.crateHi; c.lineWidth = 4; c.lineCap = 'round';
+        c.beginPath(); c.moveTo(14, 13); c.lineTo(TILE - 14, TILE - 17); c.moveTo(TILE - 14, 13); c.lineTo(14, TILE - 17); c.stroke();
+        // Corner studs
+        c.fillStyle = '#fef3c7';
+        [[11, 10], [TILE - 11, 10], [11, TILE - 14], [TILE - 11, TILE - 14]].forEach(function (pt) {
+          c.beginPath(); c.arc(pt[0], pt[1], 2.5, 0, 6.283); c.fill();
+        });
       });
       SPR['pp_' + aid] = makeSprite('pp_' + aid, TILE, TILE, function (c) {
         c.fillStyle = a.floor[0]; c.fillRect(0, 0, TILE, TILE);
@@ -203,19 +253,34 @@
       }
     });
 
-    var bCols = { blue: '#22b8ff', teal: '#00d2b8', neon: '#d946ef', gold: '#fbbf24', boss: '#f43f5e' };
+    var bCols = { blue: ['#22b8ff', '#0284c7'], teal: ['#00e0c6', '#047857'], neon: ['#e879f9', '#9333ea'], gold: ['#fde047', '#d97706'], boss: ['#fb7185', '#be123c'] };
     Object.keys(bCols).forEach(function (ck) {
-      var col = bCols[ck];
+      var col = bCols[ck][0], dk = bCols[ck][1];
       for (var wf = 0; wf < 2; wf++) {
-        SPR['bl_' + ck + '_' + wf] = makeSprite('bl_' + ck + '_' + wf, TILE, TILE, (function (cl, f) {
+        SPR['bl_' + ck + '_' + wf] = makeSprite('bl_' + ck + '_' + wf, TILE, TILE, (function (cl, dcl, f) {
           return function (c) {
-            c.fillStyle = 'rgba(15,41,66,0.22)'; c.beginPath(); c.ellipse(32, 55, 16, 5, 0, 0, 6.283); c.fill();
-            c.fillStyle = cl; c.beginPath(); c.moveTo(28, 12); c.lineTo(36, 12); c.lineTo(32, 18); c.closePath(); c.fill();
-            c.beginPath(); c.ellipse(32, 35, f ? 22 : 20, f ? 20 : 22, 0, 0, 6.283); c.fill();
+            // Contact shadow
+            c.fillStyle = 'rgba(15,41,66,0.28)'; c.beginPath(); c.ellipse(32, 56, 17, 5.5, 0, 0, 6.283); c.fill();
+            // Tied rubber balloon knot + collar at top
+            c.fillStyle = cl; c.strokeStyle = '#0f2942'; c.lineWidth = 3;
+            c.beginPath(); c.moveTo(26, 9); c.lineTo(38, 9); c.lineTo(35, 17); c.lineTo(29, 17); c.closePath(); c.fill(); c.stroke();
+            // Glossy plump teardrop water-balloon body
+            var rx = f ? 22 : 20, ry = f ? 19 : 21;
+            var gr = c.createRadialGradient(25, 28, 4, 32, 36, 24);
+            gr.addColorStop(0, '#ffffff'); gr.addColorStop(0.24, cl); gr.addColorStop(1, dcl);
+            c.fillStyle = gr;
+            c.beginPath(); c.ellipse(32, 36, rx, ry, 0, 0, 6.283); c.fill();
             c.lineWidth = 3.5; c.strokeStyle = '#0f2942'; c.stroke();
-            c.fillStyle = 'rgba(255,255,255,0.82)'; c.beginPath(); c.ellipse(24, 27, 7, 4, -0.5, 0, 6.283); c.fill();
+            // Bright curved wet specular highlights + rim shine
+            c.fillStyle = 'rgba(255,255,255,0.88)';
+            c.beginPath(); c.ellipse(23, 27, 6.5, 3.8, -0.55, 0, 6.283); c.fill();
+            c.beginPath(); c.arc(19, 34, 2.2, 0, 6.283); c.fill();
+            c.strokeStyle = 'rgba(255,255,255,0.45)'; c.lineWidth = 2.5; c.lineCap = 'round';
+            c.beginPath(); c.arc(32, 36, 15, 0.35, 1.35); c.stroke();
+            // Cute knot tie ring
+            c.fillStyle = '#fef08a'; rr(c, 28, 15, 8, 4, 2); c.fill(); c.strokeStyle = '#0f2942'; c.lineWidth = 1.6; c.stroke();
           };
-        })(col, wf));
+        })(col, dk, wf));
       }
       SPR['spc_' + ck] = makeSprite('spc_' + ck, TILE, TILE, function (c) {
         c.fillStyle = col; c.beginPath(); c.arc(32, 32, 28, 0, 6.283); c.fill();
@@ -509,8 +574,8 @@
     K.endFrame();
   }
 
-  function drawText(ctx, str, x, y, size, align, fill, plain) {
-    ctx.save(); ctx.direction = 'rtl'; ctx.textAlign = align || 'center'; ctx.textBaseline = 'middle';
+  function drawText(ctx, str, x, y, size, align, fill, plain, dir) {
+    ctx.save(); ctx.direction = dir || 'rtl'; ctx.textAlign = align || 'center'; ctx.textBaseline = 'middle';
     ctx.font = '700 ' + size + 'px Fredoka';
     if (!plain) { ctx.lineJoin = 'round'; ctx.strokeStyle = '#0f2942'; ctx.lineWidth = Math.max(3, size * 0.16); ctx.strokeText(str, x, y); }
     ctx.fillStyle = fill || '#fff'; ctx.fillText(str, x, y); ctx.restore();
@@ -535,15 +600,26 @@
   }
 
   function drawFighterCard(ctx, p, x, y, scoreVal) {
-    rr(ctx, x, y, 192, 92, 18);
-    ctx.fillStyle = p.state === 'out' ? 'rgba(226,232,240,0.85)' : 'rgba(255,255,255,0.96)';
-    ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = '#0f2942'; ctx.stroke();
+    var sk = D.skinById(p.skin), out = p.state === 'out', isHero = !p.cpu;
+    ctx.save();
+    if (out) ctx.globalAlpha = 0.56;
+    // Sleek compact arcade HUD badge
+    rr(ctx, x, y + 4, 192, 74, 18); ctx.fillStyle = 'rgba(15,41,66,0.35)'; ctx.fill();
+    rr(ctx, x, y, 192, 74, 18);
+    ctx.fillStyle = out ? '#334155' : 'rgba(15,35,60,0.92)'; ctx.fill();
+    ctx.lineWidth = 3; ctx.strokeStyle = isHero ? '#fde047' : sk.splash; ctx.stroke();
+    // Color accent left medallion behind avatar
+    ctx.fillStyle = sk.suit; ctx.beginPath(); ctx.arc(x + 32, y + 37, 24, 0, 6.283); ctx.fill();
+    ctx.lineWidth = 2.5; ctx.strokeStyle = '#0f2942'; ctx.stroke();
     var spr = SPR['cm_' + p.skin + '_2_0'];
-    if (spr) ctx.drawImage(spr, x + 6, y + 12, 52, 52);
-    drawText(ctx, p.name, x + 180, y + 24, 18, 'right', '#0f2942', true);
-    var stTxt = 'بالون ' + String(p.balloons) + ' · مدى ' + String(p.range) + (p.kick ? ' · ركل' : '') + (p.shield ? ' · درع' : '');
-    drawText(ctx, stTxt, x + 180, y + 51, 13, 'right', '#0284c7', true);
-    drawText(ctx, p.state === 'out' ? 'خرج من الساحة!' : ('النقاط: ' + String(scoreVal || 0)), x + 180, y + 74, 14, 'right', p.state === 'out' ? '#e11d48' : '#059669', true);
+    if (spr) ctx.drawImage(spr, x + 8, y + 10, 48, 48);
+    // Top row: Name + Star Score
+    drawText(ctx, p.name, x + 180, y + 23, 17, 'right', isHero ? '#fde047' : '#fff', true);
+    drawText(ctx, out ? 'خرج' : ('⭐' + String(scoreVal || 0)), x + 64, y + 23, 14, 'left', out ? '#fb7185' : '#4ade80', true, out ? 'rtl' : 'ltr');
+    // Bottom row: Crisp icon stat chips (🎈×1 💦×1 🛡️)
+    var chips = '🎈×' + String(p.balloons) + '  💦×' + String(p.range) + (p.shield ? '  🛡️' : '') + (p.kick ? '  🥊' : '');
+    drawText(ctx, chips, x + 180, y + 52, 15, 'right', '#bae6fd', true, 'ltr');
+    ctx.restore();
   }
 
   function drawArenaCell(mc, aid, c, r, t) {
@@ -559,12 +635,9 @@
     if (paused && pausePainted) return;
     var w = screenState === 'title' ? demo : world; if (!w) return;
     var ctx = view.ctx, arena = D.arenaById(w.arena);
-    var sky = skyCache[w.arena];
-    if (!sky) {
-      sky = ctx.createLinearGradient(0, 0, 0, H); sky.addColorStop(0, arena.sky[0]); sky.addColorStop(1, arena.sky[1]);
-      skyCache[w.arena] = sky;
-    }
-    ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
+    var bgSpr = skyCache[w.arena];
+    if (bgSpr) ctx.drawImage(bgSpr, 0, 0);
+    else { ctx.fillStyle = arena.sky[0]; ctx.fillRect(0, 0, W, H); }
 
     ctx.save();
     if (screenState === 'play' && !paused) ctx.translate(shake.x || 0, shake.y || 0);
@@ -605,10 +678,20 @@
     }
 
     for (var bi = 0; bi < w.balloons.length; bi++) {
-      var b = w.balloons[bi], hot = !b.lob && b.fuse < 0.75;
+      var b = w.balloons[bi], hot = !b.lob && b.fuse < 0.85;
+      var bx = OX + b.x, by = OY + b.y;
+      // Pulsing danger ring underneath grounded water balloons so they read unmistakably!
+      if (!b.lob) {
+        var pulse = 0.5 + 0.5 * Math.sin(w.time * (hot ? 22 : 8) + b.id);
+        ctx.save();
+        ctx.strokeStyle = hot ? 'rgba(244,63,94,' + (0.55 + pulse * 0.4) + ')' : 'rgba(14,165,233,' + (0.35 + pulse * 0.25) + ')';
+        ctx.lineWidth = hot ? 4 : 3;
+        ctx.beginPath(); ctx.arc(bx, by + 6, 22 + pulse * (hot ? 6 : 3), 0, 6.283); ctx.stroke();
+        ctx.restore();
+      }
       var bSpr = SPR['bl_' + balloonColorKey(b) + '_' + (Math.floor(w.time * (hot ? 14 : 6) + b.id) % 2)];
-      var arcY = b.lob ? Math.sin(Math.min(1, b.lob.t / b.lob.dur) * 3.1415) * 44 : 0, sc = hot ? 1 + Math.sin(w.time * 24) * 0.1 : 1;
-      ctx.save(); ctx.translate(OX + b.x, OY + b.y - arcY); ctx.scale(sc, sc);
+      var arcY = b.lob ? Math.sin(Math.min(1, b.lob.t / b.lob.dur) * 3.1415) * 44 : 0, sc = hot ? 1 + Math.sin(w.time * 24) * 0.11 : 1;
+      ctx.save(); ctx.translate(bx, by - arcY); ctx.scale(sc, sc);
       if (bSpr) ctx.drawImage(bSpr, -TILE / 2, -TILE / 2);
       ctx.restore();
     }
@@ -645,17 +728,22 @@
 
     if (screenState !== 'title' && world) {
       var rem = Math.max(0, Math.ceil((world.adventure ? 140 : 90) - world.time));
-      drawText(ctx, 'الوقت: ' + String(rem), 640, 32, 28, 'center', world.sudden ? '#fb7185' : '#fff');
+      // Sleek top-center arcade Timer Pill (no duplicate game title!)
+      var hasStage = !!(world.adventure && world.stage && !(world.boss && world.boss.hp > 0));
+      var pillW = hasStage ? 300 : 168;
+      rr(ctx, 640 - pillW / 2, 16, pillW, 48, 24);
+      ctx.fillStyle = world.sudden ? '#be123c' : 'rgba(15,35,60,0.92)'; ctx.fill();
+      ctx.lineWidth = 3.5; ctx.strokeStyle = world.sudden ? '#fde047' : '#38bdf8'; ctx.stroke();
+      var timerTxt = hasStage ? ('⏱ ' + String(rem) + '  ·  ' + world.stage.name) : ('⏱ ' + String(rem));
+      drawText(ctx, timerTxt, 640, 41, 24, 'center', world.sudden ? '#fef08a' : '#fff', true, hasStage ? 'rtl' : 'ltr');
       if (world.boss && world.boss.hp > 0) {
-        rr(ctx, 480, 56, 320, 22, 11); ctx.fillStyle = '#0f2942'; ctx.fill();
-        rr(ctx, 483, 59, 314 * (world.boss.hp / world.boss.maxHp), 16, 8); ctx.fillStyle = '#ef4444'; ctx.fill();
-        drawText(ctx, world.boss.name + ' (' + String(world.boss.hp) + '/' + String(world.boss.maxHp) + ')', 640, 67, 15, 'center', '#fff');
-      } else {
-        drawText(ctx, world.adventure && world.stage ? world.stage.name : 'معركة البالونات', 640, 64, 20, 'center', '#fde047');
+        rr(ctx, 480, 68, 320, 20, 10); ctx.fillStyle = '#0f2942'; ctx.fill();
+        rr(ctx, 483, 71, 314 * (world.boss.hp / world.boss.maxHp), 14, 7); ctx.fillStyle = '#ef4444'; ctx.fill();
+        drawText(ctx, world.boss.name + ' (' + String(world.boss.hp) + '/' + String(world.boss.maxHp) + ')', 640, 78, 14, 'center', '#fff');
       }
       var fighters = world.players.filter(function (p) { return !p.mob; });
       for (var fi = 0; fi < fighters.length; fi++) {
-        drawFighterCard(ctx, fighters[fi], fi % 2 === 0 ? 16 : 1072, 104 + Math.floor(fi / 2) * 108, scores[fighters[fi].id] || 0);
+        drawFighterCard(ctx, fighters[fi], fi % 2 === 0 ? 16 : 1072, 102 + Math.floor(fi / 2) * 88, scores[fighters[fi].id] || 0);
       }
       if (world.freeze > 0) drawText(ctx, 'انطلق!', 640, 380, 68, 'center', '#fde047');
     }

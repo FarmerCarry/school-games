@@ -64,8 +64,11 @@
     $('hudTimer').textContent = world.suddenDeath ? '⚡' : String(Math.ceil(world.timeLeft));
     $('hudTimer').classList.toggle('urgent', !world.suddenDeath && world.timeLeft <= 8);
     var m = RK.modById(world.mod);
-    $('hudMod').textContent = world.suddenDeath ? 'الهدف الذهبي! ⚡' : m.name;
-    $('hudMod').style.borderColor = m.color;
+    var modEl = $('hudMod');
+    modEl.textContent = world.suddenDeath ? 'الهدف الذهبي! ⚡' : m.name;
+    modEl.style.borderColor = m.color;
+    // Normal kickoff label fades out cleanly after 2.2s as a round-start toast; chaos modifiers stay visible
+    modEl.classList.toggle('out', !world.suddenDeath && !m.chaos && world.time > 2.2);
     $('p1Tag').textContent = world.duo ? 'اللاعب 1' : 'أنت';
     $('p2Tag').textContent = world.duo ? 'اللاعب 2' : 'الشيف الآلي';
   }

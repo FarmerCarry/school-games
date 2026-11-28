@@ -9,11 +9,6 @@
       <stop offset="0" stop-color="#a8683a"/>
       <stop offset="1" stop-color="#6e4020"/>
     </linearGradient>
-    <linearGradient id="band" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#1b1f4a" stop-opacity="0"/>
-      <stop offset="0.35" stop-color="#1b1f4a" stop-opacity="0.75"/>
-      <stop offset="1" stop-color="#1b1f4a" stop-opacity="0.9"/>
-    </linearGradient>
   </defs>
   <rect width="400" height="400" fill="url(#sky)"/>
   <!-- sun burst -->
@@ -97,11 +92,5 @@
     <path d="M318 112 l6 13 14 2 -10 9 3 14 -13 -7 -13 7 3 -14 -10 -9 14 -2Z"/>
     <path d="M52 128 l4 9 10 1 -7 7 2 10 -9 -5 -9 5 2 -10 -7 -7 10 -1Z"/>
     <path d="M352 204 l3 7 8 1 -6 5 2 8 -7 -4 -7 4 2 -8 -6 -5 8 -1Z"/>
-  </g>
-  <!-- title -->
-  <rect x="0" y="300" width="400" height="100" fill="url(#band)"/>
-  <g font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-weight="bold" text-anchor="middle" direction="rtl" transform="rotate(-4 200 340)">
-    <text x="200" y="334" font-size="62" fill="#ffd23f" stroke="#7c2d12" stroke-width="12" stroke-linejoin="round" paint-order="stroke">جنون</text>
-    <text x="200" y="378" font-size="46" fill="#ff3b3b" stroke="#ffffff" stroke-width="9" stroke-linejoin="round" paint-order="stroke">الدراجات</text>
   </g>
 </svg>

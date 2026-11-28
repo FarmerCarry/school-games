@@ -23,6 +23,7 @@
     <path d="M300 230 L140 0 L220 0 Z"/><path d="M300 230 L300 0 L380 0 Z"/><path d="M300 230 L400 60 L400 150 Z"/><path d="M300 230 L20 0 L80 0 Z"/>
   </g>
 
+  <g transform="translate(0 -34)">
   <!-- stands -->
   <rect y="178" width="400" height="80" fill="#4a5aa6"/>
   <rect y="178" width="400" height="10" fill="#e8eef9"/>
@@ -37,8 +38,8 @@
   <rect y="258" width="400" height="4" fill="#1d1a2e"/>
 
   <!-- pitch -->
-  <rect y="262" width="400" height="138" fill="url(#pitch)"/>
-  <path d="M0 262 L60 262 L20 400 L0 400 Z M120 262 L180 262 L160 400 L100 400 Z M240 262 L300 262 L320 400 L260 400 Z M360 262 L400 262 L400 400 L380 400 Z" fill="#fff" opacity="0.08"/>
+  <rect y="262" width="400" height="180" fill="url(#pitch)"/>
+  <path d="M0 262 L60 262 L10 442 L0 442 Z M120 262 L180 262 L154 442 L94 442 Z M240 262 L300 262 L326 442 L266 442 Z M360 262 L400 262 L400 442 L386 442 Z" fill="#fff" opacity="0.08"/>
   <path d="M0 276 H400" stroke="#fff" stroke-width="3" opacity="0.85"/>
   <ellipse cx="200" cy="336" rx="110" ry="34" fill="none" stroke="#fff" stroke-width="3" opacity="0.85"/>
 
@@ -139,10 +140,5 @@
     <rect x="200" y="160" width="9" height="5" fill="#4fc3f7" transform="rotate(-40 204 162)"/>
     <rect x="18" y="170" width="9" height="5" fill="#ff8fb1" transform="rotate(20 22 172)"/>
   </g>
-
-  <!-- title -->
-  <g direction="rtl" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-weight="bold" text-anchor="middle" stroke="#1d1a2e" stroke-linejoin="round" paint-order="stroke">
-    <text x="200" y="70" font-size="58" fill="#ffffff" stroke-width="13" transform="rotate(-4 200 60)">كرة القدم</text>
-    <text x="206" y="140" font-size="64" fill="#ffd23f" stroke-width="14" transform="rotate(3 200 120)">المجنونة!</text>
   </g>
 </svg>

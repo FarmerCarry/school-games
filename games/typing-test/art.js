@@ -323,8 +323,8 @@
     return layer('kb-' + lang + (zones ? 'z' : ''), ps, C.w, C.h, function (g) {
       g.translate(-C.x, -C.y);
       var b = A.KB_BOX;
-      rr(g, b.x, b.y + 6, b.w, b.h + 30, 26); fill(g, 'rgba(28,34,80,0.35)');
-      rr(g, b.x, b.y, b.w, b.h + 30, 26); fill(g, '#2a2f4f'); ink(g, 6);
+      rr(g, b.x, b.y + 6, b.w, b.h + 2, 24); fill(g, 'rgba(28,34,80,0.35)');
+      rr(g, b.x, b.y, b.w, b.h + 2, 24); fill(g, '#2a2f4f'); ink(g, 6);
       rr(g, b.x + 8, b.y + 8, b.w - 16, 8, 4); fill(g, 'rgba(255,255,255,0.08)');
       for (var code in KEYS) {
         var k = KEYS[code];

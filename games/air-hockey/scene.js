@@ -30,7 +30,7 @@
     if (!T) throw new Error('three.js is unavailable');
     opts = opts || {};
     var E = opts.T; // engine table constants
-    var wgl = Kit.webgl.createRenderer(canvas, { software: !!opts.soft, softRatio: 0.7 });
+    var wgl = Kit.webgl.createRenderer(canvas, { software: !!opts.soft, softRatio: 1.0, antialias: true });
     var soft = wgl.software, renderer = wgl.renderer, ratio = wgl.ratio;
     var scene = new T.Scene();
     var camera = new T.PerspectiveCamera(40, 16 / 9, 0.1, 90);
@@ -107,24 +107,40 @@
     }
 
     /* ------------------------------------------------------------ arena */
-    var floorTex = null;
+    var floorTex = null, wallTex = null;
     var floorMat = new T.MeshBasicMaterial({ color: 0xffffff });
-    var floor = new T.Mesh(new T.CircleGeometry(34, 40), floorMat);
+    var floor = new T.Mesh(new T.CircleGeometry(30, 48), floorMat);
     floor.rotation.x = -Math.PI / 2; floor.position.y = FLOOR_Y;
     scene.add(floor);
-    // A ring of glowing light pillars around the arena (one instanced draw).
-    var PILLARS = 16;
-    var pillars = new T.InstancedMesh(new T.BoxGeometry(0.5, 1, 0.5), new T.MeshBasicMaterial({ color: 0xffffff }), PILLARS);
-    var pillarColors = ['#ff4fd8', '#58e8ff', '#ffe14f', '#7dff6b'];
-    for (var pi = 0; pi < PILLARS; pi++) {
-      var pa = pi / PILLARS * Math.PI * 2, ph = 3 + (pi % 3) * 1.4;
-      pillars.setMatrixAt(pi, mat(Math.cos(pa) * 17, FLOOR_Y + ph / 2, Math.sin(pa) * 17, 0, -pa, 0, 1, ph, 1));
-      pillars.setColorAt(pi, C.set(pillarColors[pi % 4]));
+    // Retro-arcade stadium wall around the rink perimeter (replaces floating bars).
+    var wallMat = new T.MeshBasicMaterial({ color: 0xffffff, side: T.BackSide });
+    var wall = new T.Mesh(new T.CylinderGeometry(14.5, 14.8, 4.4, 48, 1, true), wallMat);
+    wall.position.y = FLOOR_Y + 2.2;
+    scene.add(wall);
+    // Glowing neon rink outline on the arena floor + 4 low corner arcade light bollards.
+    var floorNeonMat = new T.MeshBasicMaterial({ color: 0x58e8ff });
+    var rinkLoop = extrude((function () {
+      var s = roundRect(new T.Shape(), HW + 1.55, HL + 1.55, CR + 1.55);
+      s.holes.push(roundRect(new T.Path(), HW + 1.38, HL + 1.38, CR + 1.38));
+      return s;
+    })(), 0.04);
+    var rinkRing = new T.Mesh(rinkLoop, floorNeonMat);
+    rinkRing.position.y = FLOOR_Y + 0.02;
+    scene.add(rinkRing);
+    var bollardParts = [];
+    var bColors = ['#58e8ff', '#ff4fd8', '#58e8ff', '#ff4fd8'], bi = 0;
+    for (var bx = -1; bx <= 1; bx += 2) for (var bz = -1; bz <= 1; bz += 2) {
+      var px0 = bx * (HW + 2.3), pz0 = bz * (HL + 1.1), bc0 = bColors[bi++];
+      bollardParts.push(
+        { g: new T.CylinderGeometry(0.42, 0.48, 0.08, 16), m: mat(px0, FLOOR_Y + 0.04, pz0), c: '#16113b' },
+        { g: new T.CylinderGeometry(0.32, 0.36, 0.06, 16), m: mat(px0, FLOOR_Y + 0.09, pz0), c: bc0 }
+      );
     }
-    scene.add(pillars);
+    var bollards = new T.Mesh(merge(bollardParts), new T.MeshBasicMaterial({ vertexColors: true }));
+    scene.add(bollards);
     var glowTex = radialTex('rgba(255,255,255,1)', 'rgba(255,255,255,0)');
-    var underGlow = new T.Mesh(new T.PlaneGeometry(HW * 2 + 5, HL * 2 + 5), new T.MeshBasicMaterial({ map: glowTex, transparent: true, depthWrite: false, blending: T.AdditiveBlending, opacity: 0.85 }));
-    underGlow.rotation.x = -Math.PI / 2; underGlow.position.y = FLOOR_Y + 0.02;
+    var underGlow = new T.Mesh(new T.PlaneGeometry(HW * 2 + 6, HL * 2 + 6), new T.MeshBasicMaterial({ map: glowTex, transparent: true, depthWrite: false, blending: T.AdditiveBlending, opacity: 0.9 }));
+    underGlow.rotation.x = -Math.PI / 2; underGlow.position.y = FLOOR_Y + 0.03;
     scene.add(underGlow);
 
     /* ------------------------------------------------------------ table */
@@ -239,22 +255,57 @@
       }
       col.needsUpdate = true;
       neonMat.color.set(t.neon);
+      floorNeonMat.color.set(t.neon);
       var bc = new T.Color(t.body), bcol = body.geometry.attributes.color;
       for (var j = 0; j < bcol.count; j++) bcol.setXYZ(j, bc.r, bc.g, bc.b);
       bcol.needsUpdate = true;
       underGlow.material.color.set(t.neon);
       scene.background = new T.Color(t.sky);
-      scene.fog = new T.Fog(t.sky, 15, 36);
+      scene.fog = new T.Fog(t.sky, 17, 36);
       if (floorTex) floorTex.dispose();
-      floorTex = canvasTex(256, 256, function (g) {
-        var gr = g.createRadialGradient(128, 128, 10, 128, 128, 128);
-        C.set(t.floor); var hi = '#' + C.clone().lerp(C2.set(0xffffff), 0.25).getHexString();
-        gr.addColorStop(0, hi); gr.addColorStop(0.35, t.floor); gr.addColorStop(1, t.sky);
-        g.fillStyle = gr; g.fillRect(0, 0, 256, 256);
-        g.strokeStyle = 'rgba(255,255,255,0.08)'; g.lineWidth = 3;
-        for (var r = 30; r < 128; r += 22) { g.beginPath(); g.arc(128, 128, r, 0, 7); g.stroke(); }
+      floorTex = canvasTex(512, 512, function (g) {
+        var gr = g.createRadialGradient(256, 256, 24, 256, 256, 256);
+        C.set(t.floor); var hi = '#' + C.clone().lerp(C2.set(0xffffff), 0.22).getHexString();
+        gr.addColorStop(0, hi); gr.addColorStop(0.42, t.floor); gr.addColorStop(1, t.sky);
+        g.fillStyle = gr; g.fillRect(0, 0, 512, 512);
+        // Subtle arcade floor radial grid + glowing rings.
+        g.save();
+        g.strokeStyle = 'rgba(255,255,255,0.06)'; g.lineWidth = 2;
+        for (var a = 0; a < 24; a++) {
+          var ang = a / 24 * Math.PI * 2;
+          g.beginPath(); g.moveTo(256 + Math.cos(ang) * 54, 256 + Math.sin(ang) * 54);
+          g.lineTo(256 + Math.cos(ang) * 252, 256 + Math.sin(ang) * 252); g.stroke();
+        }
+        for (var r = 64; r < 252; r += 36) {
+          g.strokeStyle = r === 136 ? t.neon : r === 208 ? t.line : 'rgba(255,255,255,0.09)';
+          g.globalAlpha = (r === 136 || r === 208) ? 0.32 : 1;
+          g.lineWidth = (r === 136 || r === 208) ? 4 : 2;
+          g.beginPath(); g.arc(256, 256, r, 0, 7); g.stroke();
+        }
+        g.restore();
       });
       floorMat.map = floorTex; floorMat.needsUpdate = true;
+      if (wallTex) wallTex.dispose();
+      wallTex = canvasTex(512, 128, function (g) {
+        var wg = g.createLinearGradient(0, 0, 0, 128);
+        wg.addColorStop(0, t.sky); wg.addColorStop(0.55, t.floor); wg.addColorStop(1, '#120b2e');
+        g.fillStyle = wg; g.fillRect(0, 0, 512, 128);
+        // Vertical arcade bay trims.
+        g.fillStyle = 'rgba(255,255,255,0.05)';
+        for (var x = 0; x < 512; x += 32) g.fillRect(x, 22, 4, 106);
+        // Horizontal neon trim strips + soft stadium light orbs.
+        g.fillStyle = t.neon; g.globalAlpha = 0.72; g.fillRect(0, 86, 512, 5);
+        g.fillStyle = t.line; g.globalAlpha = 0.55; g.fillRect(0, 48, 512, 3);
+        var dots = [t.neon, t.line, '#ffe14f', '#7dff6b'];
+        for (var d = 0; d < 16; d++) {
+          var dx = d * 32 + 16;
+          g.fillStyle = dots[d % 4]; g.globalAlpha = 0.24;
+          g.beginPath(); g.ellipse(dx, 28, 3.6, 15, 0, 0, 7); g.fill();
+          g.globalAlpha = 0.9; g.beginPath(); g.ellipse(dx, 28, 1.3, 5.5, 0, 0, 7); g.fill();
+        }
+        g.globalAlpha = 1;
+      });
+      wallMat.map = wallTex; wallMat.needsUpdate = true;
     };
 
     /* ----------------------------------------------------------- shadows */
@@ -611,15 +662,15 @@
       if (w) for (i = 0; i < w.pucks.length; i++) if (w.pucks[i].alive) { main = w.pucks[i]; break; }
       // Camera targets.
       if (o.mode === 'title') {
-        var a = Math.sin(t * 0.13) * 0.55;
-        wantPos.set(Math.sin(a) * 11, 6.4, Math.cos(a) * 11); wantLook.set(0, -0.6, 0);
+        var a = Math.sin(t * 0.13) * 0.45;
+        wantPos.set(Math.sin(a) * 11.8, 7.2, Math.cos(a) * 11.8); wantLook.set(0, 0.35, -0.35);
       } else if (o.mode === 'skins') {
         wantPos.set(-1.4, 2.4, HL + 3.6); wantLook.set(-0.9, 0.5, HL - 1.3);
       } else if (o.duo) {
-        wantPos.set(0, 10.4, 6.4); wantLook.set(0, 0, 0.35);
+        wantPos.set(0, 10.6, 6.8); wantLook.set(0, 0, 0.25);
       } else {
         var px = main ? main.x * K : 0, pz = main ? main.y * K : 0;
-        wantPos.set(px * 0.12, 7.1, HL + 4.4 + pz * 0.05); wantLook.set(px * 0.18, 0, -0.7 + pz * 0.06);
+        wantPos.set(px * 0.08, 8.8, HL + 6.1 + pz * 0.03); wantLook.set(px * 0.1, 0, 0.25 + pz * 0.04);
       }
       var kk = firstCam ? 1 : 1 - Math.exp(-dt * (o.mode === 'play' ? 4 : 2));
       camPos.lerp(wantPos, kk); camLook.lerp(wantLook, kk);
@@ -770,8 +821,8 @@
     };
     var slow = 0;
     view.frameTime = function (ms) {
-      if (ms > 28) slow++; else slow = Math.max(0, slow - 0.5);
-      if (slow > 90 && ratio > 0.6) { ratio = Math.max(0.6, ratio - 0.2); renderer.setPixelRatio(ratio); slow = 0; return true; }
+      if (ms > 45) slow++; else slow = Math.max(0, slow - 0.5);
+      if (slow > 120 && ratio > 0.85) { ratio = Math.max(0.85, ratio - 0.1); renderer.setPixelRatio(ratio); slow = 0; return true; }
       return false;
     };
     view.info = function () { return renderer.info.render; };

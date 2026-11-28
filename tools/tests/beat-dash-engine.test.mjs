@@ -107,7 +107,7 @@ test('the first song is slower and gentler than Neon Steps: single spikes, no pa
   for (const level of [1, 0]) {
     const s = BD.newState(firstSong), opt = songAt(level);
     while (!s.dead && s.tick < 5000) BD.tick(firstSong, s, false, false, opt);
-    assert.ok(s.tick / 60 > 7, `a long run-up at difficulty ${level}: ${(s.tick / 60).toFixed(2)} s to the first spike`);
+    assert.ok(s.tick / 60 > 2.2 && s.tick / 60 < 5.0, `brisk welcoming run-up at difficulty ${level}: ${(s.tick / 60).toFixed(2)} s to the first spike`);
   }
   const { s, jumps, events } = beatPlayer(firstSong, songAt(1), 0);
   assert.equal(s.won, true, 'pressing exactly on the beat clears it');

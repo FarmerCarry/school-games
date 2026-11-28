@@ -104,8 +104,4 @@
 <polygon points="292.0,188.0 294.7,195.3 302.0,198.0 294.7,200.7 292.0,208.0 289.3,200.7 282.0,198.0 289.3,195.3" fill="#ffffff" opacity="1"/>
 <polygon points="104.0,202.0 106.1,207.9 112.0,210.0 106.1,212.1 104.0,218.0 101.9,212.1 96.0,210.0 101.9,207.9" fill="#ffffff" opacity="1"/>
 <polygon points="220.0,35.0 222.4,41.6 229.0,44.0 222.4,46.4 220.0,53.0 217.6,46.4 211.0,44.0 217.6,41.6" fill="#ffffff" opacity="1"/>
-<g transform="rotate(-4 200 340)">
-<text x="200" y="362" font-size="86" font-family="'Segoe UI',Tahoma,Arial,sans-serif" font-weight="900" text-anchor="middle" fill="#22123f" stroke="#22123f" stroke-width="22" stroke-linejoin="round">دمج</text>
-<text x="200" y="355" font-size="86" font-family="'Segoe UI',Tahoma,Arial,sans-serif" font-weight="900" text-anchor="middle" fill="#ffffff" stroke="#22123f" stroke-width="12" stroke-linejoin="round" paint-order="stroke">دمج</text>
-</g>
 </svg>

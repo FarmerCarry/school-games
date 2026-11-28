@@ -25,6 +25,7 @@
   <symbol id="i-shirt" viewBox="0 0 64 64"><path d="M22 8 L32 14 L42 8 L58 18 L52 30 L46 27 L46 56 L18 56 L18 27 L12 30 L6 18 Z" stroke-linejoin="round"/></symbol>
   <symbol id="i-flag" viewBox="0 0 64 64"><rect x="12" y="6" width="6" height="54" rx="3"/><path d="M18 8 L54 8 L46 21 L54 34 L18 34 Z"/></symbol>
   <symbol id="i-cup" viewBox="0 0 64 64"><path d="M18 8 L46 8 L46 22 Q46 38 32 38 Q18 38 18 22 Z"/><path d="M18 14 L8 14 Q8 28 20 28 M46 14 L56 14 Q56 28 44 28" fill="none" stroke="currentColor" stroke-width="5"/><rect x="28" y="38" width="8" height="10"/><rect x="18" y="48" width="28" height="8" rx="3"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 64 64"><path d="M32 5 L55 15 V33 C55 47 44 56 32 60 C20 56 9 47 9 33 V15 Z" stroke="#1c2250" stroke-width="5" stroke-linejoin="round"/><path d="M32 13 L47 20 V32 C47 41 40 48 32 52 Z" fill="rgba(255,255,255,0.34)"/><path d="M32 20 C37 20 40 28 40 33 C40 39 36 42 32 42 C28 42 24 39 24 33 C24 28 27 20 32 20 Z" fill="#fffaf0" stroke="#1c2250" stroke-width="3"/></symbol>
   <symbol id="i-clock" viewBox="0 0 64 64"><circle cx="32" cy="34" r="24" fill="#ffffff" stroke="#1c2250" stroke-width="5"/><path d="M32 20 L32 35 L42 41" fill="none" stroke="#1c2250" stroke-width="5" stroke-linecap="round"/><rect x="26" y="3" width="12" height="7" rx="3" fill="#1c2250"/></symbol>
 </svg>
 
@@ -34,8 +35,8 @@
   <!-- In-race HUD -->
   <div id="hud" hidden>
     <button type="button" id="btnPause" class="er-btn er-round" aria-label="استراحة" title="استراحة (P أو Esc)"><svg aria-hidden="true"><use href="#i-pause"/></svg></button>
-    <div class="place p0" id="place0"><b>1</b><small dir="ltr">/4</small></div>
-    <div class="place p1" id="place1" hidden><b>1</b><small dir="ltr">/4</small></div>
+    <div class="place p0" id="place0" dir="ltr"><b>1</b><small>/4</small></div>
+    <div class="place p1" id="place1" dir="ltr" hidden><b>1</b><small>/4</small></div>
     <div class="prog" id="prog" aria-hidden="true"><div class="bar"></div><div class="ticks" id="ticks"></div><svg class="flag"><use href="#i-flag"/></svg><div class="dots" id="dots"></div></div>
     <div class="chips">
       <div class="chip gold"><svg aria-hidden="true"><use href="#i-egg"/></svg><b id="hudGold">0</b></div>
@@ -45,13 +46,13 @@
       <svg viewBox="0 0 300 160" class="arc"><defs><linearGradient id="mg" x1="0" x2="1"><stop offset="0" stop-color="#ff4d4d"/><stop offset=".22" stop-color="#ffd23f"/><stop offset=".4" stop-color="#5ee36a"/><stop offset=".6" stop-color="#5ee36a"/><stop offset=".78" stop-color="#ffd23f"/><stop offset="1" stop-color="#ff4d4d"/></linearGradient></defs>
         <path d="M30 150 A120 120 0 0 1 270 150" fill="none" stroke="#1c2250" stroke-width="34" stroke-linecap="round"/><path d="M30 150 A120 120 0 0 1 270 150" fill="none" stroke="url(#mg)" stroke-width="22" stroke-linecap="round"/></svg>
       <div class="needle"><svg class="egg" viewBox="0 0 64 64"><use href="#i-egg"/></svg></div>
-      <div class="shields"><i class="sh"></i><i class="sh"></i></div>
+      <div class="shields" title="دروع الحماية"><svg class="sh" viewBox="0 0 64 64"><use href="#i-shield"/></svg><svg class="sh" viewBox="0 0 64 64"><use href="#i-shield"/></svg></div>
       <span class="kc l" dir="ltr">←</span><span class="kc r" dir="ltr">→</span>
     </div>
     <div class="meter m1" id="meter1" aria-hidden="true" hidden>
       <svg viewBox="0 0 300 160" class="arc"><path d="M30 150 A120 120 0 0 1 270 150" fill="none" stroke="#1c2250" stroke-width="34" stroke-linecap="round"/><path d="M30 150 A120 120 0 0 1 270 150" fill="none" stroke="url(#mg)" stroke-width="22" stroke-linecap="round"/></svg>
       <div class="needle"><svg class="egg" viewBox="0 0 64 64"><use href="#i-egg"/></svg></div>
-      <div class="shields"><i class="sh"></i><i class="sh"></i></div>
+      <div class="shields" title="دروع الحماية"><svg class="sh" viewBox="0 0 64 64"><use href="#i-shield"/></svg><svg class="sh" viewBox="0 0 64 64"><use href="#i-shield"/></svg></div>
       <span class="kc l" dir="ltr">←</span><span class="kc r" dir="ltr">→</span>
     </div>
     <div class="tag t0" id="tag0" hidden>1</div><div class="tag t1" id="tag1" hidden>2</div>

@@ -103,6 +103,7 @@
     Kit.stats.round('L' + (i + 1));
     begin(CG.LEVELS[i], false);
     banner('المرحلة ' + (i + 1), CG.WORLDS[CG.LEVELS[i].w].name, 1600);
+    if (i === 0) showHint('انقر لإطلاق الكريمة! 🎯', 2400);
   }
   function startEndless() {
     endless = true; endlessBest = save.endless;
@@ -222,7 +223,7 @@
       const spec = CG.TOWERS[type], b = document.createElement('button');
       b.type = 'button'; b.className = 'cg-card'; b.setAttribute('data-type', type);
       b.title = spec.name;
-      const cv = document.createElement('canvas'); cv.width = cv.height = 116; cv.setAttribute('data-icon', type);
+      const cv = document.createElement('canvas'); cv.width = cv.height = 128; cv.setAttribute('data-icon', type);
       A.towerIcon(cv, type); b.appendChild(cv);
       const txt = document.createElement('div'), nm = document.createElement('div'), pr = document.createElement('div');
       nm.className = 'cg-name'; nm.textContent = spec.short;
@@ -247,7 +248,7 @@
   }
   function quickBuild(type) {
     if (screen !== 'play' || !world || ending) return;
-    activeType = type; acted = true; hideHint();
+    activeType = type; acted = true;
     const res = CG.quickAct(world, type);
     if (res.ok) {
       const p = world.pads[res.pad];
@@ -285,15 +286,19 @@
   }
 
   /* -------------------------------------------------- banners, HUD & IO */
-  let bannerTimer = 0;
+  let bannerTimer = 0, hintTimer = 0;
   function banner(title, sub, ms) {
     const el = $('banner'); el.textContent = title;
     if (sub) { const sm = document.createElement('small'); sm.textContent = sub; el.appendChild(sm); }
     el.hidden = false; clearTimeout(bannerTimer); bannerTimer = setTimeout(hideBanner, ms || 1600);
   }
   function hideBanner() { clearTimeout(bannerTimer); $('banner').hidden = true; }
-  function showHint(text) { const el = $('hint'); el.textContent = text; el.hidden = false; }
-  function hideHint() { $('hint').hidden = true; }
+  function showHint(text, ms) {
+    const el = $('hint'); el.textContent = text; el.hidden = false;
+    clearTimeout(hintTimer);
+    if (ms) hintTimer = setTimeout(hideHint, ms);
+  }
+  function hideHint() { clearTimeout(hintTimer); $('hint').hidden = true; }
 
   function bump(id, hurt) {
     const el = $(id).parentNode; el.classList.remove('bump', 'hurt'); void el.offsetWidth;

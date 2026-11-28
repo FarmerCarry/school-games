@@ -695,27 +695,34 @@
       }
       c.globalAlpha = 1;
     }
-    // sun / moon
-    c.fillStyle = th.sun; c.globalAlpha = 0.35;
-    c.beginPath(); c.arc(1040, 130 + yOff * 0.3, 92, 0, TAU); c.fill();
-    c.globalAlpha = 1; c.beginPath(); c.arc(1040, 130 + yOff * 0.3, 66, 0, TAU); c.fill();
-    if (th.night) { c.fillStyle = skyGrad[ti]; c.beginPath(); c.arc(1068, 112 + yOff * 0.3, 56, 0, TAU); c.fill(); }
-    // clouds
-    c.fillStyle = th.cloud; c.globalAlpha = th.night ? 0.35 : 0.85;
+    // sun / moon + warm halo
+    var sunY = 130 + yOff * 0.3;
+    c.fillStyle = th.sun; c.globalAlpha = 0.15; c.beginPath(); c.arc(1040, sunY, 124, 0, TAU); c.fill();
+    c.globalAlpha = 0.35; c.beginPath(); c.arc(1040, sunY, 90, 0, TAU); c.fill();
+    c.globalAlpha = 1; c.beginPath(); c.arc(1040, sunY, 64, 0, TAU); c.fill();
+    if (th.night) { c.fillStyle = skyGrad[ti]; c.beginPath(); c.arc(1068, sunY - 18, 54, 0, TAU); c.fill(); }
+    else for (var bi = 0; bi < 3; bi++) {
+      var bx = (((bi * 460 + 260) - cam.x * 0.11 + time * (4 + bi)) % 1520 + 1520) % 1520 - 120;
+      var by = 185 + (bi % 2) * 78 + Math.sin(time * 1.4 + bi * 2) * 8 + yOff * 0.4;
+      c.globalAlpha = 0.72; c.fillStyle = ['#ff5ea8', '#ffd21f', '#38d39f'][bi];
+      c.beginPath(); c.ellipse(bx, by, 14, 17, 0, 0, TAU); c.fill();
+      c.fillStyle = '#8b5a3c'; c.fillRect(bx - 4, by + 19, 8, 5);
+    }
+    // clouds (soft drift + warm underside depth)
     for (var k = 0; k < 6; k++) {
-      var span = W + 500;
-      var cx = (((k * 431 + 100) - cam.x * (0.06 + k * 0.012)) % span + span) % span - 250;
-      var cy = 70 + (k * 67) % 220 + yOff * 0.5;
-      var sc = 0.7 + (k % 3) * 0.25;
-      c.beginPath();
-      c.arc(cx, cy, 34 * sc, 0, TAU); c.arc(cx + 38 * sc, cy - 14 * sc, 42 * sc, 0, TAU); c.arc(cx + 80 * sc, cy, 32 * sc, 0, TAU);
-      c.rect(cx, cy - 4 * sc, 80 * sc, 36 * sc * 0.9);
-      c.fill();
+      var cx = (((k * 431 + 100) - cam.x * (0.06 + k * 0.012) + (calm ? 0 : time * (8 + k * 2))) % 1780 + 1780) % 1780 - 250;
+      var cy = 74 + (k * 67) % 210 + yOff * 0.5, sc = 0.7 + (k % 3) * 0.25;
+      c.globalAlpha = th.night ? 0.22 : 0.4; c.fillStyle = th.night ? '#4a3d94' : '#9ed4f5';
+      c.beginPath(); c.ellipse(cx + 40 * sc, cy + 25 * sc, 62 * sc, 13 * sc, 0, 0, TAU); c.fill();
+      c.fillStyle = th.cloud; c.globalAlpha = th.night ? 0.35 : 0.9;
+      c.beginPath(); c.arc(cx, cy, 34 * sc, 0, TAU); c.arc(cx + 38 * sc, cy - 14 * sc, 42 * sc, 0, TAU); c.arc(cx + 80 * sc, cy, 32 * sc, 0, TAU);
+      c.rect(cx, cy - 4 * sc, 80 * sc, 34 * sc); c.fill();
     }
     c.globalAlpha = 1;
-    drawHills(c, th.far, 0.18, 470 + yOff, 70, 0.0035, th.hill, 1.7);
+    drawHills(c, th.night ? 'rgba(62,48,138,0.55)' : 'rgba(255,255,255,0.28)', 0.09, 415 + yOff * 0.75, 62, 0.0024, th.hill, 0.4);
+    drawHills(c, th.far, 0.18, 475 + yOff, 68, 0.0035, th.hill, 1.7, 1);
     drawDecor(c, ti, 670 + yOff * 1.25);
-    drawHills(c, th.near, 0.38, 560 + yOff * 1.5, 60, 0.005, th.hill, 4.2);
+    drawHills(c, th.near, 0.38, 560 + yOff * 1.5, 60, 0.005, th.hill, 4.2, 1);
   }
   // Scenery between the hill layers, one look per world: trees and bushes, lollipops and
   // gumdrops, cacti and rock arches, crystal spires. Flat shapes on a middle parallax; the
@@ -778,11 +785,11 @@
     c.fillStyle = d[1]; c.beginPath(); c.moveTo(x, g); c.lineTo(x, g - h - w2 * 1.5); c.lineTo(x + w2, g - h); c.lineTo(x + w2, g); c.fill();
   }
   function hash(n) { var s = Math.sin(n * 127.1) * 43758.5453; return s - Math.floor(s); }
-  function drawHills(c, color, f, base, amp, freq, style, seed) {
+  function drawHills(c, color, f, base, amp, freq, style, seed, rim) {
     var ox = cam.x * f;
     c.fillStyle = color;
-    c.beginPath(); c.moveTo(0, H);
-    var step = style === 'mesa' ? 8 : 24;
+    c.beginPath();
+    var step = style === 'mesa' ? 8 : 24, first = true;
     for (var sx = -step; sx <= W + step; sx += step) {
       var wx = sx + ox, y;
       if (style === 'mesa') {
@@ -796,9 +803,10 @@
       } else {
         y = base + Math.sin(wx * freq + seed) * amp + Math.sin(wx * freq * 2.3 + seed * 2) * amp * 0.4;
       }
-      c.lineTo(sx, y);
+      if (first) { c.moveTo(sx, y); first = false; } else c.lineTo(sx, y);
     }
-    c.lineTo(W + step, H); c.closePath(); c.fill();
+    if (rim) { c.strokeStyle = theme.night ? 'rgba(185,175,255,0.28)' : 'rgba(255,252,215,0.42)'; c.lineWidth = 5; c.stroke(); }
+    c.lineTo(W + step, H); c.lineTo(-step, H); c.closePath(); c.fill();
   }
 
   function drawSpeedLines(c) {
@@ -909,7 +917,7 @@
     }
 
     // hooks
-    var tgt = (w.st === 'play' || w.st === 'ready') && !w.hook ? w.target : null;
+    var tgt = !attract && (w.st === 'play' || w.st === 'ready') && !w.hook ? w.target : null;
     for (i = 0; i < L.hooks.length; i++) {
       o = L.hooks[i];
       if (o.cx < vb.x0 || o.cx > vb.x1 || o.cy < vb.y0 || o.cy > vb.y1) continue;
@@ -917,8 +925,8 @@
     }
     // target guide
     if (tgt && w.st !== 'dead' && !attract) {
-      c.setLineDash([4, 12]); c.lineDashOffset = -time * 40;
-      c.strokeStyle = 'rgba(255,255,255,0.7)'; c.lineWidth = 3;
+      c.setLineDash([6, 10]); c.lineDashOffset = -time * 48;
+      c.strokeStyle = 'rgba(255,244,160,0.85)'; c.lineWidth = 3.5;
       c.beginPath(); c.moveTo(w.x, w.y); c.lineTo(tgt.cx, tgt.cy); c.stroke();
       c.setLineDash([]); c.lineDashOffset = 0;
     }
@@ -1007,20 +1015,25 @@
   }
 
   function drawHook(c, o, isT, isH) {
-    var x = o.cx, y = o.cy, ht = w.t - o.hitT;
+    var x = o.cx, y = o.cy, ht = w.t - o.hitT, p = calm ? 0.5 : 0.5 + 0.5 * Math.sin(time * 7 + o.id);
     var s = ht >= 0 && ht < 0.35 ? 1 + Math.sin(ht * 28) * 0.3 * (1 - ht / 0.35) : 1;
+    var r = 19 * s, col = isH || isT ? '#ffe14d' : o.moving ? '#2ec4ff' : '#ff4fa3';
+    c.fillStyle = isT || isH ? 'rgba(255,235,110,' + (0.24 + 0.16 * p).toFixed(3) + ')' : 'rgba(255,255,255,0.22)';
+    c.beginPath(); c.arc(x, y, isT || isH ? 42 + p * 6 : r + 11 + p * 3, 0, TAU); c.fill();
     if (isT) {
-      var p = 0.5 + 0.5 * Math.sin(time * 9);
-      c.fillStyle = 'rgba(255,240,120,' + (0.25 + 0.2 * p).toFixed(3) + ')';
-      c.beginPath(); c.arc(x, y, 34 + p * 6, 0, TAU); c.fill();
+      c.setLineDash([7, 7]); c.strokeStyle = 'rgba(255,244,160,0.68)'; c.lineWidth = 3;
+      c.beginPath(); c.arc(x, y, 64 + p * 6, 0, TAU); c.stroke(); c.setLineDash([]);
       c.strokeStyle = '#ffe14d'; c.lineWidth = 5;
-      for (var k = 0; k < 4; k++) { var a0 = time * 3 + k * TAU / 4; c.beginPath(); c.arc(x, y, 30 + p * 4, a0, a0 + 0.9); c.stroke(); }
+      for (var k = 0; k < 4; k++) { var a0 = time * 2.8 + k * TAU / 4; c.beginPath(); c.arc(x, y, 34 + p * 4, a0, a0 + 0.85); c.stroke(); }
     }
-    var r = 15 * s;
     c.fillStyle = theme.ink; c.beginPath(); c.arc(x, y, r + 5, 0, TAU); c.fill();
-    c.fillStyle = isH || isT ? '#ffe14d' : '#ffffff'; c.beginPath(); c.arc(x, y, r, 0, TAU); c.fill();
-    c.fillStyle = isH ? '#ff4fa3' : o.moving ? '#1fa8ff' : '#ff4fa3'; c.beginPath(); c.arc(x, y, r * 0.45, 0, TAU); c.fill();
-    c.fillStyle = 'rgba(255,255,255,0.8)'; c.beginPath(); c.arc(x - r * 0.4, y - r * 0.45, r * 0.18, 0, TAU); c.fill();
+    c.fillStyle = col; c.beginPath(); c.arc(x, y, r, 0, TAU); c.fill();
+    c.fillStyle = '#fff'; c.beginPath(); c.arc(x, y, r * 0.68, 0, TAU); c.fill();
+    c.fillStyle = theme.ink; c.beginPath(); c.arc(x, y, r * 0.38, 0, TAU); c.fill();
+    c.fillStyle = isH || isT ? '#ff4fa3' : col;
+    if (isT || isH) { drawStar(c, x, y, r * 0.42, time * 2); c.fill(); }
+    else { c.beginPath(); c.arc(x, y, r * 0.25, 0, TAU); c.fill(); }
+    c.fillStyle = 'rgba(255,255,255,0.85)'; c.beginPath(); c.arc(x - r * 0.48, y - r * 0.48, r * 0.17, 0, TAU); c.fill();
   }
 
   function drawRope(c) {
@@ -1308,8 +1321,8 @@
 
   /* -------------------------------------------------------------------- HUD */
   function panel(c, x, y, w2, h2) {
-    c.fillStyle = 'rgba(35,22,80,0.8)'; rr(c, x, y, w2, h2, 18); c.fill();
-    c.strokeStyle = 'rgba(255,255,255,0.7)'; c.lineWidth = 3; c.stroke();
+    c.fillStyle = 'rgba(35,22,85,0.62)'; rr(c, x, y, w2, h2, 20); c.fill();
+    c.strokeStyle = 'rgba(255,255,255,0.85)'; c.lineWidth = 3; c.stroke();
   }
   // dir: 'rtl' for Arabic (default), 'ltr' for pure numbers like "3.4 / 5".
   function text(c, s, x, y, size, col, align, dir, maxW) {
@@ -1349,26 +1362,32 @@
       if (w.flips) { flipIcon(c, 40, 40, '#7ff6ff'); text(c, '' + w.flips, 58, 41, 30, '#7ff6ff', 'left', 'ltr'); }
     } else {
       var def = LEVELS[lvl];
-      var PX = 14, PW = 400, RX = PX + PW - 18;
+      var PX = 14, PW = 446, RX = PX + PW - 18;
       panel(c, PX, 12, PW, 96);
       // row 1 (right to left): level number badge, then the level name
       var badge = (worldOf(lvl) + 1) + '-' + (lvl % 6 + 1);
       var bw = textW(c, badge, 30);
       text(c, badge, RX, 41, 30, '#ffe14d', 'right', 'ltr');
       text(c, def.name, RX - bw - 14, 41, 26, '#fff', 'right', 'rtl', RX - bw - 14 - (PX + 16));
-      // row 2 (right to left): time / par, flips / goal, the 3 stars
+      // row 2 (right to left): time / par, labeled flips / goal, clean left-to-right stars
       var t = w.timer, underPar = t <= def.par;
       clockIcon(c, RX - 10, 82, underPar ? '#9dff6b' : '#fff');
       var par = '/ ' + def.par, pw = textW(c, par, 18);
-      text(c, par, RX - 28, 84, 18, 'rgba(255,255,255,0.8)', 'right', 'ltr');
-      text(c, t.toFixed(1), RX - 32 - pw, 82, 26, underPar ? '#9dff6b' : '#fff', 'right', 'ltr');
-      var fOk = w.flips >= def.flips, FX = RX - 160;
+      text(c, par, RX - 28, 84, 18, 'rgba(255,255,255,0.82)', 'right', 'ltr');
+      text(c, t.toFixed(1), RX - 32 - pw, 82, 25, underPar ? '#9dff6b' : '#fff', 'right', 'ltr');
+      var fOk = w.flips >= def.flips, FX = RX - 156;
       flipIcon(c, FX, 82, fOk ? '#9dff6b' : '#fff');
-      text(c, w.flips + '/' + def.flips, FX - 16, 82, 26, fOk ? '#9dff6b' : '#fff', 'right', 'ltr');
+      text(c, 'شقلبة', FX - 16, 82, 17, 'rgba(255,255,255,0.9)', 'right', 'rtl');
+      text(c, w.flips + '/' + def.flips, FX - 68, 82, 23, fOk ? '#9dff6b' : '#fff', 'right', 'ltr');
       var bits = starBits(lvl);
-      hudStar(c, PX + 32, 82, 11, w.st === 'won' || (bits & 1));
-      hudStar(c, PX + 60, 82, 11, underPar && w.st !== 'ready' || (bits & 2));
-      hudStar(c, PX + 88, 82, 11, fOk || (bits & 4));
+      var earned = (w.st === 'won' || (bits & 1) ? 1 : 0) + ((w.st === 'won' && underPar) || (bits & 2) ? 1 : 0) + (fOk || (bits & 4) ? 1 : 0);
+      for (var si = 0; si < 3; si++) hudStar(c, PX + 30 + si * 28, 82, 11, si < earned);
+      // compact finish-line distance pill on the right below pause/mute
+      if (w.st !== 'won') {
+        var rem = Math.max(0, Math.ceil((L.finish - w.x) / 25));
+        panel(c, W - 128, 72, 114, 38);
+        text(c, '🏁 ' + rem + ' م', W - 71, 92, 20, '#ffe14d', 'center', 'rtl');
+      }
       if (w.st === 'ready' && readyT < 3 && def.hint) {
         var a = Math.min(1, readyT * 3);
         c.globalAlpha = a;

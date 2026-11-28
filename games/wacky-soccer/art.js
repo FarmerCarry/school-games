@@ -152,9 +152,9 @@
       circle(ctx, 1110, 70, 90); ctx.fillStyle = 'rgba(0,0,40,0.25)'; ctx.fill();
       ctx.restore();
     } else {
-      // sun
-      circle(ctx, 1150, 70, 44); ctx.fillStyle = '#fff3a0'; ctx.fill();
-      circle(ctx, 1150, 70, 60); ctx.fillStyle = 'rgba(255,243,160,0.3)'; ctx.fill();
+      // sun (clear of scoreboard and top-right buttons)
+      circle(ctx, 1106, 56, 36); ctx.fillStyle = '#fff3a0'; ctx.fill();
+      circle(ctx, 1106, 56, 50); ctx.fillStyle = 'rgba(255,243,160,0.3)'; ctx.fill();
     }
     // stadium structure
     ctx.fillStyle = space ? '#2a2358' : '#3b4a8f';
@@ -165,12 +165,12 @@
     ctx.fillStyle = space ? '#6c5fc0' : '#ff5a5f';
     for (var i = 0; i < W; i += 80) { ctx.fillRect(i, 150, 40, 12); }
     ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(0, 176, W, 8);
-    // floodlights
+    // floodlights mounted cleanly along the roof, clear of top-left/top-right HUD
     for (var L = 0; L < 2; L++) {
-      var lx = L ? W - 70 : 70;
-      ctx.fillStyle = '#5d6aa8'; ctx.fillRect(lx - 4, 60, 8, 92);
-      rr(ctx, lx - 34, 34, 68, 34, 6); ctx.fillStyle = '#e8eef9'; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = OUT; ctx.stroke();
-      for (var k = 0; k < 4; k++) { circle(ctx, lx - 22 + k * 15, 51, 6); ctx.fillStyle = '#fff7b0'; ctx.fill(); }
+      var lx = L ? W - 224 : 224;
+      ctx.fillStyle = '#5d6aa8'; ctx.fillRect(lx - 4, 130, 8, 22);
+      rr(ctx, lx - 25, 111, 50, 21, 5); ctx.fillStyle = '#e8eef9'; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = OUT; ctx.stroke();
+      for (var k = 0; k < 4; k++) { circle(ctx, lx - 15 + k * 10, 121.5, 3.8); ctx.fillStyle = '#fff7b0'; ctx.fill(); }
     }
     // stand tiers
     for (var row = 0; row < 5; row++) {

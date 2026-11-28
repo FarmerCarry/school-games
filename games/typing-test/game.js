@@ -592,24 +592,33 @@
       if (ending.t <= 0) showTestResult();
     }
   }
+  // Four sky-corridor slots flanking the title logo & language buttons (never overlapping center UI).
+  const TITLE_SLOTS = [
+    { bx: 158, by: 184, ar: true },
+    { bx: 146, by: 382, ar: false },
+    { bx: 1038, by: 238, ar: false },
+    { bx: 1152, by: 390, ar: true }
+  ];
+  function makeDeco(slotIdx) {
+    const s = TITLE_SLOTS[slotIdx], set = s.ar ? 'بتنملاسيكشعقف' : 'abcdefghklmnoprst';
+    return { slot: slotIdx, x: s.bx, y: s.by, text: set[(Math.random() * set.length) | 0], lang: s.ar ? 'ar' : 'en', w: 150, phase: slotIdx * 1.6 + Math.random() * 1.2, zap: 0 };
+  }
   function decoStep(dt) {
-    // Title clouds carry letters; now and then a silent bolt from the town pops one.
-    while (deco.length < 5) {
-      const ar = deco.length % 2 === 0, set = ar ? 'بتنملاسيكشعقف' : 'abcdefghklmnoprst';
-      deco.push({ x: time < 0.1 ? 100 + deco.length * 260 : -120 - Math.random() * 500, y: 120 + Math.random() * 360, v: 26 + Math.random() * 22, text: set[(Math.random() * set.length) | 0], lang: ar ? 'ar' : 'en', w: 150, phase: Math.random() * 6, zap: 0 });
+    // Title clouds hover cleanly in left/right sky corridors; a silent bolt from the town pops one now and then.
+    if (!deco.length) for (let i = 0; i < TITLE_SLOTS.length; i++) deco.push(makeDeco(i));
+    for (let i = 0; i < deco.length; i++) {
+      const d = deco[i], s = TITLE_SLOTS[d.slot];
+      d.x = s.bx + (calm() ? 0 : Math.sin(time * 0.55 + d.phase) * 24);
+      d.y = s.by + (calm() ? 0 : Math.cos(time * 0.8 + d.phase) * 9);
+      if (d.zap > 0) { d.zap += dt; if (d.zap > 0.45) deco[i] = makeDeco(d.slot); }
     }
-    for (let i = deco.length - 1; i >= 0; i--) {
-      const d = deco[i];
-      d.x += d.v * dt;
-      if (d.zap > 0) { d.zap += dt; if (d.zap > 0.4) deco.splice(i, 1); continue; }
-      if (d.x > W + 140) deco.splice(i, 1);
-    }
-    if (!calm() && Math.random() < dt / 2.6) {
-      const d = deco.find(o => !o.zap && o.x > 120 && o.x < W - 120 && (o.y > 300 || o.x < 330 || o.x > 950));
+    if (!calm() && Math.random() < dt / 2.8) {
+      const pool = deco.filter(o => !o.zap);
+      const d = pool[(Math.random() * pool.length) | 0];
       if (d) {
         d.zap = 0.001;
-        bolts.push({ x1: d.x + 60, y1: 640, x2: d.x, y2: d.y + 28, t: 0, seed: (Math.random() * 900) | 0 });
-        bows.push({ x: d.x, y: d.y + 40, r: 70, t: 0 });
+        bolts.push({ x1: d.x + (d.x < 640 ? 40 : -40), y1: 640, x2: d.x, y2: d.y + 28, t: 0, seed: (Math.random() * 900) | 0 });
+        bows.push({ x: d.x, y: d.y + 40, r: 66, t: 0 });
         fx.burst(d.x, d.y, { count: 14, colors: ['#ffd23f', '#ffffff', '#ff7eb6'], speed: 260, life: 0.6, size: 7, gravity: 160 });
       }
     }
@@ -744,8 +753,8 @@
     }
     drawHud(g);
     // The level's number pops up for a moment as it starts.
-    if (introT < 1.4 && !ending) {
-      const k = introT / 1.4, s = still ? 1 : Math.min(1.08, 0.4 + k * 5) - Math.max(0, k * 5 - 1) * 0.08;
+    if (introT < 1.05 && !ending) {
+      const k = introT / 1.05, s = still ? 1 : Math.min(1.08, 0.4 + k * 5) - Math.max(0, k * 5 - 1) * 0.08;
       g.save(); g.globalAlpha = Math.min(1, (1 - k) * 4); g.translate(640, 300); g.scale(Math.max(1, s), Math.max(1, s));
       A.pill(g, -120, -44, 240, 88, '#ffd23f');
       A.boltIcon(g, 76, 0, 1.5, '#ffffff');

@@ -11,11 +11,6 @@
       <stop offset="45%" stop-color="#ffaa22"/>
       <stop offset="100%" stop-color="#ff3d1a" stop-opacity="0"/>
     </linearGradient>
-    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#fff9c4"/>
-      <stop offset="55%" stop-color="#ffdc38"/>
-      <stop offset="100%" stop-color="#ff941a"/>
-    </linearGradient>
   </defs>
   <!-- Sky to Outer Space backdrop -->
   <rect width="400" height="400" fill="url(#sky)"/>
@@ -73,9 +68,4 @@
   <!-- Sparkling stars around the ball -->
   <polygon points="184,116 189,128 202,130 192,138 195,150 184,143 173,150 176,138 166,130 179,128" fill="#ffe44d" stroke="#1c2559" stroke-width="3"/>
   <polygon points="326,162 330,171 340,172 332,179 334,188 326,183 318,188 320,179 312,172 322,171" fill="#ffe44d" stroke="#1c2559" stroke-width="2.5"/>
-  <!-- Chunky Arabic Title Banner -->
-  <g transform="translate(200,368)">
-    <rect x="-166" y="-34" width="332" height="58" rx="29" fill="#131c4a" stroke="#ffd426" stroke-width="5"/>
-    <text x="0" y="9" text-anchor="middle" direction="rtl" font-family="Fredoka, 'Baloo Bhaijaan 2', sans-serif" font-weight="700" font-size="38" fill="url(#gold)">ضربة إلى الفضاء</text>
-  </g>
 </svg>

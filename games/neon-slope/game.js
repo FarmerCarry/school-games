@@ -219,10 +219,10 @@
     g.globalCompositeOperation = 'destination-out';
     for (var k = 0; k < 7; k++) { var y = 130 + k * 17, h = 2 + k * 1.6; g.fillRect(0, y, 256, h); }
   });
-  var sun = new T.Mesh(new T.PlaneGeometry(190, 190), new T.MeshBasicMaterial({ map: sunTex, transparent: true, fog: false, depthWrite: false, depthTest: false }));
+  var sun = new T.Mesh(new T.PlaneGeometry(172, 172), new T.MeshBasicMaterial({ map: sunTex, transparent: true, fog: false, depthWrite: false, depthTest: false }));
   sun.renderOrder = -8; sun.frustumCulled = false;
   scene.add(sun);
-  var sunGlow = new T.Mesh(new T.PlaneGeometry(460, 460), new T.MeshBasicMaterial({ map: glowTex, color: 0xff4fa0, transparent: true, opacity: 0.55, blending: T.AdditiveBlending, fog: false, depthWrite: false, depthTest: false }));
+  var sunGlow = new T.Mesh(new T.PlaneGeometry(420, 420), new T.MeshBasicMaterial({ map: glowTex, color: 0xff4fa0, transparent: true, opacity: 0.55, blending: T.AdditiveBlending, fog: false, depthWrite: false, depthTest: false }));
   sunGlow.renderOrder = -8.5; sunGlow.frustumCulled = false;
   scene.add(sunGlow);
 
@@ -292,12 +292,25 @@
 
   var GEM_N = 140;
   var gemGeo = new T.OctahedronGeometry(0.36, 0);
-  var gemMesh = new T.InstancedMesh(gemGeo, new T.MeshPhongMaterial({ flatShading: true, emissive: 0x3a2200, specular: 0xffffff, shininess: 90 }), GEM_N);
+  // Bake luminous crystal facet shading into vertex colors (multiplied by instanceColor)
+  // so gems sparkle as rich neon gold/amber & neon pink crystals without blown-out white or muddy brown.
+  (function () {
+    var pos = gemGeo.attributes.position, n = pos.count, col = new Float32Array(n * 3);
+    var topF = [[1.0, 0.99, 0.86], [0.97, 0.90, 0.62], [1.0, 0.94, 0.72], [0.92, 0.82, 0.48]];
+    var botF = [[0.96, 0.62, 0.22], [0.85, 0.48, 0.16], [0.92, 0.56, 0.18], [0.80, 0.44, 0.15]];
+    for (var f = 0; f < n; f += 3) {
+      var cy = (pos.getY(f) + pos.getY(f + 1) + pos.getY(f + 2)) / 3;
+      var sh = cy >= 0 ? topF[(f / 3) & 3] : botF[(f / 3) & 3];
+      for (var k = 0; k < 3; k++) { var o = (f + k) * 3; col[o] = sh[0]; col[o + 1] = sh[1]; col[o + 2] = sh[2]; }
+    }
+    gemGeo.setAttribute('color', new T.BufferAttribute(col, 3));
+  })();
+  var gemMesh = new T.InstancedMesh(gemGeo, new T.MeshBasicMaterial({ vertexColors: true }), GEM_N);
   gemMesh.frustumCulled = false; gemMesh.instanceMatrix.setUsage(T.DynamicDrawUsage);
   gemMesh.count = 0;
   course.add(gemMesh);
   var gems = [];
-  var GEM_COL = new T.Color(0xffd93b), BIG_COL = new T.Color(0xff5fe0);
+  var GEM_COL = new T.Color(0xffe048), BIG_COL = new T.Color(0xff66ee);
   gemMesh.setColorAt(0, GEM_COL);
   for (var gi = 0; gi < GEM_N; gi++) gems.push({ active: false });
 
@@ -557,9 +570,10 @@
     var n = len || randInt(12, 18), pat = pick(['line', 'wave', 'zig']), c = randInt(gen.a + 1, gen.b - 1);
     for (var k = 0; k < n; k++) {
       var r = mkRow(lane());
-      if (k > 1) {
+      if (k > (st.demo ? 6 : 1)) {
         var cc = c;
-        if (pat === 'wave') cc = Math.round((gen.a + gen.b) / 2 + ((gen.b - gen.a) / 2) * Math.sin(k * 0.45));
+        if (st.demo && gen.count === 1) cc = Math.round((gen.a + gen.b) / 2 + Math.sin(k * 0.55));
+        else if (pat === 'wave') cc = Math.round((gen.a + gen.b) / 2 + ((gen.b - gen.a) / 2) * Math.sin(k * 0.45));
         else if (pat === 'zig') cc = gen.a + ((k >> 2) % (gen.b - gen.a + 1));
         gemC(r, clamp(cc, gen.a, gen.b));
       }
@@ -1127,9 +1141,9 @@
       gemMesh.setMatrixAt(gn, tmpM);
       gemMesh.setColorAt(gn, g.big ? BIG_COL : GEM_COL);
       GG.pos[gn * 3] = g.x; GG.pos[gn * 3 + 1] = g.y + bob; GG.pos[gn * 3 + 2] = -g.d;
-      var tw = 0.55 + 0.25 * Math.sin(st.t * 5 + g.ph);
-      GG.col[gn * 3] = tw; GG.col[gn * 3 + 1] = (g.big ? 0.37 : 0.85) * tw; GG.col[gn * 3 + 2] = (g.big ? 0.88 : 0.23) * tw;
-      GG.size[gn] = g.big ? 3.2 : 2.2;
+      var tw = 0.65 + 0.28 * Math.sin(st.t * 5 + g.ph);
+      GG.col[gn * 3] = tw; GG.col[gn * 3 + 1] = (g.big ? 0.42 : 0.86) * tw; GG.col[gn * 3 + 2] = (g.big ? 0.94 : 0.25) * tw;
+      GG.size[gn] = g.big ? 3.8 : 2.8;
       gn++;
     }
     Kit.webgl.shrinkCount(gemMesh, gn);
@@ -1471,7 +1485,7 @@
     else ty = Math.max(b.groundY + (b.y - b.groundY) * 0.4, b.y - 2);
     cam.y += (ty - cam.y) * k2;
     var back = 6.2 + sp * 1.3, up = 2.55 + sp * 0.35, look = 11, lookUp = 0.95;
-    if (st.mode === 'title') { back = 5.2 + Math.sin(st.t * 0.4) * 0.3; up = 1.6; lookUp = 0.15; }
+    if (st.mode === 'title') { back = 6.2 + Math.sin(st.t * 0.4) * 0.3; up = 2.45; lookUp = 0.2; }
     if (st.mode === 'dying' || st.mode === 'over') { var dd = Math.min(1, st.dieT); back += dd * 2.5; up += dd * 1.6; }
     var shake = reducedFx ? 0 : st.shake, sx = (rand() - 0.5) * shake, sy = (rand() - 0.5) * shake;
     _cp.set(cam.x + sx, cam.y + up + sy, -(b.d - back)).applyMatrix4(course.matrixWorld);
@@ -1484,8 +1498,8 @@
     if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
     // background follows the camera
     sky.position.copy(camera.position); stars.position.copy(camera.position);
-    sun.position.set(camera.position.x, camera.position.y + 66, camera.position.z - 720);
-    sunGlow.position.set(camera.position.x, camera.position.y + 50, camera.position.z - 730);
+    sun.position.set(camera.position.x, camera.position.y + 38, camera.position.z - 720);
+    sunGlow.position.set(camera.position.x, camera.position.y + 26, camera.position.z - 730);
     mountains.position.set(camera.position.x, camera.position.y + 26, camera.position.z - 680);
     mtnTex.offset.x = (b.x * 0.0004) % 1;
     updateSky(1 - Math.exp(-dt * 1.5));

@@ -195,12 +195,12 @@ i.coin.sm { width: 20px; height: 20px; }
 /* ------------------------------------------------------------ hud btn */
 .hudbtn {
   position: absolute; top: 12px; right: 70px; width: 50px; height: 50px; border-radius: 50%;
-  border: 3px solid rgba(255, 255, 255, .6); background: rgba(40, 20, 80, .45); cursor: pointer;
-  display: flex; align-items: center; justify-content: center; gap: 6px; pointer-events: auto;
+  cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; pointer-events: auto;
 }
+.hudbtn, .sg-mute { border: 3px solid rgba(255, 255, 255, .85); background: rgba(36, 18, 74, .74); }
 .hudbtn[hidden] { display: none; }
 .hudbtn b { display: block; width: 7px; height: 20px; background: #fff; border-radius: 3px; }
-.hudbtn:hover { background: rgba(40, 20, 80, .65); }
+.hudbtn:hover, .sg-mute:hover { background: rgba(36, 18, 74, .9); }
 
 .toast {
   position: absolute; bottom: 24px; left: 50%; transform: translate(-50%, 30px); opacity: 0;

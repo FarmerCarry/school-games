@@ -12,6 +12,7 @@
 <div id="stage">
   <canvas id="bg"></canvas>
 
+  <div id="playUi" hidden>
   <aside id="shop">
     <div class="shop-head">
       <div class="shop-title">المتجر</div>
@@ -23,13 +24,14 @@
     <div id="ups"></div>
     <div class="sec-label"><span>المباني</span><small id="bNote"></small></div>
     <div id="list"></div>
+    <div class="shop-foot" id="shopFoot"></div>
   </aside>
 
   <div id="hud"><div id="count"></div><div id="rate"></div></div>
   <div id="buffs"></div>
-  <button class="tbtn" id="bPause" type="button" title="استراحة">⏸</button>
-  <button class="tbtn" id="bAch" type="button" title="الكؤوس">🏆<span class="badge" id="achBadge" hidden></span></button>
-  <button class="tbtn" id="bSkin" type="button" title="أشكال البيتزا">🎨<span class="badge" id="skinBadge" hidden>!</span></button>
+  <button class="tbtn" id="bPause" type="button" title="استراحة" aria-label="استراحة"><b></b><b></b></button>
+  <button class="tbtn pill" id="bAch" type="button" title="الكؤوس"><span>🏆</span><span class="tlbl">الكؤوس</span><span class="badge" id="achBadge" hidden></span></button>
+  <button class="tbtn pill" id="bSkin" type="button" title="أشكال البيتزا"><span>🎨</span><span class="tlbl">الأشكال</span><span class="badge" id="skinBadge" hidden>!</span></button>
   <button id="bReb" type="button" hidden>🌟 انطلاقة ذهبية</button>
   <div id="goal"><div class="gt" id="goalText"></div><div class="bar"><i id="goalBar"></i></div></div>
   <div id="news"></div>
@@ -37,6 +39,7 @@
   <div id="toasts"></div>
   <div id="banner"></div>
   <div id="tip" hidden></div>
+  </div>
 
   <canvas id="fx"></canvas>
 

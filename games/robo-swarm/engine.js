@@ -47,18 +47,21 @@
 
     var run = {
       uid: 1, seed: (opts.seed == null ? 2026 : opts.seed) >>> 0, rng: makeRng(opts.seed == null ? 2026 : opts.seed),
-      arena: arena, diff: diff, players: players, ddaMul: ddaMul, state: 'play', t: 0, wave: 1, spawnT: 0.45,
+      arena: arena, diff: diff, players: players, ddaMul: ddaMul, state: 'play', t: 0, wave: 1, spawnT: 0.25,
       score: 0, kills: 0, bolts: 0, combo: 0, comboT: 0, revives: 0, heartsLost: 0,
       xp: 0, level: 1, xpNext: 12, stars: 0, mechs: mechs, cam: { x: D.W * 0.5, y: D.H * 0.5 },
       enemies: [], shots: [], boltDrops: [], pods: [], arcs: [], events: [],
       coilCycle: [-1, -1, -1, -1], bossSpawned: false, bossDefeated: false, bossId: 0
     };
     if (opts.opening !== false) {
-      var angs = [0.78, 1.55, 2.42, -2.38, -1.48];
-      for (var k = 0; k < angs.length; k++) {
-        spawnEnemy(run, k % 2, D.W * 0.5 + Math.cos(angs[k]) * 380, D.H * 0.5 + Math.sin(angs[k]) * 260);
+      var openBots = [
+        [0, 320, -170], [1, 390, 60], [0, 300, 210], [1, -330, 185],
+        [0, -370, -70], [1, 130, -255], [0, -180, 250], [0, 480, -90]
+      ];
+      for (var k = 0; k < openBots.length; k++) {
+        spawnEnemy(run, openBots[k][0], D.W * 0.5 + openBots[k][1], D.H * 0.5 + openBots[k][2]);
       }
-      spawnPod(run, 1, D.W * 0.5 - 190, D.H * 0.5 - 120);
+      spawnPod(run, 1, D.W * 0.5 - 185, D.H * 0.5 - 115);
       run.events.length = 0;
     }
     return run;

@@ -105,7 +105,7 @@
     roundOpen = true;
     if (!save.coach) { hint = 1; Kit.stats.tutorial('start'); } else hint = 0;
     setScreen('play');
-    showBanner(lv === FP.FREE ? 'لعب حر' : 'المرحلة ' + lv, '#fff', 2.2, missionText(lv));
+    showBanner(lv === FP.FREE ? 'لعب حر!' : 'المرحلة ' + lv + '!', '#fff', 1.15);
     say((lv === FP.FREE ? 'لعب حر' : 'المرحلة ' + lv) + ': ' + missionText(lv));
   }
   function play() { J.select(); start(FP.nextLevel(save)); }
@@ -639,13 +639,13 @@
     var sc = 1 + scorePop * 0.12;
     ctx.save(); ctx.translate(1099, 168); ctx.scale(sc, sc); text(fmt(w.score), 0, 0, 56, '#ffffff'); ctx.restore();
     var mk = w.mult > 1;
-    ctx.save(); ctx.translate(1099, 262);
+    ctx.save(); ctx.translate(1099, 286);
     var wob = calm() || !mk ? 0 : M.sin(time * 5) * 0.08;
     ctx.rotate(wob);
     ctx.beginPath();
-    for (var s = 0; s < 24; s++) { var a = s / 24 * M.PI * 2, r = s % 2 ? 40 : 54; ctx.lineTo(M.cos(a) * r, M.sin(a) * r); }
+    for (var s = 0; s < 24; s++) { var a = s / 24 * M.PI * 2, r = s % 2 ? 36 : 48; ctx.lineTo(M.cos(a) * r, M.sin(a) * r); }
     ctx.closePath(); ctx.fillStyle = mk ? '#ffe14f' : 'rgba(255,255,255,0.25)'; ctx.fill(); ctx.lineWidth = 4; ctx.strokeStyle = FP.INK; ctx.stroke();
-    text(ltr('×' + w.mult), 0, 3, 40, mk ? '#ff5fa2' : '#ffffff');
+    text(ltr('×' + w.mult), 0, 3, 38, mk ? '#ff5fa2' : '#ffffff');
     ctx.restore();
     drawMascot();
   }
@@ -704,9 +704,9 @@
       if (banner) {
         var k = banner.t / banner.max, s = calm() ? 1 : k < 0.12 ? 0.4 + k / 0.12 * 0.7 : k < 0.2 ? 1.1 - (k - 0.12) * 1.2 : 1;
         ctx.globalAlpha = k > 0.82 ? M.max(0, (1 - k) / 0.18) : 1;
-        ctx.save(); ctx.translate(X0 + 280, 430); ctx.scale(s, s);
-        text(banner.text, 0, 0, 72, banner.color, 'center', /[؀-ۿ]/.test(banner.text));
-        if (banner.sub) text(banner.sub, 0, 62, 34, '#ffffff', 'center', /[؀-ۿ]/.test(banner.sub));
+        ctx.save(); ctx.translate(X0 + 261, 380); ctx.scale(s, s);
+        text(banner.text, 0, 0, 62, banner.color, 'center', /[؀-ۿ]/.test(banner.text));
+        if (banner.sub) text(banner.sub, 0, 52, 30, '#ffffff', 'center', /[؀-ۿ]/.test(banner.sub));
         ctx.restore();
         ctx.globalAlpha = 1;
       }

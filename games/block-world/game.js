@@ -111,11 +111,38 @@
     $('modeFree').setAttribute('aria-pressed', String(free));
   }
 
-  function showBanner(text) {
+  function showBanner(text, dur) {
     var el = $('banner');
     el.textContent = text;
     el.hidden = false;
-    bannerT = 2.0;
+    $('hudGoal').hidden = true;
+    bannerT = dur || 1.8;
+  }
+
+  function createTitleWorld() {
+    var tw = BW.createWorld({ seed: 2026, freeMode: true, upgrades: saveData.upgrades });
+    // Carve a bright right-side alcove so the cute hovering jetpack miner shines right beside the Play CTA!
+    for (var ty = 7; ty <= 9; ty++) {
+      for (var tx = 38; tx <= 42; tx++) tw.set(tx, ty, BW.T.AIR);
+    }
+    tw.set(39, 10, BW.T.GOLD);
+    tw.set(40, 10, BW.T.DIAMOND);
+    tw.set(41, 10, BW.T.GOLD);
+    tw.set(43, 8, BW.T.RUBY);
+    tw.set(43, 9, BW.T.CRYSTAL_BLK);
+    tw.p.x = 40.4;
+    tw.p.y = 8.4;
+    tw.p.face = -1;
+    tw.p.jetting = true;
+    // Frame first relic neatly on the left side of the title screen
+    if (tw.relics[0]) {
+      var rx = 23, ry = 9;
+      for (var gy = ry - 2; gy <= ry + 2; gy++) for (var gx = rx - 2; gx <= rx + 2; gx++) tw.set(gx, gy, BW.T.BRICK);
+      for (var gy2 = ry - 1; gy2 <= ry + 1; gy2++) for (var gx2 = rx - 1; gx2 <= rx + 1; gx2++) tw.set(gx2, gy2, BW.T.AIR);
+      tw.relics[0].x = rx + 0.5;
+      tw.relics[0].y = ry + 0.35;
+    }
+    return tw;
   }
 
   function buildSandboxBar() {
@@ -166,10 +193,13 @@
     hudCache = { gems: -1, relics: -1, time: -1, ammo: -1, goal: '' };
     $('sandboxBar').hidden = !free;
     if (free) refreshSandboxBar();
+    $('banner').hidden = true;
+    $('hudGoal').hidden = false;
+    bannerT = 0;
     syncHud();
     setMode('play');
     Kit.stats.round(free ? 'free' : 'heist');
-    showBanner(free ? '🧱 وضع حر: احفر وفجّر بحرية!' : '💣 اجمع 3 آثار واهرب قبل انتهاء الوقت!');
+    showBanner(free ? '🧱 وضع حر: احفر وفجّر بحرية!' : '💎 اجمع 3 آثار واهرب!', 1.8);
     say(free ? 'بدأ الوضع الحر' : 'بدأت مهمة المنجم');
   }
 
@@ -206,7 +236,7 @@
       Kit.stats.end('quit', G.world ? G.world.score : 0);
     }
     G.world = null;
-    if (!G.titleWorld) G.titleWorld = BW.createWorld({ seed: 2026, freeMode: true, upgrades: saveData.upgrades });
+    if (!G.titleWorld) G.titleWorld = createTitleWorld();
     G.snap = true;
     refreshTitle();
     setMode('title');
@@ -394,15 +424,22 @@
   function update(dt) {
     time += dt;
     if (resultLock > 0) resultLock = Math.max(0, resultLock - dt);
-    if (bannerT > 0) { bannerT -= dt; if (bannerT <= 0) $('banner').hidden = true; }
+    if (bannerT > 0) {
+      bannerT -= dt;
+      if (bannerT <= 0) {
+        $('banner').hidden = true;
+        if (G.mode === 'play') $('hudGoal').hidden = false;
+      }
+    }
     if (G.savedFlash > 0) G.savedFlash = Math.max(0, G.savedFlash - dt);
 
     if (G.mode === 'title' && G.titleWorld) {
-      // Gentle live animated mine behind title screen (zero sound!)
+      // Gentle live animated mine behind title screen (miner hovers beside Play CTA, zero sound!)
       var tw = G.titleWorld;
-      var hoverX = 32.5 + Math.sin(time * 0.9) * 2.2;
-      var hoverY = 8.4 + Math.cos(time * 1.6) * 0.7;
+      var hoverX = 40.4 + Math.sin(time * 1.1) * 0.55;
+      var hoverY = 8.4 + Math.cos(time * 1.8) * 0.35;
       BW.step(tw, dt, { steer: { x: hoverX, y: hoverY } });
+      tw.p.face = -1;
       tw.ev.length = 0;
       G.dirty = true;
     } else if (G.mode === 'pause') {
@@ -470,7 +507,8 @@
       shake: shake,
       particles: particles,
       snap: G.snap,
-      hideArrows: G.mode === 'title'
+      hideArrows: G.mode === 'title',
+      titleMode: G.mode === 'title'
     });
     G.snap = false;
     G.dirty = false;
@@ -579,7 +617,7 @@
   });
 
   buildSandboxBar();
-  G.titleWorld = BW.createWorld({ seed: 2026, freeMode: true, upgrades: saveData.upgrades });
+  G.titleWorld = createTitleWorld();
   refreshTitle();
   setMode('title');
   view.resize();

@@ -27,13 +27,14 @@
   var SLIDE = 0.1, POP = 0.24, SPAWN = 0.18;
   var SIZES = [3, 4, 5, 6];
   var SIZE_NAMES = { 3: 'تحدٍّ صعب', 4: 'كلاسيكي', 5: 'واسع', 6: 'عملاق' };
+  var SIZE_SUB = { 3: 'الهدف 256', 4: 'الهدف 2048', 5: '25 خانة', 6: '36 خانة' };
   var GAP = { 3: 0.034, 4: 0.03, 5: 0.024, 6: 0.02 };
   var WIN = { 3: 256, 4: 2048, 5: 2048, 6: 2048 };
   var DR = [-1, 0, 1, 0], DC = [0, 1, 0, -1]; // up, right, down, left
   var KEYDIR = { ArrowUp: 0, KeyW: 0, ArrowRight: 1, KeyD: 1, ArrowDown: 2, KeyS: 2, ArrowLeft: 3, KeyA: 3 };
   var INK = '#22123f';
   var BX = 335, BY = 56, BS = 610;          // game board
-  var DX = 472, DY = 176, DS = 336;         // title demo board
+  var DX = 482, DY = 182, DS = 316;         // title demo board
 
   var canvas = $('game'), ui = $('ui');
   var sprites = {}, spriteN = 0, bgCache = {}, boardCache = {};
@@ -58,12 +59,12 @@
     bestTile: num(store.get('bestTile', 0), 0),
     best: obj(store.get('best', {})),
     bt: obj(store.get('bt', {})),
-    seen: store.get('seen', ['classic']) || ['classic'],
+    seen: store.get('seen', ['classic', 'fruit']) || ['classic', 'fruit'],
     games: num(store.get('games', 0), 0)
   };
   if (SIZES.indexOf(save.size) < 0) save.size = 4;
   SIZES.forEach(function (n) { save.best[n] = num(save.best[n], 0); save.bt[n] = num(save.bt[n], 0); });
-  if (!Array.isArray(save.seen)) save.seen = ['classic'];
+  if (!Array.isArray(save.seen)) save.seen = ['classic', 'fruit'];
   if (!M.byId[save.theme] || !unlocked(M.byId[save.theme])) save.theme = 'classic';
 
   function unlocked(t) { return save.bestTile >= t.req; }
@@ -187,7 +188,7 @@
   // Clears pending effects but keeps the ones that must not be lost (unlock / record news).
   function clearQueue() { for (var i = queue.length - 1; i >= 0; i--) if (!queue[i].keep) queue.splice(i, 1); }
 
-  var fx = { parts: [], floats: [], rings: [], big: null, shake: 0, sx: 0, sy: 0, bx: 0, by: 0, flash: 0 };
+  var fx = { parts: [], floats: [], rings: [], big: null, shake: 0, sx: 0, sy: 0, bx: 0, by: 0, flash: 0, shim: 0, shimCol: '#ffd23f' };
 
   /* ============================================================== audio */
   var A = Kit.audio;
@@ -451,6 +452,16 @@
       M.rr(ctx, x, y, S, S, S * 0.045); ctx.fill();
       ctx.globalAlpha = 1;
     }
+    if (S === BS && fx.shim > 0.02 && !Kit.motion.reduced()) {
+      ctx.save();
+      var p2 = 1 - fx.shim, gx = x + (p2 * 1.6 - 0.3) * S;
+      var sg = ctx.createLinearGradient(gx - 110, y, gx + 110, y + S);
+      sg.addColorStop(0, 'rgba(255,255,255,0)'); sg.addColorStop(0.5, fx.shimCol); sg.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.globalAlpha = fx.shim * 0.85;
+      ctx.strokeStyle = sg; ctx.lineWidth = 7;
+      M.rr(ctx, x + 2, y + 2, S - 4, S - 4, S * 0.045); ctx.stroke();
+      ctx.restore();
+    }
   }
 
   function tileCenter(N, S, x, y, r, c) {
@@ -504,6 +515,7 @@
     var damp = Math.pow(0.0005, dt);
     fx.bx *= damp; fx.by *= damp;
     fx.flash = Math.max(0, fx.flash - dt * 2.5);
+    fx.shim = Math.max(0, fx.shim - dt * 1.8);
   }
 
   function drawFX() {
@@ -686,6 +698,8 @@
       if (t.v > top) top = t.v;
     }
     var tk = log2(top);
+    fx.shim = Math.min(1, 0.55 + merges.length * 0.22);
+    fx.shimCol = merges.length >= 2 ? COMBO_COL[Math.min(5, merges.length)] : '#ffd23f';
     if (tk >= 7) fx.shake = Math.max(fx.shake, Math.min(9, (tk - 6) * 1.6));
     if (merges.length >= 2) {
       var n = Math.min(5, merges.length);
@@ -756,7 +770,7 @@
     sfx.click();
     saveGame();
     // the kept paused frame shows the settled board, without shake or bump
-    fx.shake = fx.sx = fx.sy = fx.bx = fx.by = 0;
+    fx.shake = fx.sx = fx.sy = fx.bx = fx.by = fx.shim = 0;
     G.board.settle(now);
     setScreen('pause');
   }
@@ -820,8 +834,9 @@
     $('score').textContent = Kit.fmt(G.score);
     $('best').textContent = Kit.fmt(save.best[G.N]);
     $('sizeLbl').textContent = G.N + '×' + G.N;
-    var dots = $('undoDots').children;
+    var dots = $('undoDots').querySelectorAll('i');
     for (var i = 0; i < 3; i++) dots[i].className = i < G.undos ? '' : 'off';
+    $('undoN').textContent = G.undos;
     $('btnUndo').classList.toggle('empty', G.undos <= 0 || !G.hist.length);
     $('themeName').textContent = theme().name;
     var mx = Math.max(2, G.maxT), target = WIN[G.N];
@@ -935,7 +950,7 @@
     for (var i = 0; i < szb.length; i++) {
       var n = +szb[i].dataset.n;
       szb[i].classList.toggle('on', n === save.size);
-      szb[i].querySelector('.bs').textContent = save.best[n] ? '🏆 ' + Kit.fmt(save.best[n]) : 'لم تلعب بعد';
+      szb[i].querySelector('.bs').textContent = save.best[n] ? '🏆 ' + Kit.fmt(save.best[n]) : SIZE_SUB[n];
       szb[i].querySelector('.sv').hidden = !liveSave(n);
     }
     var tb = $('themes').children;

@@ -46,8 +46,8 @@
     var G = {
       demo: !!opts.demo, target: opts.target || 3, stage: opts.stage == null ? -1 : opts.stage,
       tanks: [], balls: [], crates: [], barrels: [], pads: [], parts: [], pops: [], splats: [], dots: [],
-      maze: null, theme: null, themeIdx: Math.floor(Math.random() * A.THEMES.length),
-      round: 0, state: 'ready', timer: 0, time: 0,
+      maze: null, theme: null, themeIdx: FL(RD() * A.THEMES.length),
+      round: 0, state: 'ready', timer: 0, time: 0, playT: 0,
       slow: 0, spectate: 0, over: false, winner: null, coins: 0, onEnd: opts.onEnd || null,
       humans: 0, firstRound: true, banner: null, laserPts: [], lastSplatBy: null,
       guide: !!opts.guide, selfOut: false,
@@ -66,7 +66,7 @@
         score: 0, x: 0, y: 0, a: 0, bodyA: 0, alive: true, dead: 0, cool: 0, active: 0,
         hp: hp, maxHp: hp, invuln: 0, boingCd: 0,
         weapon: null, ammo: 0, laser: 0, speed: 0, shield: 0,
-        sq: 0, recoil: 0, tread: 0, blinkT: 1 + Math.random() * 3, blink: 0, flash: 0, muzzle: 0, scale: 0, popHud: 0,
+        sq: 0, recoil: 0, tread: 0, blinkT: 1 + RD() * 3, blink: 0, flash: 0, muzzle: 0, scale: 0, popHud: 0,
         paint: '#000', blobs: null, splats: 0, lastKill: -9, moving: 0, dispScore: 0
       };
       t.spring = Kit.art.spring(200, 13);
@@ -83,18 +83,18 @@
     /* -------------------------------------------------------- rounds */
     function newRound() {
       G.round++;
-      G.themeIdx = (G.themeIdx + 1 + Math.floor(Math.random() * (A.THEMES.length - 1))) % A.THEMES.length;
+      G.themeIdx = (G.themeIdx + 1 + FL(RD() * (A.THEMES.length - 1))) % A.THEMES.length;
       G.theme = A.THEMES[G.themeIdx];
       var n = G.tanks.length, cols, rows;
-      if (n <= 2) { cols = 9 + Math.floor(Math.random() * 4); rows = 6 + Math.floor(Math.random() * 2); }
-      else { cols = 11 + Math.floor(Math.random() * 4); rows = 6 + Math.floor(Math.random() * 2); }
-      var cs = Math.min(96, Math.floor(1180 / cols), Math.floor((H - TOP - 44) / rows));
-      var ox = Math.round((W - cols * cs) / 2), oy = Math.round(TOP + 8 + (H - TOP - 8 - rows * cs) / 2);
-      G.maze = M.generate(cols, rows, cs, ox, oy, 0.28 + Math.random() * 0.12);
+      if (n <= 2) { cols = 9 + FL(RD() * 4); rows = 6 + FL(RD() * 2); }
+      else { cols = 11 + FL(RD() * 4); rows = 6 + FL(RD() * 2); }
+      var cs = MN(94, FL(1180 / cols), FL((H - TOP - 68) / rows));
+      var ox = Math.round((W - cols * cs) / 2), oy = Math.round(TOP + 12 + (H - TOP - 44 - rows * cs) / 2);
+      G.maze = M.generate(cols, rows, cs, ox, oy, 0.28 + RD() * 0.12);
       G.balls.length = 0; G.crates.length = 0; G.barrels.length = 0; G.pads.length = 0;
       G.pops.length = 0; G.splats.length = 0; G.dots.length = 0;
-      G.crateT = 2.6 + Math.random() * 1.8;
-      G.spectate = 0; G.skipSpectate = false; G.slow = 0; G.endT = 0; G.banner = null; G.selfOut = false;
+      G.crateT = 2.6 + RD() * 1.8;
+      G.spectate = 0; G.skipSpectate = false; G.slow = 0; G.endT = 0; G.playT = 0; G.banner = null; G.selfOut = false;
       placeTanks();
       placeArenaToys();
       G.state = 'ready'; G.timer = 0.5;
@@ -107,11 +107,11 @@
       G.tanks.forEach(function (t) { used.push(M.cellOf(m, t.x, t.y)); });
       function pickFreeCell(minTankDist) {
         for (var tries = 0; tries < 40; tries++) {
-          var c = Math.floor(Math.random() * N);
+          var c = FL(RD() * N);
           if (used.indexOf(c) >= 0) continue;
           var cc = M.cellCenter(m, c), ok = true;
           for (var i = 0; i < G.tanks.length; i++) {
-            if (Math.hypot(G.tanks[i].x - cc.x, G.tanks[i].y - cc.y) < minTankDist) { ok = false; break; }
+            if (HY(G.tanks[i].x - cc.x, G.tanks[i].y - cc.y) < minTankDist) { ok = false; break; }
           }
           if (ok) { used.push(c); return cc; }
         }
@@ -133,12 +133,12 @@
       for (var tries = 0; tries < 80; tries++) {
         var cells = [];
         for (var i = 0; i < G.tanks.length; i++) {
-          var c; do { c = Math.floor(Math.random() * N); } while (cells.indexOf(c) >= 0);
+          var c; do { c = FL(RD() * N); } while (cells.indexOf(c) >= 0);
           cells.push(c);
         }
         var sc = 1e9;
         for (var a = 0; a < cells.length; a++) for (var b = a + 1; b < cells.length; b++) {
-          var d = Math.abs(cells[a] % m.cols - cells[b] % m.cols) + Math.abs(((cells[a] / m.cols) | 0) - ((cells[b] / m.cols) | 0));
+          var d = AB(cells[a] % m.cols - cells[b] % m.cols) + AB(((cells[a] / m.cols) | 0) - ((cells[b] / m.cols) | 0));
           if (d < sc) sc = d;
         }
         if (sc > bestScore) { bestScore = sc; best = cells; }
@@ -148,8 +148,8 @@
         t.x = cc.x; t.y = cc.y;
         var cx = best[i] % m.cols, cy = (best[i] / m.cols) | 0, open = [];
         for (var d = 0; d < 4; d++) if (M.canPass(m, cx, cy, d)) open.push(d);
-        var dd = open.length ? open[Math.floor(Math.random() * open.length)] : 0;
-        t.a = [0, Math.PI / 2, Math.PI, -Math.PI / 2][dd];
+        var dd = open.length ? open[FL(RD() * open.length)] : 0;
+        t.a = [0, PI / 2, PI, -PI / 2][dd];
         t.bodyA = t.a;
         t.alive = true; t.dead = 0; t.cool = 0.18; t.active = 0; t.weapon = null; t.ammo = 0;
         t.hp = t.human && !G.demo ? G.playerHp : 1; t.maxHp = t.hp; t.invuln = 0; t.boingCd = 0;
@@ -193,7 +193,7 @@
 
       if (G.state === 'ready') {
         G.timer -= dt;
-        G.tanks.forEach(function (t) { t.scale = Math.min(1, t.scale + dt * 5.5); animTank(t, dt); });
+        G.tanks.forEach(function (t) { t.scale = MN(1, t.scale + dt * 5.5); animTank(t, dt); });
         if (G.timer <= 0) {
           G.state = 'play';
           if (!G.demo) { S.go(); pop(W / 2, H / 2 + 10, 'انطلق!', '#ffffff', 72, 0.65, true); }
@@ -219,9 +219,9 @@
         }
       } else if (G.state === 'matchEnd') {
         G.tanks.forEach(function (t) { animTank(t, dt); });
-        if (Math.random() < 0.25 && !Kit.motion.reduced()) {
+        if (RD() < 0.25 && !Kit.motion.reduced()) {
           var wt = G.matchWinner;
-          burst(Math.random() * W, -10, 3, ['#ff4f63', '#ffc61f', '#3fd15d', '#3b8cff', '#a64dff', wt ? wt.pal.paint : '#fff'], 120, 6, 2.5, 220);
+          burst(RD() * W, -10, 3, ['#ff4f63', '#ffc61f', '#3fd15d', '#3b8cff', '#a64dff', wt ? wt.pal.paint : '#fff'], 120, 6, 2.5, 220);
         }
       }
       fx.update(dt);
@@ -231,16 +231,16 @@
     }
 
     function animTank(t, dt) {
-      t.sq = Math.max(0, t.sq - dt * 4);
-      t.recoil = Math.max(0, t.recoil - dt * 7);
-      t.flash = Math.max(0, t.flash - dt * 4);
-      if (t.muzzle) t.muzzle = Math.max(0, t.muzzle - dt * 9);
+      t.sq = MX(0, t.sq - dt * 4);
+      t.recoil = MX(0, t.recoil - dt * 7);
+      t.flash = MX(0, t.flash - dt * 4);
+      if (t.muzzle) t.muzzle = MX(0, t.muzzle - dt * 9);
       if (t.spring) t.spring.update(dt);
       t.blinkT -= dt;
-      if (t.blinkT < 0) { t.blink = 0.12; t.blinkT = 2 + Math.random() * 3.5; }
-      t.blink = Math.max(0, t.blink - dt);
-      if (!t.alive) t.dead = Math.min(1, t.dead + dt * 3);
-      t.dispScore += (t.score - t.dispScore) * Math.min(1, dt * 6);
+      if (t.blinkT < 0) { t.blink = 0.12; t.blinkT = 2 + RD() * 3.5; }
+      t.blink = MX(0, t.blink - dt);
+      if (!t.alive) t.dead = MN(1, t.dead + dt * 3);
+      t.dispScore += (t.score - t.dispScore) * MN(1, dt * 6);
     }
 
     function readInput(t) {
@@ -261,6 +261,7 @@
     }
 
     function playStep(dt, realDt) {
+      G.playT += realDt;
       var i;
       for (i = 0; i < G.tanks.length; i++) {
         var t = G.tanks[i];
@@ -268,8 +269,8 @@
         if (!t.alive) continue;
         var inp = t.human && !t.bot ? readInput(t) : window.TS_BOT.think(t.bot, t, G, dt);
         t.cool -= dt;
-        if (t.invuln > 0) t.invuln = Math.max(0, t.invuln - dt);
-        if (t.boingCd > 0) t.boingCd = Math.max(0, t.boingCd - dt);
+        if (t.invuln > 0) t.invuln = MX(0, t.invuln - dt);
+        if (t.boingCd > 0) t.boingCd = MX(0, t.boingCd - dt);
         if (t.laser > 0) t.laser -= dt;
         if (t.speed > 0) t.speed -= dt;
         if (t.shield > 0) t.shield -= dt;
@@ -277,32 +278,32 @@
         var rot = TANK_ROT * (t.speed > 0 ? 1.25 : 1);
         var ox = t.x, oy = t.y;
         if (inp.direct) {
-          var len = Math.hypot(inp.mx, inp.my);
+          var len = HY(inp.mx, inp.my);
           if (len > 0) {
             var ux = inp.mx / len, uy = inp.my / len;
             var dspd = spd * 1.12;
             t.x += ux * dspd * dt; t.y += uy * dspd * dt;
             var moveAng = Math.atan2(uy, ux);
-            t.bodyA += angDiff(t.bodyA, moveAng) * Math.min(1, dt * 15);
-            if (!MOUSE.active) t.a += angDiff(t.a, moveAng) * Math.min(1, dt * 15);
+            t.bodyA += angDiff(t.bodyA, moveAng) * MN(1, dt * 15);
+            if (!MOUSE.active) t.a += angDiff(t.a, moveAng) * MN(1, dt * 15);
           }
           if (MOUSE.active) t.a = Math.atan2(MOUSE.y - t.y, MOUSE.x - t.x);
           resolveTank(t);
-          var dmoved = Math.hypot(t.x - ox, t.y - oy);
+          var dmoved = HY(t.x - ox, t.y - oy);
           t.tread += dmoved;
-          t.moving = dmoved / Math.max(dt, 1e-4);
+          t.moving = dmoved / MX(dt, 1e-4);
         } else {
           t.a += inp.turn * rot * dt;
           t.bodyA = t.a;
           var mv = inp.fwd * spd * (inp.fwd < 0 ? 0.72 : 1) * dt;
-          t.x += Math.cos(t.a) * mv; t.y += Math.sin(t.a) * mv;
+          t.x += CS(t.a) * mv; t.y += SN(t.a) * mv;
           resolveTank(t);
-          var moved = Math.hypot(t.x - ox, t.y - oy);
-          t.tread += (inp.fwd >= 0 ? 1 : -1) * moved + Math.abs(inp.turn) * dt * 30;
-          t.moving = moved / Math.max(dt, 1e-4);
+          var moved = HY(t.x - ox, t.y - oy);
+          t.tread += (inp.fwd >= 0 ? 1 : -1) * moved + AB(inp.turn) * dt * 30;
+          t.moving = moved / MX(dt, 1e-4);
         }
-        if (t.speed > 0 && t.moving > 25 && Math.random() < 0.5) {
-          burst(t.x - Math.cos(t.bodyA) * 20, t.y - Math.sin(t.bodyA) * 20, 1, ['#ffe14d', '#fff'], 40, 4, 0.35);
+        if (t.speed > 0 && t.moving > 25 && RD() < 0.5) {
+          burst(t.x - CS(t.bodyA) * 20, t.y - SN(t.bodyA) * 20, 1, ['#ffe14d', '#fff'], 40, 4, 0.35);
         }
         if (inp.fire) fire(t);
       }
@@ -312,7 +313,7 @@
         var a = G.tanks[i]; if (!a.alive) continue;
         for (var j = i + 1; j < G.tanks.length; j++) {
           var b = G.tanks[j]; if (!b.alive) continue;
-          var dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy);
+          var dx = b.x - a.x, dy = b.y - a.y, d = HY(dx, dy);
           if (d < 34 && d > 0.01) {
             var push = (34 - d) / 2; dx /= d; dy /= d;
             a.x -= dx * push; a.y -= dy * push; b.x += dx * push; b.y += dy * push;
@@ -370,7 +371,7 @@
         for (var bi = 0; bi < G.barrels.length; bi++) {
           var br = G.barrels[bi];
           if (!br.alive) continue;
-          var dx = t.x - br.x, dy = t.y - br.y, d = Math.hypot(dx, dy), minD = TANK_R + br.r;
+          var dx = t.x - br.x, dy = t.y - br.y, d = HY(dx, dy), minD = TANK_R + br.r;
           if (d < minD && d > 0.001) {
             t.x = br.x + (dx / d) * minD;
             t.y = br.y + (dy / d) * minD;
@@ -393,7 +394,7 @@
       else if (t.weapon === 'giant') { giant = true; }
       if (t.weapon) { t.ammo--; if (t.ammo <= 0) t.weapon = null; }
       for (var i = 0; i < angles.length; i++) spawnBall(t, t.a + angles[i], giant);
-      var mx = t.x + Math.cos(t.a) * 28, my = t.y + Math.sin(t.a) * 28;
+      var mx = t.x + CS(t.a) * 28, my = t.y + SN(t.a) * 28;
       burst(mx, my, giant ? 10 : 5, [t.pal.paint, '#fff'], 120, giant ? 6 : 4, 0.25);
       var tier = Kit.art.quality.tier;
       fx.burst(mx, my, { n: tier === 0 ? 3 : 6, color: t.pal.paint, speed: 80, life: 0.32, size: tier === 0 ? 3 : 5, shape: 'dot' });
@@ -403,7 +404,7 @@
     function spawnBall(t, ang, giant) {
       var r = giant ? GIANT_R : BALL_R, sp = giant ? GIANT_SPEED : BALL_SPEED;
       var b = {
-        x: t.x, y: t.y, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, r: r, owner: t,
+        x: t.x, y: t.y, vx: CS(ang) * sp, vy: SN(ang) * sp, r: r, owner: t,
         life: BALL_LIFE, age: 0, bounces: 0, maxB: giant ? 4 : BALL_BOUNCES, safe: true, dist: 0,
         color: t.pal.paint, sq: 0, sqA: 0, giant: giant
       };
@@ -414,29 +415,29 @@
     }
 
     function moveBall(b, len, spawning) {
-      var sp = Math.hypot(b.vx, b.vy); if (sp < 1) return;
-      var steps = Math.max(1, Math.ceil(len / 3)), stepLen = len / steps;
+      var sp = HY(b.vx, b.vy); if (sp < 1) return;
+      var steps = MX(1, Math.ceil(len / 3)), stepLen = len / steps;
       for (var s = 0; s < steps; s++) {
         b.x += b.vx / sp * stepLen; b.y += b.vy / sp * stepLen;
         b.dist += stepLen;
         var o = M.collideCircle(G.maze, b.x, b.y, b.r);
         if (o.hit) {
           b.x = o.x; b.y = o.y;
-          var nl = Math.hypot(o.nx, o.ny);
+          var nl = HY(o.nx, o.ny);
           if (nl > 0) {
             var nx = o.nx / nl, ny = o.ny / nl, dot = b.vx * nx + b.vy * ny;
             if (dot < 0) {
               b.vx -= 2 * dot * nx; b.vy -= 2 * dot * ny;
               b.bounces++; b.sq = 1; b.sqA = Math.atan2(ny, nx);
               if (!spawning) {
-                if (!G.demo) S.bounce(Math.min(b.bounces, 6));
+                if (!G.demo) S.bounce(MN(b.bounces, 6));
                 addDot(b.x - nx * b.r * 0.6, b.y - ny * b.r * 0.6, b.giant ? 7 : 3.2, b.color);
                 if (b.giant) Kit.art.shake.add(0.12);
               }
             }
           }
         }
-        if (b.safe && b.dist > 30 && Math.hypot(b.x - b.owner.x, b.y - b.owner.y) > HIT_R + b.r + 4) b.safe = false;
+        if (b.safe && b.dist > 30 && HY(b.x - b.owner.x, b.y - b.owner.y) > HIT_R + b.r + 4) b.safe = false;
         if (!spawning && hitBarrels(b)) return true;
         if (!spawning && hitTanks(b)) return true;
         if (b.bounces > b.maxB) { b.life = 0; return true; }
@@ -448,7 +449,7 @@
       for (var i = 0; i < G.barrels.length; i++) {
         var br = G.barrels[i];
         if (!br.alive) continue;
-        if (Math.hypot(b.x - br.x, b.y - br.y) < br.r + b.r) {
+        if (HY(b.x - br.x, b.y - br.y) < br.r + b.r) {
           b.life = 0;
           explodeBarrel(br, b.owner);
           return true;
@@ -469,10 +470,10 @@
       if (!G.demo) { S.boom(); pop(br.x, br.y - 28, 'بوووم! 💥', '#ffe14d', 38, 1.0); }
       // Spawn 6 energetic paint droplets flying radially
       for (var k = 0; k < 6; k++) {
-        var a = (k / 6) * Math.PI * 2 + 0.25;
+        var a = (k / 6) * PI * 2 + 0.25;
         G.balls.push({
-          x: br.x + Math.cos(a) * 14, y: br.y + Math.sin(a) * 14,
-          vx: Math.cos(a) * 290, vy: Math.sin(a) * 290,
+          x: br.x + CS(a) * 14, y: br.y + SN(a) * 14,
+          vx: CS(a) * 290, vy: SN(a) * 290,
           r: 6.5, owner: killer || G.tanks[0], life: 1.4, age: 0.4,
           bounces: 0, maxB: 2, safe: false, dist: 40, color: paintCol, sq: 0.5, sqA: a, giant: false
         });
@@ -481,12 +482,12 @@
       // Chain-detonate adjacent barrels & blast tanks in blast radius
       for (var j = 0; j < G.barrels.length; j++) {
         var ob = G.barrels[j];
-        if (ob.alive && Math.hypot(ob.x - br.x, ob.y - br.y) < 120) explodeBarrel(ob, killer);
+        if (ob.alive && HY(ob.x - br.x, ob.y - br.y) < 120) explodeBarrel(ob, killer);
       }
       for (var ti = 0; ti < G.tanks.length; ti++) {
         var t = G.tanks[ti];
         if (!t.alive) continue;
-        var dx = t.x - br.x, dy = t.y - br.y, d = Math.hypot(dx, dy);
+        var dx = t.x - br.x, dy = t.y - br.y, d = HY(dx, dy);
         if (d < 105) {
           if (t === killer && !G.chaosRicochet) {
             var nx = dx / (d || 1), ny = dy / (d || 1);
@@ -521,7 +522,7 @@
         var t = G.tanks[i];
         if (!t.alive) continue;
         if (t === b.owner && (b.safe || b.age < OWN_GRACE)) continue;
-        var dx = b.x - t.x, dy = b.y - t.y, d = Math.hypot(dx, dy);
+        var dx = b.x - t.x, dy = b.y - t.y, d = HY(dx, dy);
         // Safe playful bounce off your own tank in Solo/Campaign (zero frustrating self-splat!)
         if (t === b.owner && !G.chaosRicochet) {
           if (d < HIT_R + b.r + 2) {
@@ -566,12 +567,12 @@
     function stepPads(dt) {
       for (var i = 0; i < G.pads.length; i++) {
         var pad = G.pads[i];
-        if (pad.cd > 0) { pad.cd = Math.max(0, pad.cd - dt); continue; }
+        if (pad.cd > 0) { pad.cd = MX(0, pad.cd - dt); continue; }
         for (var j = 0; j < G.tanks.length; j++) {
           var t = G.tanks[j];
-          if (!t.alive || Math.hypot(t.x - pad.x, t.y - pad.y) > pad.r + 10) continue;
+          if (!t.alive || HY(t.x - pad.x, t.y - pad.y) > pad.r + 10) continue;
           pad.cd = 3.5;
-          t.speed = Math.max(t.speed, 2.8);
+          t.speed = MX(t.speed, 2.8);
           t.sq = 0.5; t.flash = 0.4;
           burst(pad.x, pad.y, 14, ['#ffe14d', '#ff9d00', '#fff'], 180, 4.5, 0.4);
           if (!G.demo) { S.speed(); pop(pad.x, pad.y - 26, 'انطلاق! ⚡', '#ffe14d', 28, 0.85); }
@@ -583,13 +584,13 @@
     function stepBalls(dt, frozen) {
       for (var i = G.balls.length - 1; i >= 0; i--) {
         var b = G.balls[i];
-        if (frozen) { b.life = Math.min(b.life, 0.25); }
+        if (frozen) { b.life = MN(b.life, 0.25); }
         b.life -= dt; b.age += dt;
-        b.sq = Math.max(0, b.sq - dt * 7);
-        if (b.life > 0 && !frozen) moveBall(b, Math.hypot(b.vx, b.vy) * dt, false);
+        b.sq = MX(0, b.sq - dt * 7);
+        if (b.life > 0 && !frozen) moveBall(b, HY(b.vx, b.vy) * dt, false);
         if (b.life <= 0) {
           G.balls.splice(i, 1);
-          b.owner.active = Math.max(0, b.owner.active - 1);
+          b.owner.active = MX(0, b.owner.active - 1);
           burst(b.x, b.y, b.giant ? 12 : 6, [b.color, '#fff'], 90, b.giant ? 6 : 3.5, 0.3);
           if (!G.demo && !frozen) S.pop();
         }
@@ -598,7 +599,7 @@
 
     function splatTank(t, killer, b) {
       t.alive = false; t.dead = 0; t.paint = killer.pal.paint; t.shield = 0;
-      var rnd = Math.random, blobs = [];
+      var rnd = RD, blobs = [];
       for (var k = 0; k < 7; k++) blobs.push((rnd() - 0.5) * 30, (rnd() - 0.5) * 26, 4 + rnd() * 6);
       t.blobs = blobs;
       addSplat(t.x, t.y, b && b.giant ? 62 : 46, killer.pal.paint, killer.splat);
@@ -611,12 +612,12 @@
       if (G.demo) { /* quiet title-screen demo */ }
       else if (self) {
         // Beginners often think the bot got them: say what really happened.
-        if (t.human) { pop(Math.max(160, Math.min(W - 160, t.x)), t.y - 34, SELF_MSG, '#ffffff', 34, 2); G.selfOut = true; }
+        if (t.human) { pop(MX(160, MN(W - 160, t.x)), t.y - 34, SELF_MSG, '#ffffff', 34, 2); G.selfOut = true; }
         else pop(t.x, t.y - 34, 'أوبس!', '#ffffff', 40, 1.2);
         if (!G.demo) S.oops();
       } else {
         killer.splats++;
-        var word = SPLAT_WORDS[Math.floor(Math.random() * SPLAT_WORDS.length)];
+        var word = SPLAT_WORDS[FL(RD() * SPLAT_WORDS.length)];
         if (G.time - killer.lastKill < 3) word = 'ضربة مزدوجة!';
         killer.lastKill = G.time;
         pop(t.x, t.y - 34, word, killer.pal.light, 40, 1.2);
@@ -637,15 +638,15 @@
       var m = G.maze, maxC = G.tanks.length > 2 ? 3 : 2;
       G.crateT -= dt;
       if (G.crateT <= 0) {
-        G.crateT = 4.5 + Math.random() * 3.5;
+        G.crateT = 4.5 + RD() * 3.5;
         if (G.crates.length < maxC) {
           for (var tries = 0; tries < 30; tries++) {
-            var c = Math.floor(Math.random() * m.cols * m.rows), cc = M.cellCenter(m, c), ok = true;
-            G.tanks.forEach(function (t) { if (t.alive && Math.hypot(t.x - cc.x, t.y - cc.y) < 150) ok = false; });
-            G.crates.forEach(function (k) { if (Math.hypot(k.x - cc.x, k.y - cc.y) < 10) ok = false; });
+            var c = FL(RD() * m.cols * m.rows), cc = M.cellCenter(m, c), ok = true;
+            G.tanks.forEach(function (t) { if (t.alive && HY(t.x - cc.x, t.y - cc.y) < 150) ok = false; });
+            G.crates.forEach(function (k) { if (HY(k.x - cc.x, k.y - cc.y) < 10) ok = false; });
             if (ok) {
-              var pw = A.POWERS[Math.floor(Math.random() * A.POWERS.length)];
-              G.crates.push({ x: cc.x, y: cc.y, pw: pw, t: Math.random() * 3, pop: 0 });
+              var pw = A.POWERS[FL(RD() * A.POWERS.length)];
+              G.crates.push({ x: cc.x, y: cc.y, pw: pw, t: RD() * 3, pop: 0 });
               if (!G.demo) S.crate();
               break;
             }
@@ -654,10 +655,10 @@
       }
       for (var i = G.crates.length - 1; i >= 0; i--) {
         var k = G.crates[i];
-        k.t += dt; k.pop = Math.min(1, k.pop + dt * 4);
+        k.t += dt; k.pop = MN(1, k.pop + dt * 4);
         for (var j = 0; j < G.tanks.length; j++) {
           var t = G.tanks[j];
-          if (!t.alive || Math.hypot(t.x - k.x, t.y - k.y) > 32) continue;
+          if (!t.alive || HY(t.x - k.x, t.y - k.y) > 32) continue;
           givePower(t, k.pw);
           burst(k.x, k.y, 18, [k.pw.color, '#fff', '#ffe14d'], 220, 5, 0.5);
           if (!G.demo) pop(k.x, k.y - 28, k.pw.name, k.pw.color, 30, 1.1);
@@ -683,10 +684,10 @@
     function burst(x, y, n, colors, speed, size, life, grav) {
       if (Kit.motion.reduced()) n = Math.ceil(n / 3);
       var tier = Kit.art.quality.tier;
-      var vn = tier === 0 ? Math.min(6, n) : Math.min(tier === 1 ? 12 : 16, n);
+      var vn = tier === 0 ? MN(6, n) : MN(tier === 1 ? 12 : 16, n);
       if (vn > 0) fx.burst(x, y, {
-        n: vn, color: colors[0], speed: Math.min(speed, 260), life: Math.min(life, 0.7),
-        size: tier === 0 ? Math.min(size, 4) : Math.min(size, 6.5),
+        n: vn, color: colors[0], speed: MN(speed, 260), life: MN(life, 0.7),
+        size: tier === 0 ? MN(size, 4) : MN(size, 6.5),
         shape: n >= 24 || grav ? 'confetti' : 'dot'
       });
       if (tier > 0 && n >= 24) fx.burst(x, y, { n: tier === 2 ? 7 : 4, color: colors[1] || '#fff', speed: speed * 0.45, life: 0.6, size: 6, shape: 'star' });
@@ -698,7 +699,7 @@
     function stepPops(dt) {
       for (var i = G.pops.length - 1; i >= 0; i--) {
         var p = G.pops[i];
-        p.life -= dt; if (!p.center) p.y = Math.max(TOP + 30, p.y - dt * 30); // stays below the HUD
+        p.life -= dt; if (!p.center) p.y = MX(TOP + 30, p.y - dt * 30); // stays below the HUD
         if (p.life <= 0) G.pops.splice(i, 1);
       }
     }
@@ -708,7 +709,7 @@
       return tier <= 0 ? 48 : tier === 1 ? 110 : 200;
     }
     function addSplat(x, y, s, color, style) {
-      var seed = (Math.random() * 1e9) | 0;
+      var seed = (RD() * 1e9) | 0;
       var tier = Kit.art.quality.tier;
       if (tier === 0) s *= 0.62;
       var rec = { x: x, y: y, s: s, color: color, style: style, seed: seed };
@@ -764,8 +765,8 @@
   }
 
   function setQuality(k, G) {
-    k = Math.max(0.5, Math.min(2, k));
-    if (Math.abs(k - layers.k) < 0.01 && layers.floor) return;
+    k = MX(0.5, MN(2, k));
+    if (AB(k - layers.k) < 0.01 && layers.floor) return;
     layers.k = k;
     if (G && G.maze) buildLayers(G);
   }
@@ -806,15 +807,15 @@
       M.trace(G.maze, t.x, t.y, t.a, laser ? LASER_AIM : GUIDE_AIM, G.laserPts);
       var p = G.laserPts;
       c.save();
-      c.globalAlpha = !laser ? 0.5 : t.laser < 2 ? (Math.sin(G.time * 14) > 0 ? 0.8 : 0.35) : 0.85;
+      c.globalAlpha = !laser ? 0.5 : t.laser < 2 ? (SN(G.time * 14) > 0 ? 0.8 : 0.35) : 0.85;
       c.lineWidth = laser ? 4 : 3; c.lineCap = 'round'; c.strokeStyle = t.pal.paint;
       c.setLineDash([2, 10]); c.lineDashOffset = Kit.motion.reduced() ? 0 : -G.time * 40;
       c.beginPath(); c.moveTo(p[0], p[1]);
       var ox = 0, oy = 0;
       for (var q = 2; q < p.length; q += 2) {
         if (q > 2 && !laser) { // guide: a shot that comes straight back is drawn beside the way out
-          var ax = p[q - 2] - p[q - 4], ay = p[q - 1] - p[q - 3], al = Math.hypot(ax, ay), bx = p[q] - p[q - 2], by = p[q + 1] - p[q - 1];
-          if (ax * bx + ay * by < -0.9 * al * Math.hypot(bx, by)) {
+          var ax = p[q - 2] - p[q - 4], ay = p[q - 1] - p[q - 3], al = HY(ax, ay), bx = p[q] - p[q - 2], by = p[q + 1] - p[q - 1];
+          if (ax * bx + ay * by < -0.9 * al * HY(bx, by)) {
             ox = -ay / al * 10; oy = ax / al * 10; c.lineTo(p[q - 2] + ox, p[q - 1] + oy);
             // nose at the wall: the bounce hides under the tank, so mark the wall with an arrow back
             if (al < 34) { mk = true; mux = ax / al; muy = ay / al; mx = p[q - 2] + mux * BALL_R; my = p[q - 1] + muy * BALL_R; }
@@ -835,11 +836,43 @@
           x: t.x, y: t.y, a: t.a, bodyA: t.bodyA, pal: t.pal, hat: t.hat, sq: t.sq, tread: t.tread, t: G.time,
           blink: t.blink > 0 && !Kit.motion.reduced(), dead: t.alive ? 0 : t.dead, paint: t.paint, blobs: t.blobs,
           shield: t.alive ? t.shield : 0, hp: t.alive ? t.hp : 0, invuln: t.alive ? t.invuln : 0,
-          flash: t.flash, muzzle: t.muzzle, recoil: Math.max(t.recoil, t.spring ? Math.min(1, Math.abs(1 - t.spring.sy) * 3.2) : 0), scale: easeBack(t.scale)
+          flash: t.flash, muzzle: t.muzzle, recoil: MX(t.recoil, t.spring ? MN(1, AB(1 - t.spring.sy) * 3.2) : 0), scale: easeBack(t.scale)
         });
       }
     }
     if (mk) A.drawBounce(c, mx, my, mux, muy);
+    // Subtle barrel aim dots & Round-1 P1 ownership halo + "أنت" tag (no setLineDash)
+    if (!G.demo && G.state === 'play') {
+      var rm = Kit.motion.reduced();
+      for (i = 0; i < G.tanks.length; i++) {
+        t = G.tanks[i];
+        if (!t.alive || !t.human || t.laser > 0 || G.guide) continue;
+        for (var ad = 0; ad < 3; ad++) {
+          var dist = 34 + ad * 10, dr = 2.9 - ad * 0.45;
+          var ax2 = t.x + CS(t.a) * dist, ay2 = t.y + SN(t.a) * dist;
+          c.globalAlpha = 0.72 - ad * 0.14;
+          A.circle(c, ax2, ay2, dr + 1.3); c.fillStyle = '#1b1640'; c.fill();
+          A.circle(c, ax2, ay2, dr); c.fillStyle = t.pal.light; c.fill();
+        }
+      }
+      c.globalAlpha = 1;
+      var p1 = G.tanks[0];
+      if (G.firstRound && G.playT < 3.6 && p1 && p1.human && p1.alive) {
+        var ha = MN(1, (3.6 - G.playT) / 0.6), hr = 27 + (rm ? 0 : SN(G.time * 7) * 3.5);
+        var flip = p1.y < G.maze.oy + 58, ty = flip ? p1.y + 42 : p1.y - 44 + (rm ? 0 : SN(G.time * 6) * 2.5);
+        c.save(); c.globalAlpha = ha;
+        A.circle(c, p1.x, p1.y, hr); c.lineWidth = 6.5; c.strokeStyle = '#fff'; c.stroke();
+        A.circle(c, p1.x, p1.y, hr); c.lineWidth = 3.5; c.strokeStyle = p1.pal.main; c.stroke();
+        A.rr(c, p1.x - 27, ty - 13, 54, 25, 12.5); c.fillStyle = p1.pal.dark; c.fill();
+        c.lineWidth = 2.5; c.strokeStyle = '#fff'; c.stroke();
+        c.beginPath();
+        if (flip) { c.moveTo(p1.x - 6, ty - 12); c.lineTo(p1.x + 6, ty - 12); c.lineTo(p1.x, ty - 19); }
+        else { c.moveTo(p1.x - 6, ty + 11); c.lineTo(p1.x + 6, ty + 11); c.lineTo(p1.x, ty + 18); }
+        c.closePath(); c.fillStyle = '#fff'; c.fill();
+        text(c, 'أنت', p1.x, ty, 16, '#fff', 'center');
+        c.restore();
+      }
+    }
     // Crisp 1P mouse aim crosshair
     if (!G.demo && G.state === 'play' && G.humans === 1 && MOUSE.active && G.tanks[0] && G.tanks[0].alive) {
       c.save();
@@ -854,10 +887,10 @@
     }
     // balls
     for (i = 0; i < G.balls.length; i++) {
-      var b = G.balls[i], sp = Math.hypot(b.vx, b.vy);
+      var b = G.balls[i], sp = HY(b.vx, b.vy);
       c.globalAlpha = 0.25; A.circle(c, b.x - b.vx / sp * b.r * 1.6, b.y - b.vy / sp * b.r * 1.6, b.r * 0.75); c.fillStyle = b.color; c.fill();
       c.globalAlpha = 0.12; A.circle(c, b.x - b.vx / sp * b.r * 3, b.y - b.vy / sp * b.r * 3, b.r * 0.55); c.fill();
-      c.globalAlpha = b.life < 1 ? (Math.sin(G.time * 14) > 0 ? 1 : 0.55) : 1;
+      c.globalAlpha = b.life < 1 ? (SN(G.time * 14) > 0 ? 1 : 0.55) : 1;
       A.drawBall(c, b.x, b.y, b.r, b.color, b.sq, b.sqA);
       c.globalAlpha = 1;
     }
@@ -867,7 +900,7 @@
     if (G.state === 'ready' && !G.demo) {
       for (i = 0; i < G.tanks.length; i++) {
         t = G.tanks[i];
-        var bob = Kit.motion.reduced() ? 0 : Math.sin(G.time * 6 + i) * 3;
+        var bob = Kit.motion.reduced() ? 0 : SN(G.time * 6 + i) * 3;
         text(c, t.name, t.x, t.y - 44 + bob, 22, '#fff', 'center', t.pal.dark, 6);
         c.fillStyle = t.pal.dark;
         c.beginPath(); c.moveTo(t.x - 7, t.y - 31 + bob); c.lineTo(t.x + 7, t.y - 31 + bob); c.lineTo(t.x, t.y - 23 + bob); c.closePath(); c.fill();
@@ -875,7 +908,7 @@
           var hint = G.humans === 1 ? 'WASD / ↑←↓→ + 🖱️' : KEY_HINT[t.ctrlIdx];
           c.font = '700 17px Fredoka'; c.direction = 'ltr';
           var tw = c.measureText(hint).width + 20;
-          var hx = Math.max(G.maze.ox + tw / 2, Math.min(G.maze.ox + G.maze.cols * G.maze.cs - tw / 2, t.x));
+          var hx = MX(G.maze.ox + tw / 2, MN(G.maze.ox + G.maze.cols * G.maze.cs - tw / 2, t.x));
           // below the tank, or above the name tag when the tank is on the bottom row
           var hy = t.y + 58 > G.maze.oy + G.maze.rows * G.maze.cs ? t.y - 94 + bob : t.y + 30;
           A.rr(c, hx - tw / 2, hy, tw, 28, 14); c.fillStyle = 'rgba(42,34,64,0.85)'; c.fill();
@@ -887,7 +920,7 @@
     for (i = 0; i < G.pops.length; i++) {
       var pp = G.pops[i], f = pp.life / pp.max, age = pp.max - pp.life;
       var s = age < 0.15 ? 0.5 + age / 0.15 * 0.7 : age < 0.3 ? 1.2 - (age - 0.15) / 0.15 * 0.2 : 1;
-      c.save(); c.globalAlpha = Math.min(1, f * 3);
+      c.save(); c.globalAlpha = MN(1, f * 3);
       c.translate(pp.x, pp.y); c.scale(s, s);
       text(c, pp.text, 0, 0, pp.size, pp.color, 'center', '#1b1640', pp.size * 0.22);
       c.restore();
@@ -904,12 +937,12 @@
   /* ------------------------------------------------------------ HUD */
   function drawHud(c, G) {
     var n = G.tanks.length, gap = 12, rm = Kit.motion.reduced();
-    var bw = Math.min(250, (W - 170 - (n - 1) * gap) / n), bh = 54;
+    var bw = MN(250, (W - 170 - (n - 1) * gap) / n), bh = 54;
     var total = n * bw + (n - 1) * gap, x0 = W / 2 + total / 2;
     for (var i = 0; i < n; i++) {
       var t = G.tanks[i];
       var x = x0 - (i + 1) * bw - i * gap, y = 8;
-      var hl = G.state === 'roundEnd' && G.winner === t ? 1 + (rm ? 0.03 : Math.sin(G.time * 12) * 0.04) : 1; // reduced: still, a bit bigger
+      var hl = G.state === 'roundEnd' && G.winner === t ? 1 + (rm ? 0.03 : SN(G.time * 12) * 0.04) : 1; // reduced: still, a bit bigger
       c.save();
       c.translate(x + bw / 2, y + bh / 2); c.scale(hl, hl); c.translate(-(x + bw / 2), -(y + bh / 2));
       A.rr(c, x, y + 5, bw, bh, 18); c.fillStyle = 'rgba(27,22,64,0.28)'; c.fill();
@@ -924,7 +957,7 @@
       c.save(); c.beginPath(); A.rr(c, x, y, bw, bh, 18); c.clip();
       A.rr(c, x + bw - 58, y, 58, bh, 0); c.fillStyle = t.pal.light; c.fill();
       c.restore();
-      A.drawTank(c, { x: x + bw - 30, y: y + bh / 2 + 2, a: -Math.PI / 2, pal: t.pal, hat: 0, t: G.time, scale: 0.62,
+      A.drawTank(c, { x: x + bw - 30, y: y + bh / 2 + 2, a: -PI / 2, pal: t.pal, hat: 0, t: G.time, scale: 0.62,
         dead: t.alive || G.state === 'ready' ? 0 : 1, paint: t.paint, blobs: t.blobs });
       // name
       c.font = '700 20px Fredoka';
@@ -937,7 +970,7 @@
         var cx = px - p * ps, cy = y + 39;
         A.circle(c, cx, cy, pr);
         var filled = p < t.score;
-        var popIn = filled && p === t.score - 1 && G.state === 'roundEnd' && G.winner === t ? Math.min(1, G.banner.t * 3) : 1;
+        var popIn = filled && p === t.score - 1 && G.state === 'roundEnd' && G.winner === t ? MN(1, G.banner.t * 3) : 1;
         c.fillStyle = '#ece8f5'; c.fill();
         if (filled) { A.circle(c, cx, cy, pr * easeBack(popIn)); c.fillStyle = t.pal.main; c.fill(); }
         A.circle(c, cx, cy, pr); c.lineWidth = 2; c.strokeStyle = t.pal.dark; c.stroke();
@@ -951,8 +984,8 @@
 
     // round banner / states
     if (G.state === 'ready') {
-      var bt = 1 - Math.max(0, G.timer * 2);
-      var sc = easeBack(Math.min(1, bt * 2.5 + 0.35));
+      var bt = 1 - MX(0, G.timer * 2);
+      var sc = easeBack(MN(1, bt * 2.5 + 0.35));
       c.save(); c.translate(W / 2, H / 2); c.scale(sc, sc);
       ribbon(c, 0, 0, 420, 96, G.theme.wall);
       text(c, 'الجولة ' + G.round, 0, -8, 50, '#fff', 'center', '#1b1640', 9);
@@ -964,14 +997,14 @@
       text(c, 'الكمبيوتر يكمل الجولة... اضغط مسافة للتخطي', W / 2, H - 39, 22, '#fff', 'center');
     }
     if ((G.state === 'roundEnd') && G.banner) {
-      var bn = G.banner, s2 = easeBack(Math.min(1, bn.t * 3.5));
+      var bn = G.banner, s2 = easeBack(MN(1, bn.t * 3.5));
       var w = bn.winner;
       var msg = bn.draw ? 'تعادل!' : (w.human && G.humans === 1 ? 'ربحت الجولة!' : 'الجولة لـ ' + w.name);
       if (G.over && w) msg = (w.human && G.humans === 1) ? 'فزت بالمباراة!' : 'بطل المباراة: ' + w.name;
       var col = bn.draw ? '#8a84a8' : w.pal.main;
       c.save(); c.translate(W / 2, H / 2); c.scale(s2, s2); c.rotate(-0.03);
       c.font = '700 54px Fredoka'; c.direction = 'rtl';
-      var mw = Math.max(420, c.measureText(msg).width + 120);
+      var mw = MX(420, c.measureText(msg).width + 120);
       ribbon(c, 0, 0, mw, 100, col);
       text(c, msg, 0, 2, 54, '#fff', 'center', '#1b1640', 10);
       if (G.selfOut && G.humans === 1) {

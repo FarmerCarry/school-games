@@ -616,20 +616,40 @@
   }
 
   /* --------------------------------------------------------- platforms */
-  function islandUnder(ctx, x, y, w, depth, col, col2) {
-    var r = rng(Math.round(w) + 3);
-    ctx.beginPath(); ctx.moveTo(x - w / 2 + 6, y);
-    var n = 7;
+  function islandUnder(ctx, x, y, w, depth, col, col2, mossy) {
+    var r = rng(Math.round(w) + 3), n = 8, pts = [];
     for (var i = 0; i <= n; i++) {
       var t = i / n, px = x + w / 2 - 6 - t * (w - 12);
-      var dd = Math.sin(t * Math.PI) * depth * (0.75 + r() * 0.35);
-      ctx.lineTo(px, y + 8 + dd);
+      var dd = Math.sin(t * Math.PI) * depth * (0.78 + r() * 0.24);
+      pts.push([px, y + 8 + dd]);
     }
+    ctx.beginPath(); ctx.moveTo(x - w / 2 + 6, y); ctx.lineTo(x + w / 2 - 6, y);
+    for (i = 0; i < n; i++) {
+      var p0 = pts[i], p1 = pts[i + 1];
+      ctx.quadraticCurveTo(p0[0], p0[1], (p0[0] + p1[0]) * 0.5, (p0[1] + p1[1]) * 0.5);
+    }
+    ctx.lineTo(pts[n][0], pts[n][1]);
     ctx.closePath(); fs(ctx, col, OUT, 4);
     ctx.save(); ctx.clip();
+    // warm upper earth band + deeper shadow strata
+    ctx.fillStyle = shade(col, 0.14);
+    ctx.fillRect(x - w / 2, y, w, depth * 0.26);
     ctx.fillStyle = col2;
-    for (var j = 0; j < 4; j++) { ell(ctx, x - w / 3 + j * w / 4.5, y + 20 + (j % 2) * 18, 16 + j * 3, 5); ctx.fill(); }
+    ctx.beginPath(); ctx.moveTo(x - w / 2, y + depth * 0.55);
+    ctx.quadraticCurveTo(x, y + depth * 0.72, x + w / 2, y + depth * 0.52);
+    ctx.lineTo(x + w / 2, y + depth + 40); ctx.lineTo(x - w / 2, y + depth + 40); ctx.closePath(); ctx.fill();
+    for (var j = 0; j < 6; j++) {
+      var rx = x - w * 0.36 + j * w * 0.145, ry = y + 22 + (j % 3) * 16;
+      ell(ctx, rx, ry, 14 + (j % 3) * 4, 5.5); ctx.fill();
+    }
     ctx.restore();
+    if (mossy) {
+      ctx.fillStyle = '#5fc750'; ctx.strokeStyle = OUT; ctx.lineWidth = 2.5;
+      [-0.44, -0.26, 0.24, 0.43].forEach(function (f) {
+        var gx = x + f * w;
+        ctx.beginPath(); ctx.moveTo(gx - 10, y + 2); ctx.quadraticCurveTo(gx, y + 18, gx + 10, y + 2); ctx.closePath(); ctx.fill(); ctx.stroke();
+      });
+    }
   }
 
   function drawPlatform(ctx, pl, T, A) {
@@ -641,7 +661,7 @@
         var top = pl.kind === 'ice' ? '#dff8ff' : pl.kind === 'grass' ? '#7ed957' : '#f0cc8e';
         var side = pl.kind === 'ice' ? '#9ee3fb' : pl.kind === 'grass' ? '#a8703f' : '#d9a765';
         var rock = pl.kind === 'ice' ? '#7fcdf0' : '#8a5a3c', rock2 = pl.kind === 'ice' ? '#a8e2fa' : '#6e452c';
-        islandUnder(ctx, x, y + h - 6, w * 0.92, Math.min(150, 50 + w * 0.14), rock, rock2);
+        islandUnder(ctx, x, y + h - 6, w * 0.92, Math.min(150, 50 + w * 0.14), rock, rock2, pl.kind !== 'ice');
         if (pl.kind === 'ice') {
           ctx.fillStyle = '#c9f2ff';
           for (var ic = 0; ic < Math.floor(w / 60); ic++) {

@@ -4,7 +4,7 @@
   var PZ = window.PZ, Art = window.PZArt, K = window.Kit;
   var W = 1280, H = 720, PX = 400;          // play area starts at x = PX
   var CX = 840, CY = 405, R = 142;           // the big pizza
-  var WIN = { x: 452, y: 98, w: 776, h: 230 }; // kitchen window
+  var WIN = { x: 448, y: 112, w: 784, h: 212 }; // kitchen window
   var COUNTER_Y = 508;
   var TAU = Math.PI * 2;
   var store = K.store('pizza-clicker');
@@ -156,9 +156,9 @@
     // checker strip under the window
     for (var k = 0; k < 22; k++) {
       c.fillStyle = k % 2 ? '#e8413a' : '#fff4e0';
-      c.fillRect(PX + k * 40, 352, 40, 16);
+      c.fillRect(PX + k * 40, 348, 40, 16);
     }
-    c.fillStyle = 'rgba(0,0,0,0.12)'; c.fillRect(PX, 368, W - PX, 3);
+    c.fillStyle = 'rgba(0,0,0,0.12)'; c.fillRect(PX, 364, W - PX, 3);
     // window hole
     c.save();
     Art.rr(c, WIN.x, WIN.y, WIN.w, WIN.h, 22);
@@ -177,26 +177,31 @@
     Art.rr(c, WIN.x, WIN.y, WIN.w, WIN.h, 22); c.stroke();
     // sill
     Art.rr(c, WIN.x - 24, WIN.y + WIN.h + 6, WIN.w + 48, 16, 6); Art.fs(c, '#b5652f', '#4a1f0c', 4);
+    c.fillStyle = 'rgba(255,235,195,0.35)'; c.fillRect(WIN.x - 16, WIN.y + WIN.h + 9, WIN.w + 32, 3);
     // little shelves with jars at the wall sides
-    shelf(c, 414, 395); shelf(c, 1150, 395);
+    shelf(c, 414, 404); shelf(c, 1150, 404);
 
     // counter
     cacheCounter.width = Math.round(W * px); cacheCounter.height = Math.round(H * px);
     c = cacheCounter.getContext('2d');
     c.setTransform(px, 0, 0, px, 0, 0);
     c.clearRect(0, 0, W, H);
-    Art.rr(c, PX - 10, COUNTER_Y, W - PX + 20, 26, 8); Art.fs(c, '#e9e2d6', '#4a1f0c', 4);
-    c.fillStyle = 'rgba(255,255,255,0.6)'; c.fillRect(PX, COUNTER_Y + 5, W - PX, 4);
+    Art.rr(c, PX - 10, COUNTER_Y, W - PX + 20, 26, 8); Art.fs(c, '#efe7da', '#4a1f0c', 4);
+    c.fillStyle = 'rgba(255,255,255,0.7)'; c.fillRect(PX, COUNTER_Y + 5, W - PX, 4);
     var g2 = c.createLinearGradient(0, COUNTER_Y + 26, 0, H);
-    g2.addColorStop(0, '#b8612a'); g2.addColorStop(1, '#8c4318');
+    g2.addColorStop(0, '#be652c'); g2.addColorStop(1, '#853d15');
     c.fillStyle = g2; c.fillRect(PX, COUNTER_Y + 26, W - PX, H - COUNTER_Y - 26);
+    // subtle wood grain sheen
+    c.strokeStyle = 'rgba(255,220,160,0.08)'; c.lineWidth = 2;
+    for (var wy = COUNTER_Y + 38; wy < H - 34; wy += 24) { c.beginPath(); c.moveTo(PX, wy); c.lineTo(W, wy); c.stroke(); }
     c.strokeStyle = '#4a1f0c'; c.lineWidth = 4;
     c.beginPath(); c.moveTo(PX, COUNTER_Y + 28); c.lineTo(W, COUNTER_Y + 28); c.stroke();
     for (var p = 0; p < 6; p++) {
       var x0 = PX + 20 + p * 145;
-      Art.rr(c, x0, COUNTER_Y + 44, 125, 120, 14);
+      Art.rr(c, x0, COUNTER_Y + 44, 125, 118, 14);
       c.lineWidth = 4; c.strokeStyle = 'rgba(74,31,12,0.45)'; c.stroke();
-      c.fillStyle = 'rgba(255,255,255,0.06)'; c.fill();
+      c.fillStyle = 'rgba(255,255,255,0.07)'; c.fill();
+      Art.circ(c, x0 + 62.5, COUNTER_Y + 62, 5.5); Art.fs(c, '#ffd670', '#4a1f0c', 2);
     }
   }
   function shelf(c, x, y) {
@@ -468,15 +473,18 @@
       var cv = document.createElement('canvas'); cv.width = cv.height = 108;
       var info = document.createElement('div'); info.className = 'info';
       var nm = document.createElement('div'); nm.className = 'nm';
+      var meta = document.createElement('div'); meta.className = 'meta';
       var cost = document.createElement('div'); cost.className = 'cost';
       var img = document.createElement('img'); img.src = pizzaIconURL(); img.alt = '';
       var cs = document.createElement('span');
       cost.appendChild(img); cost.appendChild(cs);
-      info.appendChild(nm); info.appendChild(cost);
+      var pps = document.createElement('div'); pps.className = 'pps';
+      meta.appendChild(cost); meta.appendChild(pps);
+      info.appendChild(nm); info.appendChild(meta);
       var cnt = document.createElement('div'); cnt.className = 'cnt';
       b.appendChild(cv); b.appendChild(info); b.appendChild(cnt);
       listEl.appendChild(b);
-      var row = { el: b, cv: cv, nm: nm, cs: cs, cnt: cnt, state: '', costTxt: '', cntTxt: '', i: i };
+      var row = { el: b, cv: cv, nm: nm, cs: cs, pps: pps, cnt: cnt, state: '', costTxt: '', ppsTxt: '', cntTxt: '', i: i };
       rows.push(row);
       (function (row) {
         b.addEventListener('click', function () {
@@ -518,7 +526,7 @@
     for (i = 0; i < NB; i++) if (revealed(i)) lastRevealed = i;
     for (i = 0; i < NB; i++) {
       var row = rows[i];
-      var st = i <= lastRevealed ? 'show' : i <= lastRevealed + 2 ? 'mystery' : 'hidden';
+      var st = i <= lastRevealed ? 'show' : i <= lastRevealed + 4 ? 'mystery' : 'hidden';
       if (st !== row.state) {
         row.state = st;
         row.el.style.display = st === 'hidden' ? 'none' : '';
@@ -530,12 +538,17 @@
       var cost = PZ.buildCost(i, S.owned[i], S.buyAmt);
       var ct = PZ.fmt(cost);
       if (ct !== row.costTxt) { row.costTxt = ct; row.cs.textContent = ct; }
+      var pt = st === 'mystery' ? '🔒 قريبًا' : plus(PZ.fmtRate(PZ.BUILDINGS[i].pps * D.bmult[i])) + '/ث';
+      if (pt !== row.ppsTxt) { row.ppsTxt = pt; row.pps.innerHTML = pt; }
       var nt = S.owned[i] ? String(S.owned[i]) : '';
       if (nt !== row.cntTxt) { row.cntTxt = nt; row.cnt.textContent = nt; }
       var no = S.pizzas < cost;
       if (row.no !== no) { row.no = no; row.el.classList.toggle('no', no); }
     }
     setText($('bNote'), S.totalOwned ? 'لديك ' + S.totalOwned : '');
+    var footHtml = '<span>👆 قوة النقرة: <b>' + plus(PZ.fmt(clickValue())) + '</b></span><span>🏪 <b>' + (lastRevealed + 1) + '/' + NB + '</b> مفتوح</span>';
+    var sf = $('shopFoot');
+    if (sf && sf._h !== footHtml) { sf._h = footHtml; sf.innerHTML = footHtml; }
     // upgrades
     var avail = [];
     for (i = 0; i < PZ.UPGRADES.length; i++) {
@@ -900,7 +913,7 @@
         S = next; hiddenAt = 0; recalc();
         buffs.frenzy = buffs.click = 0; golden = null; rain.items.length = 0; rain.toSpawn = 0; goldenTimer = K.rand(22, 30);
         pizzaCacheSkin = ''; upsSig = 'x';
-        rows.forEach(function (r) { r.state = ''; r.costTxt = null; r.cntTxt = null; r.no = null; });
+        rows.forEach(function (r) { r.state = ''; r.costTxt = null; r.ppsTxt = null; r.cntTxt = null; r.no = null; });
         parts.length = 0; floats.length = 0; combo = 0; toastsEl.textContent = '';
         paintAmt(); refreshShop(true); refreshHud(); refreshGoal(); save();
         closeModal(); setPause(false); showTitle();
@@ -909,11 +922,11 @@
   }
 
   /* ============================================================ modes */
-  var titleEl = $('title'), pauseEl = $('pause');
+  var titleEl = $('title'), pauseEl = $('pause'), playUiEl = $('playUi');
   function showTitle() {
     mode = 'title'; hideTip();
     Kit.stats.end('end'); // play stats: back at the menu ends the free-play round (ignored at boot: none open)
-    titleEl.hidden = false; pauseEl.hidden = true;
+    titleEl.hidden = false; pauseEl.hidden = true; playUiEl.hidden = true;
     $('bPlay').textContent = S.lifetime > 0 ? 'تابع!' : 'العب!';
     $('titleProg').innerHTML = S.lifetime > 0
       ? 'بيتزا مصنوعة: ' + PZ.fmt(S.lifetime) + ' &nbsp;•&nbsp; 🏆 ' + S.achCount + '/' + PZ.ACHIEVEMENTS.length + (S.crusts ? ' &nbsp;•&nbsp; 🌟 ' + PZ.fmt(S.crusts) : '')
@@ -922,7 +935,7 @@
   function startGame() {
     if (mode !== 'title') return;
     K.audio.unlock();
-    titleEl.hidden = true;
+    titleEl.hidden = true; playUiEl.hidden = false;
     mode = 'play';
     // Play stats: free play is one 'main' round from Play/Continue until showTitle;
     // a first-time player starts the coach (hint steps S.tut 0 -> 2).
@@ -1160,8 +1173,8 @@
   }
 
   function skyMode() { return S.owned[9] > 0 ? 2 : S.owned[7] > 0 ? 1 : 0; }
-  var STARS = [], HOUSES = [];
-  (function () { var r = Art.rng(3), cols = ['#ffe3b3', '#d7f0c8', '#f9d0da', '#d6e4ff', '#fff1c4']; for (var x = WIN.x + 20; x < WIN.x + WIN.w - 40; x += 70 + r() * 60) HOUSES.push({ x: x, w: 30 + r() * 14, h: 22 + r() * 16, c: cols[Math.floor(r() * 5)] }); })();
+  var STARS = [], HOUSES = [[18,66,62,1,1,0,0],[96,54,46,0,0,0,1],[168,74,74,1,0,1,0],[256,58,52,1,1,0,0],[468,62,56,1,0,0,1],[544,76,70,1,1,1,0],[634,56,50,0,0,0,1],[704,66,64,1,0,0,0]];
+  var H_W = ['#ffdf9e','#f7b28b','#fff1cc','#d4ebc7','#f9c7c0','#ffe7a6'], H_R = ['#c84a2d','#b83c2a','#d46134','#a83c26'], H_A = ['#e03c32','#2f9653','#e07a24','#2c7cc4'];
   (function () { var r = Art.rng(7); for (var i = 0; i < 40; i++) STARS.push({ x: WIN.x + r() * WIN.w, y: WIN.y + r() * (WIN.h - 60), s: 1 + r() * 2.2, p: r() * TAU }); })();
 
   function renderScene() {
@@ -1169,94 +1182,91 @@
     c.setTransform(px, 0, 0, px, 0, 0);
     c.save();
     c.translate(shakeX, shakeY);
-    // ---- sky inside the window
     c.save();
     Art.rr(c, WIN.x, WIN.y, WIN.w, WIN.h, 22); c.clip();
-    var sm = skyMode();
-    var g = c.createLinearGradient(0, WIN.y, 0, WIN.y + WIN.h);
-    if (sm === 0) { g.addColorStop(0, '#5cc8ff'); g.addColorStop(1, '#c9f1ff'); }
+    var sm = skyMode(), i, n, g = c.createLinearGradient(0, WIN.y, 0, WIN.y + WIN.h);
+    if (sm === 0) { g.addColorStop(0, '#4bb8ff'); g.addColorStop(0.58, '#9fe3ff'); g.addColorStop(1, '#fff0c7'); }
     else if (sm === 1) { g.addColorStop(0, '#1b2a6b'); g.addColorStop(1, '#6a4fb3'); }
     else { g.addColorStop(0, '#12082e'); g.addColorStop(1, '#4a1a78'); }
     c.fillStyle = g; c.fillRect(WIN.x, WIN.y, WIN.w, WIN.h);
-    var i, n;
     if (sm > 0) {
-      for (i = 0; i < STARS.length; i++) {
-        var st = STARS[i];
-        c.globalAlpha = 0.5 + 0.5 * Math.sin(t * 2 + st.p);
-        c.fillStyle = '#fff'; c.fillRect(st.x, st.y, st.s, st.s);
-      }
+      for (i = 0; i < STARS.length; i++) { var st = STARS[i]; c.globalAlpha = 0.5 + 0.5 * Math.sin(t * 2 + st.p); c.fillStyle = '#fff'; c.fillRect(st.x, st.y, st.s, st.s); }
       c.globalAlpha = 1;
-    }
-    if (sm === 0) {
-      // sun
-      c.save(); c.translate(WIN.x + 70, WIN.y + 55); c.rotate(t * 0.3);
-      Art.star(c, 0, 0, 44, 30, 12); Art.fs(c, '#ffe14d');
-      c.restore();
-      Art.circ(c, WIN.x + 70, WIN.y + 55, 26); Art.fs(c, '#ffcf2e', '#f0a400', 3);
-      // clouds
+    } else {
+      var sx0 = WIN.x + 68, sy0 = WIN.y + 46, sg = c.createRadialGradient(sx0, sy0, 14, sx0, sy0, 80);
+      sg.addColorStop(0, 'rgba(255,244,170,0.65)'); sg.addColorStop(1, 'rgba(255,244,170,0)');
+      c.fillStyle = sg; Art.circ(c, sx0, sy0, 80); c.fill();
+      c.save(); c.translate(sx0, sy0); c.rotate(t * 0.25); Art.star(c, 0, 0, 38, 26, 12); Art.fs(c, '#ffe14d'); c.restore();
+      Art.circ(c, sx0, sy0, 22); Art.fs(c, '#ffcf2e', '#f0a400', 2.5);
       for (i = 0; i < 4; i++) {
-        var cx = WIN.x + ((i * 230 + t * (10 + i * 3)) % (WIN.w + 200)) - 100, cy = WIN.y + 30 + (i % 2) * 45;
-        c.fillStyle = 'rgba(255,255,255,0.92)';
-        Art.circ(c, cx, cy, 18); c.fill(); Art.circ(c, cx + 20, cy - 8, 22); c.fill(); Art.circ(c, cx + 42, cy, 16); c.fill();
-        c.fillRect(cx, cy, 42, 16);
+        var cx = WIN.x + ((i * 220 + t * (9 + i * 2.5)) % (WIN.w + 200)) - 100, cy = WIN.y + 26 + (i % 2) * 34;
+        c.fillStyle = 'rgba(255,245,225,0.65)'; Art.ell(c, cx + 21, cy + 12, 34, 9); c.fill();
+        c.fillStyle = 'rgba(255,255,255,0.95)'; Art.circ(c, cx, cy + 2, 15); c.fill(); Art.circ(c, cx + 18, cy - 6, 19); c.fill(); Art.circ(c, cx + 38, cy + 1, 14); c.fill();
+        c.fillRect(cx, cy + 2, 38, 13);
       }
     }
-    // galaxies (far back)
     n = Math.min(S.owned[9], 3);
-    for (i = 0; i < n; i++) Art.icon(c, 9, WIN.x + 150 + i * 250, WIN.y + 60 + (i % 2) * 20, 90 - i * 10, t + i);
-    // moon base
+    for (i = 0; i < n; i++) Art.icon(c, 9, WIN.x + 150 + i * 250, WIN.y + 56 + (i % 2) * 20, 86 - i * 10, t + i);
     if (S.owned[7] > 0) {
-      Art.icon(c, 7, WIN.x + 80, WIN.y + 70, 100, t);
-      n = Math.min(S.owned[7], 4);
-      for (i = 1; i < n; i++) { c.save(); c.translate(WIN.x + 40 + i * 30, WIN.y + 115 - Math.abs(Math.sin(t * 2 + i)) * 10); Art.circ(c, 0, 0, 6); Art.fs(c, '#fff', '#3b2314', 2); c.restore(); }
+      Art.icon(c, 7, WIN.x + 80, WIN.y + 66, 94, t);
+      for (i = 1, n = Math.min(S.owned[7], 4); i < n; i++) { c.save(); c.translate(WIN.x + 40 + i * 30, WIN.y + 108 - Math.abs(Math.sin(t * 2 + i)) * 10); Art.circ(c, 0, 0, 6); Art.fs(c, '#fff', '#3b2314', 2); c.restore(); }
     }
-    // portal
-    if (S.owned[8] > 0) {
-      n = Math.min(S.owned[8], 2);
-      for (i = 0; i < n; i++) {
-        var pxp = WIN.x + WIN.w - 90 - i * 170, pyp = WIN.y + 70;
-        c.save(); c.translate(pxp, pyp); c.scale(1, 0.9 + 0.05 * Math.sin(t * 3));
-        Art.icon(c, 8, 0, 0, 100, t + i);
-        c.restore();
+    if (S.owned[8] > 0) for (i = 0, n = Math.min(S.owned[8], 2); i < n; i++) { c.save(); c.translate(WIN.x + WIN.w - 90 - i * 170, WIN.y + 66); c.scale(1, 0.9 + 0.05 * Math.sin(t * 3)); Art.icon(c, 8, 0, 0, 94, t + i); c.restore(); }
+    for (i = 0, n = Math.min(S.owned[6], 4); i < n; i++) Art.icon(c, 6, WIN.x + ((i * 260 + t * (22 + i * 6)) % (WIN.w + 160)) - 80, WIN.y + 38 + i * 24 + Math.sin(t * 1.5 + i) * 6, 66, t + i);
+    var base = WIN.y + WIN.h - 32;
+    function hill(col, off, f1, a1, f2, a2) {
+      c.fillStyle = col; c.beginPath(); c.moveTo(WIN.x, base);
+      for (var hx = 0; hx <= WIN.w; hx += 20) c.lineTo(WIN.x + hx, base - off - Math.sin(hx * f1 + 1) * a1 - Math.sin(hx * f2) * a2);
+      c.lineTo(WIN.x + WIN.w, WIN.y + WIN.h); c.lineTo(WIN.x, WIN.y + WIN.h); c.closePath(); c.fill();
+    }
+    hill(sm === 0 ? '#7ec495' : sm === 1 ? '#36594f' : '#2d205c', 48, 0.009, 20, 0.022, 8);
+    var btx = WIN.x + 372, bty = base - 94;
+    c.fillStyle = sm === 0 ? '#e8c48e' : '#4a457a'; c.fillRect(btx, bty, 22, 48);
+    c.beginPath(); c.moveTo(btx - 3, bty); c.lineTo(btx + 11, bty - 16); c.lineTo(btx + 25, bty); c.closePath();
+    c.fillStyle = sm === 0 ? '#c45638' : '#3a2d66'; c.fill();
+    c.fillStyle = sm === 0 ? '#6e4c36' : '#ffe98a'; Art.rr(c, btx + 7, bty + 6, 8, 12, 4); c.fill();
+    hill(sm === 0 ? '#74cc52' : sm === 1 ? '#376846' : '#3b286e', 26, 0.013, 14, 0.027, 6);
+    for (i = 0; i < HOUSES.length; i++) {
+      var h = HOUSES[i], hx2 = WIN.x + h[0], hw = h[1], hh = h[2], topY = base - hh;
+      if (h[6]) {
+        var trx = hx2 + hw + 9;
+        c.fillStyle = '#6b4226'; c.fillRect(trx - 2.5, base - 16, 5, 16);
+        c.fillStyle = sm === 0 ? '#2f7a3e' : '#1f4534'; Art.ell(c, trx, base - 36, 9, 26); c.fill();
+        c.fillStyle = sm === 0 ? '#429e52' : '#2d5c46'; Art.ell(c, trx - 2.5, base - 38, 4.5, 18); c.fill();
+      }
+      if (h[4]) {
+        c.fillStyle = sm === 0 ? '#a8472e' : '#3a305e'; c.fillRect(hx2 + hw - 16, topY - 17, 9, 14);
+        if (sm === 0) { var sy = (t * 12 + i * 7) % 18; c.fillStyle = 'rgba(255,255,255,0.55)'; Art.circ(c, hx2 + hw - 11 + Math.sin(t * 2 + i) * 3, topY - 21 - sy, 3.5 + sy * 0.14); c.fill(); }
+      }
+      c.fillStyle = sm === 0 ? H_W[i % 6] : sm === 1 ? '#575c94' : '#4a3882'; c.fillRect(hx2, topY, hw, hh);
+      c.fillStyle = 'rgba(90,40,15,0.12)'; c.fillRect(hx2 + hw - 8, topY, 8, hh);
+      c.strokeStyle = 'rgba(74,31,12,0.45)'; c.lineWidth = 2; c.strokeRect(hx2, topY, hw, hh);
+      c.beginPath(); c.moveTo(hx2 - 5, topY + 2); c.lineTo(hx2 + 8, topY - 12); c.lineTo(hx2 + hw - 8, topY - 12); c.lineTo(hx2 + hw + 5, topY + 2); c.closePath();
+      c.fillStyle = sm === 0 ? H_R[i & 3] : '#352a63'; c.fill(); c.stroke();
+      for (var wc = hw >= 64 ? 2 : 1, wi = 0; wi < wc; wi++) {
+        var wx = wc === 2 ? hx2 + 11 + wi * (hw - 34) : hx2 + hw / 2 - 7, wy = topY + 10;
+        c.fillStyle = sm === 0 ? '#5c8c58' : '#32365e'; c.fillRect(wx - 3, wy, 3, 13); c.fillRect(wx + 12, wy, 3, 13);
+        c.fillStyle = sm === 0 ? '#bfe8ff' : '#ffe885'; c.fillRect(wx, wy, 12, 13);
+        c.lineWidth = 1.5; c.strokeRect(wx, wy, 12, 13);
+        if (sm === 0) { c.fillStyle = '#c85a32'; c.fillRect(wx - 2, wy + 13, 16, 3.5); c.fillStyle = '#ff5a5f'; c.fillRect(wx + 1, wy + 11, 3, 3); c.fillStyle = '#ffd43b'; c.fillRect(wx + 7, wy + 11, 3, 3); }
+      }
+      if (h[5]) { c.fillStyle = sm === 0 ? '#7d4623' : '#2d234a'; Art.rr(c, hx2 + hw / 2 - 8, base - 21, 16, 21, 7); c.fill(); }
+      if (h[3]) {
+        var aw = hw - 8, sw = aw / 6;
+        for (var ai = 0; ai < 6; ai++) { c.fillStyle = ai & 1 ? '#fff8ea' : (sm === 0 ? H_A[i & 3] : '#6c5ca8'); c.fillRect(hx2 + 4 + ai * sw, base - 26, sw, 8); }
+        c.lineWidth = 1.5; c.strokeRect(hx2 + 4, base - 26, aw, 8);
       }
     }
-    // airships
-    n = Math.min(S.owned[6], 4);
-    for (i = 0; i < n; i++) {
-      var ax = WIN.x + ((i * 260 + t * (22 + i * 6)) % (WIN.w + 160)) - 80, ay = WIN.y + 40 + i * 26 + Math.sin(t * 1.5 + i) * 6;
-      Art.icon(c, 6, ax, ay, 70, t + i);
-    }
-    // hills + skyline
-    c.fillStyle = sm === 0 ? '#7ccf5a' : sm === 1 ? '#3b6b4a' : '#3a2a6a';
-    c.beginPath(); c.moveTo(WIN.x, WIN.y + WIN.h - 40);
-    for (var hx = 0; hx <= WIN.w; hx += 20) c.lineTo(WIN.x + hx, WIN.y + WIN.h - 44 - Math.sin(hx * 0.012) * 16 - Math.sin(hx * 0.031) * 7);
-    c.lineTo(WIN.x + WIN.w, WIN.y + WIN.h); c.lineTo(WIN.x, WIN.y + WIN.h); c.closePath(); c.fill();
-    var base = WIN.y + WIN.h - 34;
-    for (i = 0; i < HOUSES.length; i++) {
-      var hh = HOUSES[i];
-      c.fillStyle = sm === 0 ? hh.c : sm === 1 ? '#5a5f96' : '#4a3a86';
-      c.fillRect(hh.x, base - hh.h + 6, hh.w, hh.h);
-      c.beginPath(); c.moveTo(hh.x - 5, base - hh.h + 7); c.lineTo(hh.x + hh.w / 2, base - hh.h - 14); c.lineTo(hh.x + hh.w + 5, base - hh.h + 7); c.closePath();
-      c.fillStyle = sm === 0 ? '#d9573a' : '#3a2f6a'; c.fill();
-      c.fillStyle = sm === 0 ? '#bfe9ff' : '#ffe98a';
-      c.fillRect(hh.x + hh.w / 2 - 5, base - hh.h + 14, 10, 9);
-    }
-    var nf = Math.min(S.owned[5], 3), np = Math.min(S.owned[4], 5);
-    for (i = 0; i < nf; i++) Art.icon(c, 5, WIN.x + 110 + i * 250, base - 34, 72, t + i * 0.7);
-    for (i = 0; i < np; i++) Art.icon(c, 4, WIN.x + 50 + i * 165 + (i % 2) * 20, base - 28, 56, t);
-    // street
-    c.fillStyle = '#4a4a5a'; c.fillRect(WIN.x, WIN.y + WIN.h - 30, WIN.w, 30);
+    for (i = 0, n = Math.min(S.owned[5], 3); i < n; i++) Art.icon(c, 5, WIN.x + 110 + i * 250, base - 34, 72, t + i * 0.7);
+    for (i = 0, n = Math.min(S.owned[4], 5); i < n; i++) Art.icon(c, 4, WIN.x + 50 + i * 165 + (i % 2) * 20, base - 28, 56, t);
+    c.fillStyle = sm === 0 ? '#e6cfa8' : '#585870'; c.fillRect(WIN.x, base - 3, WIN.w, 6);
+    c.fillStyle = '#4e4d5e'; c.fillRect(WIN.x, base + 3, WIN.w, 30);
     c.fillStyle = '#ffe14d';
-    for (var dx = 0; dx < WIN.w; dx += 50) c.fillRect(WIN.x + dx + ((t * 40) % 50), WIN.y + WIN.h - 16, 24, 3);
-    var ns = Math.min(S.owned[2], 4), nt = Math.min(S.owned[3], 3);
-    for (i = 0; i < nt; i++) {
-      var tx = WIN.x + ((i * 300 + t * 70) % (WIN.w + 160)) - 80;
-      Art.icon(c, 3, tx, WIN.y + WIN.h - 32, 58, t);
-    }
-    for (i = 0; i < ns; i++) {
-      var sx = WIN.x + ((i * 210 + 90 + t * (120 + i * 12)) % (WIN.w + 120)) - 60;
-      Art.icon(c, 2, sx, WIN.y + WIN.h - 22 + Math.sin(t * 12 + i) * 1, 40, t);
-    }
+    for (var dx = 0; dx < WIN.w; dx += 50) c.fillRect(WIN.x + dx + ((t * 40) % 50), base + 16, 24, 3);
+    for (i = 0, n = Math.min(S.owned[3], 3); i < n; i++) Art.icon(c, 3, WIN.x + ((i * 300 + t * 70) % (WIN.w + 160)) - 80, WIN.y + WIN.h - 32, 58, t);
+    for (i = 0, n = Math.min(S.owned[2], 4); i < n; i++) Art.icon(c, 2, WIN.x + ((i * 210 + 90 + t * (120 + i * 12)) % (WIN.w + 120)) - 60, WIN.y + WIN.h - 22 + Math.sin(t * 12 + i), 40, t);
+    c.fillStyle = 'rgba(255,255,255,0.09)';
+    c.beginPath(); c.moveTo(WIN.x + 520, WIN.y); c.lineTo(WIN.x + 585, WIN.y); c.lineTo(WIN.x + 490, WIN.y + WIN.h); c.lineTo(WIN.x + 425, WIN.y + WIN.h); c.closePath(); c.fill();
     c.restore();
 
     // ---- wall

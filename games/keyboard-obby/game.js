@@ -21,7 +21,7 @@
   const pixelScale = () => _mn(2, _mx(1, _rd(hudView.scale * hudView.dpr * 4) / 4));
   const PRAISE = ['رائع!', 'ممتاز!', 'مذهل!', 'بطل!'];
   // The little keyboard at the bottom of the screen.
-  const KB = { u: 34, x: (W - KO.KB_W * 34) / 2, y: HH - KO.KB_ROWS * 34 - 16 };
+  const KB = { u: 28, x: (W - KO.KB_W * 28) / 2, y: HH - KO.KB_ROWS * 28 - 12 };
 
   /* ---------------------------------------------------------------- save */
   const store = Kit.store('keyboard-obby');
@@ -407,8 +407,8 @@
           break;
         case 'hop': J.jump(_mn(1, 0.25 + e.d / 8)); view.flash(e.code, 'ok'); break;
         case 'land': J.land(_mn(1, 0.25 + e.d * 0.08)); Kit.track.cue(); break; // the next key is asked for
-        case 'coin': J.coin(_mn(5, e.n)); coinBump = 1; addFloat('+1', heroAbove(e, 1.1), _G, 38); break;
-        case 'gem': J.chime(2); coinBump = 1; addFloat('+5', heroAbove(e, 1.2), '#ff9cf0', 42); break;
+        case 'coin': J.coin(_mn(5, e.n)); coinBump = 1; addFloat('+1', KO.toWorld(e.x + 0.6, e.y + 0.95, e.z, {}), _G, 38); break;
+        case 'gem': J.chime(2); coinBump = 1; addFloat('+5', KO.toWorld(e.x + 0.6, e.y + 1.05, e.z, {}), '#ff9cf0', 42); break;
         case 'checkpoint': J.chime(1); addFloat('نقطة حفظ!', heroAbove(e, 1.5), '#7dffb0', 40); say('نقطة حفظ'); break;
         case 'shake': J.pop(0.15); break;
         case 'crumble': crumbleSound(); break;
@@ -508,7 +508,7 @@
     for (const x of w.L.words) if (step >= x.start && step < x.start + x.len) return { text: x.text, at: step - x.start };
     return null;
   }
-  function fmtTime(t) { return String(_fl(t)); }
+  function fmtTime(t) { const s = _fl(t); return _fl(s / 60) + ':' + (s % 60 < 10 ? '0' : '') + (s % 60); }
   function drawHud() {
     const show = (screen === 'play' || screen === 'pause') && !!world;
     if (!show) {
@@ -537,7 +537,7 @@
     g.clearRect(0, 0, W, HH);
     for (const f of floats) {
       const p = view.project(f.x, f.y + (still ? 0 : f.t * 0.7), f.z);
-      if (!p.behind) H.float(g, f.text, p.x, p.y, f.size, f.color, f.t < 0.9 ? 1 : 1 - (f.t - 0.9) / 0.4);
+      if (!p.behind) H.float(g, f.text, p.x, _ab(p.x - 640) < 115 && p.y < 208 ? 208 : p.y, f.size, f.color, f.t < 0.9 ? 1 : 1 - (f.t - 0.9) / 0.4);
     }
     H.chip(g, 96, 18, 150, 'coin', String(w.coins + w.gems * 5), coinBump);
     H.chip(g, 96, 84, 150, 'clock', fmtTime(w.t));
@@ -545,8 +545,8 @@
     if (w.combo >= 2 || w.jet) H.streak(g, 96, w.mistakes ? 216 : 150, w.combo, w.jet, pulse);
     H.text(g, (cur.w + 1) + '-' + (cur.l + 1), 880, 44, 34, _W, { stroke: 8 });
     H.progress(g, 930, 44, 220, KO.progress(w), w.L.cps, w.n, KO.COLORS[save.color].c, ghostPose ? ghostPose.progress : -1);
-    H.jar(g, 1218, 130, 40, 300, w.jelly, KO.THEMES[cur.w].jelly, time, still, w.jellyFreeze > 0);
-    if (target && !ending) H.bubble(g, 640, 12, { code: target, lang: save.lang, word: wd, pulse: pulse, bump: still ? 0 : bubbleBump });
+    H.jar(g, 1236, 138, 26, 166, w.jelly, KO.THEMES[cur.w].jelly, time, still, w.jellyFreeze > 0);
+    if (target && !ending) H.bubble(g, 640, 6, { code: target, lang: save.lang, word: wd, pulse: pulse, bump: still ? 0 : bubbleBump });
     H.keyboard(g, KB.x, KB.y, KB.u, { lang: save.lang, target: ending ? '' : target, ahead: w.L.path[w.next + 1] || '', pulse: still ? 0.5 : pulse, flash: hudFlash, ps: pixelScale() });
     if (nudgeHint > 0) H.nudge(g, 640, KB.y - 68, _mn(1, nudgeHint / 0.4));
     if (banner) {

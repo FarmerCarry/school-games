@@ -11,25 +11,25 @@
     var E = window.DeskKartsEngine;
     if (!T) throw new Error('three.js unavailable');
 
-    var wgl = Kit.webgl.createRenderer(canvas, { srgb: true });
+    var wgl = Kit.webgl.createRenderer(canvas, { srgb: true, softRatio: 1, max: 1.75, antialias: true });
     var software = wgl.software, renderer = wgl.renderer;
 
     var scene = new T.Scene();
-    var skyColor = new T.Color(0x8ad6ff);
+    var skyColor = new T.Color(0x9bdcff);
     scene.background = skyColor;
-    scene.fog = new T.Fog(0x9be0ff, 88, 225);
+    scene.fog = new T.Fog(0xd8f0ff, 145, 340);
 
-    var camera = new T.PerspectiveCamera(60, 16 / 9, 0.5, 260);
-    var camera2 = new T.PerspectiveCamera(66, 8 / 9, 0.5, 260);
+    var camera = new T.PerspectiveCamera(60, 16 / 9, 0.5, 360);
+    var camera2 = new T.PerspectiveCamera(66, 8 / 9, 0.5, 360);
     camera.position.set(0, 6.2, 12);
     camera.lookAt(0, 1.5, 0);
 
-    // Bright sunny classroom lighting (warm sunlight + sky hemisphere + crisp rim)
-    var hemi = new T.HemisphereLight(0xfffbe8, 0x6ea3c2, 1.38);
+    // Bright sunny classroom lighting (warm sunlight + sky hemisphere + warm bounce fill)
+    var hemi = new T.HemisphereLight(0xfffdf0, 0xa8c8dc, 1.48);
     var sun = new T.DirectionalLight(0xfff5db, 1.85);
-    sun.position.set(28, 52, 34);
-    var fill = new T.DirectionalLight(0xbce4ff, 0.55);
-    fill.position.set(-34, 24, -26);
+    sun.position.set(28, 56, 34);
+    var fill = new T.DirectionalLight(0xffe9c7, 0.95);
+    fill.position.set(-34, 28, -26);
     scene.add(hemi, sun, fill);
 
     // Reusable scratch math objects (zero per-frame GC allocations)
@@ -119,10 +119,9 @@
     /* ---------------------------------------------------- Procedural Desk Texture */
     function makeDeskTexture(L) {
       var c = document.createElement('canvas');
-      c.width = 256;
-      c.height = 256;
+      c.width = 512;
+      c.height = 512;
       var ctx = c.getContext('2d');
-      ctx.scale(0.5, 0.5);
 
       // Warm woodgrain desk background
       C.setHex(L.deskColor);
@@ -131,29 +130,29 @@
 
       // Subtle wood plank seams & warm streaks
       for (var y = 0; y < 512; y += 64) {
-        ctx.fillStyle = 'rgba(70, 35, 10, 0.08)';
+        ctx.fillStyle = 'rgba(70, 35, 10, 0.10)';
         ctx.fillRect(0, y, 512, 3);
-        ctx.fillStyle = 'rgba(255, 240, 210, 0.08)';
+        ctx.fillStyle = 'rgba(255, 240, 210, 0.10)';
         ctx.fillRect(0, y + 3, 512, 5);
       }
       for (var i = 0; i < 42; i++) {
         var gy = ((i * 37) % 512);
-        ctx.fillStyle = i % 2 ? 'rgba(90, 45, 12, 0.06)' : 'rgba(255, 244, 215, 0.07)';
+        ctx.fillStyle = i % 2 ? 'rgba(90, 45, 12, 0.07)' : 'rgba(255, 244, 215, 0.08)';
         ctx.fillRect(0, gy, 512, 4 + (i % 5));
       }
 
       // Centered school desk mat / giant notebook sheet
       var mx = 42, my = 54, mw = 428, mh = 404;
-      ctx.fillStyle = 'rgba(40, 22, 8, 0.18)';
-      ctx.fillRect(mx + 6, my + 8, mw, mh);
+      ctx.fillStyle = 'rgba(40, 22, 8, 0.22)';
+      ctx.fillRect(mx + 7, my + 9, mw, mh);
 
       C.setHex(L.matColor);
       ctx.fillStyle = '#' + C.getHexString();
       ctx.fillRect(mx, my, mw, mh);
 
       // Mat border & grid / notebook lines by theme
-      ctx.strokeStyle = (L.theme === 'math' || L.theme === 'library') ? 'rgba(85, 145, 220, 0.28)' : 'rgba(255, 255, 255, 0.22)';
-      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = (L.theme === 'math' || L.theme === 'library') ? 'rgba(72, 138, 220, 0.32)' : 'rgba(255, 255, 255, 0.25)';
+      ctx.lineWidth = 1.6;
       var step = L.theme === 'math' ? 20 : 28;
       for (var gx = mx + step; gx < mx + mw; gx += step) {
         ctx.beginPath(); ctx.moveTo(gx, my); ctx.lineTo(gx, my + mh); ctx.stroke();
@@ -162,21 +161,110 @@
         ctx.beginPath(); ctx.moveTo(mx, gy2); ctx.lineTo(mx + mw, gy2); ctx.stroke();
       }
       if (L.theme === 'math') {
-        // Red notebook margin line
-        ctx.strokeStyle = 'rgba(255, 92, 92, 0.45)';
+        // Red notebook margin line + classic notebook binder holes
+        ctx.strokeStyle = 'rgba(255, 86, 86, 0.52)';
         ctx.lineWidth = 2.5;
         ctx.beginPath(); ctx.moveTo(mx + 44, my); ctx.lineTo(mx + 44, my + mh); ctx.stroke();
+        ctx.fillStyle = 'rgba(130, 90, 48, 0.35)';
+        for (var bh = 0; bh < 3; bh++) {
+          ctx.beginPath(); ctx.arc(mx + 22, my + 82 + bh * 120, 7, 0, 6.283); ctx.fill();
+        }
       }
       // Crisp mat frame border
-      ctx.strokeStyle = L.theme === 'principal' ? '#ffd54f' : 'rgba(255, 255, 255, 0.65)';
+      ctx.strokeStyle = L.theme === 'principal' ? '#ffd54f' : 'rgba(255, 255, 255, 0.72)';
       ctx.lineWidth = 4;
       ctx.strokeRect(mx + 6, my + 6, mw - 12, mh - 12);
 
       var tex = new T.CanvasTexture(c);
       tex.colorSpace = T.SRGBColorSpace || tex.colorSpace;
-      tex.anisotropy = software ? 1 : 4;
+      tex.anisotropy = software ? 2 : 4;
       return tex;
     }
+
+    /* ---------------------------------------------------- Sunlit Classroom Diorama */
+    function mkTex(w, h, fn) {
+      var c = document.createElement('canvas'); c.width = w; c.height = h;
+      fn(c.getContext('2d'));
+      var tex = new T.CanvasTexture(c);
+      tex.colorSpace = T.SRGBColorSpace || tex.colorSpace;
+      return tex;
+    }
+
+    var QUESTION_TEX = mkTex(128, 128, function (g) {
+      var gr = g.createLinearGradient(0, 0, 128, 128);
+      gr.addColorStop(0, '#ffe85c'); gr.addColorStop(0.55, '#ffb703'); gr.addColorStop(1, '#f48c06');
+      g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
+      g.strokeStyle = '#fff9db'; g.lineWidth = 8; g.strokeRect(8, 8, 112, 112);
+      g.strokeStyle = '#7c3a00'; g.lineWidth = 4; g.strokeRect(2, 2, 124, 124);
+      g.font = '800 84px Fredoka, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.lineWidth = 10; g.strokeStyle = '#222842'; g.strokeText('?', 64, 68);
+      g.fillStyle = '#fff'; g.fillText('?', 64, 68);
+    });
+
+    var CHALK_TEX = mkTex(512, 256, function (g) {
+      var bg = g.createLinearGradient(0, 0, 0, 256);
+      bg.addColorStop(0, '#235e46'); bg.addColorStop(1, '#184231');
+      g.fillStyle = bg; g.fillRect(0, 0, 512, 256);
+      g.font = '700 42px Fredoka, sans-serif'; g.textAlign = 'center';
+      g.fillStyle = 'rgba(255,255,255,.78)'; g.fillText('2 + 3 = 5', 120, 96);
+      g.fillStyle = 'rgba(255,232,120,.82)'; g.fillText('★  ★  ★', 265, 198);
+      g.fillStyle = 'rgba(138,224,255,.78)'; g.fillText('A + B', 392, 96);
+      g.strokeStyle = 'rgba(255,240,180,.58)'; g.lineWidth = 4;
+      g.beginPath(); g.ellipse(258, 102, 58, 30, 0, 0, 6.283); g.stroke();
+    });
+
+    var roomPaperPlanes = [];
+    (function buildClassroomPanorama() {
+      var rb = [], W = 0xfff8e2, WN = 0xd99e5b, TR = 0xfffdf5, SK = 0x7fd4ff;
+      var BC = [0xff5252, 0x2979ff, 0x2ecc71, 0xffca28, 0x9b51ff, 0xff7043];
+      function P(x, y, z, w, h, d, c, gl, rz) { rb.push([x, y, z, w, h, d, 0, rz || 0, c, gl || 0]); }
+
+      // 4 sunlit classroom walls + warm wood wainscot + cream molding
+      [[0, -112, 260, 4], [0, 112, 260, 4], [-126, 0, 4, 228], [126, 0, 4, 228]].forEach(function (a) {
+        P(a[0], 20, a[1], a[2], 82, a[3], W);
+        P(a[0], -8, a[1], a[2] === 4 ? 4.8 : a[2], 22, a[3] === 4 ? 4.8 : a[3], WN);
+        P(a[0], 3.2, a[1], a[2] === 4 ? 5.6 : a[2], 2.2, a[3] === 4 ? 5.6 : a[3], TR);
+      });
+
+      // Panoramic sunlit classroom windows with clouds & green trees on all 4 walls
+      [[-82,-109,44,30,0],[82,-109,44,30,0],[-123,-44,54,32,1],[-123,44,54,32,1],[123,-44,54,32,1],[123,44,54,32,1],[-62,109,52,30,0],[62,109,52,30,0]].forEach(function (u) {
+        var x = u[0], z = u[1], w = u[2], h = u[3], az = u[4], ox = az ? (x < 0 ? 0.5 : -0.5) : 0, oz = az ? 0 : (z < 0 ? 0.5 : -0.5);
+        P(x, 25, z, az ? 1.6 : w, h, az ? w : 1.6, SK, 1);
+        P(x + ox - (az ? 0 : w * 0.2), 25 + h * 0.16, z + oz - (az ? w * 0.18 : 0), az ? 0.9 : w * 0.34, h * 0.16, az ? w * 0.34 : 0.9, 0xffffff, 1);
+        P(x + ox + (az ? 0 : w * 0.22), 25 + h * 0.26, z + oz + (az ? w * 0.2 : 0), az ? 0.9 : w * 0.26, h * 0.13, az ? w * 0.26 : 0.9, 0xffffff, 1);
+        P(x + ox, 25 - h * 0.34, z + oz, az ? 0.9 : w * 0.92, h * 0.28, az ? w * 0.92 : 0.9, 0x45c466, 1);
+        P(x, 25 + h * 0.5, z, az ? 2.6 : w + 2.4, 2.4, az ? w + 2.4 : 2.6, TR);
+        P(x, 25 - h * 0.5, z, az ? 3.2 : w + 3.4, 2.8, az ? w + 3.4 : 3.2, TR);
+        P(x, 25, z, az ? 2.2 : w, 1.5, az ? w : 2.2, TR);
+        P(x, 25, z, az ? 2.2 : 1.5, h, az ? 1.5 : 2.2, TR);
+      });
+
+      // North chalkboard oak frame & ledge
+      P(0, 24, -109.2, 74, 34, 2, 0xb8753a); P(0, 7.2, -107.6, 76, 2.2, 4.2, 0xc98648);
+      P(-14, 8.8, -106.8, 5, 1, 1.2, 0xffffff); P(-4, 8.8, -106.8, 4.5, 1, 1.2, 0xffe066);
+
+      // Colorful pennant bunting
+      for (var i = 0; i < 14; i++) {
+        var px = -104 + i * 16, y = 47 - Math.sin((i / 13) * Math.PI) * 5.5, t = i % 2 ? 0.12 : -0.12;
+        P(px, y, -108, 6.2, 7.2, 0.8, BC[i % 5], 1, t); P(px, y, 108, 6.2, 7.2, 0.8, BC[(i + 2) % 5], 1, t);
+      }
+
+      // South bookshelf + East/West cork bulletin boards
+      P(0, 18, 108.5, 42, 36, 6, 0xb5763e);
+      for (var sh = 0; sh < 3; sh++) {
+        var sy = 6 + sh * 11; P(0, sy, 106.5, 40, 1.4, 5, WN);
+        for (var bk = 0; bk < 8; bk++) P(-16 + bk * 4.5, sy + 4.4, 106.8, 3.4, 6.8 + (bk % 3) * 1.1, 4.2, BC[(bk + sh * 2) % 6]);
+      }
+      for (var s = -1; s <= 1; s += 2) {
+        var bx = s * 123.5;
+        P(bx, 22, 0, 2.2, 24, 30, 0xb8753a); P(bx - s * 0.8, 22, 0, 1.2, 21, 27, 0xdba05c);
+        P(bx - s * 1.4, 25, -7, 0.6, 8, 7, 0xfff48f, 1); P(bx - s * 1.4, 24, 5, 0.6, 9, 8, 0x9be7ff, 1); P(bx - s * 1.4, 15, -1, 0.6, 7, 9, 0xffa8c8, 1);
+      }
+
+      scene.add(new T.Mesh(buildOrientedBoxes(rb), [MAT_LIT, MAT_GLOW]));
+      var cb = new T.Mesh(new T.PlaneGeometry(70, 30), new T.MeshBasicMaterial({ map: CHALK_TEX }));
+      cb.position.set(0, 24, -108); scene.add(cb);
+    })();
 
     /* ---------------------------------------------------- 3D Track Ribbon Mesh */
     function buildTrackRibbon(L) {
@@ -199,8 +287,8 @@
       var col = new Float32Array(quadCount * 18);
       var o = 0;
 
-      var cRoadA = new T.Color(L.roadColor);
-      var cRoadB = cRoadA.clone().multiplyScalar(0.95);
+      var cRoadA = new T.Color(L.roadColor).multiplyScalar(0.84);
+      var cRoadB = cRoadA.clone().multiplyScalar(0.94);
       var cCurbA = new T.Color(L.curbA);
       var cCurbB = new T.Color(L.curbB);
       var cWhite = new T.Color(0xffffff);
@@ -346,75 +434,33 @@
         boxes.push([rm.x + rm.tx * 1.3, 1.24, rm.z + rm.tz * 1.3, 0.55, 0.10, bw * 0.72, ryR, 0.20, 0xffe600, 1]);
       }
 
-      // 3) Giant Stationery Props around desk perimeter & safe infield islands
-      var candidates = [
-        { x:  0,  z:  4,  kind: 'books' },
-        { x: -16, z:  4,  kind: 'cup' },
-        { x:  18, z:  4,  kind: 'tape' },
-        { x:  0,  z: -2,  kind: 'crayons' },
-        { x: -58, z: -26, kind: 'cup' },
-        { x:  58, z: -26, kind: 'books' },
-        { x: -58, z:  28, kind: 'tape' },
-        { x:  58, z:  28, kind: 'crayons' },
-        { x:   0, z: -42, kind: 'books' },
-        { x: -32, z: -40, kind: 'notes' },
-        { x:  32, z: -40, kind: 'cup' },
-        { x: -56, z:   2, kind: 'notes' },
-        { x:  60, z:   2, kind: 'notes' },
-        { x:   0, z:  44, kind: 'crayons' },
-        { x: -34, z:  42, kind: 'books' },
-        { x:  36, z:  42, kind: 'tape' }
-      ];
-
-      var placed = 0;
-      for (var c = 0; c < candidates.length; c++) {
-        var pt = candidates[c];
-        if (!isClearOfTrack(L, pt.x, pt.z, 5.2)) continue;
-        placed++;
-        var x = pt.x, z = pt.z;
-
-        if (pt.kind === 'cup') {
-          // Giant striped school pencil cup with towering colored pencils
+      // 3) Giant Stationery Props around desk perimeter & safe infield islands (0=books,1=cup,2=tape,3=crayons,4=notes)
+      var cands = [[0,4,0],[-16,4,1],[18,4,2],[0,-2,3],[-58,-26,1],[58,-26,0],[-58,28,2],[58,28,3],[0,-42,0],[-32,-40,4],[32,-40,1],[-56,2,4],[60,2,4],[0,44,3],[-34,42,0],[36,42,2],[-72,-50,0],[72,-50,1],[-74,48,1],[74,48,0],[0,-56,1]];
+      for (var c = 0; c < cands.length; c++) {
+        var x = cands[c][0], z = cands[c][1], knd = cands[c][2];
+        if (!isClearOfTrack(L, x, z, 5.2)) continue;
+        if (knd === 1) {
           var cupCol = L.theme === 'principal' ? 0xffc400 : (L.theme === 'art' ? 0xff5a7c : 0x29b6f6);
-          boxes.push([x, 3.2, z, 6.2, 6.4, 6.2, 0.25, 0, cupCol, 0]);
-          boxes.push([x, 3.4, z, 6.45, 1.3, 6.45, 0.25, 0, 0xffffff, 0]);
-          boxes.push([x, 6.3, z, 5.4, 0.4, 5.4, 0.25, 0, 0x263147, 0]);
-          // Pencils sticking out
-          boxes.push([x - 1.2, 8.6, z - 0.8, 1.0, 7.6, 1.0, 0.1, 0.18, 0xffca28, 0]);
-          boxes.push([x - 1.8, 12.6, z - 0.8, 0.7, 1.4, 0.7, 0.1, 0.18, 0xf2cfa0, 0]);
-          boxes.push([x + 1.1, 8.2, z + 0.9, 1.0, 7.2, 1.0, 0.3, -0.22, 0xff4252, 0]);
-          boxes.push([x + 0.2, 8.8, z - 1.2, 1.0, 8.0, 1.0, -0.2, 0.08, 0x28d96c, 0]);
-        } else if (pt.kind === 'books') {
-          // Stacked colorful school textbooks
-          boxes.push([x, 1.2, z, 11.0, 2.4, 8.2, 0.18, 0, 0x3b82f6, 0]);
-          boxes.push([x + 0.3, 1.2, z, 10.2, 1.9, 7.7, 0.18, 0, 0xfff8e6, 0]);
-          boxes.push([x - 0.4, 3.4, z + 0.2, 9.6, 2.0, 7.4, -0.14, 0, 0xff5252, 0]);
-          boxes.push([x - 0.1, 3.4, z + 0.2, 8.8, 1.5, 6.9, -0.14, 0, 0xfffaf0, 0]);
-          boxes.push([x + 0.2, 5.1, z - 0.2, 8.2, 1.5, 6.2, 0.32, 0, 0x2ecc71, 0]);
-        } else if (pt.kind === 'tape') {
-          // Giant round masking tape roll (12 tangential segments forming a crisp smooth ring!)
+          boxes.push([x, 3.2, z, 6.2, 6.4, 6.2, 0.25, 0, cupCol, 0], [x, 3.4, z, 6.45, 1.3, 6.45, 0.25, 0, 0xffffff, 0], [x, 6.3, z, 5.4, 0.4, 5.4, 0.25, 0, 0x263147, 0],
+            [x - 1.2, 8.6, z - 0.8, 1, 7.6, 1, 0.1, 0.18, 0xffca28, 0], [x - 1.8, 12.6, z - 0.8, 0.7, 1.4, 0.7, 0.1, 0.18, 0xf2cfa0, 0],
+            [x + 1.1, 8.2, z + 0.9, 1, 7.2, 1, 0.3, -0.22, 0xff4252, 0], [x + 0.2, 8.8, z - 1.2, 1, 8, 1, -0.2, 0.08, 0x28d96c, 0]);
+        } else if (knd === 0) {
+          boxes.push([x, 1.2, z, 11, 2.4, 8.2, 0.18, 0, 0x3b82f6, 0], [x + 0.3, 1.2, z, 10.2, 1.9, 7.7, 0.18, 0, 0xfff8e6, 0],
+            [x - 0.4, 3.4, z + 0.2, 9.6, 2, 7.4, -0.14, 0, 0xff5252, 0], [x - 0.1, 3.4, z + 0.2, 8.8, 1.5, 6.9, -0.14, 0, 0xfffaf0, 0],
+            [x + 0.2, 5.1, z - 0.2, 8.2, 1.5, 6.2, 0.32, 0, 0x2ecc71, 0]);
+        } else if (knd === 2) {
           for (var s = 0; s < 12; s++) {
             var a = (s / 12) * Math.PI * 2;
-            boxes.push([x + Math.cos(a) * 3.4, 1.5, z + Math.sin(a) * 3.4, 1.65, 3.0, 2.2, -a, 0, 0xf7e7b4, 0]);
-            boxes.push([x + Math.cos(a) * 2.3, 1.5, z + Math.sin(a) * 2.3, 0.65, 3.08, 1.5, -a, 0, 0xb87b44, 0]);
+            boxes.push([x + Math.cos(a) * 3.4, 1.5, z + Math.sin(a) * 3.4, 1.7, 3, 2.25, -a, 0, 0xfff1c9, 0], [x + Math.cos(a) * 2.25, 1.5, z + Math.sin(a) * 2.25, 0.72, 3.12, 1.55, -a, 0, 0xc87d3b, 0]);
           }
-        } else if (pt.kind === 'crayons') {
-          // Row of chunky colorful wax crayons with crisp black wrapper & aligned tips
-          var cHex = [0xff4252, 0xff9f1c, 0x28d96c, 0x22a7ff, 0x9b51ff];
-          var cRot = 0.12;
-          var sc2 = Math.sin(cRot), cc2 = Math.cos(cRot);
+        } else if (knd === 3) {
+          var cHex = [0xff4252, 0xff9f1c, 0x28d96c, 0x22a7ff, 0x9b51ff], sc2 = Math.sin(0.12), cc2 = Math.cos(0.12);
           for (var cr = 0; cr < 5; cr++) {
-            var ox = (cr - 2) * 1.48;
-            var bx = x + ox * cc2, bz = z - ox * sc2;
-            boxes.push([bx, 0.65, bz, 1.15, 1.15, 6.8, cRot, 0, cHex[cr], 0]);
-            boxes.push([bx, 0.68, bz, 1.24, 1.22, 2.4, cRot, 0, 0x22283c, 0]);
-            boxes.push([bx + sc2 * 3.9, 0.62, bz + cc2 * 3.9, 0.68, 0.68, 1.25, cRot, 0, cHex[cr], 0]);
+            var ox = (cr - 2) * 1.48, bx = x + ox * cc2, bz = z - ox * sc2;
+            boxes.push([bx, 0.65, bz, 1.15, 1.15, 6.8, 0.12, 0, cHex[cr], 0], [bx, 0.68, bz, 1.24, 1.22, 2.4, 0.12, 0, 0x22283c, 0], [bx + sc2 * 3.9, 0.62, bz + cc2 * 3.9, 0.68, 0.68, 1.25, 0.12, 0, cHex[cr], 0]);
           }
-        } else if (pt.kind === 'notes') {
-          // Bright neon sticky note stack + shiny paperclip
-          boxes.push([x, 0.65, z, 6.8, 1.3, 6.8, 0.22, 0, 0xfff059, 0]);
-          boxes.push([x + 0.4, 1.45, z - 0.2, 6.6, 0.35, 6.6, 0.32, 0, 0xff80ab, 0]);
-          boxes.push([x - 0.8, 1.72, z + 0.6, 3.8, 0.22, 1.2, 0.7, 0, 0xdce4f0, 0]);
+        } else {
+          boxes.push([x, 0.65, z, 6.8, 1.3, 6.8, 0.22, 0, 0xfff059, 0], [x + 0.4, 1.45, z - 0.2, 6.6, 0.35, 6.6, 0.32, 0, 0xff80ab, 0], [x - 0.8, 1.72, z + 0.6, 3.8, 0.22, 1.2, 0.7, 0, 0xdce4f0, 0]);
         }
       }
 
@@ -595,6 +641,19 @@
       shellPool.push(sg);
     }
 
+    // 3 cheerful ambient Origami Paper Airplanes soaring gracefully overhead in the sunlit classroom!
+    for (var ap = 0; ap < 3; ap++) {
+      var apG = new T.Group();
+      var apBody = new T.Mesh(GEO_PLANE_BODY, MAT_PAPER);
+      var apWing = new T.Mesh(GEO_PLANE_WING, MAT_PAPER); apWing.position.set(-0.25, 0.02, 0);
+      var apStripe = new T.Mesh(new T.BoxGeometry(0.42, 0.11, 2.16), ap === 0 ? MAT_PLANE_ACC : MAT_SHELL_CY);
+      apStripe.position.set(-0.25, 0.04, 0);
+      apG.add(apBody, apWing, apStripe);
+      apG.scale.setScalar(2.4);
+      scene.add(apG);
+      roomPaperPlanes.push({ g: apG, rx: 56 + ap * 14, rz: 40 + ap * 11, y: 20 + ap * 4.5, spd: 0.22 + ap * 0.07, ph: ap * 2.1 });
+    }
+
     function makeEraserMesh() {
       var g = new T.Group();
       var pinkMat = new T.MeshLambertMaterial({ color: 0xff77a9 });
@@ -634,14 +693,11 @@
       return g;
     }
 
+    var ITEM_BOX_MAT = new T.MeshLambertMaterial({ map: QUESTION_TEX, emissive: 0x3b2400 });
     function makeItemBoxMesh() {
       var g = new T.Group();
-      var cubeMat = new T.MeshLambertMaterial({ color: 0xffca28, emissive: 0x5c3a00 });
-      var cube = new T.Mesh(GEO_BOX, cubeMat);
-      var bandMat = new T.MeshBasicMaterial({ color: 0xffffff });
-      var b1 = new T.Mesh(new T.BoxGeometry(1.52, 0.28, 1.52), bandMat);
-      var b2 = new T.Mesh(new T.BoxGeometry(0.28, 1.52, 1.52), bandMat);
-      g.add(cube, b1, b2);
+      var cube = new T.Mesh(GEO_BOX, ITEM_BOX_MAT);
+      g.add(cube);
       return g;
     }
 
@@ -668,7 +724,7 @@
 
       skyColor.setHex(L.skyColor);
       scene.background = skyColor;
-      scene.fog.color.setHex(L.skyColor);
+      scene.fog.color.setHex(0xd8f0ff);
 
       // Giant sunlit desk top with procedural wood + desk mat texture
       deskTex = makeDeskTexture(L);
@@ -913,7 +969,7 @@
       }
     }
 
-    function updateChaseCam(idx, w, pk, dt, snapCam, splitMode) {
+    function updateChaseCam(idx, w, pk, dt, snapCam, splitMode, isTitle) {
       var spCam = E.sampleAt(w.L, pk.s + 5.5);
       var trackAng = Math.atan2(spCam.tz, spCam.tx);
       var desiredYaw = pk.ang + E.wrapAngle(trackAng - pk.ang) * 0.30;
@@ -921,15 +977,15 @@
       else camYaw[idx] = E.wrapAngle(camYaw[idx] + E.wrapAngle(desiredYaw - camYaw[idx]) * E.clamp(dt * 6.5, 0, 1));
 
       var boostKick = pk.boostT > 0 ? 1.4 : 0;
-      var backDist = (splitMode ? 9.8 : 9.4) + boostKick;
-      var camHeight = (splitMode ? 6.3 : 6.0) + pk.y * 0.48;
-      var ahead = 9.2;
+      var backDist = (splitMode ? 9.8 : isTitle ? 10.6 : 9.4) + boostKick;
+      var camHeight = (splitMode ? 6.3 : isTitle ? 6.1 : 6.0) + pk.y * 0.48;
+      var ahead = isTitle ? 10.4 : 9.2;
 
       var tx = pk.x - Math.cos(camYaw[idx]) * backDist;
       var ty = camHeight;
       var tz = pk.z - Math.sin(camYaw[idx]) * backDist;
       var lx = pk.x + Math.cos(camYaw[idx]) * ahead;
-      var ly = 1.6 + pk.y * 0.32;
+      var ly = (isTitle ? 0.65 : 1.6) + pk.y * 0.32;
       var lz = pk.z + Math.sin(camYaw[idx]) * ahead;
 
       if (snapCam) {
@@ -967,6 +1023,15 @@
 
       var t = w.worldTime;
       var shIdx = 0;
+
+      // 0) Glide overhead ambient classroom origami paper airplanes!
+      for (var api = 0; api < roomPaperPlanes.length; api++) {
+        var rp2 = roomPaperPlanes[api], aa = t * rp2.spd + rp2.ph;
+        var ax = Math.cos(aa) * rp2.rx, az = Math.sin(aa) * rp2.rz;
+        var dx2 = -Math.sin(aa) * rp2.rx, dz2 = Math.cos(aa) * rp2.rz;
+        rp2.g.position.set(ax, rp2.y + Math.sin(t * 1.8 + rp2.ph) * 1.4, az);
+        rp2.g.rotation.set(0.14, -Math.atan2(dz2, dx2), Math.sin(t * 2.2 + rp2.ph) * 0.12);
+      }
 
       // 1) Update bouncy erasers
       for (var i = 0; i < w.erasers.length && i < eraserMeshes.length; i++) {
@@ -1157,12 +1222,12 @@
       shaker.update(dt);
       isSplit = !isTitleDemo && !!w.duo;
       if (isTitleDemo) {
-        updateChaseCam(0, w, w.karts[0], dt, snapCam, false);
+        updateChaseCam(0, w, w.karts[0], dt, snapCam, false, true);
       } else if (isSplit) {
-        updateChaseCam(0, w, w.karts[0], dt, snapCam, true);
-        updateChaseCam(1, w, w.karts[1], dt, snapCam, true);
+        updateChaseCam(0, w, w.karts[0], dt, snapCam, true, false);
+        updateChaseCam(1, w, w.karts[1], dt, snapCam, true, false);
       } else {
-        updateChaseCam(0, w, w.karts[0], dt, snapCam, false);
+        updateChaseCam(0, w, w.karts[0], dt, snapCam, false, false);
       }
 
       var sx = (!view.calm && shaker.power > 0.005) ? shaker.x * 0.42 : 0;

@@ -360,8 +360,9 @@ async function boardSound() {
     const sound = frame.locator('#soundButton');
     async function assertSound(muted) {
       await frame.waitForFunction(muted => Kit.audio.muted === muted && !document.getElementById('soundButton').disabled, muted);
-      assert.equal(await sound.textContent(), muted ? 'الصوت: مغلق' : 'الصوت: يعمل', game + ': sound label follows actual audio');
-      assert.equal(await sound.getAttribute('aria-pressed'), String(!muted), game + ': sound pressed state follows actual audio');
+      assert.equal(await sound.textContent(), muted ? '🔇' : '🔊', game + ': sound icon follows actual audio');
+      assert.equal(await sound.getAttribute('aria-label'), 'كتم الصوت', game + ': sound button keeps accessible label');
+      assert.equal(await sound.getAttribute('aria-pressed'), String(muted), game + ': sound pressed state follows actual audio');
     }
     const savedMute = () => frame.evaluate(() => localStorage.getItem('sg:site:muted'));
     await assertSound(false);

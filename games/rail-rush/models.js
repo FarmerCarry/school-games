@@ -173,17 +173,27 @@
         var col = pick(BUILD_COLORS);
         b.box(col, cx, 0, cz, bd, bh, bw, 0.72);
         b.box(pick(['#ffffff', '#3d405b', '#f2cc8f', '#e5e5e5']), cx, bh, cz, bd + 0.5, 0.45, bw + 0.5);
-        // ground floor shop band + awning
-        if (r() < 0.6) {
+        // ground floor shop band + striped awning
+        if (r() < 0.7) {
           b.box('#3d405b', side * (x0 - 0.02), 0, cz, 0.1, 2.6, bw - 1);
+          w.box('#ffe9a8', side * (x0 - 0.08), 0.75, cz, 0.04, 1.35, bw - 2.2);
           var aw = pick(['#ef476f', '#118ab2', '#06d6a0', '#ffd166', '#ff7a1a']);
-          b.box(aw, side * (x0 - 0.6), 2.7, cz, 1.2, 0.18, bw - 0.6, 0, 0, 0, side * 0.25);
+          var segs = Math.max(4, Math.floor((bw - 0.6) / 1.1)), sw = (bw - 0.6) / segs;
+          for (var si = 0; si < segs; si++) {
+            b.box(si % 2 ? '#ffffff' : aw, side * (x0 - 0.65), 2.7, cz - (bw - 0.6) / 2 + (si + 0.5) * sw, 1.35, 0.2, sw, 0, 0, 0, side * 0.26);
+          }
         }
-        // roof extras
-        if (r() < 0.45) {
-          b.add(GEO.cyl10, '#b08968', cx + R(-2, 2), bh + 1.45, cz + R(-2, 2), 1.8, 2.0, 1.8, 0, 0, 0, 0.8);
-          b.add(GEO.cone6, '#7f5539', cx, bh + 3.0, cz, 2.2, 1.0, 2.2);
-        } else if (r() < 0.5) {
+        // roof extras: stilted water-towers or AC units / rooftop signs
+        if (r() < 0.5) {
+          var wx = cx + R(-1.8, 1.8), wz2 = cz + R(-1.5, 1.5);
+          [[-0.55, -0.55], [0.55, -0.55], [-0.55, 0.55], [0.55, 0.55]].forEach(function (lg) {
+            b.box('#6b4423', wx + lg[0], bh + 0.45, wz2 + lg[1], 0.18, 1.2, 0.18);
+          });
+          b.add(GEO.cyl10, '#c08b5c', wx, bh + 2.55, wz2, 1.9, 1.9, 1.9, 0, 0, 0, 0.8);
+          b.add(GEO.cyl10, '#495057', wx, bh + 2.15, wz2, 1.96, 0.12, 1.96);
+          b.add(GEO.cyl10, '#495057', wx, bh + 2.95, wz2, 1.96, 0.12, 1.96);
+          b.add(GEO.cone6, '#7f5539', wx, bh + 4.05, wz2, 2.35, 1.1, 2.35);
+        } else if (r() < 0.6) {
           b.box('#adb5bd', cx + R(-2, 2), bh + 0.45, cz + R(-2, 2), 1.6, 1.0, 1.4);
           b.box('#adb5bd', cx + R(-2, 2), bh + 0.45, cz + R(-2, 2), 1.2, 0.8, 1.2);
         }
@@ -373,6 +383,8 @@
   RR.buildCar = function (styleIdx, kind, moving) {
     var st = TRAIN_STYLES[styleIdx % TRAIN_STYLES.length];
     var b = new Builder();
+    // ground contact shadow beneath the train
+    b.box('#2a2434', 0, 0.155, 0, 2.52, 0.02, 10.3);
     // bogies and wheels
     [-3.3, 3.3].forEach(function (bz) {
       b.box('#3a3f4b', 0, 0.12, bz, 1.9, 0.45, 2.4);
@@ -450,6 +462,7 @@
 
   RR.buildBarrier = function (kind) {
     var b = new Builder();
+    b.box('#2a2434', 0, 0.155, 0, 2.35, 0.02, 0.72);
     if (kind === 'low') {
       [-1, 1].forEach(function (sx) {
         b.box('#555b6e', sx * 0.95, 0.05, 0, 0.5, 0.1, 0.6);
@@ -575,9 +588,9 @@
   RR.shadowCanvas = function () {
     return canvasTex(64, function (g, s) {
       var gr = g.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
-      gr.addColorStop(0, 'rgba(20,20,40,0.55)');
-      gr.addColorStop(0.6, 'rgba(20,20,40,0.35)');
-      gr.addColorStop(1, 'rgba(20,20,40,0)');
+      gr.addColorStop(0, 'rgba(18,16,38,0.72)');
+      gr.addColorStop(0.55, 'rgba(18,16,38,0.44)');
+      gr.addColorStop(1, 'rgba(18,16,38,0)');
       g.fillStyle = gr;
       g.fillRect(0, 0, s, s);
     });
@@ -838,7 +851,7 @@
     M.eye = new T.MeshBasicMaterial({ color: '#1b1b2f' });
     M.white = new T.MeshBasicMaterial({ color: '#ffffff' });
     M.mouth = new T.MeshBasicMaterial({ color: '#7a1f2b' });
-    M.cheek = new T.MeshBasicMaterial({ color: '#ff9aa2' });
+    M.cheek = new T.MeshBasicMaterial({ color: '#ffa4ae' });
     M.glow = new T.MeshBasicMaterial({ color: '#3ad1ff' });
     M.flame = new T.MeshBasicMaterial({ color: '#ffb000' });
     M.bubble = new T.MeshLambertMaterial({ color: '#cfefff', transparent: true, opacity: 0.35, depthWrite: false });
@@ -868,15 +881,15 @@
     part(BOX, M.hood2, torso, 0, 0.44, 0.17, 0.36, 0.18, 0.1);
     var headG = group(torso, 0, 0.5, 0);
     part(CYL, M.skin, headG, 0, 0.04, 0, 0.14, 0.1, 0.14);
-    part(SPH, M.skin, headG, 0, 0.3, 0, 0.58, 0.54, 0.54);
-    var hair = part(SPH, M.hair, headG, 0, 0.33, 0.05, 0.6, 0.5, 0.52);
-    part(SPH, M.skin, headG, -0.29, 0.28, 0.02, 0.1, 0.14, 0.1);
-    part(SPH, M.skin, headG, 0.29, 0.28, 0.02, 0.1, 0.14, 0.1);
+    part(SPH, M.skin, headG, 0, 0.3, 0, 0.56, 0.54, 0.53);
+    var hair = part(SPH, M.hair, headG, 0, 0.33, 0.05, 0.58, 0.5, 0.51);
+    part(SPH, M.skin, headG, -0.28, 0.28, 0.02, 0.09, 0.13, 0.09);
+    part(SPH, M.skin, headG, 0.28, 0.28, 0.02, 0.09, 0.13, 0.09);
     var eyes = group(headG, 0, 0, 0);
     [-1, 1].forEach(function (s) {
-      part(SPH, M.eye, eyes, s * 0.1, 0.31, -0.245, 0.09, 0.13, 0.06);
-      part(SPH, M.white, eyes, s * 0.1 - 0.02, 0.34, -0.27, 0.03, 0.04, 0.02);
-      part(SPH, M.cheek, eyes, s * 0.17, 0.22, -0.225, 0.08, 0.05, 0.03);
+      part(SPH, M.eye, eyes, s * 0.1, 0.31, -0.242, 0.09, 0.13, 0.055);
+      part(SPH, M.white, eyes, s * 0.1 - 0.02, 0.34, -0.265, 0.03, 0.04, 0.02);
+      part(SPH, M.cheek, eyes, s * 0.145, 0.23, -0.242, 0.064, 0.036, 0.018);
     });
     part(BOX, M.mouth, eyes, 0, 0.19, -0.265, 0.09, 0.03, 0.02);
     // accessories

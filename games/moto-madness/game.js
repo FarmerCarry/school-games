@@ -526,7 +526,7 @@
     for (var i = 0; i < ev.length; i++) {
       var e = ev[i];
       switch (e.type) {
-        case 'start': if (sound) bigPop('انطلق!', '', '#5dff9d'); break;
+        case 'start': if (sound) bigPop('انطلق!', '', '#ffe44d'); break;
         case 'land': {
           var k = min(1, e.v / 1300);
           for (var w = 0; w < 2; w++) { var wh = b.wheels[w]; burst(wh.x, wh.y + 18, 6 + M.round(k * 10), { colors: th.dust, speed: 160 + k * 200, angle: -PI / 2, spread: 2.6, life: 0.6, size: 9, type: 1, g: -40, drag: 3 }); }
@@ -829,89 +829,57 @@
     ctx.lineWidth = lw || 7; ctx.strokeStyle = 'rgba(20,20,45,0.9)'; ctx.strokeText(text, x, y);
     ctx.fillStyle = color || '#fff'; ctx.fillText(text, x, y);
   }
+  function pill(x, y, w, h, r, bg, st, lw) {
+    ctx.fillStyle = bg || 'rgba(14,18,48,0.72)'; MMR.rrect(ctx, x, y, w, h, r); ctx.fill();
+    if (st) { ctx.strokeStyle = st; ctx.lineWidth = lw || 2; ctx.stroke(); }
+  }
   function drawHUD() {
-    var L = MM.LEVELS[levelIdx], w = world, cur = max(0, w.time - w.bonus);
+    var L = MM.LEVELS[levelIdx], w = world, cur = max(0, w.time - w.bonus), i;
     if (w.finished) cur = w.finalTime;
-    // timer
-    var st = starsFor(levelIdx, cur), tcol = st === 3 ? '#ffffff' : st === 2 ? '#ffe9a8' : '#ffc0c0';
-    var pulse = hurry > 0 ? 1 + hurry * 0.25 : 1;
-    ctx.save(); ctx.translate(26, 62); ctx.scale(pulse, pulse);
-    outlined(fmt(cur), 0, 0, 50, tcol, 'left', 9, 'ltr');
-    ctx.restore();
-    // star target
-    var target = st === 3 ? L.stars[0] : st === 2 ? L.stars[1] : null;
-    for (var i = 0; i < 3; i++) {
-      ctx.fillStyle = 'rgba(20,20,45,0.9)'; MMR.star(ctx, 40 + i * 30, 94, 15, 'rgba(20,20,45,0.85)');
-      MMR.star(ctx, 40 + i * 30, 94, 11, i < st ? '#ffd23f' : 'rgba(255,255,255,0.25)');
-    }
-    if (target != null) outlined('أقل من ' + fmt(target), 130, 102, 20, '#ffffff', 'left', 5);
-    if (bonusFlash > 0 || w.bonus > 0) {
-      ctx.globalAlpha = bonusFlash > 0 ? 1 : 0.8;
-      outlined('الشقلبات وفّرت ' + w.bonus + ' ث', 26, 136, bonusFlash > 0 ? 24 : 18, '#b8ff6a', 'left', 5);
-      ctx.globalAlpha = 1;
-    }
-    if (w.nitroT > 0) {
-      ctx.fillStyle = 'rgba(20,20,45,0.65)'; MMR.rrect(ctx, 26, 148, 160, 14, 7); ctx.fill();
-      ctx.fillStyle = '#ff8a2f'; MMR.rrect(ctx, 28, 150, max(8, 156 * (w.nitroT / 1.5)), 10, 5); ctx.fill();
-    }
-    // progress bar
-    var lv = w.level, px = 440, pw = 400, py = 26;
-    var prog = Kit.clamp((w.bike.x - lv.start.x) / (lv.finishX - lv.start.x), 0, 1);
-    ctx.fillStyle = 'rgba(20,20,45,0.6)'; MMR.rrect(ctx, px - 6, py - 6, pw + 12, 20, 10); ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,0.25)'; MMR.rrect(ctx, px, py, pw, 8, 4); ctx.fill();
-    ctx.fillStyle = '#3ddc84'; MMR.rrect(ctx, px, py, max(8, pw * prog), 8, 4); ctx.fill();
-    for (i = 0; i < lv.checkpoints.length; i++) {
-      var cx = px + pw * (lv.checkpoints[i].x - lv.start.x) / (lv.finishX - lv.start.x);
-      ctx.fillStyle = i <= w.cp ? '#3ddc84' : '#ff5a5f'; ctx.fillRect(cx - 2, py - 8, 4, 22);
-    }
-    ctx.fillStyle = '#fff'; ctx.fillRect(px + pw - 2, py - 10, 4, 26);
-    ctx.fillStyle = '#1d1d24'; ctx.fillRect(px + pw + 2, py - 10, 12, 6); ctx.fillStyle = '#fff'; ctx.fillRect(px + pw + 2, py - 4, 12, 6);
-    if (ghostX != null) { // your best run on the progress bar
-      var gp = Kit.clamp((ghostX - lv.start.x) / (lv.finishX - lv.start.x), 0, 1);
-      ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.beginPath(); ctx.arc(px + pw * gp, py + 4, 8, 0, TAU); ctx.fill();
-      ctx.strokeStyle = 'rgba(20,20,45,0.6)'; ctx.lineWidth = 2; ctx.stroke();
-    }
-    ctx.fillStyle = curSkin.rainbow ? '#ffd23f' : curSkin.body; ctx.beginPath(); ctx.arc(px + pw * prog, py + 4, 9, 0, TAU); ctx.fill();
-    ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.stroke();
-    // boulder warning when it is off the left edge
+    var st = starsFor(levelIdx, cur), tcol = st === 3 ? '#fff' : st === 2 ? '#ffe9a8' : '#ffc0c0', target = st === 3 ? L.stars[0] : st === 2 ? L.stars[1] : null;
+    pill(16, 12, target != null ? 236 : 168, 98, 20, 0, 'rgba(255,255,255,0.22)');
+    var pulse = hurry > 0 ? 1 + hurry * 0.22 : 1;
+    ctx.save(); ctx.translate(30, 58); ctx.scale(pulse, pulse); outlined(fmt(cur), 0, 0, 44, tcol, 'left', 7, 'ltr'); ctx.restore();
+    for (i = 0; i < 3; i++) { MMR.star(ctx, 42 + i * 28, 88, 13, 'rgba(10,12,32,0.85)'); MMR.star(ctx, 42 + i * 28, 88, 10, i < st ? '#ffd23f' : 'rgba(255,255,255,0.25)'); }
+    if (target != null) outlined('أقل من ' + fmt(target), 124, 95, 18, '#eef3ff', 'left', 4);
+    if (bonusFlash > 0 || w.bonus > 0) { ctx.globalAlpha = bonusFlash > 0 ? 1 : 0.85; outlined('الشقلبات وفّرت ' + w.bonus + ' ث', 24, 136, bonusFlash > 0 ? 24 : 18, '#b8ff6a', 'left', 5); ctx.globalAlpha = 1; }
+    if (w.nitroT > 0) { pill(24, 148, 160, 14, 7); pill(26, 150, max(8, 156 * (w.nitroT / 1.5)), 10, 5, '#ff8a2f'); }
+    var lv = w.level, px = 440, pw = 400, py = 28, prog = Kit.clamp((w.bike.x - lv.start.x) / (lv.finishX - lv.start.x), 0, 1);
+    pill(px - 24, 12, pw + 52, 68, 20, 0, 'rgba(255,255,255,0.22)');
+    pill(px, py, pw, 8, 4, 'rgba(255,255,255,0.22)'); pill(px, py, max(8, pw * prog), 8, 4, '#3ddc84');
+    for (i = 0; i < lv.checkpoints.length; i++) { var cx = px + pw * (lv.checkpoints[i].x - lv.start.x) / (lv.finishX - lv.start.x); ctx.fillStyle = i <= w.cp ? '#3ddc84' : '#ff5a5f'; ctx.fillRect(cx - 2, py - 6, 4, 20); }
+    ctx.fillStyle = '#fff'; ctx.fillRect(px + pw - 2, py - 8, 4, 24);
+    ctx.fillStyle = '#1d1d24'; ctx.fillRect(px + pw + 2, py - 8, 12, 6); ctx.fillStyle = '#fff'; ctx.fillRect(px + pw + 2, py - 2, 12, 6);
+    if (ghostX != null) { var gp = Kit.clamp((ghostX - lv.start.x) / (lv.finishX - lv.start.x), 0, 1); ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.beginPath(); ctx.arc(px + pw * gp, py + 4, 8, 0, TAU); ctx.fill(); ctx.strokeStyle = 'rgba(20,20,45,0.6)'; ctx.lineWidth = 2; ctx.stroke(); }
+    ctx.fillStyle = curSkin.rainbow ? '#ffd23f' : curSkin.body; ctx.beginPath(); ctx.arc(px + pw * prog, py + 4, 9, 0, TAU); ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.stroke();
     if (chaser && !w.crashed) {
       var sx = (chaser.x - cam.x) * cam.zoom + 640;
       if (sx < -chaser.r * cam.zoom) {
         var sy = Kit.clamp((chaser.y - cam.y) * cam.zoom + 360, 160, 640), fl = sin(clock * 16) > 0;
-        ctx.fillStyle = fl ? '#ff3b3b' : '#ffd23f';
-        ctx.beginPath(); ctx.moveTo(14, sy); ctx.lineTo(54, sy - 30); ctx.lineTo(54, sy + 30); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = fl ? '#ff3b3b' : '#ffd23f'; ctx.beginPath(); ctx.moveTo(14, sy); ctx.lineTo(54, sy - 30); ctx.lineTo(54, sy + 30); ctx.closePath(); ctx.fill();
         outlined('!', 70, sy + 14, 42, fl ? '#ffd23f' : '#ff3b3b', 'center', 6, 'ltr');
       }
     }
-    // level name
     var wi = flr(levelIdx / 5) + 1, li = levelIdx % 5 + 1;
-    outlined(wi + '-' + li + '  ' + L.name, 640, 64, 22, '#ffffff', 'center', 5);
-    if (stuckT > 4 && state === 'play') {
-      ctx.globalAlpha = 0.75 + 0.25 * sin(clock * 6);
-      ctx.fillStyle = 'rgba(15,18,45,0.72)'; MMR.rrect(ctx, 470, 600, 340, 56, 18); ctx.fill();
-      outlined('عالق؟ اضغط R لتبدأ من جديد', 640, 637, 24, '#ffffff', 'center', 5);
-      ctx.globalAlpha = 1;
-    }
-    // intro banner
+    outlined(wi + '-' + li + '  ' + L.name, 640, 66, 20, '#fff', 'center', 4);
+    if (stuckT > 4 && state === 'play') { ctx.globalAlpha = 0.75 + 0.25 * sin(clock * 6); pill(470, 600, 340, 56, 18, 'rgba(15,18,45,0.78)'); outlined('عالق؟ اضغط R لتبدأ من جديد', 640, 637, 24, '#fff', 'center', 5); ctx.globalAlpha = 1; }
     if (!w.started && state === 'play') {
-      var a = 0.75 + 0.25 * sin(clock * 6);
-      ctx.fillStyle = 'rgba(15,18,45,0.72)'; MMR.rrect(ctx, 430, 520, 420, 90, 22); ctx.fill();
-      outlined(wi + '-' + li + '  ' + L.name, 640, 558, 32, '#ffd23f', 'center', 7);
-      ctx.globalAlpha = a;
-      outlined('اضغط ↑ باستمرار لتنطلق!', 640, 594, 24, '#ffffff', 'center', 5);
-      ctx.globalAlpha = 1;
+      pill(430, 520, 420, 90, 22, 'rgba(15,18,45,0.78)'); outlined(wi + '-' + li + '  ' + L.name, 640, 558, 32, '#ffd23f', 'center', 7);
+      ctx.globalAlpha = 0.75 + 0.25 * sin(clock * 6); outlined('اضغط ↑ باستمرار لتنطلق!', 640, 594, 24, '#fff', 'center', 5); ctx.globalAlpha = 1;
     }
   }
   function drawDemoHUD() { }
   function drawBigPops() {
     for (var i = 0; i < pops.length; i++) {
-      var p = pops[i], k = p.t / p.life;
-      var sc = p.t < 0.18 ? 0.3 + (p.t / 0.18) * 1.0 : p.t < 0.3 ? 1.3 - (p.t - 0.18) / 0.12 * 0.3 : 1;
-      var y = p.y - (k > 0.7 ? (k - 0.7) * 120 : 0);
-      ctx.save(); ctx.translate(640, y); ctx.scale(sc, sc); ctx.rotate(-0.04);
-      ctx.globalAlpha = k > 0.8 ? (1 - k) * 5 : 1;
-      outlined(p.text, 0, 0, 64, p.color, 'center', 12);
-      if (p.sub) outlined(p.sub, 0, 46, 34, '#ffffff', 'center', 7);
+      var p = pops[i], k = p.t / p.life, sc = p.t < 0.18 ? 0.3 + (p.t / 0.18) * 1.0 : p.t < 0.3 ? 1.3 - (p.t - 0.18) / 0.12 * 0.3 : 1;
+      ctx.save(); ctx.translate(640, p.y - (k > 0.75 ? (k - 0.75) * 100 : 0)); ctx.scale(sc, sc); ctx.rotate(-0.03);
+      ctx.globalAlpha = k > 0.82 ? (1 - k) * 5.5 : 1;
+      ctx.font = 'bold 58px Fredoka, sans-serif'; ctx.direction = 'rtl';
+      var pw = max(210, ctx.measureText(p.text).width + 64), ph = p.sub ? 114 : 76;
+      pill(-pw / 2, -42, pw, ph, 26, 'rgba(10,12,34,0.45)');
+      pill(-pw / 2, -48, pw, ph, 26, 'rgba(18,22,56,0.9)', p.color, 4);
+      outlined(p.text, 0, 8, 58, p.color, 'center', 10);
+      if (p.sub) outlined(p.sub, 0, 48, 28, '#fff', 'center', 6);
       ctx.restore();
     }
     ctx.globalAlpha = 1;

@@ -1048,36 +1048,44 @@
   }
   function paintFar(c, w, h) {
     var th = layerTheme, i, x, y, s;
-    for (i = 0; i < 8; i++) {
-      x = hash(i * 19) * w; y = hash(i * 23 + 1) * h * 0.62; s = 80 + hash(i * 11) * 150;
-      c.globalAlpha = 0.09 + hash(i * 7) * 0.07;
-      c.fillStyle = i % 2 ? th.deco : th.line;
-      if (i % 3 === 0) { c.beginPath(); c.arc(x, y, s * 0.42, 0, TAU); c.fill(); }
-      else { Kit.art.round(c, x, y, s, s * 0.72, s * 0.24); c.fill(); }
-      if (x < s) { c.globalAlpha = 0.09; if (i % 3 === 0) { c.beginPath(); c.arc(x + w, y, s * 0.42, 0, TAU); c.fill(); } else { Kit.art.round(c, x + w, y, s, s * 0.72, s * 0.24); c.fill(); } }
+    // Sparkling synthwave stars + glowing retro arcade sun orb
+    for (i = 0; i < 24; i++) {
+      x = hash(i * 19 + 3) * w; y = hash(i * 29 + 7) * h * 0.56; s = 2 + hash(i * 13) * 3.5;
+      c.globalAlpha = 0.45 + hash(i * 5) * 0.45;
+      c.fillStyle = i % 3 ? '#fff' : th.line;
+      c.beginPath(); c.arc(x, y, s, 0, TAU); c.fill();
     }
-    c.globalAlpha = 0.9; c.fillStyle = Kit.art.shade(th.bg1, -0.35);
+    var sg = c.createLinearGradient(0, h * 0.16, 0, h * 0.62);
+    sg.addColorStop(0, '#ffe14d'); sg.addColorStop(0.55, th.deco); sg.addColorStop(1, th.bg2);
+    c.globalAlpha = 0.52; c.fillStyle = sg;
+    c.beginPath(); c.arc(w * 0.5, h * 0.46, 130, 0, TAU); c.fill();
+    // Crisp neon synth mountain ridges
+    c.globalAlpha = 0.88; c.fillStyle = Kit.art.shade(th.bg1, -0.32);
     c.beginPath(); c.moveTo(0, h);
-    for (i = 0; i <= 32; i++) {
-      x = i / 32 * w;
-      y = h * 0.74 + Math.sin(i / 32 * Math.PI * 4) * h * 0.045 + Math.sin(i / 32 * Math.PI * 8) * h * 0.02;
+    for (i = 0; i <= 16; i++) {
+      x = i / 16 * w;
+      y = h * (i % 2 ? 0.57 + hash(i * 11) * 0.09 : 0.72 + hash(i * 7) * 0.05);
       c.lineTo(x, y);
     }
     c.lineTo(w, h); c.closePath(); c.fill();
+    c.globalAlpha = 0.55; c.strokeStyle = th.deco; c.lineWidth = 4; c.stroke();
     c.globalAlpha = 1;
   }
   function paintMid(c, w, h) {
-    var th = layerTheme, slot = 160, n = Math.round(w / slot), i, bw, bh, x;
-    c.fillStyle = Kit.art.shade(th.bg2, -0.38);
+    var th = layerTheme, slot = 128, n = Math.round(w / slot), i, bw, bh, x;
     for (i = 0; i < n; i++) {
-      bw = 108 + (hash(i * 5) * 36 | 0); bh = 70 + hash(i * 9) * (h - 78);
+      bw = 66 + (hash(i * 5) * 38 | 0); bh = 68 + hash(i * 9) * (h - 76);
       x = i * slot + (slot - bw) / 2;
-      c.globalAlpha = 0.92;
-      Kit.art.round(c, x, h - bh, bw, bh + 30, 14); c.fill();
-      c.globalAlpha = 0.45; c.fillStyle = th.line;
-      var wy, wx;
-      for (wy = h - bh + 18; wy < h - 24; wy += 26) for (wx = x + 16; wx < x + bw - 18; wx += 22) c.fillRect(wx, wy, 9, 12);
-      c.fillStyle = Kit.art.shade(th.bg2, -0.38);
+      c.globalAlpha = 0.92; c.fillStyle = Kit.art.shade(th.bg1, -0.18);
+      Kit.art.round(c, x, h - bh, bw, bh + 26, 10); c.fill();
+      // Glowing neon roof trim & spire
+      c.globalAlpha = 0.85; c.fillStyle = i % 2 ? th.line : th.deco;
+      c.fillRect(x + 6, h - bh, bw - 12, 4);
+      if (i % 3 === 0) c.fillRect(x + bw / 2 - 2, h - bh - 22, 4, 22);
+      // Crisp bright arcade windows
+      c.globalAlpha = 0.58; c.fillStyle = i % 2 ? th.line : th.accent;
+      for (var wy = h - bh + 16; wy < h - 18; wy += 22)
+        for (var wx = x + 12; wx < x + bw - 14; wx += 18) c.fillRect(wx, wy, 7, 10);
     }
     c.globalAlpha = 1;
   }
@@ -1127,7 +1135,16 @@
     ctx.globalAlpha = beatAlpha(bi);
     farL.draw(ctx, camX * U, -camY * U);
     ctx.globalAlpha = beatAlpha(bi) * 0.95;
-    if (gy < H + 40 && gy > 80) drawBand(midL, camX * U, gy - 200, 200);
+    if (gy < H + 40 && gy > 80) {
+      drawBand(midL, camX * U, gy - 200, 200);
+      // Beat-pulsing neon equalizer bars along the horizon!
+      ctx.globalAlpha = 0.24 + 0.22 * bi.tint;
+      for (var eq = 0; eq < 16; eq++) {
+        var eh = 20 + (hash(eq * 17) * 52 + bi.pulse * 44) * (0.65 + 0.35 * Math.sin(eq * 1.4 + bi.beat));
+        ctx.fillStyle = eq % 2 ? th.line : th.deco;
+        ctx.fillRect(eq * 80 + 18, gy - eh, 44, eh);
+      }
+    }
     ctx.restore();
   }
 
@@ -1584,7 +1601,7 @@
     if (px < -800 || px > W + 800) return;
     ctx.save(); ctx.globalAlpha = alpha == null ? 1 : alpha;
     ctx.font = '700 ' + size + 'px Fredoka, "Segoe UI", sans-serif';
-    ctx.direction = 'rtl'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+    ctx.direction = 'rtl'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
     ctx.lineWidth = size * 0.2; ctx.strokeStyle = 'rgba(15,6,40,0.85)';
     ctx.strokeText(txt, px, py); ctx.fillStyle = col || '#fff'; ctx.fillText(txt, px, py);
     ctx.restore();
@@ -1677,10 +1694,9 @@
       drawBackground(th, t, bi, camX, camY);
       ctx.save(); Kit.art.shake.apply(ctx);
       var gy = GROUND0 + camY * U;
-      // attempt text + signs
-      worldText('المحاولة ' + G.sessionAtt, (G.attemptX || 0) + 3.5, 5.2, camX, gy, 64, '#ffffff');
+      // signs (world-space) + centered attempt label below top progress bar
       var signs = L.def.signs || [];
-      for (var i = 0; i < signs.length; i++) worldText(signs[i].text, signs[i].x, signs[i].y, camX, gy, 34, signs[i].col || '#fff');
+      for (var i = 0; i < signs.length; i++) worldText(signs[i].text, signs[i].x, signs[i].y, camX, gy, 32, signs[i].col || '#fff');
       drawLevel(L, th, camX, camY, t, bi, s, save.stars[L.id] || 0);
       // checkpoints: practice diamonds, the normal mode's flags
       if (!G.practice) drawFlags(L, s, camX, gy, t);
@@ -1700,6 +1716,16 @@
       ctx.restore();
       if (Kit.art.quality.tier >= 1) Kit.art.vignette(ctx, W, H, 0.28);
       drawHUD(L, s, t);
+      var attAlpha = Math.max(0, Math.min(1, 1 - (s.x - (G.attemptX || 0) - 9) / 6));
+      if (attAlpha > 0.02 && !G.won) {
+        ctx.save(); ctx.globalAlpha = attAlpha;
+        ctx.font = '700 32px Fredoka, "Segoe UI", sans-serif';
+        ctx.direction = 'rtl'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+        ctx.lineWidth = 7; ctx.strokeStyle = '#1b1033';
+        ctx.strokeText('المحاولة ' + G.sessionAtt, W / 2, 74);
+        ctx.fillStyle = '#ffffff'; ctx.fillText('المحاولة ' + G.sessionAtt, W / 2, 74);
+        ctx.restore();
+      }
       drawPrompt((x + 0.5 - camX) * U, gy - (y + 0.5) * U, t);
     } else {
       // menu backdrop: attract mode

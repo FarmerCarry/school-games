@@ -193,7 +193,7 @@
       streakT: 0,
       selBlock: 0, // For Free Sandbox placement
       portals: [
-        { x: sx + 0.5, y: 3.1, active: false, express: false }
+        { x: sx + 6.0, y: 2.95, active: false, express: false }
       ],
       relics: relics,
       slimes: slimes,

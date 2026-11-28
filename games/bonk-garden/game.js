@@ -86,8 +86,7 @@
     starPop = [0, 0, 0]; starsHad = 0; heartPop = 0; lastTick = -1; comboPop = 0; frenzyFlash = 0;
     hint = -1; intro = null; ham.giant = 0; ham.sw = 9;
     save.rounds++;
-    var sp = world.spec;
-    showBanner(n ? 'المرحلة ' + n : 'بلا نهاية', '#ffffff', 1.5, BG.WORLDS[sp.world].name);
+    // The top-left HUD pill already displays the level & world name; avoid stamping a duplicate banner over the fence/holes.
     setScreen('play');
     say(n ? 'المرحلة ' + n : 'بلا نهاية');
   }
@@ -591,19 +590,20 @@
       var on = w.score >= sp.goals[k], pop = 1 + starPop[k] * 0.6;
       BG.star(ctx, starX(k), by, (k === 2 ? 21 : 17) * pop, on ? '#ffd23f' : '#d9d3ec', 0);
     }
-    // the level
-    panel(94, 18, 196, 58);
-    text(level ? 'المرحلة ' + level : 'بلا نهاية', 192, 48, 28, '#ffffff', 'center', true);
+    // the level and world name
+    panel(94, 12, 212, 68);
+    text(level ? 'المرحلة ' + level : 'بلا نهاية', 200, 34, 24, '#ffffff', 'center', true);
+    text(BG.WORLDS[sp.world].name, 200, 60, 16, '#ffe14f', 'center', true);
     // time left, or hearts in the endless garden
     if (!sp.endless) {
       var left = M.max(0, sp.dur - w.t), low = left <= 5.5 && w.phase === 'play';
-      var cx = 1100, cy = 52, r = 40, pul = low && !calm() ? 1 + 0.08 * M.abs(M.sin(w.t * M.PI * 2)) : 1;
+      var cx = 1124, cy = 50, r = 38, pul = low && !calm() ? 1 + 0.08 * M.abs(M.sin(w.t * M.PI * 2)) : 1;
       ctx.save(); ctx.translate(cx, cy); ctx.scale(pul, pul);
       BG.blob(ctx, 0, 0, r + 4, r + 4); ctx.fillStyle = '#ffffff'; ctx.fill();
-      BG.blob(ctx, 0, 0, r, r); ctx.fillStyle = low ? '#ff6b6b' : 'rgba(42,29,78,0.85)'; ctx.fill();
+      BG.blob(ctx, 0, 0, r, r); ctx.fillStyle = low ? '#ff6b6b' : 'rgba(42,29,78,0.88)'; ctx.fill();
       ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, r - 5, -M.PI / 2, -M.PI / 2 + M.PI * 2 * (left / sp.dur)); ctx.closePath();
       ctx.fillStyle = low ? '#ffb3b3' : '#7cd651'; ctx.fill();
-      text(String(M.ceil(left)), 0, 2, 36, '#ffffff');
+      text(String(M.ceil(left)), 0, 2, 34, '#ffffff');
       ctx.restore();
     } else {
       panel(1006, 18, 184, 64);
@@ -614,24 +614,25 @@
     }
     drawCombo(w);
   }
-  // The combo jar on the left: ten bonks in a row fill it and start the frenzy.
+  // The combo jar on the left: framed cleanly below the picket fence (y >= 260).
   var JAR = ['#ff5f7e', '#ffa53d', '#ffe14f', '#7dffb0', '#4fd8ff', '#b46bff'], RIM = ['#ff5f7e', '#ffe14f', '#4fd8ff', '#7dffb0', '#b46bff'];
   function drawCombo(w) {
-    var x = 26, top = 196, hgt = 380, fr = w.frenzy > 0;
-    panel(x, top, 56, hgt + 16, 'rgba(42,29,78,0.78)');
+    var x = 22, top = 262, barTop = 304, hgt = 320, fr = w.frenzy > 0;
+    BG.rrect(ctx, x, top, 72, 418, 26); ctx.fillStyle = 'rgba(42,29,78,0.88)'; ctx.fill();
+    ctx.lineWidth = 4; ctx.strokeStyle = fr ? '#ff9fd0' : '#ffffff'; ctx.stroke();
+    text('جنون', x + 36, top + 24, 21, fr ? '#ff9fd0' : '#ffe14f', 'center', true);
     var n = fr ? BG.COMBO : M.min(BG.COMBO, w.combo), seg = hgt / BG.COMBO;
     for (var i = 0; i < BG.COMBO; i++) {
-      var y = top + 8 + hgt - (i + 1) * seg;
+      var y = barTop + hgt - (i + 1) * seg;
       var col = fr ? JAR[(i + M.floor(time * 12)) % 6] : i < n ? (i >= 7 ? '#ff9fd0' : '#ffd23f') : 'rgba(255,255,255,0.16)';
       if (fr && i >= BG.COMBO * w.frenzy / BG.FRENZY) col = 'rgba(255,255,255,0.16)';
-      BG.rrect(ctx, x + 9, y + 3, 38, seg - 6, 8); ctx.fillStyle = col; ctx.fill();
+      BG.rrect(ctx, x + 13, y + 3, 46, seg - 6, 8); ctx.fillStyle = col; ctx.fill();
     }
-    text(fr ? '×2' : String(w.combo), x + 28, top + hgt + 44, fr ? 34 : 30, fr ? '#ff9fd0' : '#ffffff');
-    text('جنون', x + 28, top - 22, 22, fr ? '#ff9fd0' : '#ffffff', 'center', true);
+    text(fr ? '×2' : String(w.combo), x + 36, barTop + hgt + 34, fr ? 30 : 28, fr ? '#ff9fd0' : '#ffffff');
   }
   function drawHand(x, y, t) {
-    var b = calm() ? 0 : M.sin(t * 7) * 10;
-    ctx.save(); ctx.translate(x + 30 + b * 0.5, y + 56 + b); ctx.rotate(-0.45); ctx.scale(0.85, 0.85);
+    var b = calm() ? 0 : M.sin(t * 7) * 8;
+    ctx.save(); ctx.translate(x + 28 + b * 0.5, y + 32 + b * 0.7); ctx.rotate(-0.55); ctx.scale(0.72, 0.72);
     ctx.lineJoin = 'round'; ctx.lineWidth = 5; ctx.strokeStyle = INK; ctx.fillStyle = '#ffffff';
     BG.rrect(ctx, -12, -46, 24, 50, 12); ctx.fill(); ctx.stroke();
     BG.rrect(ctx, -26, -6, 52, 54, 20); ctx.fill(); ctx.stroke();
@@ -678,7 +679,7 @@
     if (playing) {
       if (hint >= 0 && !save.coach) {
         var hh = world.holes[hint];
-        drawHand(hh.x + 10, hh.y - hh.h * 0.3, time);
+        drawHand(hh.x + hh.rx * 0.58, hh.y - hh.h * 0.12, time);
         if (!bannerUp()) bubble('انقر عليه!', hh.x, 'rgba(255,95,126,0.95)');
       } else if (intro && !bannerUp()) bubble(intro.text, world.holes[intro.hole].x, intro.text === INTROS.bunny ? 'rgba(255,79,109,0.96)' : 'rgba(42,29,78,0.9)');
       drawHammerAt(ham, hammerId(), 1 + 0.45 * ham.giant);

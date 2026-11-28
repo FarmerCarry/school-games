@@ -542,7 +542,7 @@
         if (introFirst) {
           introFirst = false; countEl.textContent = ''; $('vs').hidden = true; countShown = -1;
           sfx('countdown', 0);
-          popup('انطلق!', W / 2, 330, '#3ddc84', true);
+          popup('انطلق!', W / 2, 368, '#3ddc84', true);
           idleT = 0;
         } else sfx('whoosh', 0.4);
         break;

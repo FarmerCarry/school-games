@@ -22,12 +22,18 @@
         <span class="team-name" id="hudP1Name" dir="rtl">اللاعب 1</span>
         <span class="team-score" id="hudS1">0</span>
       </div>
-      <div class="super-track"><div class="super-fill p1-fill" id="hudSup1"></div></div>
+      <div class="super-row" id="hudSupRow1" title="شحن دانك النيزك">
+        <svg class="super-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 L4 14 H11 L10 22 L20 10 H13 Z"/></svg>
+        <div class="super-track"><div class="super-fill p1-fill" id="hudSup1"></div></div>
+      </div>
       <div class="pw-pill" id="hudPw1" hidden></div>
     </div>
 
-    <div class="clock-pill" id="hudClockWrap">
-      <span id="hudClock">60</span>
+    <div class="clock-col">
+      <div class="clock-pill" id="hudClockWrap">
+        <span id="hudClock">60</span>
+      </div>
+      <span class="super-cap" dir="rtl">⚡ دانك</span>
     </div>
 
     <div class="team-box p2-box">
@@ -35,7 +41,10 @@
         <span class="team-score" id="hudS2">0</span>
         <span class="team-name" id="hudP2Name" dir="rtl">رامي السريع</span>
       </div>
-      <div class="super-track"><div class="super-fill p2-fill" id="hudSup2"></div></div>
+      <div class="super-row" id="hudSupRow2" title="شحن دانك النيزك">
+        <div class="super-track"><div class="super-fill p2-fill" id="hudSup2"></div></div>
+        <svg class="super-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 L4 14 H11 L10 22 L20 10 H13 Z"/></svg>
+      </div>
       <div class="pw-pill" id="hudPw2" hidden></div>
     </div>
   </div>
@@ -74,26 +83,26 @@
   </div>
 
   <div class="title-center">
-    <h1 class="hero-logo">سلة الرؤوس الكبيرة</h1>
+    <div class="title-head">
+      <h1 class="hero-logo">سلة الرؤوس الكبيرة</h1>
 
-    <div class="stage-strip" id="stageStrip" aria-label="اختر الملعب">
-      <button type="button" id="stagePrev" class="stage-nav" aria-label="الملعب السابق">‹</button>
-      <div class="stage-badge" id="stageBadge">
-        <span class="stage-dots" id="stageDots"></span>
-        <span class="stage-text" id="stageText">1/5 · ملعب الحديقة</span>
+      <div class="stage-strip" id="stageStrip" aria-label="اختر الملعب">
+        <button type="button" id="stagePrev" class="stage-nav" aria-label="الملعب السابق">‹</button>
+        <div class="stage-badge" id="stageBadge">
+          <span class="stage-dots" id="stageDots"></span>
+          <span class="stage-text" id="stageText">1/5 · ملعب الحديقة</span>
+        </div>
+        <button type="button" id="stageNext" class="stage-nav" aria-label="الملعب التالي">›</button>
       </div>
-      <button type="button" id="stageNext" class="stage-nav" aria-label="الملعب التالي">›</button>
     </div>
 
     <div class="title-actions">
+      <button type="button" data-act="duo" id="duoBtn" class="icon-pill-btn">👥 لاعبان فوضى!</button>
       <button type="button" data-act="cpu" id="playBtn" class="play-mega">
         <span class="play-tri">⚡</span>
         <span>لعب سريع!</span>
       </button>
-      <div class="sub-actions">
-        <button type="button" data-act="duo" id="duoBtn" class="icon-pill-btn">👥 لاعبان فوضى!</button>
-        <button type="button" data-act="shop" id="shopBtn" class="icon-pill-btn">🎒 الخزانة</button>
-      </div>
+      <button type="button" data-act="shop" id="shopBtn" class="icon-pill-btn">🎒 الخزانة</button>
     </div>
   </div>
 

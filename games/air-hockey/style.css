@@ -53,44 +53,66 @@ kbd {
 .face svg { width: 100%; height: 100%; overflow: visible; }
 
 /* --------------------------------------------------------------- title */
-.logo { position: absolute; top: 14px; left: 0; right: 0; margin: 0; text-align: center; line-height: 1; pointer-events: none; }
+.logo { position: absolute; top: 8px; left: 0; right: 0; margin: 0; text-align: center; line-height: 1; pointer-events: none; }
 .logo span {
   display: block; font-weight: 700;
   text-shadow: -5px -5px 0 var(--ink), 5px -5px 0 var(--ink), -5px 5px 0 var(--ink), 5px 5px 0 var(--ink),
-    0 -6px 0 var(--ink), 0 6px 0 var(--ink), -6px 0 0 var(--ink), 6px 0 0 var(--ink), 0 13px 0 var(--ink);
+    0 -6px 0 var(--ink), 0 6px 0 var(--ink), -6px 0 0 var(--ink), 6px 0 0 var(--ink), 0 11px 0 var(--ink);
 }
-.logo .l1 { font-size: 64px; color: #ffffff; }
-.logo .l2 { font-size: 118px; color: #5ff2ff; margin-top: -18px; }
-#ladder { position: absolute; left: 0; right: 0; top: 352px; display: flex; justify-content: center; gap: 14px; direction: ltr; }
+.logo .l1 { font-size: 52px; color: #ffffff; }
+.logo .l2 { font-size: 94px; color: #5ff2ff; margin-top: -10px; }
+.ladder-hdr {
+  position: absolute; left: 50%; top: 320px; transform: translateX(-50%); padding: 3px 20px; border-radius: 999px;
+  background: rgba(20, 16, 60, 0.84); border: 3px solid rgba(95, 242, 255, 0.65); color: #e8f9ff;
+  font-size: 20px; font-weight: 700; letter-spacing: 0.01em; pointer-events: none; white-space: nowrap;
+}
+#ladder { position: absolute; left: 0; right: 0; top: 364px; display: flex; justify-content: center; gap: 14px; direction: ltr; }
 .foe {
-  position: relative; width: 78px; height: 78px; padding: 4px; border-radius: 50%;
-  background: rgba(28, 34, 80, 0.75); border: 4px solid rgba(255, 255, 255, 0.55); box-shadow: 0 5px 0 rgba(28, 34, 80, 0.9);
+  position: relative; width: 76px; height: 76px; padding: 4px; border-radius: 50%;
+  background: rgba(28, 34, 80, 0.78); border: 4px solid rgba(255, 255, 255, 0.6); box-shadow: 0 5px 0 rgba(28, 34, 80, 0.9);
   transition: transform 0.1s ease;
 }
 .foe .face { width: 100%; height: 100%; }
 .foe:hover:not([disabled]) { transform: translateY(-3px) scale(1.06); }
 .foe:focus-visible { outline: 5px solid #ffcc00; outline-offset: 4px; }
-.foe.on { border-color: #ffd23f; background: #fff3c2; transform: scale(1.14); }
+.foe.on { border-color: #ffd23f; background: #fff3c2; transform: scale(1.12); }
 .foe[disabled] { cursor: default; }
 .foe[disabled] .face { filter: grayscale(1) brightness(0.45); }
 .foe .lk { position: absolute; left: 50%; top: 50%; width: 34px; height: 34px; margin: -17px 0 0 -17px; fill: #fff; color: #fff; }
 .foe .won { position: absolute; bottom: -12px; left: 0; right: 0; display: flex; justify-content: center; gap: 0; }
 .foe .won svg { width: 22px; height: 22px; fill: #ffd23f; stroke: var(--ink); stroke-width: 4; }
 .foe .won svg.off { fill: rgba(255, 255, 255, 0.35); }
-.ah-play { position: absolute; left: 560px; top: 470px; width: 160px; height: 160px; background: #3ddc84; border-width: 7px; box-shadow: 0 10px 0 var(--ink); }
-.ah-play::after { inset: -20px; border-width: 9px; }
-.small { position: absolute; left: 0; right: 0; top: 504px; display: flex; justify-content: center; gap: 290px; direction: ltr; pointer-events: none; }
-#btnDuo { background: #fff; }
-.keyline {
-  position: absolute; left: 0; right: 0; bottom: 14px; display: flex; justify-content: center; align-items: center; gap: 10px;
-  color: #fff; font-size: 20px; font-weight: 700; direction: ltr; pointer-events: none;
+.ah-play {
+  position: absolute; left: 564px; top: 468px; width: 152px; height: 152px; flex-direction: column; gap: 0;
+  background: #3ddc84; border-width: 7px; box-shadow: 0 10px 0 var(--ink);
 }
-.keyline .mouse { width: 34px; height: 34px; }
-.keyline .sep { opacity: 0.6; margin: 0 6px; }
-.keyline .duo-keys kbd { font-size: 18px; }
+.ah-play svg { width: 66px; height: 66px; transform: translateX(5px); }
+.ah-play .lbl { font-size: 28px; line-height: 1.05; color: #fff; text-shadow: 0 3px 0 var(--ink); margin-top: -2px; }
+.ah-play::after { inset: -18px; border-width: 8px; }
+.small { position: absolute; left: 0; right: 0; top: 488px; display: flex; justify-content: center; gap: 256px; direction: ltr; pointer-events: none; }
+.ah-tile {
+  width: 112px; height: 112px; border-radius: 30px; flex-direction: column; gap: 2px;
+  background: #fff; color: var(--ink); border-width: 5px; box-shadow: 0 7px 0 var(--ink);
+}
+.ah-tile svg { width: 52px; height: 52px; }
+.ah-tile .lbl { font-size: 21px; line-height: 1.1; color: var(--ink); }
+.keyline {
+  position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); display: flex; align-items: center; gap: 12px;
+  padding: 6px 22px; border-radius: 999px; background: rgba(20, 16, 60, 0.86); border: 3px solid rgba(255, 255, 255, 0.45);
+  color: #fff; font-size: 19px; font-weight: 700; direction: rtl; white-space: nowrap; pointer-events: none;
+}
+.keyline b { color: #5ff2ff; }
+.keyline .sep { opacity: 0.55; }
+.keyline kbd { min-width: auto; font-size: 16px; padding: 1px 8px; box-shadow: 0 3px 0 var(--ink); }
 
 /* ---------------------------------------------------------------- HUD */
 #pauseBtn { position: absolute; left: 14px; top: 14px; }
+.sg-mute {
+  top: 14px; right: 14px; width: 58px; height: 58px; background: #fff; color: var(--ink);
+  border: 4px solid var(--ink); box-shadow: 0 5px 0 var(--ink); font-size: 25px;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.sg-mute:hover { background: #e8f9ff; }
 #board {
   position: absolute; left: 340px; top: 10px; width: 600px; height: 86px; display: flex; gap: 8px;
 }
@@ -137,9 +159,9 @@ kbd {
 .pop.big { font-size: 84px; animation-duration: 1.3s; }
 @keyframes ah-pop {
   0% { transform: translate(-50%, -50%) scale(0.3); opacity: 0; }
-  18% { transform: translate(-50%, -60%) scale(1.15); opacity: 1; }
-  70% { transform: translate(-50%, -90%) scale(1); opacity: 1; }
-  100% { transform: translate(-50%, -120%) scale(0.95); opacity: 0; }
+  18% { transform: translate(-50%, -56%) scale(1.12); opacity: 1; }
+  70% { transform: translate(-50%, -68%) scale(1); opacity: 1; }
+  100% { transform: translate(-50%, -82%) scale(0.95); opacity: 0; }
 }
 #count {
   position: absolute; left: 0; right: 0; top: 250px; text-align: center; font-size: 150px; font-weight: 700; line-height: 1; color: #ffd23f;

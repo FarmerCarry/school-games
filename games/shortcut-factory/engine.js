@@ -8,18 +8,18 @@
   'use strict';
 
   var W = 1280, H = 720;
-  var RAIL_Y = 92;
-  var CLAW_HOME_Y = 148;
-  var FLOOR_Y = 656;
+  var RAIL_Y = 86;
+  var CLAW_HOME_Y = 140;
+  var FLOOR_Y = 602;
   var X_MIN = 150, X_MAX = 1130;
   var SAVE_VERSION = 2;
   var FEVER_STREAK = 3;
   var FEVER_DUR = 6.0;
 
   var LANES = [
-    { idx: 0, y: 332, dir: 1, speedMul: 0.84, tint: '#4cc9f0' },
-    { idx: 1, y: 462, dir: -1, speedMul: 1.08, tint: '#ff9f1c' },
-    { idx: 2, y: 592, dir: 1, speedMul: 1.32, tint: '#ff5d8f' }
+    { idx: 0, y: 304, dir: 1, speedMul: 0.84, tint: '#4cc9f0' },
+    { idx: 1, y: 422, dir: -1, speedMul: 1.08, tint: '#ff9f1c' },
+    { idx: 2, y: 540, dir: 1, speedMul: 1.32, tint: '#ff5d8f' }
   ];
 
   var TOYS = {
@@ -191,7 +191,7 @@
       goldRain: [],
       rainCd: 0,
       claw: {
-        x: W * 0.5,
+        x: opts.demo ? 210 : W * 0.5,
         y: CLAW_HOME_Y,
         dir: 1,
         sway: 0,
@@ -476,13 +476,15 @@
     cl.bufT = Math.max(0, cl.bufT - dt);
 
     if (cl.state === 'swing') {
-      // Smooth playful sweep along gantry rail (soft ease near ends so edges are easy!)
-      var sweepSp = w.cfg.clawSweep * (1 + w.upg.turbo * 0.06) * (w.fever > 0 ? 1.25 : 1);
-      var edgeDist = Math.min(cl.x - X_MIN, X_MAX - cl.x);
-      var ease = clamp(0.45 + edgeDist / 120, 0.45, 1);
+      // Smooth playful sweep along gantry rail (on title demo, keep claw clear of centered logo/tagline!)
+      var minX = w.demo ? 135 : X_MIN;
+      var maxX = w.demo ? 270 : X_MAX;
+      var sweepSp = w.cfg.clawSweep * (w.demo ? 0.52 : 1) * (1 + w.upg.turbo * 0.06) * (w.fever > 0 ? 1.25 : 1);
+      var edgeDist = Math.min(cl.x - minX, maxX - cl.x);
+      var ease = clamp(0.45 + edgeDist / 100, 0.45, 1);
       cl.x += cl.dir * sweepSp * ease * dt;
-      if (cl.x >= X_MAX) { cl.x = X_MAX; cl.dir = -1; }
-      if (cl.x <= X_MIN) { cl.x = X_MIN; cl.dir = 1; }
+      if (cl.x >= maxX) { cl.x = maxX; cl.dir = -1; }
+      if (cl.x <= minX) { cl.x = minX; cl.dir = 1; }
       cl.y = CLAW_HOME_Y;
       cl.sway = -cl.dir * 0.14 * ease;
       cl.jaw = lerp(cl.jaw, 1, Math.min(1, dt * 12));

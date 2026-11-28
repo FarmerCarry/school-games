@@ -110,7 +110,8 @@
     Kit.track.cue();
     setScreen('play');
     var spec = world.spec;
-    showBanner(n ? 'المرحلة ' + n : 'بلا نهاية', '#fff', 1.5, n ? spec.name : 'لا تدع الصفوف تصل إلى الخط!');
+    // The top HUD bar already shows the level number and stage name; only endless needs an opening tip.
+    if (!n) showBanner('بلا نهاية', '#fff', 1.4, 'لا تدع الصفوف تصل إلى الخط!');
     say(n ? 'المرحلة ' + n + ' ' + spec.name : 'بلا نهاية');
   }
 
@@ -570,7 +571,8 @@
 
   /* --------------------------------------------------------------- demo */
   function newDemo() {
-    var n = 1 + M.floor(M.random() * 5);
+    // Showcase the compact smiling/candy formations (L1-L3) so the live bricks shine unobstructed on the Title screen.
+    var n = !demo ? 1 : 1 + M.floor(M.random() * 3);
     demo = BS.create({ level: n, speed: 420, paddle: 220, drop: 0.12, magnet: 1, cap: 60, seed: seed() });
     demo.floorPerm = true;
     demo.serveT = 0.6;
@@ -700,27 +702,28 @@
     BS.rrect(ctx, x - 14, y - 22, 13, 15, 6); ctx.fillStyle = '#ff4fb8'; ctx.fill();
   }
   function drawCoach(w) {
-    var pulse = calm() ? 1 : 1 + M.sin(time * 6) * 0.05;
+    var px = M.max(190, M.min(1090, coach === 1 ? w.x[0] : w.px));
+    var pulse = calm() ? 0 : M.sin(time * 5.5) * 6;
+    // Slim translucent cue tucked cleanly below the paddle so it never blocks falling capsules or balls.
+    ctx.save();
     if (coach === 1) {
-      var x = M.max(330, M.min(950, w.x[0])), y = 470;
-      ctx.save(); ctx.translate(x, y); ctx.scale(pulse, pulse);
-      panel(-200, -40, 400, 80, 'rgba(255,79,184,0.95)');
-      label(ctx, 'انقر أو مسافة!', 46, 2, 34, '#fff', 'center', true);
-      mouseIcon(-150, 0);
-      ctx.restore();
+      BS.rrect(ctx, px - 122, 678, 244, 34, 17);
+      ctx.fillStyle = 'rgba(20,8,48,0.82)'; ctx.fill();
+      ctx.lineWidth = 3; ctx.strokeStyle = '#ff6fc4'; ctx.stroke();
+      label(ctx, 'انقر أو مسافة للإطلاق', px, 696, 18, '#fff', 'center', true);
     } else {
-      var px = M.max(260, M.min(1020, w.px)), slide = calm() ? 0 : M.sin(time * 4) * 30;
-      ctx.save(); ctx.translate(px, 575);
-      panel(-210, -36, 420, 72, 'rgba(61,180,255,0.8)');
-      keycap(-170 - (slide < 0 ? 4 : 0), 0, 44, '←'); keycap(170 + (slide > 0 ? 4 : 0), 0, 44, '→');
-      mouseIcon(-110 + slide * 0.5, 0);
-      label(ctx, 'حرّك المضرب!', 30, 2, 30, '#fff', 'center', true);
-      ctx.restore();
-      // the hint sits where the balls come down to the paddle: they fly over it, never hide
-      ctx.save(); if (shake.power && screen === 'play') ctx.translate(shake.x, shake.y);
-      BS.drawBalls(ctx, w.pow.fire > 0 ? 'fire' : BS.BALLS[save.ball].id, w.n, w.x, w.y, w.dx, w.dy);
-      ctx.restore();
+      // Gentle side arrows flanking the paddle at paddle height + compact pill beneath it.
+      var off = w.pw / 2 + 22 + M.abs(pulse), ay = F.PY + F.PH / 2;
+      ctx.globalAlpha = 0.85;
+      label(ctx, '◄', px - off, ay, 24, '#4fd8ff');
+      label(ctx, '►', px + off, ay, 24, '#4fd8ff');
+      ctx.globalAlpha = 1;
+      BS.rrect(ctx, px - 104, 678, 208, 34, 17);
+      ctx.fillStyle = 'rgba(20,8,48,0.78)'; ctx.fill();
+      ctx.lineWidth = 3; ctx.strokeStyle = '#4fd8ff'; ctx.stroke();
+      label(ctx, 'حرّك المضرب!', px, 696, 19, '#fff', 'center', true);
     }
+    ctx.restore();
   }
 
   /* --------------------------------------------------------------- render */

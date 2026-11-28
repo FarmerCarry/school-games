@@ -160,8 +160,13 @@
 
   function initDemo() {
     demo = E.create({ demo: true, stageIndex: 0, worldIndex: 0, seed: 2026 });
-    // Pre-step demo a couple seconds so title scene starts lively immediately
-    for (var i = 0; i < 95; i++) E.step(demo, 1 / 30);
+    // Seed a lively mid-arena clash so the title battle diorama shines right away
+    E.spawnUnit(demo, 0, 0, { free: true });
+    E.spawnUnit(demo, 1, 0, { free: true });
+    for (var i = 0; i < 65; i++) E.step(demo, 1 / 30);
+    E.spawnUnit(demo, 0, 1, { free: true });
+    E.spawnUnit(demo, 1, 2, { free: true });
+    for (var j = 0; j < 45; j++) E.step(demo, 1 / 30);
     demo.events.length = 0;
   }
 
@@ -176,6 +181,15 @@
   }
 
   /* ------------------------------------------- Build Unit Docks */
+  var UNIT_SHORT_NAMES = ['فارس', 'رامي', 'ديناصور', 'العملاق'];
+  function cardInnerHtml(kind, side, key) {
+    var u = E.UNITS[kind];
+    return '<span class="tc-card-key">' + key + '</span>' +
+      unitSvg(kind, side === 1) +
+      '<span class="tc-card-name" dir="rtl">' + UNIT_SHORT_NAMES[kind] + '</span>' +
+      '<span class="tc-card-cost">⚡ ' + u.cost + '</span>' +
+      '<span class="tc-card-cd" style="transform:scaleY(0)"></span>';
+  }
   function buildUnitDocks() {
     var p1Keys = ['1', '2', '3', '4'];
     var p2Keys = ['7', '8', '9', '0'];
@@ -190,11 +204,7 @@
           btn.dataset.side = String(side);
           btn.dataset.kind = String(kind);
           btn.title = u.name + ' (' + u.cost + ' ⚡)';
-          btn.innerHTML =
-            '<span class="tc-card-key">' + keys[kind] + '</span>' +
-            unitSvg(kind, side === 1) +
-            '<span class="tc-card-cost">⚡' + u.cost + '</span>' +
-            '<span class="tc-card-cd" style="transform:scaleY(0)"></span>';
+          btn.innerHTML = cardInnerHtml(kind, side, keys[kind]);
           btn.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
           btn.addEventListener('click', function (e) {
             e.stopPropagation();
@@ -223,18 +233,18 @@
           btn.classList.add('locked');
           btn.classList.remove('disabled');
           btn.disabled = true;
-          btn.innerHTML = '<span class="tc-card-lock" aria-hidden="true">🔒</span>';
+          var unlockStage = i === 2 ? '1-2' : (i === 3 ? '1-3' : '1-1');
+          btn.innerHTML =
+            '<span class="tc-card-lock" aria-hidden="true">🔒</span>' +
+            '<span class="tc-card-name" dir="rtl">' + UNIT_SHORT_NAMES[i] + '</span>' +
+            '<span class="tc-card-unlock" dir="ltr">' + unlockStage + '</span>';
         }
         continue;
       }
       if (btn.classList.contains('locked')) {
         btn.classList.remove('locked');
         var keys = side === 0 ? ['1', '2', '3', '4'] : ['7', '8', '9', '0'];
-        btn.innerHTML =
-          '<span class="tc-card-key">' + keys[i] + '</span>' +
-          unitSvg(i, side === 1) +
-          '<span class="tc-card-cost">⚡' + u.cost + '</span>' +
-          '<span class="tc-card-cd" style="transform:scaleY(0)"></span>';
+        btn.innerHTML = cardInnerHtml(i, side, keys[i]);
         cdEl = btn.querySelector('.tc-card-cd');
       }
       var affordable = E.canSpawn(world, side, i);
@@ -610,8 +620,10 @@
     if (rdy1 !== hudCache.cd1) {
       hudCache.cd1 = rdy1;
       $('cannonPill1').classList.toggle('reloading', !rdy1);
-      $('cannonState1').textContent = rdy1 ? 'جاهز!' : 'شحن…';
+      $('cannonPill1').disabled = !rdy1;
+      $('cannonState1').textContent = rdy1 ? 'أطلق المدفع!' : 'شحن…';
     }
+    $('cannonCd1').style.transform = 'scaleY(' + Kit.clamp(s0.cannonCd / E.CANNON_COOLDOWN, 0, 1).toFixed(3) + ')';
     if (activeDuo) {
       var en2 = Math.floor(s1.energy);
       if (en2 !== hudCache.en2) {
@@ -623,8 +635,10 @@
       if (rdy2 !== hudCache.cd2) {
         hudCache.cd2 = rdy2;
         $('cannonPill2').classList.toggle('reloading', !rdy2);
-        $('cannonState2').textContent = rdy2 ? 'جاهز!' : 'شحن…';
+        $('cannonPill2').disabled = !rdy2;
+        $('cannonState2').textContent = rdy2 ? 'أطلق المدفع!' : 'شحن…';
       }
+      $('cannonCd2').style.transform = 'scaleY(' + Kit.clamp(s1.cannonCd / E.CANNON_COOLDOWN, 0, 1).toFixed(3) + ')';
     }
     if (world.score !== hudCache.score) {
       hudCache.score = world.score;
@@ -830,6 +844,15 @@
     $('btnAgain').addEventListener('click', function () { startBattle(activeStageIndex, activeDuo); });
     $('btnResShop').addEventListener('click', function () { openShop('result'); });
     $('btnResHome').addEventListener('click', function () { J.back(); toTitle(); });
+    ['cannonPill1', 'cannonPill2'].forEach(function (id, idx) {
+      var btn = $(id);
+      btn.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        tryFireCannon(idx);
+        focusCanvas();
+      });
+    });
   }
 
   /* ------------------------------------------- Boot & Lifecycle */

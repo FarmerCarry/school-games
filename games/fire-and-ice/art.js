@@ -12,56 +12,65 @@
   var AUTO_COLOR = 0x2ee6c5;
 
   var THEMES = [
-    { // Wing 0: Sunlit Golden Sandstone Temple
-      sky: 0x3b2a22,
-      hemiSky: 0xfff5dc,
-      hemiGnd: 0xc97b42,
-      hemiInt: 1.28,
-      sunCol: 0xfff3d4,
-      sunInt: 1.38,
-      rimCol: 0x7fd8ff,
-      rimInt: 0.42,
-      top: 0xe6b978,
-      front: 0xa6784c,
-      side: 0x765132,
-      bottom: 0x5c3e26,
-      basin: 0x4b3322,
-      arch: 0xc2925a,
-      archTrim: 0xf4cc7a
+    { // Wing 0: Sunlit Golden Sandstone & Emerald Relief Temple
+      sky: 0x1b1525,
+      hemiSky: 0xfff0cc,
+      hemiGnd: 0x6b4254,
+      hemiInt: 1.32,
+      sunCol: 0xffe9b5,
+      sunInt: 1.52,
+      rimCol: 0x56d8ff,
+      rimInt: 0.56,
+      top: 0xf4c878,
+      front: 0xa66e46,
+      side: 0x613e34,
+      bottom: 0x3f272b,
+      basin: 0x2d1d26,
+      arch: 0xd49b5a,
+      archTrim: 0xffdc7a,
+      accent: 0x2fd496,
+      vine: 0x2fa85e,
+      vineHi: 0x6be078
     },
     { // Wing 1: Luminous Crystal Cavern Temple
-      sky: 0x16253c,
-      hemiSky: 0xd9f4ff,
-      hemiGnd: 0x4e6794,
-      hemiInt: 1.24,
+      sky: 0x101c34,
+      hemiSky: 0xdcf6ff,
+      hemiGnd: 0x3b5485,
+      hemiInt: 1.28,
       sunCol: 0xfff6e5,
-      sunInt: 1.32,
+      sunInt: 1.38,
       rimCol: 0x52e5ff,
-      rimInt: 0.56,
-      top: 0x8bb6da,
-      front: 0x4b688a,
-      side: 0x344a67,
-      bottom: 0x26374e,
-      basin: 0x1f2d42,
-      arch: 0x6284ab,
-      archTrim: 0x9ce8ff
+      rimInt: 0.64,
+      top: 0x95c6ea,
+      front: 0x47688f,
+      side: 0x2e4566,
+      bottom: 0x1f304a,
+      basin: 0x19253b,
+      arch: 0x678cb8,
+      archTrim: 0xa4ecff,
+      accent: 0x45e8ff,
+      vine: 0x36b8e8,
+      vineHi: 0xa4f4ff
     },
     { // Wing 2: Warm Torchlit Obsidian Sanctum
-      sky: 0x241724,
+      sky: 0x1d1122,
       hemiSky: 0xffdfc4,
-      hemiGnd: 0x7a4258,
-      hemiInt: 1.24,
+      hemiGnd: 0x6b354c,
+      hemiInt: 1.28,
       sunCol: 0xffe4b8,
-      sunInt: 1.34,
+      sunInt: 1.42,
       rimCol: 0x6ad7ff,
-      rimInt: 0.50,
-      top: 0xc98a68,
-      front: 0x684d5e,
-      side: 0x473444,
-      bottom: 0x342534,
-      basin: 0x2b1d2b,
-      arch: 0x826072,
-      archTrim: 0xffc66b
+      rimInt: 0.54,
+      top: 0xd6936c,
+      front: 0x6c4c60,
+      side: 0x463044,
+      bottom: 0x2e1f30,
+      basin: 0x241726,
+      arch: 0x8d6378,
+      archTrim: 0xffcc6e,
+      accent: 0xff8438,
+      vine: 0x5c4a58,
+      vineHi: 0xffa642
     }
   ];
 
@@ -103,77 +112,223 @@
 
     /* -------------------------------------------------- backdrop textures */
     function makeBackdropTexture(wing) {
+      var W = 1024, H = 576;
       var c = document.createElement('canvas');
-      c.width = 512; c.height = 288;
+      c.width = W; c.height = H;
       var g = c.getContext('2d');
-      var gr = g.createLinearGradient(0, 0, 0, 288);
+
+      // Deep indigo-to-warm-sanctuary wall gradient (rich figure-ground depth)
+      var gr = g.createLinearGradient(0, 0, 0, H);
       if (wing === 0) {
-        gr.addColorStop(0, '#6a4830');
-        gr.addColorStop(0.5, '#4b3324');
-        gr.addColorStop(1, '#312018');
+        gr.addColorStop(0, '#2a223a');
+        gr.addColorStop(0.36, '#3d2c3a');
+        gr.addColorStop(0.72, '#4f332c');
+        gr.addColorStop(1, '#2c1c20');
       } else if (wing === 1) {
-        gr.addColorStop(0, '#22456b');
-        gr.addColorStop(0.55, '#19304d');
-        gr.addColorStop(1, '#101d32');
+        gr.addColorStop(0, '#13274a');
+        gr.addColorStop(0.45, '#19355c');
+        gr.addColorStop(1, '#0e1d36');
       } else {
-        gr.addColorStop(0, '#4f2839');
-        gr.addColorStop(0.55, '#331d2d');
-        gr.addColorStop(1, '#1f121e');
+        gr.addColorStop(0, '#281533');
+        gr.addColorStop(0.48, '#3f1e34');
+        gr.addColorStop(1, '#201020');
       }
       g.fillStyle = gr;
-      g.fillRect(0, 0, 512, 288);
+      g.fillRect(0, 0, W, H);
 
-      // Subtle masonry brick courses
-      g.strokeStyle = wing === 0 ? 'rgba(255,214,150,0.08)' : wing === 1 ? 'rgba(130,220,255,0.08)' : 'rgba(255,175,110,0.08)';
-      g.lineWidth = 1.5;
-      for (var y = 18; y < 288; y += 22) {
-        g.beginPath(); g.moveTo(0, y); g.lineTo(512, y); g.stroke();
-        var off = (y % 44 === 18) ? 0 : 24;
-        for (var x = off; x < 512; x += 48) {
-          g.beginPath(); g.moveTo(x, y); g.lineTo(x, y + 22); g.stroke();
+      // Warm ambient glow pooling across the upper central sanctuary
+      var ag = g.createRadialGradient(W * 0.5, H * 0.34, 30, W * 0.5, H * 0.38, 460);
+      if (wing === 0) {
+        ag.addColorStop(0, 'rgba(255, 206, 108, 0.34)');
+        ag.addColorStop(0.45, 'rgba(235, 132, 62, 0.14)');
+        ag.addColorStop(1, 'rgba(20, 14, 28, 0)');
+      } else if (wing === 1) {
+        ag.addColorStop(0, 'rgba(92, 228, 255, 0.32)');
+        ag.addColorStop(0.5, 'rgba(42, 130, 210, 0.14)');
+        ag.addColorStop(1, 'rgba(10, 20, 40, 0)');
+      } else {
+        ag.addColorStop(0, 'rgba(255, 144, 68, 0.32)');
+        ag.addColorStop(0.5, 'rgba(180, 62, 118, 0.14)');
+        ag.addColorStop(1, 'rgba(20, 10, 24, 0)');
+      }
+      g.fillStyle = ag;
+      g.fillRect(0, 0, W, H);
+
+      // Weathered ashlar stone courses with varied block tones
+      var rowH = 34, colW = 72;
+      for (var ry = 0; ry < H; ry += rowH) {
+        var off = ((ry / rowH) & 1) ? 0 : colW / 2;
+        for (var rx = -colW; rx < W + colW; rx += colW) {
+          var h = (((rx * 31 + ry * 73) & 255) / 255);
+          g.fillStyle = h > 0.55 ? 'rgba(255, 218, 158, 0.045)' : 'rgba(8, 5, 16, 0.09)';
+          g.fillRect(rx + off + 2, ry + 2, colW - 4, rowH - 4);
+        }
+      }
+      g.strokeStyle = wing === 0 ? 'rgba(255, 212, 140, 0.08)' : wing === 1 ? 'rgba(130, 224, 255, 0.09)' : 'rgba(255, 174, 115, 0.08)';
+      g.lineWidth = 1.6;
+      for (var y = rowH; y < H; y += rowH) {
+        g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke();
+        var off2 = ((y / rowH) & 1) ? 0 : colW / 2;
+        for (var x = off2; x < W; x += colW) {
+          g.beginPath(); g.moveTo(x, y); g.lineTo(x, y + rowH); g.stroke();
         }
       }
 
-      // Recessed temple colonnade arches
-      for (var ai = 0; ai < 4; ai++) {
-        var ax = 64 + ai * 128;
-        g.fillStyle = wing === 0 ? 'rgba(255,222,145,0.14)' : wing === 1 ? 'rgba(90,225,255,0.15)' : 'rgba(255,155,75,0.15)';
+      // Helper to paint an ornate glowing recessed temple arch
+      function drawTempleArch(cx, topY, radius, botY, tintA, tintB, accentCol) {
+        // Outer stone voussoir frame
+        g.fillStyle = 'rgba(14, 10, 22, 0.34)';
         g.beginPath();
-        g.arc(ax, 102, 34, Math.PI, 0);
-        g.lineTo(ax + 34, 255);
-        g.lineTo(ax - 34, 255);
+        g.arc(cx, topY + radius, radius + 18, Math.PI, 0);
+        g.lineTo(cx + radius + 18, botY);
+        g.lineTo(cx - radius - 18, botY);
         g.closePath();
         g.fill();
 
-        // Warm pillar shadows flanking each arch
-        g.fillStyle = 'rgba(0,0,0,0.16)';
-        g.fillRect(ax - 50, 12, 16, 266);
-        g.fillRect(ax + 34, 12, 16, 266);
+        // Warm recessed arch interior gradient
+        var ig = g.createLinearGradient(cx, topY, cx, botY);
+        ig.addColorStop(0, tintA);
+        ig.addColorStop(0.55, tintB);
+        ig.addColorStop(1, 'rgba(16, 10, 20, 0.42)');
+        g.fillStyle = ig;
+        g.beginPath();
+        g.arc(cx, topY + radius, radius, Math.PI, 0);
+        g.lineTo(cx + radius, botY);
+        g.lineTo(cx - radius, botY);
+        g.closePath();
+        g.fill();
+
+        // Carved golden & emerald arch trim double-rim
+        g.strokeStyle = accentCol;
+        g.lineWidth = 4;
+        g.beginPath();
+        g.arc(cx, topY + radius, radius + 7, Math.PI, 0);
+        g.stroke();
+
+        g.strokeStyle = 'rgba(255, 228, 146, 0.38)';
+        g.lineWidth = 2;
+        g.beginPath();
+        g.arc(cx, topY + radius, radius - 8, Math.PI, 0);
+        g.stroke();
+
+        // Keystone diamond at apex of arch
+        g.fillStyle = accentCol;
+        g.beginPath();
+        g.moveTo(cx, topY - 16);
+        g.lineTo(cx + 12, topY - 2);
+        g.lineTo(cx, topY + 12);
+        g.lineTo(cx - 12, topY - 2);
+        g.closePath();
+        g.fill();
       }
 
-      // Diagonal sunlight / crystal skylight / warm ember shafts
+      var archAccent = wing === 0 ? 'rgba(64, 224, 168, 0.58)' : wing === 1 ? 'rgba(92, 232, 255, 0.62)' : 'rgba(255, 168, 76, 0.58)';
+      var archTop = wing === 0 ? 'rgba(255, 206, 114, 0.28)' : wing === 1 ? 'rgba(72, 224, 255, 0.28)' : 'rgba(255, 134, 62, 0.28)';
+      var archMid = wing === 0 ? 'rgba(98, 58, 48, 0.26)' : wing === 1 ? 'rgba(26, 68, 118, 0.26)' : 'rgba(92, 34, 64, 0.26)';
+
+      // Side arches (left = Frost alcove, right = Flame alcove) + Grand Central Sanctuary Arch
+      drawTempleArch(196, 116, 86, 540, wing === 0 ? 'rgba(84, 212, 255, 0.22)' : archTop, archMid, wing === 0 ? 'rgba(76, 220, 245, 0.50)' : archAccent);
+      drawTempleArch(828, 116, 86, 540, wing === 0 ? 'rgba(255, 166, 72, 0.25)' : archTop, archMid, wing === 0 ? 'rgba(255, 198, 92, 0.56)' : archAccent);
+      drawTempleArch(512, 74, 134, 540, archTop, archMid, archAccent);
+
+      // Grand Carved Elemental Sun-and-Frost Rose Relief inside the Center Arch
+      var mx = 512, my = 224, mr = 86;
       g.save();
-      var beamCol = wing === 0 ? 'rgba(255,232,155,0.13)' : wing === 1 ? 'rgba(115,235,255,0.13)' : 'rgba(255,178,95,0.12)';
-      g.fillStyle = beamCol;
-      for (var bi = 0; bi < 3; bi++) {
-        var bx = 95 + bi * 145;
+      var mg = g.createRadialGradient(mx, my, 8, mx, my, mr + 28);
+      mg.addColorStop(0, wing === 1 ? 'rgba(130, 244, 255, 0.45)' : 'rgba(255, 224, 128, 0.45)');
+      mg.addColorStop(0.6, wing === 0 ? 'rgba(54, 214, 158, 0.20)' : 'rgba(96, 194, 255, 0.18)');
+      mg.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      g.fillStyle = mg;
+      g.beginPath(); g.arc(mx, my, mr + 28, 0, Math.PI * 2); g.fill();
+
+      // 16 radiating carved temple sun-rays
+      g.strokeStyle = 'rgba(255, 216, 124, 0.40)';
+      g.lineWidth = 3;
+      for (var ri = 0; ri < 16; ri++) {
+        var ra = (ri / 16) * Math.PI * 2;
+        var r1 = mr * 0.52, r2 = (ri % 2 === 0) ? mr + 12 : mr - 4;
+        g.beginPath();
+        g.moveTo(mx + Math.cos(ra) * r1, my + Math.sin(ra) * r1);
+        g.lineTo(mx + Math.cos(ra) * r2, my + Math.sin(ra) * r2);
+        g.stroke();
+      }
+      // Concentric inlaid emerald-jade & gold rings
+      g.strokeStyle = wing === 0 ? 'rgba(58, 224, 164, 0.62)' : 'rgba(96, 232, 255, 0.62)';
+      g.lineWidth = 8;
+      g.beginPath(); g.arc(mx, my, mr * 0.78, 0, Math.PI * 2); g.stroke();
+      g.strokeStyle = 'rgba(255, 218, 120, 0.65)';
+      g.lineWidth = 3;
+      g.beginPath(); g.arc(mx, my, mr * 0.94, 0, Math.PI * 2); g.stroke();
+      g.beginPath(); g.arc(mx, my, mr * 0.56, 0, Math.PI * 2); g.stroke();
+
+      // Split Fire (right) & Ice (left) central emblem halves
+      g.fillStyle = 'rgba(255, 134, 46, 0.42)';
+      g.beginPath(); g.arc(mx, my, mr * 0.50, -Math.PI / 2, Math.PI / 2); g.closePath(); g.fill();
+      g.fillStyle = 'rgba(66, 220, 255, 0.42)';
+      g.beginPath(); g.arc(mx, my, mr * 0.50, Math.PI / 2, Math.PI * 1.5); g.closePath(); g.fill();
+      g.fillStyle = 'rgba(255, 240, 180, 0.62)';
+      g.beginPath();
+      g.moveTo(mx, my - 26); g.lineTo(mx + 18, my); g.lineTo(mx, my + 26); g.lineTo(mx - 18, my);
+      g.closePath(); g.fill();
+      g.restore();
+
+      // Side arch carved relief motifs (Frost crystal on left, Solar flame on right)
+      function drawDiamondMural(cx, cy, col) {
+        g.save();
+        g.strokeStyle = col;
+        g.lineWidth = 3;
+        g.beginPath();
+        g.moveTo(cx, cy - 38); g.lineTo(cx + 26, cy); g.lineTo(cx, cy + 38); g.lineTo(cx - 26, cy);
+        g.closePath(); g.stroke();
+        g.fillStyle = col;
+        g.globalAlpha = 0.28;
+        g.fill();
+        g.globalAlpha = 0.75;
+        g.beginPath(); g.arc(cx, cy, 10, 0, Math.PI * 2); g.fill();
+        g.restore();
+      }
+      drawDiamondMural(196, 224, wing === 0 ? 'rgba(92, 232, 255, 0.55)' : archAccent);
+      drawDiamondMural(828, 224, wing === 0 ? 'rgba(255, 178, 72, 0.60)' : archAccent);
+
+      // Carved top geometric temple frieze strip
+      g.fillStyle = 'rgba(18, 12, 24, 0.32)';
+      g.fillRect(0, 32, W, 30);
+      g.fillStyle = wing === 0 ? 'rgba(255, 208, 104, 0.42)' : wing === 1 ? 'rgba(108, 234, 255, 0.42)' : 'rgba(255, 152, 74, 0.42)';
+      for (var fx = 42; fx < W; fx += 52) {
+        g.beginPath();
+        g.moveTo(fx, 38); g.lineTo(fx + 10, 47); g.lineTo(fx, 56); g.lineTo(fx - 10, 47);
+        g.closePath(); g.fill();
+      }
+
+      // Silky volumetric diagonal sunlight shafts streaming down into the hall
+      g.save();
+      var shafts = [[190, 120], [495, 150], [780, 118]];
+      for (var bi = 0; bi < shafts.length; bi++) {
+        var bx = shafts[bi][0], bw = shafts[bi][1];
+        var sg = g.createLinearGradient(bx, 0, bx - 140, H);
+        if (wing === 0) {
+          sg.addColorStop(0, 'rgba(255, 234, 162, 0.22)');
+          sg.addColorStop(0.55, 'rgba(255, 206, 124, 0.11)');
+          sg.addColorStop(1, 'rgba(255, 184, 96, 0)');
+        } else if (wing === 1) {
+          sg.addColorStop(0, 'rgba(130, 240, 255, 0.22)');
+          sg.addColorStop(0.55, 'rgba(84, 206, 255, 0.10)');
+          sg.addColorStop(1, 'rgba(64, 176, 255, 0)');
+        } else {
+          sg.addColorStop(0, 'rgba(255, 182, 102, 0.20)');
+          sg.addColorStop(0.55, 'rgba(255, 118, 68, 0.09)');
+          sg.addColorStop(1, 'rgba(255, 92, 54, 0)');
+        }
+        g.fillStyle = sg;
         g.beginPath();
         g.moveTo(bx, 0);
-        g.lineTo(bx + 52, 0);
-        g.lineTo(bx - 18, 288);
-        g.lineTo(bx - 76, 288);
+        g.lineTo(bx + bw, 0);
+        g.lineTo(bx + bw - 175, H);
+        g.lineTo(bx - 195, H);
         g.closePath();
         g.fill();
       }
       g.restore();
-
-      // Glowing medallions / runes along top frieze
-      g.fillStyle = wing === 0 ? 'rgba(255,204,95,0.22)' : wing === 1 ? 'rgba(92,230,255,0.24)' : 'rgba(255,140,70,0.24)';
-      for (var mi = 0; mi < 4; mi++) {
-        g.beginPath();
-        g.arc(64 + mi * 128, 36, 9, 0, Math.PI * 2);
-        g.fill();
-      }
 
       var tex = new T.CanvasTexture(c);
       if (T.SRGBColorSpace) tex.colorSpace = T.SRGBColorSpace;
@@ -643,6 +798,11 @@
       var cSide = new T.Color(theme.side);
       var cBot = new T.Color(theme.bottom);
       var cBasin = new T.Color(theme.basin);
+      var cArch = new T.Color(theme.arch);
+      var cTrim = new T.Color(theme.archTrim);
+      var cAcc = new T.Color(theme.accent);
+      var cVine = new T.Color(theme.vine);
+      var cVineHi = new T.Color(theme.vineHi);
 
       function pushQuad(ax, ay, az, bx, by, bz, cx, cy, cz, dx, dy, dz, nx, ny, nz, color, shade) {
         var r = Math.min(1, color.r * shade);
@@ -694,24 +854,80 @@
             if (lf !== '#') faces |= 8;
             if (rt !== '#') faces |= 16;
 
-            var zBack = -1.12, zFront = 0.74;
+            var zBack = -1.12, zFront = 0.72;
             // Subtle outer wall thickness protrusion for temple frame feel
             var isBorder = (gx === 0 || gx === w.cols - 1 || gy === 0 || gy === w.rows - 1);
-            if (isBorder) zFront = 0.88;
+            if (isBorder) zFront = 0.78;
 
             addBox(x0, x1, y0, y1, zBack, zFront, shade, faces, cFront, cTop, cSide, cBot);
 
-            // Chunky sunlit beveled capstone ledge on walkable top surfaces!
+            // Chunky sunlit beveled capstone ledge on walkable top surfaces + emerald moss/crystal accents
             if (exposedTop && !isBorder && !FI.isPoolTile(up)) {
               var capF = 1 | 2 | 4 | (lf !== '#' ? 8 : 0) | (rt !== '#' ? 16 : 0);
               addBox(x0 - (lf !== '#' ? 0.04 : 0), x1 + (rt !== '#' ? 0.04 : 0),
-                y1 - 0.17, y1 + 0.015, -1.16, 0.83, shade * 1.03, capF, cTop, cTop, cFront, cSide);
+                y1 - 0.17, y1 + 0.015, -1.16, 0.80, shade * 1.04, capF, cTop, cTop, cFront, cSide);
+              if (((gx * 19 + gy * 37) & 7) === 0) {
+                addBox(x0 + 0.14, x1 - 0.14, y1 - 0.25, y1 - 0.11, 0.76, 0.84, 1.0, 1 | 2 | 8 | 16, cVine, cVineHi, cVine, cVine);
+              }
+            }
+            // Carved golden border trim studs along inner rim of the temple frame
+            if (isBorder && gy === 0 && gx > 0 && gx < w.cols - 1 && (gx % 4 === 2)) {
+              addBox(x0 + 0.18, x1 - 0.18, y0 - 0.14, y0 + 0.16, 0.68, 0.84, 1.02, 1 | 2 | 4 | 8 | 16, cTrim, cTrim, cArch, cSide);
             }
           } else if (FI.isPoolTile(ch)) {
             // Carved stone trough cradling the recessed glowing pool
             addBox(x0, x1, y0, y1 - 0.24, -1.12, 0.78, shade * 0.92, 1 | 2 | 4, cBasin, cBasin, cBasin, cBot);
             // Low carved stone front rim holding liquid in
             addBox(x0, x1, y1 - 0.24, y1 - 0.04, 0.64, 0.82, shade, 1 | 2, cFront, cTop, cSide, cBasin);
+          }
+        }
+      }
+
+      // Recessed 3D Temple Architecture (merged in the SAME 1 draw call — zero extra draw calls!)
+      // 1) Four fluted temple stone columns framing the sanctuary arches
+      var pilX = [-12.6, -5.6, 5.6, 12.6];
+      for (var pi = 0; pi < pilX.length; pi++) {
+        var px = pilX[pi];
+        // Column shaft
+        addBox(px - 0.44, px + 0.44, -halfH + 1, halfH - 1, -1.72, -1.32, 0.86, 1 | 8 | 16, cArch, cTop, cSide, cBot);
+        // Column capital & emerald/gold inlay band
+        addBox(px - 0.64, px + 0.64, halfH - 1.55, halfH - 1.0, -1.72, -1.20, 1.0, 1 | 2 | 4 | 8 | 16, cTrim, cTop, cArch, cSide);
+        addBox(px - 0.52, px + 0.52, halfH - 1.88, halfH - 1.55, -1.72, -1.26, 0.96, 1 | 4 | 8 | 16, cAcc, cAcc, cSide, cSide);
+        // Mid-shaft carved brass ring
+        addBox(px - 0.52, px + 0.52, 0.65, 1.02, -1.72, -1.26, 0.98, 1 | 2 | 4 | 8 | 16, cTrim, cTrim, cArch, cSide);
+        // Base plinth
+        addBox(px - 0.62, px + 0.62, -halfH + 1.0, -halfH + 1.65, -1.72, -1.22, 0.92, 1 | 2 | 8 | 16, cArch, cTop, cSide, cBot);
+      }
+
+      // 2) Upper sculpted arch cornice & carved emerald/gold relief frieze beam
+      addBox(-halfW + 1, halfW - 1, halfH - 1.32, halfH - 0.96, -1.72, -1.26, 0.92, 1 | 4, cArch, cTop, cSide, cBot);
+      for (var rx = -11; rx <= 11; rx += 2.2) {
+        addBox(rx - 0.24, rx + 0.24, halfH - 1.50, halfH - 1.06, -1.30, -1.18, 1.02, 1 | 4 | 8 | 16, cTrim, cTrim, cArch, cSide);
+      }
+
+      // 3) Lush 3D hanging temple vines / crystal icicles draping across the upper hall (clear of braziers & title logo)
+      var vines = [
+        [-13.4, 3.8], [-11.4, 2.7], [-10.0, 4.1], [-6.8, 2.3], [-4.6, 3.1],
+        [4.8, 3.3], [6.8, 2.4], [10.2, 4.2], [11.6, 2.7], [13.2, 4.0]
+      ];
+      for (var vi = 0; vi < vines.length; vi++) {
+        var vx = vines[vi][0], vlen = vines[vi][1];
+        var segs = Math.max(3, Math.round(vlen * 2.2));
+        for (var si = 0; si < segs; si++) {
+          var vy1 = halfH - 1.0 - si * (vlen / segs);
+          var vy0 = vy1 - (vlen / segs) - 0.04;
+          var swayX = Math.sin(si * 0.85 + vi * 1.7) * 0.14;
+          var sw = (si === segs - 1) ? 0.09 : 0.13;
+          addBox(vx + swayX - sw, vx + swayX + sw, vy0, vy1, -1.32, -1.20, 0.95, 1 | 4 | 8 | 16, cVine, cVineHi, cVine, cVine);
+          // Alternating lush leaf clusters / crystal shards along each hanging vine
+          if (si > 0 && si < segs) {
+            var dir = (si & 1) ? 1 : -1;
+            var lx = vx + swayX + dir * 0.20;
+            addBox(lx - 0.18, lx + 0.18, vy0 + 0.06, vy1 - 0.04, -1.28, -1.16, 1.04, 1 | 2 | 4 | 8 | 16, cVineHi, cVineHi, cVine, cVine);
+            if (si === segs - 1 && (vi % 2 === 0)) {
+              // Tiny glowing golden temple blossom / crystal tip
+              addBox(vx + swayX - 0.11, vx + swayX + 0.11, vy0 - 0.16, vy0 + 0.04, -1.26, -1.14, 1.1, 1 | 4 | 8 | 16, cTrim, cTrim, cTrim, cTrim);
+            }
           }
         }
       }
@@ -901,30 +1117,62 @@
       levelObjs.doors.fire = buildDoorMesh(w.doors.fire, 'fire', theme);
       levelObjs.doors.ice = buildDoorMesh(w.doors.ice, 'ice', theme);
 
-      // 4. Wall Torches
+      // 4. Ornate Wall Torch Sconces + Hanging Sanctuary Braziers
+      function addSconce(wx, wy, wz, phase, hanging) {
+        var tg = new T.Group();
+        tg.position.set(wx, wy, wz);
+        if (hanging) {
+          var chainH = Math.max(0.6, (halfH - 1.0) - (wy + 0.35));
+          var chain = new T.Mesh(GEO.cyl, MAT.iron);
+          chain.scale.set(0.06, chainH, 0.06);
+          chain.position.set(0, 0.35 + chainH / 2, 0.12);
+          var bowl = new T.Mesh(GEO.cyl, MAT.brass);
+          bowl.scale.set(0.56, 0.22, 0.56);
+          bowl.position.set(0, 0.04, 0.14);
+          var rim2 = new T.Mesh(GEO.torus, MAT.iron);
+          rim2.rotation.x = Math.PI / 2;
+          rim2.scale.set(0.82, 0.82, 0.65);
+          rim2.position.set(0, 0.15, 0.14);
+          tg.add(chain, bowl, rim2);
+        } else {
+          var plate = new T.Mesh(GEO.box, MAT.iron);
+          plate.scale.set(0.32, 0.56, 0.08);
+          plate.position.set(0, -0.10, -0.02);
+          var holder = new T.Mesh(GEO.cyl, MAT.iron);
+          holder.scale.set(0.14, 0.52, 0.14);
+          holder.rotation.x = 0.28;
+          holder.position.set(0, -0.16, 0.08);
+          var cup = new T.Mesh(GEO.cyl, MAT.brass);
+          cup.scale.set(0.30, 0.14, 0.30);
+          cup.position.set(0, 0.08, 0.14);
+          tg.add(plate, holder, cup);
+        }
+        var fOut = new T.Mesh(GEO.cone, MAT.torchOut);
+        fOut.scale.set(0.32, 0.54, 0.32);
+        fOut.position.set(0, 0.36, 0.14);
+        var fIn = new T.Mesh(GEO.cone, MAT.torchIn);
+        fIn.scale.set(0.18, 0.32, 0.18);
+        fIn.position.set(0, 0.30, 0.18);
+        var halo = new T.Mesh(GEO.plane, MAT.torchGlow);
+        halo.scale.set(4.5, 4.5, 1);
+        halo.position.set(0, 0.36, 0.06);
+        tg.add(fOut, fIn, halo);
+        levelGroup.add(tg);
+        levelObjs.torches.push({ out: fOut, inn: fIn, halo: halo, x: wx, y: wy + 0.36, phase: phase });
+      }
       for (var ti = 0; ti < w.torches.length; ti++) {
         var tc = w.torches[ti];
-        var tg = new T.Group();
-        tg.position.set(toX(tc.x), toY(tc.y), -1.10);
-        var holder = new T.Mesh(GEO.cyl, MAT.iron);
-        holder.scale.set(0.14, 0.50, 0.14);
-        holder.rotation.x = 0.25;
-        holder.position.set(0, -0.16, 0.06);
-        var cup = new T.Mesh(GEO.cyl, MAT.brass);
-        cup.scale.set(0.26, 0.12, 0.26);
-        cup.position.set(0, 0.08, 0.12);
-        var fOut = new T.Mesh(GEO.cone, MAT.torchOut);
-        fOut.scale.set(0.28, 0.46, 0.28);
-        fOut.position.set(0, 0.34, 0.12);
-        var fIn = new T.Mesh(GEO.cone, MAT.torchIn);
-        fIn.scale.set(0.15, 0.28, 0.15);
-        fIn.position.set(0, 0.28, 0.16);
-        var halo = new T.Mesh(GEO.plane, MAT.torchGlow);
-        halo.scale.set(3.4, 3.4, 1);
-        halo.position.set(0, 0.34, 0.05);
-        tg.add(holder, cup, fOut, fIn, halo);
-        levelGroup.add(tg);
-        levelObjs.torches.push({ out: fOut, inn: fIn, halo: halo, x: tg.position.x, y: tg.position.y + 0.34, phase: ti * 2.17 });
+        addSconce(toX(tc.x), toY(tc.y), -1.12, ti * 2.17, false);
+      }
+      // Hang warm sanctuary braziers in open upper temple bays (only where upper tiles are open)
+      var brazierCols = [6, 23];
+      for (var bzi = 0; bzi < brazierCols.length; bzi++) {
+        var bcx = brazierCols[bzi];
+        var clearBay = true;
+        for (var bzy = 1; bzy <= 6; bzy++) {
+          if (FI.tileAt(w, bcx, bzy) !== '.') { clearBay = false; break; }
+        }
+        if (clearBay) addSconce(bcx + 0.5 - halfW, halfH - 5.2, -1.24, 5.1 + bzi * 2.7, true);
       }
 
       // 5. Spinning 3D Ruby & Sapphire Gems
@@ -1241,10 +1489,10 @@
 
         for (var ti2 = 0; ti2 < levelObjs.torches.length; ti2++) {
           var tc2 = levelObjs.torches[ti2];
-          var fl = 0.88 + Math.sin(animT * 13 + tc2.phase) * 0.14 + Math.cos(animT * 21 + tc2.phase) * 0.06;
-          tc2.out.scale.set(0.28 * fl, 0.46 * fl, 0.28 * fl);
-          tc2.inn.scale.set(0.15 * fl, 0.28 * fl, 0.15 * fl);
-          tc2.halo.scale.set(3.35 * fl, 3.35 * fl, 1);
+          var fl = 0.90 + Math.sin(animT * 13 + tc2.phase) * 0.13 + Math.cos(animT * 21 + tc2.phase) * 0.06;
+          tc2.out.scale.set(0.32 * fl, 0.54 * fl, 0.32 * fl);
+          tc2.inn.scale.set(0.18 * fl, 0.32 * fl, 0.18 * fl);
+          tc2.halo.scale.set(4.5 * fl, 4.5 * fl, 1);
         }
 
         // Gentle ambient embers / frost sparkles / goo bubbles

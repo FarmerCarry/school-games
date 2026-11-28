@@ -112,8 +112,8 @@
       r: [66, 58, 50, 43, 37],            // bubble art radius
       margin: [26, 20, 14, 10, 6],        // hit reach beyond the art (and Bop's body)
       speed: [42, 60, 82, 108, 138],      // drift up, px/s
-      live: [2, 3, 3, 4, 5],              // bubbles on screen at once
-      gap: [1.5, 1.25, 1, 0.82, 0.68],    // s between new bubbles
+      live: [3, 4, 4, 5, 6],              // bubbles on screen at once
+      gap: [1.1, 0.95, 0.8, 0.68, 0.56],  // s between new bubbles
       magnet: [170, 125, 88, 56, 30],     // strongest pull towards a moving Bop, px/s
       reach: [240, 205, 170, 140, 115],   // pull range beyond touching, px
       wait: [999, 8, 5.5, 3.8, 2.6],      // s a bubble waits near the top, then floats away
@@ -467,6 +467,17 @@
   /* ------------------------------------------------------------ modes */
   var MODE = {};
   MODE.touch = {
+    enter: function (w) {
+      var n = _mn(3, w.party ? 3 : w.goal), xs = [290, 640, 990], ys = [430, 300, 455];
+      for (var i = 0; i < n; i++) {
+        MODE.touch.spawn(w);
+        var b = w.targets[w.targets.length - 1];
+        b.x = xs[i] + (w.rand() - 0.5) * 80;
+        b.y = ys[i] + (w.rand() - 0.5) * 44;
+        b.hoverY = _mn(b.y - 25, 200 + w.rand() * 140);
+        b.color = (i * 2 + _fl(w.rand() * 2)) % 6;
+      }
+    },
     spawn: function (w) {
       var r = knob(w, 'r'), lv = w.party ? 0 : w.plan.l, big = !w.party && lv === 2 && w.made % 4 === 3;
       var hasPinata = w.party && w.targets.some(function (o) { return !o.dead && o.pinata; });
@@ -1053,7 +1064,7 @@
       w.activity = w.known && _ab(nx - w.px) + _ab(ny - w.py) > 0.5 ? 1 : _mx(0, w.activity - dt / 1.5);
       w.px = nx; w.py = ny; w.known = true;
     } else w.activity = _mx(0, w.activity - dt / 1.5);
-    if (w.known) BB.follow(w.bop, w.px, w.py, dt);
+    if (w.known) BB.follow(w.bop, clamp(w.px, 54, W - 54), clamp(w.py, 58, H - 76), dt);
     if (w.party) {
       if (w.pinataCD > 0) w.pinataCD -= dt;
       var wave = 1 + _fl(_mn(w.t, w.plan.duration - 0.001) / BB.WAVE_SECONDS);

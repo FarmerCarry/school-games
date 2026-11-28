@@ -286,31 +286,41 @@
         } else if (d < 16) danger += 0.5 * (16 - d) / 7;
       }
       var sc = -danger * 40 + Math.min(md, 30) * 0.6 - crowd * 8 + Math.random() * 3;
+      if (e.isPlayer && G.frozen) sc += Math.min(12, clearCone(s.x, s.y, s.z, openYaw(s))) * 1.4;
       if (team && s.team) sc += s.team === e.team ? 8 : -45;
       if (sc > bs) { bs = sc; best = s; spawnFace.has = fk > 0; spawnFace.yaw = Math.atan2(-fx, -fz); }
     }
     return best || sp[0];
   };
-  // With no enemy in sight, face the most open direction (leaning toward the middle of the map),
-  // so nobody starts a life staring at a wall.
+  // Raycast a 3-ray eye-height cone so neither the center sightline nor side FOV starts hugging a wall.
   var openHit = { t: 0, nx: 0, ny: 0, nz: 0, box: null };
+  function clearCone(x, y, z, yaw) {
+    var mn = 30, ey = y + SS.EYE_H;
+    for (var a = -1; a <= 1; a++) {
+      var yy = yaw + a * 0.3, dx = -Math.sin(yy), dz = -Math.cos(yy);
+      var d = G.W.ray(x, ey, z, dx, 0, dz, 30, openHit, true) ? openHit.t : 30;
+      if (d < mn) mn = d;
+    }
+    return mn;
+  }
   function openYaw(s) {
     var best = Math.atan2(s.x, s.z), bs = -1e9, cx = -s.x, cz = -s.z, cl = Math.sqrt(cx * cx + cz * cz) || 1;
     for (var k = 0; k < 24; k++) {
       var yaw = k / 24 * Math.PI * 2, dx = -Math.sin(yaw), dz = -Math.cos(yaw);
-      var d = G.W.ray(s.x, s.y + SS.EYE_H, s.z, dx, 0, dz, 30, openHit, true) ? openHit.t : 30;
-      var sc = Math.min(d, 30) + 8 * (dx * cx + dz * cz) / cl;
+      var d = clearCone(s.x, s.y, s.z, yaw);
+      var sc = d + 6 * (dx * cx + dz * cz) / cl;
       if (sc > bs) { bs = sc; best = yaw; }
     }
     return best;
   }
   G.respawn = function (e) {
     var s = G.pickSpawn(e);
-    e.x = e.px = s.x + (Math.random() - 0.5) * 0.4; e.z = e.pz = s.z + (Math.random() - 0.5) * 0.4; e.y = e.py = s.y;
+    e.x = e.px = s.x + (Math.random() - 0.5) * 0.3; e.z = e.pz = s.z + (Math.random() - 0.5) * 0.3; e.y = e.py = s.y;
     e.vx = e.vy = e.vz = 0; e.grounded = true; e.stepUp = 0;
     if (G.W.solid(e.x - e.r + 0.02, e.y + 0.06, e.z - e.r + 0.02, e.x + e.r - 0.02, e.y + e.h - 0.05, e.z + e.r - 0.02)) G.W.unstick(e);
-    e.yaw = spawnFace.has ? spawnFace.yaw : openYaw(s) + (Math.random() - 0.5) * 0.2; e.pitch = 0; e.rp = e.ry = 0;
-    e.hp = 100; e.alive = true; e.shield = 2; e.spawnAge = 0; e.spawnT = G.t; e.life++; e.power = 0; e.zoom = false; e.stainN = 0; e.stainI = 0;
+    var useFace = spawnFace.has && clearCone(e.x, e.y, e.z, spawnFace.yaw) >= 8.5;
+    e.yaw = useFace ? spawnFace.yaw : openYaw({ x: e.x, y: e.y, z: e.z }); e.pitch = 0; e.rp = e.ry = 0;
+    e.hp = 100; e.alive = true; e.shield = 2.2; e.spawnAge = 0; e.spawnT = G.t; e.life++; e.power = 0; e.zoom = false; e.stainN = 0; e.stainI = 0;
     fillAmmo(e);
     e.reloadT = 0; e.fireT = 0.3; e.swapT = 0; e.bloom = 0; e.fireBuf = 0;
     if (e.bot) { e.wpn = e.prefW; e.bot.reset(G); }
@@ -837,7 +847,7 @@
       if (G.frozen || G.over) { e.mx = e.mz = 0; e.fire = e.fireP = false; e.jumpReq = false; e.wantThrow = false; }
       stepEnt(e, dt);
       if (!G.frozen) updateWeapons(e, dt);
-      if (e.shield > 0) { e.spawnAge += dt; if (e.spawnAge > 1 || e.mx * e.mx + e.mz * e.mz > 0.01) e.shield -= dt; }
+      if (!G.frozen && e.shield > 0) { e.spawnAge += dt; if (e.spawnAge > 1 || e.mx * e.mx + e.mz * e.mz > 0.01) e.shield -= dt; }
       if (e.power > 0) e.power -= dt;
       if (e.flash > 0) e.flash -= dt;
       if (e.hp < 100 && G.t - e.lastHitT > 5) e.hp = Math.min(100, e.hp + 16 * dt);

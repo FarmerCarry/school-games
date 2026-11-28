@@ -1179,11 +1179,14 @@
     }
     if (G.intro > 0 || G.introT < 1.6) {
       var k = G.introT;
-      var y = k < 0.3 ? -60 + ease(k / 0.3) * 180 : k < 1.2 ? 120 : 120 - ease((k - 1.2) / 0.35) * 220;
-      ctx.font = '700 54px Fredoka, "Segoe UI", sans-serif'; ctx.textAlign = 'center';
-      ctx.lineWidth = 10; ctx.strokeStyle = '#2b1238'; ctx.lineJoin = 'round';
+      var y = k < 0.3 ? -48 + ease(k / 0.3) * 60 : k < 1.2 ? 12 : 12 - ease((k - 1.2) / 0.35) * 72;
       var txt = LEVELS[G.level].name;
-      ctx.strokeText(txt, 640, y); ctx.fillStyle = '#fff'; ctx.fillText(txt, 640, y);
+      ctx.font = '700 24px Fredoka, "Segoe UI", sans-serif';
+      var tw = ctx.measureText(txt).width + 48;
+      pill(640 - tw / 2, y, tw, 44);
+      ctx.fillStyle = '#ffe14d'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(txt, 640, y + 23);
+      ctx.textBaseline = 'alphabetic';
     }
   }
   function drawTutorial(w) {

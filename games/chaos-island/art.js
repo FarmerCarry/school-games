@@ -9,7 +9,10 @@
     var E = window.ChaosEngine;
     if (!T) throw new Error('three.js unavailable');
 
-    var wgl = Kit.webgl.createRenderer(canvas);
+    var wgl = Kit.webgl.createRenderer(canvas, {
+      softRatio: (window.innerWidth || 1280) <= 1360 ? 1.0 : 0.9,
+      antialias: true
+    });
     var software = wgl.software, renderer = wgl.renderer;
 
     var scene = new T.Scene();
@@ -18,7 +21,7 @@
     var skyLava = new T.Color(0xff9266);
     var skyCur = skyNormal.clone();
     scene.background = skyCur;
-    scene.fog = new T.Fog(0x7ad6ff, 34, 92);
+    scene.fog = new T.Fog(0x52c4ff, 34, 82);
 
     // Slightly lower angled 3D camera so 2D platform hitboxes align cleanly with visual landings.
     var camera = new T.PerspectiveCamera(38, 16 / 9, 0.5, 160);
@@ -228,10 +231,10 @@
     }
     buildIsland();
 
-    // Cheerful low-poly glowing Sun in upper-left sky
+    // Cheerful low-poly glowing Sun in upper-left sky (unfogged so it stays bright golden)
     var sunOrb = new T.Mesh(
       new T.IcosahedronGeometry(1.65, 1),
-      new T.MeshBasicMaterial({ color: 0xffe966 })
+      new T.MeshBasicMaterial({ color: 0xffe966, fog: false })
     );
     sunOrb.position.set(-14.5, 10.6, -24);
     scene.add(sunOrb);
@@ -252,20 +255,53 @@
     drumGroup.add(drumMesh, drumTop);
     scene.add(drumGroup);
 
-    // Sparkling Ocean & Rising Lava Surface
+    // Sparkling Ocean & Rising Lava Surface (oversized plane blends smoothly into sky fog)
     var seaMat = new T.MeshLambertMaterial({ color: 0x16b8e8 });
-    var seaMesh = new T.Mesh(new T.PlaneGeometry(160, 120, 1, 1), seaMat);
+    var seaMesh = new T.Mesh(new T.PlaneGeometry(240, 180, 1, 1), seaMat);
     seaMesh.rotation.x = -Math.PI / 2;
     seaMesh.position.y = -1.65;
     scene.add(seaMesh);
 
-    // Subtle ocean foam ring hugging the island
-    var foamMat = new T.MeshBasicMaterial({ color: 0xbff5ff, transparent: true, opacity: 0.78 });
-    var foamMesh = new T.Mesh(new T.RingGeometry(10.6, 11.7, 28), foamMat);
+    // Deep lagoon shadow + foam ring + 3 gentle expanding sea ripple rings around the island
+    var lagoonShadow = new T.Mesh(
+      new T.CircleGeometry(10.8, 28),
+      new T.MeshBasicMaterial({ color: 0x097ea8, transparent: true, opacity: 0.42, depthWrite: false })
+    );
+    lagoonShadow.rotation.x = -Math.PI / 2;
+    lagoonShadow.scale.set(1.06, 0.56, 1);
+    lagoonShadow.position.set(0, -1.61, -0.1);
+    scene.add(lagoonShadow);
+
+    var foamMat = new T.MeshBasicMaterial({ color: 0xcff8ff, transparent: true, opacity: 0.78, depthWrite: false });
+    var foamMesh = new T.Mesh(new T.RingGeometry(10.6, 11.55, 32), foamMat);
     foamMesh.rotation.x = -Math.PI / 2;
     foamMesh.scale.set(1.05, 0.56, 1);
     foamMesh.position.set(0, -1.58, -0.1);
     scene.add(foamMesh);
+
+    var rippleGeo = new T.RingGeometry(11.1, 11.38, 48);
+    var seaRipples = [];
+    for (var ri = 0; ri < 3; ri++) {
+      var rMat = new T.MeshBasicMaterial({ color: 0xdffbff, transparent: true, opacity: 0.24, depthWrite: false });
+      var rMesh = new T.Mesh(rippleGeo, rMat);
+      rMesh.rotation.x = -Math.PI / 2;
+      rMesh.position.set(0, -1.57, -0.1);
+      scene.add(rMesh);
+      seaRipples.push({ mesh: rMesh, mat: rMat, phase: ri / 3 });
+    }
+
+    // Sunlit ocean sparkles (1 draw call, gentle shimmer on water around island)
+    var SPARKLE_SPOTS = [
+      [-14.5, 4.5], [-12.2, 7.6], [-8.4, 8.8], [-3.2, 9.2], [2.4, 9.5], [7.6, 8.6], [12.4, 7.2], [14.8, 4.2],
+      [-16.0, -2.5], [-13.6, -7.8], [-8.8, -10.5], [-2.5, -11.8], [4.0, -11.4], [10.2, -9.8], [14.4, -6.4], [16.2, -1.4],
+      [-11.2, 5.8], [11.6, 5.4], [-5.5, 10.6], [5.8, 10.4]
+    ];
+    var sparkleGeo = new T.PlaneGeometry(0.68, 0.22);
+    sparkleGeo.rotateX(-Math.PI / 2);
+    var sparkleMat = new T.MeshBasicMaterial({ color: 0xe6fbff, transparent: true, opacity: 0.72, depthWrite: false });
+    var sparkleInst = new T.InstancedMesh(sparkleGeo, sparkleMat, SPARKLE_SPOTS.length);
+    sparkleInst.instanceMatrix.setUsage(T.DynamicDrawUsage);
+    scene.add(sparkleInst);
 
     // Rising Lava Flood plane (hidden when below sea level!)
     var lavaMat = new T.MeshBasicMaterial({ color: 0xff5a1f, transparent: true, opacity: 0.90 });
@@ -343,7 +379,7 @@
     var eyeGeo = new T.BoxGeometry(0.14, 0.18, 0.06);
     var shineGeo = new T.BoxGeometry(0.06, 0.06, 0.07);
     var cheekGeo = new T.BoxGeometry(0.14, 0.08, 0.05);
-    var markerGeo = new T.ConeGeometry(0.26, 0.42, 4);
+    var markerGeo = new T.ConeGeometry(0.22, 0.36, 4);
     var shieldGeo = new T.RingGeometry(0.55, 0.72, 16);
 
     var matWhite = new T.MeshBasicMaterial({ color: 0xffffff });
@@ -390,10 +426,10 @@
         hatAnchor.position.set(0, 1.50, 0);
         rig.add(hatAnchor);
 
-        // Floating player marker diamond/arrow above human players
+        // Floating player marker diamond/arrow cleanly above tallest hats
         var mark = new T.Mesh(markerGeo, matP1Mark);
         mark.rotation.x = Math.PI;
-        mark.position.y = 2.38;
+        mark.position.y = 2.78;
         mark.visible = false;
         root.add(mark);
 
@@ -435,14 +471,16 @@
     }
 
     /* ---------------------------------------------------- instanced props & hazards */
-    // Blob shadows (1 draw call for all actors, meteors, coconuts!)
-    var MAX_SHADOWS = 32;
-    var shadowGeo = new T.CircleGeometry(0.55, 14);
-    shadowGeo.rotateX(-Math.PI / 2);
-    var shadowMat = new T.MeshBasicMaterial({ color: 0x102838, transparent: true, opacity: 0.34, depthWrite: false });
-    var shadows = new T.InstancedMesh(shadowGeo, shadowMat, MAX_SHADOWS);
-    shadows.instanceMatrix.setUsage(T.DynamicDrawUsage);
-    scene.add(shadows);
+    // Soft feathered blob shadows (1 draw call for actors, floating coins & rolling coconuts!)
+    var shadows = Kit.webgl.blobShadowPool(scene, 48, { opacity: 0.52, yOffset: 0.03 });
+    function surfaceUnder(x, y) {
+      var sy = E.GROUND_Y;
+      for (var i = 0; i < E.PLATFORMS.length; i++) {
+        var pl = E.PLATFORMS[i];
+        if (x >= pl.x1 && x <= pl.x2 && pl.y <= y + 0.08 && pl.y > sy) sy = pl.y;
+      }
+      return sy;
+    }
 
     // Spinning golden coins (1 draw call!)
     var MAX_COINS = 16;
@@ -524,20 +562,20 @@
     }
     scene.add(tornadoGroup);
 
-    // Bright pulsing directional arrow & safe-zone pad over the stone shelter during Tornado/Lightning
+    // Compact pulsing directional badge mounted on shelter lintel + safe-zone floor pad
     var shelterBeacon = new T.Group();
     shelterBeacon.visible = false;
     var shelterArrow = new T.Group();
     var shelterArrowMat = new T.MeshBasicMaterial({ color: 0x38f6ff });
     var shelterRimMat = new T.MeshBasicMaterial({ color: 0xffe135 });
-    var arrowHead = new T.Mesh(new T.ConeGeometry(0.56, 0.88, 6), shelterRimMat);
+    var arrowHead = new T.Mesh(new T.ConeGeometry(0.28, 0.38, 6), shelterRimMat);
     arrowHead.rotation.x = Math.PI;
     arrowHead.position.y = 0;
-    var arrowStem = new T.Mesh(new T.BoxGeometry(0.32, 0.72, 0.32), shelterArrowMat);
-    arrowStem.position.y = 0.72;
+    var arrowStem = new T.Mesh(new T.BoxGeometry(0.16, 0.24, 0.16), shelterArrowMat);
+    arrowStem.position.y = 0.28;
     shelterArrow.add(arrowHead, arrowStem);
-    shelterArrow.position.set(0, 3.65, 1.42);
-    var shelterPadMat = new T.MeshBasicMaterial({ color: 0x38f6ff, transparent: true, opacity: 0.42, side: T.DoubleSide, depthWrite: false });
+    shelterArrow.position.set(0, 2.84, 1.28);
+    var shelterPadMat = new T.MeshBasicMaterial({ color: 0x38f6ff, transparent: true, opacity: 0.46, side: T.DoubleSide, depthWrite: false });
     var shelterPad = new T.Mesh(new T.PlaneGeometry(2.75, 1.85), shelterPadMat);
     shelterPad.rotation.x = -Math.PI / 2;
     shelterPad.position.set(0, E.GROUND_Y + 0.05, 0);
@@ -612,16 +650,32 @@
         else if (world.disaster === 'flood' || world.disaster === 'meteor' || world.disaster === 'quake') targetSky = skyLava;
       }
       skyCur.lerp(targetSky, Math.min(1, dt * 3.5));
-      scene.fog.color.copy(skyCur).lerp(C.setHex(0xffffff), 0.25);
+      scene.fog.color.copy(skyCur);
 
-      // Gentle cloud drift & ocean breathing
+      // Gentle cloud drift, ocean ripples & sunlit water sparkles
       for (var c = 0; c < clouds.length; c++) {
         var cl = clouds[c];
         cl.mesh.position.x += cl.speed * dt;
         if (cl.mesh.position.x > 26) cl.mesh.position.x = -26;
       }
-      seaMesh.position.y = -1.65 + Math.sin(t * 2.1) * 0.08;
+      var seaWave = Math.sin(t * 2.1) * 0.08;
+      seaMesh.position.y = -1.65 + seaWave;
+      foamMesh.position.y = -1.58 + seaWave;
       foamMesh.scale.set(1.05 + Math.sin(t * 2.4) * 0.03, 0.56 + Math.sin(t * 2.4) * 0.02, 1);
+      for (var ri2 = 0; ri2 < seaRipples.length; ri2++) {
+        var rp = seaRipples[ri2];
+        var ru = view.calm ? ((ri2 + 0.35) / seaRipples.length) : ((t * 0.22 + rp.phase) % 1);
+        var rs = 1.0 + ru * 0.46;
+        rp.mesh.position.y = -1.57 + seaWave;
+        rp.mesh.scale.set(1.05 * rs, 0.56 * rs, 1);
+        rp.mat.opacity = Math.sin(ru * Math.PI) * 0.26;
+      }
+      for (var si = 0; si < SPARKLE_SPOTS.length; si++) {
+        var sp = SPARKLE_SPOTS[si];
+        var tw = view.calm ? 0.85 : Math.max(0.01, 0.55 + 0.55 * Math.sin(t * 2.6 + si * 1.37));
+        setInst(sparkleInst, si, sp[0], -1.56 + seaWave, sp[1], tw, 1, tw);
+      }
+      sparkleInst.instanceMatrix.needsUpdate = true;
 
       // Camera framing + gentle menu sway + reduced-motion-safe shake
       shakePow = view.calm ? 0 : Math.max(0, shakePow - dt * 2.6);
@@ -663,20 +717,20 @@
         lavaMesh.visible = false;
       }
 
-      // Bright shelter beacon arrow during Tornado / Lightning card & active phases
+      // Compact shelter lintel beacon during Tornado / Lightning card & active phases
       var showShelterHint = !!(world && !world.demo && (world.phase === 'card' || world.phase === 'active') &&
         (world.disaster === 'tornado' || world.disaster === 'lightning'));
       shelterBeacon.visible = showShelterHint;
       if (showShelterHint) {
         var sPulse = view.calm ? 0 : Math.sin(t * 7.5);
-        shelterArrow.position.y = 3.65 + sPulse * 0.28;
-        var aSc = 1 + (view.calm ? 0 : Math.sin(t * 9.0) * 0.12);
+        shelterArrow.position.y = 2.84 + sPulse * 0.09;
+        var aSc = 1 + (view.calm ? 0 : Math.sin(t * 9.0) * 0.1);
         shelterArrow.scale.set(aSc, aSc, aSc);
-        shelterPadMat.opacity = view.calm ? 0.42 : (0.32 + Math.abs(Math.sin(t * 6.0)) * 0.32);
+        shelterPadMat.opacity = view.calm ? 0.46 : (0.34 + Math.abs(Math.sin(t * 6.0)) * 0.34);
       }
 
-      // Sync Actors + blob shadows
-      var shIdx = 0;
+      // Sync Actors + soft contact shadows
+      shadows.reset();
       var list = world ? world.actors : [];
       ensureActorMeshes(list.length);
       for (var i = 0; i < actorMeshes.length; i++) {
@@ -719,31 +773,31 @@
         m.armR.rotation.x = swing * 0.85;
         m.rig.position.y = (a.ground && Math.abs(a.vx) < 0.5) ? Math.abs(Math.sin(t * 4.2 + i)) * 0.08 : 0;
 
-        // Player arrow bob
-        if (m.mark.visible) m.mark.position.y = 2.32 + Math.sin(t * 6 + i) * 0.14;
+        // Player arrow bob cleanly above tallest hats
+        if (m.mark.visible) m.mark.position.y = 2.78 + Math.sin(t * 6 + i) * 0.10;
         // Shelter shield ring during tornado / lightning
         m.shield.visible = !!(a.alive && a.sheltered && world && (world.disaster === 'tornado' || world.disaster === 'lightning') && world.phase === 'active');
 
-        // Blob shadow underneath alive actors
-        if (a.alive && shIdx < MAX_SHADOWS) {
-          var syGround = E.GROUND_Y;
-          for (var pi = 0; pi < E.PLATFORMS.length; pi++) {
-            var pl = E.PLATFORMS[pi];
-            if (a.x >= pl.x1 && a.x <= pl.x2 && pl.y <= a.y + 0.08 && pl.y > syGround) syGround = pl.y;
-          }
+        // Soft contact shadow underneath alive actors
+        if (a.alive) {
+          var syGround = surfaceUnder(a.x, a.y);
           var distH = Math.max(0, a.y - syGround);
-          var sScale = Math.max(0.35, 1 - distH * 0.14);
-          setInst(shadows, shIdx++, a.x, syGround + 0.03, az, sScale, 1, sScale);
+          var sScale = 1.28 * Math.max(0.4, 1 - distH * 0.13);
+          shadows.add(a.x, syGround, az, sScale, sScale);
         }
       }
 
-      // Coins
+      // Coins + grounded contact shadows beneath floating coins
       var cnIdx = 0;
       var coinList = world ? world.coins : [];
       for (var ci = 0; ci < coinList.length && cnIdx < MAX_COINS; ci++) {
         var co = coinList[ci];
         if (co.taken) continue;
-        setInst(coinInst, cnIdx++, co.x, co.y + Math.sin(t * 4.5 + co.phase) * 0.14, 0, 1, 1, 1, 0, t * 2.8 + co.phase, 0);
+        var cy = co.y + Math.sin(t * 4.5 + co.phase) * 0.14;
+        setInst(coinInst, cnIdx++, co.x, cy, 0, 1, 1, 1, 0, t * 2.8 + co.phase, 0);
+        var cGround = surfaceUnder(co.x, co.y);
+        var cScale = 0.78 * Math.max(0.45, 1 - Math.max(0, cy - cGround) * 0.12);
+        shadows.add(co.x, cGround, 0, cScale, cScale);
       }
       coinInst.count = cnIdx;
       coinInst.instanceMatrix.needsUpdate = true;
@@ -803,9 +857,7 @@
           }
         } else if (coIdx < MAX_COCOS) {
           setInst(cocoInst, coIdx++, cc.x, cc.y, 0, 1, 1, 1, 0, 0, cc.rot);
-          if (shIdx < MAX_SHADOWS) {
-            setInst(shadows, shIdx++, cc.x, Math.max(E.GROUND_Y, cc.y - cc.r) + 0.03, 0, 1.35, 1, 1.35);
-          }
+          shadows.add(cc.x, Math.max(E.GROUND_Y, cc.y - cc.r), 0, 1.65, 1.65);
         }
       }
       cocoInst.count = coIdx;
@@ -847,8 +899,7 @@
       }
 
       // Finalize blob shadows
-      shadows.count = shIdx;
-      shadows.instanceMatrix.needsUpdate = true;
+      shadows.commit();
 
       // Step & draw particles
       var ptIdx = 0;
@@ -898,7 +949,7 @@
         done();
       },
       whenDrawn: pace.whenDrawn,
-      dispose: function () { pace.dispose(); renderer.dispose(); }
+      dispose: function () { shadows.dispose(); pace.dispose(); renderer.dispose(); }
     };
 
     return view;

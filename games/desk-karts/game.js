@@ -513,15 +513,17 @@
     var i1 = p1.item || '';
     if (force || hudCache.p1Item !== i1) {
       hudCache.p1Item = i1;
-      $('p1ItemIco').textContent = i1 ? ITEM_ICONS[i1] : '·';
+      $('p1ItemIco').textContent = i1 ? ITEM_ICONS[i1] : '?';
       $('p1ItemSlot').classList.toggle('ready', !!i1);
+      $('p1ItemSlot').classList.toggle('empty', !i1);
     }
     if (duo) {
       var i2 = p2.item || '';
       if (force || hudCache.p2Item !== i2) {
         hudCache.p2Item = i2;
-        $('p2ItemIco').textContent = i2 ? ITEM_ICONS[i2] : '·';
+        $('p2ItemIco').textContent = i2 ? ITEM_ICONS[i2] : '?';
         $('p2ItemSlot').classList.toggle('ready', !!i2);
+        $('p2ItemSlot').classList.toggle('empty', !i2);
       }
     }
   }

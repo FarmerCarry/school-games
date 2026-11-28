@@ -85,9 +85,4 @@
   <ellipse cx="198" cy="266" rx="9" ry="6" fill="#ff7a9c"/>
   <!-- the big friendly pointer -->
   <path d="M262 286 L262 352 L278 338 L290 362 L304 356 L292 332 L314 332 Z" fill="#ffffff" stroke="#1c2250" stroke-width="6" stroke-linejoin="round"/>
-  <!-- logo -->
-  <g font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-weight="900" text-anchor="middle">
-    <text x="200" y="88" font-size="66" fill="#1c2250" stroke="#1c2250" stroke-width="14" stroke-linejoin="round">فقاعات بوب</text>
-    <text x="200" y="84" font-size="66" fill="#ffd23f" stroke="#ffffff" stroke-width="2" paint-order="stroke" stroke-linejoin="round">فقاعات بوب</text>
-  </g>
 </svg>

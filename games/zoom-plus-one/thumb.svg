@@ -39,6 +39,7 @@
       <path d="M316 316 L368 316 L392 370 L330 370 Z" fill="#c77dff"/>
     </g>
   </g>
+  <g transform="translate(0 -22)">
   <!-- the toast runner with googly eyes -->
   <g stroke="#2a1d4e" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
     <path d="M182 300 L166 336 M218 300 L238 330" fill="none"/>
@@ -62,9 +63,5 @@
     <text x="300" y="236" font-size="40" fill="#ffe14f">+1</text>
     <text x="318" y="296" font-size="30" fill="#ffffff">+1</text>
   </g>
-  <!-- logo -->
-  <g font-family="Fredoka, Arial, sans-serif" font-weight="700" text-anchor="middle" stroke="#2a1d4e" stroke-width="10" paint-order="stroke" stroke-linejoin="round">
-    <text x="250" y="104" font-size="78" fill="#ffffff">زوووم</text>
-    <text x="88" y="104" font-size="72" fill="#ffe14f">+1</text>
   </g>
 </svg>

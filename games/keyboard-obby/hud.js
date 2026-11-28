@@ -111,7 +111,7 @@
   H.bubble = function (g, cx, y, o) {
     var k = KO.KEY[o.code];
     if (!k) return;
-    var label = KO.label(o.code, o.lang), wide = k.code === 'Space', capW = wide ? 230 : 112, capH = 104;
+    var label = KO.label(o.code, o.lang), wide = k.code === 'Space', capW = wide ? 220 : 104, capH = 92;
     var hasWord = !!(o.word && o.word.text), bw = _mx(capW + 44, hasWord ? 340 : 0), bh = capH + 34 + (hasWord ? 62 : 0);
     var s = 1 + (o.bump || 0) * 0.12;
     g.save(); g.translate(cx, y + bh / 2); g.scale(s, s); g.translate(-cx, -(y + bh / 2));
@@ -206,7 +206,7 @@
       g.restore();
     }
     rr(g, x - 6, y + 10, w + 12, 6, 3); fill(g, frozen ? '#7ff6ff' : level > 0.75 ? '#ff4d6d' : '#ff8fa3'); ink(g, 2.5);
-    if (frozen) text(g, '❄', x + w / 2, y - 18, 28, '#7ff6ff', { stroke: 6 });
+    rr(g, x - 48, y - 42, w + 58, 32, 16); fill(g, frozen ? '#38d9ff' : _ia(0.84)); ink(g, 3, _W); text(g, frozen ? '❄ جليد' : '🚀 حماس', x - 48 + (w + 58) / 2, y - 25, 16, _W);
   };
   // Streak Jetpack badge: fills up to 5 clean keys, then glows when jetpack is active.
   H.streak = function (g, x, y, combo, jet, pulse) {

@@ -114,7 +114,7 @@
     // Free starter Frosting Turret already placed & ready to fire at Wave 1!
     if (def.starter !== false && opts.starter !== false) {
       const sp = CG.bestPad(world);
-      if (sp >= 0) world.pads[sp].tower = { type: 'pop', lv: 0, spent: 0, cd: 0.12, angle: -Math.PI / 2, kick: 0, free: true };
+      if (sp >= 0) world.pads[sp].tower = { type: 'pop', lv: 0, spent: 0, cd: 0.12, angle: -2.35, kick: 0, free: true };
     }
     return world;
   };
@@ -198,7 +198,7 @@
     const cost = spec.lv[0].cost;
     if (world.coins < cost) return false;
     world.coins -= cost;
-    p.tower = { type, lv: 0, spent: cost, cd: 0.18, angle: -Math.PI / 2, kick: 0 };
+    p.tower = { type, lv: 0, spent: cost, cd: 0.18, angle: -2.35, kick: 0 };
     world.ev.push({ t: 'build', pad, type });
     return true;
   };

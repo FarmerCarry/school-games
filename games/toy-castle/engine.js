@@ -236,7 +236,7 @@
     var sx = side === 0 ? LEFT_CASTLE_X + 0.55 : RIGHT_CASTLE_X - 0.55;
     var sy = CANNON_Y;
     var clampedTx = side === 0 ? clamp(tx, -8.5, RIGHT_CASTLE_X + 0.4) : clamp(tx, LEFT_CASTLE_X - 0.4, 8.5);
-    var clampedTy = clamp(ty, 0.2, 8.6);
+    var clampedTy = clamp(ty, 0.2, 6.85);
     var dx = clampedTx - sx;
     var dy = clampedTy - sy;
     var dist = Math.sqrt(dx * dx + dy * dy);
@@ -422,7 +422,7 @@
     var s = st.sides[side];
     if (!s) return;
     s.aimX = side === 0 ? clamp(tx, -8.5, RIGHT_CASTLE_X + 0.3) : clamp(tx, LEFT_CASTLE_X - 0.3, 8.5);
-    s.aimY = clamp(ty, 0.4, 8.5);
+    s.aimY = clamp(ty, 0.4, 6.85);
     s.aimPitch = solveCannonShot(side, s.aimX, s.aimY).pitch;
   }
 
@@ -476,7 +476,7 @@
       uid: st.nextUid++,
       baseX: x,
       x: x,
-      y: 9.8,
+      y: 6.9,
       z: (st._rng() - 0.5) * 0.6,
       vy: -1.15 - st._rng() * 0.3,
       swayPhase: st._rng() * Math.PI * 2,

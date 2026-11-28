@@ -463,8 +463,27 @@
     // clear space around the chosen spot so the start is always fair
     // ...and never right next to the deadly rim (a spawn at 0.82 R could reach the edge in
     // about 2 s if the first mouse move pointed outwards)
-    var sp = findSpawn(0, 520, 0.6);
-    p.init(sp.x, sp.y, Math.atan2(-sp.y, -sp.x) + rand(-0.8, 0.8), 10, name, skin, eyes);
+    var sp = findSpawn(0, 520, 0.55);
+    var pAng = Math.atan2(-sp.y, -sp.x) + rand(-0.6, 0.6);
+    p.init(sp.x, sp.y, pAng, 10, name, skin, eyes);
+    // Stage 3 contrasting rival bots safely on the visible outer ring (410-500px away, moving tangentially)
+    var ringAngs = [pAng + 0.85, pAng - 1.1, pAng + 2.55];
+    var altIds = ['berry', 'wave', 'sunny', 'grape', 'lava'];
+    for (var k = 0; k < 3; k++) {
+      var b = W.snakes[k + 1];
+      if (!b) continue;
+      var dist = 415 + k * 42;
+      var bx = sp.x + Math.cos(ringAngs[k]) * dist, by = sp.y + Math.sin(ringAngs[k]) * dist;
+      if (bx * bx + by * by > (R - 260) * (R - 260)) continue;
+      var bSkin = b.skin;
+      if (bSkin === skin) {
+        for (var si = 0; si < SA.SKINS.length; si++) {
+          if (SA.SKINS[si].id === altIds[k] && SA.SKINS[si] !== skin) { bSkin = SA.SKINS[si]; break; }
+        }
+      }
+      b.init(bx, by, ringAngs[k] + (k % 2 ? 1.4 : -1.4), 24 + k * 24, b.name, bSkin, b.eyes);
+      b.ai.wa = b.ang;
+    }
     rank();
   };
 

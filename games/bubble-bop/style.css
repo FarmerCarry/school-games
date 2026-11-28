@@ -63,13 +63,18 @@ button, #scrGrip, #game.grab {
 .logo .l2 { font-size: 150px; color: #ffd23f; margin-top: -34px; }
 .bb-play { position: absolute; left: 558px; top: 438px; width: 164px; height: 164px; background: #3ddc84; border-width: 7px; box-shadow: 0 10px 0 #1c2250; }
 .bb-play::after { inset: -20px; border-width: 9px; }
-.bb-party { position: absolute; left: 490px; top: 622px; width: 300px; height: 68px; padding: 0 22px; background: linear-gradient(180deg, #ffe55c 0%, #ff9f43 100%); color: #1c2250; font-size: 28px; letter-spacing: 0; white-space: nowrap; box-shadow: 0 7px 0 #1c2250, 0 0 22px rgba(255, 210, 63, 0.55); }
+.bb-party { position: absolute; left: 490px; top: 622px; width: 300px; height: 68px; padding: 0 22px; background: linear-gradient(180deg, #ff4fb8 0%, #9b30ff 100%); color: #fff; text-shadow: 0 3px 0 #1c2250; font-size: 28px; letter-spacing: 0; white-space: nowrap; box-shadow: 0 7px 0 #1c2250, 0 0 22px rgba(155, 48, 255, 0.55); }
 .party-hint { margin: 0; font-size: 20px; font-weight: 700; color: #59628f; }
 .party-hint .sg-key { font-size: 16px; }
-.bb-side { position: absolute; top: 590px; width: 104px; height: 104px; }
-#btnCloset { left: 60px; background: #b48cff; }
-#btnTitleMap { left: 184px; background: #ffd23f; color: #1c2250; }
-#btnHow { right: 60px; background: #4fd1ff; }
+.bb-side { position: absolute; top: 582px; width: 108px; height: 112px; border-radius: 30px; flex-direction: column; gap: 2px; }
+.bb-side svg { width: 52px; height: 52px; }
+.bb-side .lbl { font-size: 20px; line-height: 1.05; text-shadow: 0 2px 0 #1c2250; }
+#btnCloset { left: 52px; background: #9b6bff; color: #fff; }
+#btnTitleMap { left: 176px; background: #ffd23f; color: #1c2250; }
+#btnTitleMap .lbl { text-shadow: none; }
+#btnHow { right: 52px; background: #2cb4ff; color: #fff; }
+.sg-mute { top: 14px; right: 14px; width: 58px; height: 58px; background: #fff; color: #1c2250; border: 4px solid #1c2250; box-shadow: 0 5px 0 #1c2250; font-size: 25px; display: inline-flex; align-items: center; justify-content: center; }
+.sg-mute:hover { background: #e8f9ff; }
 
 /* --------------------------------------------------- how to hold cards */
 #scrGrip { background: rgba(28, 34, 80, 0.72); pointer-events: auto; }

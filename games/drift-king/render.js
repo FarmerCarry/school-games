@@ -65,8 +65,10 @@
       bg.clouds.push(c);
     }
     for (i = 0; i < 70; i++) bg.stars.push([r() * W, r() * H, 0.6 + r() * 1.8, r() * 6]);
-    for (i = 0; i < 3; i++) bg.isles.push({ x: r() * 1700, y: r() * 1100, s: 0.7 + r() * 0.5, kind: i });
-    for (i = 0; i < 3; i++) bg.balloons.push({ x: r() * 1700, y: r() * 1100, s: 0.7 + r() * 0.4, col: ['#ff6f91', '#ffc93c', '#6fd6ff'][i], ph: r() * 6 });
+    var is = [[1060, 440, .82, 0], [110, 330, .82, 2], [280, 715, .84, 1]];
+    for (i = 0; i < 3; i++) bg.isles.push({ x: is[i][0], y: is[i][1], s: is[i][2], kind: is[i][3] });
+    var bs = [[1075, 355, .86, '#ff6f91', 1], [1315, 390, .8, '#ffc93c', 3], [405, 320, .78, '#6fd6ff', 5]];
+    for (i = 0; i < 3; i++) bg.balloons.push({ x: bs[i][0], y: bs[i][1], s: bs[i][2], col: bs[i][3], ph: bs[i][4] });
   }
   function wrapPos(v, span) { return ((v % span) + span) % span; }
 

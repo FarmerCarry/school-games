@@ -702,7 +702,7 @@
       } else if (phase === 'flight' && ball && !ball.done) {
         if (reticle && ball.vy < -2 && !ball.armed) {
           showHint = true; hintTxt = 'اضغط الآن لقفزة خارقة!';
-        } else if (save.shots < 2 && ball.fuel > 0 && ball.time > 0.35 && ball.time < 2.8) {
+        } else if (save.shots < 2 && ball.fuel > 0 && ball.mode === 'air' && (ball.y - P.heightAt(course, ball.x)) > 3.0 && ball.time > 0.35 && ball.time < 2.8) {
           showHint = true; hintTxt = 'اضغط مطوّلاً للصاروخ! 🚀';
         }
       }

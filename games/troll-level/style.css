@@ -22,27 +22,28 @@ button { font-family: var(--sg-font); }
 
 /* ---------------------------------------------------------------- title */
 .logo {
-  position: absolute; left: 0; right: 0; top: 4px; text-align: center; pointer-events: none;
+  position: absolute; left: 0; right: 0; top: 22px; text-align: center; pointer-events: none;
   font-weight: 700; line-height: 1.05; white-space: nowrap;
 }
 .logo span {
-  display: inline-block; font-size: 104px; margin: 0 10px;
-  -webkit-text-stroke: 12px var(--ink); paint-order: stroke fill;
-  text-shadow: 0 8px 0 #ff6b1a;
+  display: inline-block; font-size: 88px; margin: 0 10px;
+  -webkit-text-stroke: 10px var(--ink); paint-order: stroke fill;
+  text-shadow: 0 7px 0 #ff6b1a;
 }
-.logo .w1 { color: #ffffff; transform: rotate(3deg); animation: bob 1.8s ease-in-out infinite; }
-.logo .w2 { color: var(--yel); transform: rotate(-4deg); animation: wobble 2.6s ease-in-out infinite; }
-@keyframes bob { 0%, 100% { translate: 0 0; } 50% { translate: 0 -7px; } }
+.logo .w1 { color: #ffffff; transform: rotate(2deg); animation: bob 1.8s ease-in-out infinite; }
+.logo .w2 { color: var(--yel); transform: rotate(-2.5deg); animation: wobble 2.6s ease-in-out infinite; }
+@keyframes bob { 0%, 100% { translate: 0 0; } 50% { translate: 0 -4px; } }
 @keyframes wobble {
   0%, 70%, 100% { rotate: 0deg; translate: 0 0; }
-  75% { rotate: -6deg; translate: 0 6px; } 80% { rotate: 5deg; } 85% { rotate: -3deg; } 90% { rotate: 0deg; }
+  75% { rotate: -5deg; translate: 0 4px; } 80% { rotate: 4deg; } 85% { rotate: -2deg; } 90% { rotate: 0deg; }
 }
 .tag {
-  position: absolute; left: 0; right: 0; top: 170px; text-align: center; pointer-events: none;
-  font-size: 27px; font-weight: 700; color: #ffffff; text-shadow: 3px 0px 0 var(--ink), -3px 0px 0 var(--ink), 0px 3px 0 var(--ink), 0px -3px 0 var(--ink), 2.0999999999999996px 2.0999999999999996px 0 var(--ink), -2.0999999999999996px 2.0999999999999996px 0 var(--ink), 2.0999999999999996px -2.0999999999999996px 0 var(--ink), -2.0999999999999996px -2.0999999999999996px 0 var(--ink), 0 4px 0 var(--ink);
+  position: absolute; left: 0; right: 0; top: 174px; text-align: center; pointer-events: none;
+  font-size: 27px; font-weight: 700; color: #ffffff;
+  -webkit-text-stroke: 6px var(--ink); paint-order: stroke fill; text-shadow: 0 3px 0 var(--ink);
 }
 .title-bottom {
-  position: absolute; left: 24px; right: 24px; top: 530px; height: 180px;
+  position: absolute; left: 24px; right: 24px; top: 516px; height: 176px;
   display: flex; align-items: center; justify-content: space-between; pointer-events: none;
 }
 .title-bottom > * { pointer-events: auto; }

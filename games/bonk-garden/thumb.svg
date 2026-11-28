@@ -70,12 +70,11 @@
     <circle cx="9" cy="140" r="6" fill="#2a1d4e" stroke="none"/>
   </g>
   <!-- BONK -->
-  <g stroke="#2a1d4e" stroke-linejoin="round">
-    <path d="M70 92 L92 70 L96 96 L126 80 L116 106 L148 112 L118 124 L134 148 L104 138 L96 164 L82 138 L56 150 L64 124 L36 116 L64 104 L52 78 Z" fill="#ffe14f" stroke-width="5"/>
+  <g transform="translate(26 24)">
+    <g stroke="#2a1d4e" stroke-linejoin="round">
+      <path d="M70 92 L92 70 L96 96 L126 80 L116 106 L148 112 L118 124 L134 148 L104 138 L96 164 L82 138 L56 150 L64 124 L36 116 L64 104 L52 78 Z" fill="#ffe14f" stroke-width="5"/>
+    </g>
+    <text x="92" y="128" font-family="Fredoka, 'Baloo Bhaijaan 2', Arial, sans-serif" font-weight="700" font-size="32" text-anchor="middle" direction="rtl" fill="#ffffff" stroke="#2a1d4e" stroke-width="8" paint-order="stroke" stroke-linejoin="round">بونك!</text>
   </g>
-  <g font-family="Fredoka, Arial, sans-serif" font-weight="700" text-anchor="middle" stroke="#2a1d4e" paint-order="stroke" stroke-linejoin="round">
-    <text x="92" y="128" font-size="34" fill="#ffffff" stroke-width="8">بونك!</text>
-    <text x="196" y="60" font-size="50" fill="#ffffff" stroke-width="12">حديقة البونك</text>
-    <text x="46" y="214" font-size="34" fill="#ffffff" stroke-width="7">+1</text>
-  </g>
+  <text x="46" y="214" font-family="Fredoka, Arial, sans-serif" font-weight="700" font-size="34" text-anchor="middle" fill="#ffffff" stroke="#2a1d4e" stroke-width="7" paint-order="stroke" stroke-linejoin="round">+1</text>
 </svg>

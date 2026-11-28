@@ -494,7 +494,7 @@
         var tag = '⁦' + e.a + '⁩ م', mf = null;
         for (var i = 0; i < floats.length; i++) if (floats[i].mile) mf = floats[i];
         if (mf) { mf.text = tag; mf.life = 1; }
-        else float(tag, 640 + (e.a % 20 ? 170 : -170), 70, '#fff', 34, -40).mile = true;
+        else float(tag, 640 + (e.a % 20 ? -245 : 245), 148, '#fff4b8', 32, -28).mile = true;
         if (!w.level && best0 > 0 && !passedBest && w.height > best0) {
           passedBest = true;
           showBanner('رقم قياسي جديد!', '#ffe14f', 1.6);
@@ -567,19 +567,19 @@
     ctx.beginPath(); ctx.moveTo(x, y - 25); ctx.lineTo(x, y - 6); ctx.moveTo(x - 17, y - 6); ctx.lineTo(x + 17, y - 6); ctx.stroke();
   }
   function drawCoach(w) {
-    var m = view.marshyAt, k = calm() ? 0 : M.sin(time * 5);
-    var cx = M.max(240, M.min(W - 240, m.x)), cy = M.max(150, M.min(H - 120, m.y - 150));
-    ctx.save(); ctx.translate(cx, cy); if (!calm()) ctx.scale(1 + k * 0.03, 1 + k * 0.03);
-    panel(-200, -50, 400, 100, 'rgba(255,95,162,0.95)');
+    var k = calm() ? 0 : M.sin(time * 5);
+    var fade = coach && !(idle > 7 && !w.steered) && w.t > 2.6 ? M.max(0, 1 - (w.t - 2.6) / 1.4) : 1;
+    if (fade <= 0.02) return;
+    ctx.save(); ctx.globalAlpha = fade; ctx.translate(640, H - 52); if (!calm()) ctx.scale(1 + k * 0.02, 1 + k * 0.02);
+    panel(-166, -28, 332, 56, 'rgba(255,95,162,0.92)');
     var left = k < 0;
-    keycap(-150, 2, '←', left); keycap(-90, 2, '→', !left);
-    ctx.fillStyle = '#fff'; ctx.font = '700 22px Fredoka'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('/', -48, 2);
-    mouseIcon(-14 + k * 10, 2);
-    text('وجّه مارشي', 100, 0, 34, '#fff', 'center', true);
+    ctx.save(); ctx.scale(0.68, 0.68);
+    keycap(-192, 2, '←', left); keycap(-126, 2, '→', !left);
+    ctx.fillStyle = '#fff'; ctx.font = '700 26px Fredoka'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('/', -82, 2);
+    mouseIcon(-44 + k * 8, 2);
     ctx.restore();
-    // a little arrow pointing at Marshy
-    ctx.fillStyle = 'rgba(255,95,162,0.95)'; ctx.beginPath(); ctx.moveTo(m.x - 14, cy + 50); ctx.lineTo(m.x + 14, cy + 50); ctx.lineTo(m.x, cy + 70); ctx.closePath();
-    if (M.abs(m.x - cx) < 190) ctx.fill();
+    text('وجّه مارشي', 74, 1, 25, '#fff', 'center', true);
+    ctx.restore();
   }
   function bubbleIcon(x, y, r) {
     ctx.beginPath(); ctx.arc(x, y, r, 0, M.PI * 2); ctx.fillStyle = 'rgba(170,230,255,0.6)'; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = '#fff'; ctx.stroke();
@@ -595,23 +595,31 @@
     // level
     panel(92, 18, 200, 58);
     text(w.level ? 'المرحلة ' + w.level : 'بلا نهاية', 192, 47, 30, '#fff', 'center', true);
-    // candies and bubbles
-    panel(990, 16, 180, 60);
-    CH.drawCandy(ctx, 1028, 46, 1.05, 0);
-    text(Kit.fmt(w.candies), 1110, 47, 36, '#fff');
-    // rescue bubbles: endless in level 1, a few later
-    var nb = w.bubbles < 0 ? 2 : M.max(1, w.bubbles), bw = 30 + nb * 42;
-    panel(1170 - bw, 86, bw, 52, w.bubbles === 0 ? 'rgba(160,40,80,0.85)' : null);
-    if (w.bubbles < 0) { bubbleIcon(1170 - bw + 34, 112, 16); text('∞', 1170 - bw + 80, 110, 38, '#fff'); }
-    else if (w.bubbles === 0) { ctx.globalAlpha = 0.45; bubbleIcon(1170 - bw + 36, 112, 16); ctx.globalAlpha = 1; }
-    else for (var b = 0; b < w.bubbles; b++) bubbleIcon(1170 - 36 - b * 42, 112, 16);
+    // candies (top-right, clear above smiling sun)
+    panel(990, 16, 180, 58);
+    CH.drawCandy(ctx, 1028, 45, 1.0, 0);
+    text(Kit.fmt(w.candies), 1110, 46, 36, '#fff');
+    // rescue bubbles: top-left under level pill (100% clear of the smiling sun!) with clear Arabic label
+    var bw = w.bubbles > 3 ? 106 + w.bubbles * 34 : 200;
+    panel(92, 84, bw, 46, w.bubbles === 0 ? 'rgba(175,42,84,0.88)' : null);
+    if (w.bubbles < 0) {
+      bubbleIcon(122, 107, 13);
+      text('∞', 156, 106, 30, '#ffe14f');
+      text('حماية', 230, 108, 23, '#fff', 'center', true);
+    } else if (w.bubbles === 0) {
+      ctx.globalAlpha = 0.45; bubbleIcon(122, 107, 13); ctx.globalAlpha = 1;
+      text('بلا حماية', 216, 108, 21, '#ffd6e0', 'center', true);
+    } else {
+      for (var b = 0; b < w.bubbles; b++) bubbleIcon(120 + b * 34, 107, 13);
+      text('حماية', 92 + bw - 46, 108, 22, '#dff4ff', 'center', true);
+    }
     // the candy multiplier
     if (w.mult > 1) {
       var pul = calm() ? 1 : 1 + M.sin(time * 10) * 0.06;
-      ctx.save(); ctx.translate(1100, 178); ctx.scale(pul, pul);
-      panel(-70, -26, 140, 52, 'rgba(255,95,162,0.95)');
-      CH.drawCandy(ctx, -32, 0, 0.8, 1);
-      text('×' + w.mult, 24, 1, 34, '#fff');
+      ctx.save(); ctx.translate(192, 164); ctx.scale(pul, pul);
+      panel(-70, -24, 140, 48, 'rgba(255,95,162,0.95)');
+      CH.drawCandy(ctx, -32, 0, 0.78, 1);
+      text('×' + w.mult, 24, 1, 32, '#fff');
       ctx.restore();
     }
     // how far to the castle

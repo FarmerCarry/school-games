@@ -79,7 +79,4 @@
     <!-- Golden Crown -->
     <polygon points="-16,-32 -18,-50 -6,-40 0,-54 6,-40 18,-50 16,-32" fill="#ffcf2e" stroke="#1e2547" stroke-width="4" stroke-linejoin="round"/>
   </g>
-
-  <!-- Bold Arabic Logo -->
-  <text x="200" y="64" text-anchor="middle" direction="rtl" font-family="Fredoka, 'Baloo Bhaijaan 2', sans-serif" font-size="46" font-weight="700" fill="#ffe84d" stroke="#1e2547" stroke-width="10" paint-order="stroke fill">جزيرة الفوضى</text>
 </svg>

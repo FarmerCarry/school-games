@@ -42,11 +42,14 @@
 
   /* ------------------------------------------------------------ title demo */
   // A quiet bot fills a jar behind the title. It never makes a sound or touches the save.
-  var demoAim = 4.2, demoWait = 0.5, demoDir = 1;
+  var demoAim = 6.6, demoWait = 0.7, demoDir = -1;
   function newDemo() {
     demo = E.create({ seed: 77, pool: 5, grace: 8, charges: 0 });
-    // Fill it a little before anyone sees it.
+    // Fill it a little before anyone sees it, then perch the cloud gracefully clear of the title logo.
     for (var i = 0; i < 9; i++) { demoStepBot(0.9); for (var s = 0; s < 54; s++) { E.step(demo, 1 / 60); demo.ev.length = 0; } }
+    demoAim = E.JW - 0.75;
+    E.setAim(demo, demoAim);
+    demoWait = 1.6;
   }
   function demoStepBot(dt) {
     demoWait -= dt;

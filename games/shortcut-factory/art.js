@@ -36,29 +36,109 @@
     g.fillStyle = grad;
     g.fillRect(0, 0, SF.W, SF.H);
 
-    // Subtle cheerful workshop wall panels
-    g.strokeStyle = 'rgba(31, 35, 64, 0.06)';
+    // Subtle cheerful workshop wall panels + vertical steel pilasters
+    g.strokeStyle = 'rgba(31, 35, 64, 0.07)';
     g.lineWidth = 3;
     for (var x = 80; x < SF.W; x += 160) {
       g.beginPath(); g.moveTo(x, 80); g.lineTo(x, SF.H); g.stroke();
     }
-
-    // Bright factory skylight beams
-    g.fillStyle = 'rgba(255,255,255,0.34)';
-    g.beginPath(); g.moveTo(160, 0); g.lineTo(340, 0); g.lineTo(480, SF.H); g.lineTo(250, SF.H); g.closePath(); g.fill();
-    g.beginPath(); g.moveTo(860, 0); g.lineTo(1040, 0); g.lineTo(1180, SF.H); g.lineTo(950, SF.H); g.closePath(); g.fill();
-
-    // Decorative toy storage arches along upper wall
+    // Warm factory ceiling pipes & pressure gauges behind skylights
+    g.fillStyle = wingIdx === 1 ? '#b08cf2' : (wingIdx === 2 ? '#f4a940' : '#7ec4e6');
+    g.strokeStyle = 'rgba(31, 35, 64, 0.28)';
+    g.lineWidth = 3;
+    g.fillRect(0, 108, SF.W, 13);
+    g.strokeRect(-2, 108, SF.W + 4, 13);
     g.fillStyle = 'rgba(255,255,255,0.45)';
-    g.strokeStyle = 'rgba(31,35,64,0.12)';
-    g.lineWidth = 4;
-    for (var ax = 150; ax <= 990; ax += 280) {
-      roundRect(g, ax, 148, 140, 110, 22);
-      g.fill(); g.stroke();
+    g.fillRect(0, 110, SF.W, 4);
+    for (var px = 76; px < SF.W; px += 224) {
+      g.fillStyle = '#ffd23f';
+      g.strokeStyle = 'rgba(31, 35, 64, 0.35)';
+      roundRect(g, px - 9, 105, 18, 19, 4); g.fill(); g.stroke();
     }
 
+    // Bright factory skylight sunbeams
+    g.fillStyle = 'rgba(255,255,255,0.28)';
+    g.beginPath(); g.moveTo(110, 128); g.lineTo(270, 128); g.lineTo(420, 604); g.lineTo(200, 604); g.closePath(); g.fill();
+    g.beginPath(); g.moveTo(990, 128); g.lineTo(1150, 128); g.lineTo(1280, 604); g.lineTo(1060, 604); g.closePath(); g.fill();
+
+    // 4 Cheerful sunlit factory skylights with blue sky, fluffy clouds, distant hills & toy silhouettes!
+    var skyTop = wingIdx === 1 ? '#8b7dff' : (wingIdx === 2 ? '#ffb84d' : '#4ec3ff');
+    var skyBot = wingIdx === 1 ? '#d8caff' : (wingIdx === 2 ? '#fff0a8' : '#c6f3ff');
+    var winXs = [108, 378, 752, 1022];
+    for (var wi = 0; wi < winXs.length; wi++) {
+      var wx = winXs[wi], wy = 132, ww = 152, wh = 104;
+      g.save();
+      roundRect(g, wx, wy, ww, wh, 20);
+      g.clip();
+      var sg = g.createLinearGradient(0, wy, 0, wy + wh);
+      sg.addColorStop(0, skyTop);
+      sg.addColorStop(1, skyBot);
+      g.fillStyle = sg;
+      g.fillRect(wx, wy, ww, wh);
+      // Warm sun glow in outer skylights
+      if (wi === 0 || wi === 3) {
+        g.fillStyle = 'rgba(255, 245, 160, 0.85)';
+        g.beginPath(); g.arc(wx + (wi === 0 ? 34 : 118), wy + 28, 18, 0, Math.PI * 2); g.fill();
+      }
+      // Fluffy clouds
+      g.fillStyle = 'rgba(255,255,255,0.88)';
+      var cx0 = wx + 46 + (wi % 2) * 34, cy0 = wy + 40 + (wi % 2) * 10;
+      g.beginPath();
+      g.arc(cx0, cy0, 16, 0, Math.PI * 2);
+      g.arc(cx0 + 18, cy0 - 6, 20, 0, Math.PI * 2);
+      g.arc(cx0 + 38, cy0, 15, 0, Math.PI * 2);
+      g.fill();
+      // Cheerful distant green factory park hills
+      g.fillStyle = wingIdx === 1 ? '#9370db' : '#7ad66b';
+      g.beginPath();
+      g.moveTo(wx, wy + wh);
+      g.quadraticCurveTo(wx + ww * 0.35, wy + wh - 34, wx + ww * 0.72, wy + wh - 16);
+      g.quadraticCurveTo(wx + ww * 0.9, wy + wh - 24, wx + ww, wy + wh - 12);
+      g.lineTo(wx + ww, wy + wh); g.closePath(); g.fill();
+      // Cute pastel toy shelf silhouette perched on inside sill
+      g.fillStyle = 'rgba(31, 35, 64, 0.16)';
+      if (wi % 2 === 0) {
+        g.beginPath(); g.arc(wx + 32, wy + wh - 14, 11, 0, Math.PI * 2); g.arc(wx + 24, wy + wh - 24, 5, 0, Math.PI * 2); g.arc(wx + 40, wy + wh - 24, 5, 0, Math.PI * 2); g.fill();
+      } else {
+        roundRect(g, wx + 106, wy + wh - 28, 22, 22, 5); g.fill();
+        g.fillRect(wx + 115, wy + wh - 36, 4, 8);
+      }
+      // Diagonal glass shine
+      g.fillStyle = 'rgba(255,255,255,0.28)';
+      g.beginPath(); g.moveTo(wx + 22, wy); g.lineTo(wx + 52, wy); g.lineTo(wx + 12, wy + wh); g.lineTo(wx - 12, wy + wh); g.closePath(); g.fill();
+      g.restore();
+
+      // Window mullions & sturdy toy-factory frame
+      g.strokeStyle = '#5a6b96';
+      g.lineWidth = 5;
+      g.beginPath();
+      g.moveTo(wx + ww * 0.5, wy + 2); g.lineTo(wx + ww * 0.5, wy + wh - 2);
+      g.moveTo(wx + 2, wy + wh * 0.54); g.lineTo(wx + ww - 2, wy + wh * 0.54);
+      g.stroke();
+      g.strokeStyle = '#3b486b';
+      g.lineWidth = 6;
+      roundRect(g, wx, wy, ww, wh, 20); g.stroke();
+      // Window sill with rivets
+      g.fillStyle = '#5a6b96';
+      g.strokeStyle = INK;
+      g.lineWidth = 3;
+      roundRect(g, wx - 10, wy + wh - 4, ww + 20, 12, 5); g.fill(); g.stroke();
+    }
+
+    // Center factory wall badge gauge cleanly below title tagline zone
+    g.save();
+    g.fillStyle = 'rgba(255, 255, 255, 0.78)';
+    g.strokeStyle = 'rgba(59, 72, 107, 0.55)';
+    g.lineWidth = 4;
+    g.beginPath(); g.arc(SF.W * 0.5, 212, 24, 0, Math.PI * 2); g.fill(); g.stroke();
+    g.fillStyle = '#ff5d8f';
+    g.beginPath(); g.arc(SF.W * 0.5, 212, 5, 0, Math.PI * 2); g.fill();
+    g.strokeStyle = '#3b486b'; g.lineWidth = 3; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(SF.W * 0.5, 212); g.lineTo(SF.W * 0.5 + 11, 200); g.stroke();
+    g.restore();
+
     // Overhead steel gantry beam
-    var beam = g.createLinearGradient(0, SF.RAIL_Y - 24, 0, SF.RAIL_Y + 20);
+    var beam = g.createLinearGradient(0, SF.RAIL_Y - 22, 0, SF.RAIL_Y + 18);
     beam.addColorStop(0, '#5a6b96');
     beam.addColorStop(0.5, '#3b486b');
     beam.addColorStop(1, '#26304d');
@@ -82,12 +162,80 @@
     g.moveTo(0, SF.RAIL_Y + 18); g.lineTo(SF.W, SF.RAIL_Y + 18);
     g.stroke();
 
-    // Bottom factory floor baseboard
-    g.fillStyle = '#2d3654';
-    g.fillRect(0, 668, SF.W, SF.H - 668);
+    // Richly detailed Factory Floor Deck (y = 604..720) with hazard trim, riveted steel plates & glowing prize chute!
+    var fy = 604;
+    // Conveyor support legs connecting belt 3 to floor
+    g.fillStyle = '#2d3757';
+    g.strokeStyle = INK;
+    g.lineWidth = 3.5;
+    for (var lx = 150; lx <= 1130; lx += 245) {
+      g.fillRect(lx - 10, 594, 20, 14);
+      g.strokeRect(lx - 10, 594, 20, 14);
+    }
+    // Floor steel body
+    var fGrad = g.createLinearGradient(0, fy, 0, SF.H);
+    fGrad.addColorStop(0, '#3a4770');
+    fGrad.addColorStop(0.35, '#2b3556');
+    fGrad.addColorStop(1, '#1d243d');
+    g.fillStyle = fGrad;
+    g.fillRect(0, fy, SF.W, SF.H - fy);
+
+    // Hazard-stripe top lip along floor edge
+    g.fillStyle = '#242d4a';
+    g.fillRect(0, fy, SF.W, 14);
+    g.fillStyle = '#ffd23f';
+    for (var hx = -20; hx < SF.W + 40; hx += 48) {
+      g.beginPath();
+      g.moveTo(hx, fy); g.lineTo(hx + 22, fy); g.lineTo(hx + 10, fy + 14); g.lineTo(hx - 12, fy + 14);
+      g.closePath(); g.fill();
+    }
+    g.strokeStyle = INK;
+    g.lineWidth = 3.5;
+    g.beginPath();
+    g.moveTo(0, fy); g.lineTo(SF.W, fy);
+    g.moveTo(0, fy + 14); g.lineTo(SF.W, fy + 14);
+    g.stroke();
+
+    // Riveted steel floor plate panels
+    for (var px2 = 34; px2 < SF.W - 34; px2 += 242) {
+      var pw = 216, ph = 80;
+      g.fillStyle = 'rgba(255,255,255,0.045)';
+      g.strokeStyle = 'rgba(15, 20, 38, 0.55)';
+      g.lineWidth = 3;
+      roundRect(g, px2, fy + 24, pw, ph, 12); g.fill(); g.stroke();
+      g.fillStyle = '#6c7ba8';
+      var rvs = [[px2 + 12, fy + 36], [px2 + pw - 12, fy + 36], [px2 + 12, fy + ph + 12], [px2 + pw - 12, fy + ph + 12]];
+      for (var ri = 0; ri < rvs.length; ri++) {
+        g.beginPath(); g.arc(rvs[ri][0], rvs[ri][1], 4, 0, Math.PI * 2); g.fill();
+      }
+    }
+
+    // Center glowing Toy Collection Chute housing!
+    var chX = 486, chW = 308, chY = fy + 20, chH = 88;
+    g.fillStyle = '#192038';
     g.strokeStyle = INK;
     g.lineWidth = 4;
-    g.beginPath(); g.moveTo(0, 668); g.lineTo(SF.W, 668); g.stroke();
+    roundRect(g, chX, chY, chW, chH, 18); g.fill(); g.stroke();
+    var chGlow = g.createLinearGradient(0, chY + 8, 0, chY + chH - 8);
+    chGlow.addColorStop(0, 'rgba(76, 201, 240, 0.42)');
+    chGlow.addColorStop(0.55, 'rgba(61, 220, 132, 0.22)');
+    chGlow.addColorStop(1, 'rgba(255, 210, 63, 0.14)');
+    g.fillStyle = chGlow;
+    roundRect(g, chX + 10, chY + 10, chW - 20, chH - 20, 12); g.fill();
+    g.strokeStyle = '#4cc9f0';
+    g.lineWidth = 2.5;
+    roundRect(g, chX + 10, chY + 10, chW - 20, chH - 20, 12); g.stroke();
+    // Glowing intake bars & side status LEDs
+    g.fillStyle = 'rgba(127, 230, 255, 0.35)';
+    for (var bx = chX + 34; bx <= chX + chW - 44; bx += 46) {
+      roundRect(g, bx, chY + 24, 14, chH - 48, 6); g.fill();
+    }
+    var leds = [[chX - 24, '#3ddc84'], [chX - 44, '#ffd23f'], [chX + chW + 24, '#3ddc84'], [chX + chW + 44, '#ffd23f']];
+    for (var li2 = 0; li2 < leds.length; li2++) {
+      g.fillStyle = leds[li2][1];
+      g.strokeStyle = INK; g.lineWidth = 2.5;
+      g.beginPath(); g.arc(leds[li2][0], fy + 46, 7, 0, Math.PI * 2); g.fill(); g.stroke();
+    }
 
     return c;
   }
@@ -97,17 +245,22 @@
     ctx.translate(x, y);
     ctx.rotate(rot);
     ctx.fillStyle = color;
+    ctx.strokeStyle = 'rgba(31, 35, 64, 0.24)';
+    ctx.lineWidth = 3;
     ctx.beginPath();
     for (var i = 0; i < teeth * 2; i++) {
       var a = (i / (teeth * 2)) * Math.PI * 2;
-      var rad = i % 2 === 0 ? r : r * 0.80;
+      var rad = i % 2 === 0 ? r : r * 0.78;
       if (i === 0) ctx.moveTo(Math.cos(a) * rad, Math.sin(a) * rad);
       else ctx.lineTo(Math.cos(a) * rad, Math.sin(a) * rad);
     }
     ctx.closePath();
     ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,0.45)';
-    ctx.beginPath(); ctx.arc(0, 0, r * 0.34, 0, Math.PI * 2); ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.beginPath(); ctx.arc(0, 0, r * 0.36, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = 'rgba(31, 35, 64, 0.25)';
+    ctx.beginPath(); ctx.arc(0, 0, r * 0.14, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
   }
 
@@ -480,12 +633,14 @@
     for (var i = 0; i < popups.length; i++) {
       var p = popups[i];
       ctx.save();
-      ctx.globalAlpha = Math.max(0, p.life / p.max);
+      ctx.globalAlpha = Math.min(1, Math.max(0, (p.life / p.max) * 2.6));
       ctx.font = '700 ' + p.size + 'px Fredoka, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.lineWidth = 7;
-      ctx.strokeStyle = INK;
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = 9;
+      ctx.strokeStyle = '#151830';
+      ctx.strokeText(p.text, p.x, p.y + 2);
       ctx.strokeText(p.text, p.x, p.y);
       ctx.fillStyle = p.color;
       ctx.fillText(p.text, p.x, p.y);
@@ -524,10 +679,19 @@
 
     ctx.drawImage(bgCache, 0, 0);
 
-    // Slowly spinning pastel workshop background gears
-    drawGear(ctx, 130, 210, 56, 10, w.time * 0.45, 'rgba(255,255,255,0.42)');
-    drawGear(ctx, 218, 255, 36, 8, -w.time * 0.72, 'rgba(255,255,255,0.35)');
-    drawGear(ctx, 1140, 220, 62, 10, -w.time * 0.4, 'rgba(255,255,255,0.42)');
+    // Animated warm workshop gears flanking the skylights
+    drawGear(ctx, 72, 206, 46, 10, w.time * 0.45, 'rgba(255, 196, 77, 0.58)');
+    drawGear(ctx, 318, 224, 34, 8, -w.time * 0.72, 'rgba(90, 175, 235, 0.50)');
+    drawGear(ctx, 962, 224, 34, 8, w.time * 0.72, 'rgba(90, 175, 235, 0.50)');
+    drawGear(ctx, 1206, 206, 48, 10, -w.time * 0.42, 'rgba(255, 196, 77, 0.58)');
+
+    // Pulsing glow inside bottom collection chute
+    ctx.save();
+    var chPulse = 0.22 + Math.sin(w.time * 4.5) * 0.14;
+    ctx.fillStyle = w.fever > 0 ? ('rgba(255, 210, 63, ' + (chPulse + 0.18) + ')') : ('rgba(94, 242, 255, ' + chPulse + ')');
+    roundRect(ctx, 500, 638, 280, 52, 10);
+    ctx.fill();
+    ctx.restore();
 
     drawConveyors(ctx, w);
 

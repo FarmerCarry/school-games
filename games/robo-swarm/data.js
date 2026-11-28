@@ -14,24 +14,24 @@
     arenas: [
       {
         id: 'spark', index: 0, name: 'مصنع الشرار', desc: 'أحزمة تسريع وملفات صعق كهربائية',
-        bg: '#10192e', grid: '#1f3358', border: '#28e7ff', accent: '#ffe14a',
-        boosts: [{ x: 380, y: 260, w: 300, h: 78, vx: 230, vy: 0 }, { x: 1240, y: 814, w: 300, h: 78, vx: -230, vy: 0 }],
-        coils: [{ x: 450, y: 810, r: 28 }, { x: 1470, y: 340, r: 28 }, { x: 450, y: 430, r: 28 }, { x: 1470, y: 720, r: 28 }],
+        bg: '#1c2b48', plate: '#25395e', grid: '#314c7a', border: '#28e7ff', accent: '#ffe14a', icon: '⚡',
+        boosts: [{ x: 520, y: 350, w: 270, h: 72, vx: 230, vy: 0 }, { x: 1130, y: 730, w: 270, h: 72, vx: -230, vy: 0 }],
+        coils: [{ x: 440, y: 790, r: 28 }, { x: 1490, y: 380, r: 28 }, { x: 440, y: 500, r: 28 }, { x: 1490, y: 760, r: 28 }],
         vents: [], warps: [], bumpers: []
       },
       {
         id: 'magma', index: 1, name: 'حفرة الحمم', desc: 'ينابيع لهب تحرق الروبوتات القريبة',
-        bg: '#231019', grid: '#461f2e', border: '#ff6b2b', accent: '#ffd23f',
+        bg: '#341a24', plate: '#472332', grid: '#5e3042', border: '#ff7b3a', accent: '#ffd23f', icon: '🔥',
         boosts: [], coils: [],
-        vents: [{ x: 480, y: 300, r: 66 }, { x: 1440, y: 300, r: 66 }, { x: 480, y: 852, r: 66 }, { x: 1440, y: 852, r: 66 }, { x: 960, y: 230, r: 66 }, { x: 960, y: 922, r: 66 }],
+        vents: [{ x: 480, y: 360, r: 64 }, { x: 1440, y: 360, r: 64 }, { x: 480, y: 820, r: 64 }, { x: 1440, y: 820, r: 64 }, { x: 960, y: 270, r: 64 }, { x: 960, y: 890, r: 64 }],
         warps: [], bumpers: []
       },
       {
         id: 'orbit', index: 2, name: 'محطة الفضاء', desc: 'منصات انتقال فوري وحواجز ليزر مرتدة',
-        bg: '#120f2d', grid: '#29225e', border: '#ff3ea5', accent: '#3df5ff',
+        bg: '#201b4a', plate: '#2b2563', grid: '#3e3685', border: '#ff52b8', accent: '#3df5ff', icon: '✦',
         boosts: [], coils: [], vents: [],
-        warps: [{ x: 340, y: 576, r: 44, to: 1 }, { x: 1580, y: 576, r: 44, to: 0 }],
-        bumpers: [{ x: 640, y: 296, r: 34 }, { x: 1280, y: 296, r: 34 }, { x: 640, y: 856, r: 34 }, { x: 1280, y: 856, r: 34 }]
+        warps: [{ x: 350, y: 576, r: 44, to: 1 }, { x: 1570, y: 576, r: 44, to: 0 }],
+        bumpers: [{ x: 640, y: 340, r: 34 }, { x: 1280, y: 340, r: 34 }, { x: 640, y: 830, r: 34 }, { x: 1280, y: 830, r: 34 }]
       }
     ],
 
@@ -53,9 +53,9 @@
     ],
 
     waves: [
-      { id: 1, start: 0, end: 24, title: 'موجة 1: الكشّافة', interval: 0.68, weights: [7, 4, 0, 0, 0] },
-      { id: 2, start: 24, end: 48, title: 'موجة 2: الكباش والطائرات', interval: 0.54, weights: [4, 2, 3, 3, 0] },
-      { id: 3, start: 48, end: 70, title: 'موجة 3: المحطّمات المدرعة', interval: 0.45, weights: [3, 2, 3, 3, 3] }
+      { id: 1, start: 0, end: 24, title: 'الكشّافة قادمون!', interval: 0.52, weights: [7, 4, 0, 0, 0] },
+      { id: 2, start: 24, end: 48, title: 'الكباش والطائرات!', interval: 0.48, weights: [4, 2, 3, 3, 0] },
+      { id: 3, start: 48, end: 70, title: 'المحطّمات المدرعة!', interval: 0.42, weights: [3, 2, 3, 3, 3] }
     ],
 
     skins: [

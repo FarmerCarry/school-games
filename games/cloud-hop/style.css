@@ -47,15 +47,15 @@ html[data-sg-motion="reduce"] .ring::after { opacity: 0.9; transform: none; }
 #btnPause { position: absolute; top: 14px; left: 14px; }
 
 /* Title */
-.logo { position: absolute; top: 14px; left: 0; right: 0; margin: 0; text-align: center; line-height: 1.05; pointer-events: none; }
+.logo { position: absolute; top: 24px; left: 0; right: 0; margin: 0; text-align: center; line-height: 1.05; pointer-events: none; }
 .logo span {
   display: inline-block; font-weight: 700; vertical-align: middle;
   text-shadow: -5px -5px 0 var(--ink), 5px -5px 0 var(--ink), -5px 5px 0 var(--ink), 5px 5px 0 var(--ink),
     0 -6px 0 var(--ink), 0 6px 0 var(--ink), -6px 0 0 var(--ink), 6px 0 0 var(--ink), 0 13px 0 var(--ink);
 }
-.logo .l1 { font-size: 122px; color: #ffe14f; animation: ch-hop 1.05s ease-in-out infinite; }
-.logo .l2 { font-size: 112px; color: #fff; }
-@keyframes ch-hop { 0%, 100% { transform: translateY(0) rotate(-3deg); } 45% { transform: translateY(-16px) rotate(4deg); } }
+.logo .l1 { font-size: 116px; color: #ffe14f; animation: ch-hop 1.05s ease-in-out infinite; }
+.logo .l2 { font-size: 106px; color: #fff; }
+@keyframes ch-hop { 0%, 100% { transform: translateY(0) rotate(-2.5deg); } 45% { transform: translateY(-9px) rotate(3deg); } }
 .ch-play { position: absolute; left: 560px; top: 236px; width: 160px; height: 160px; background: #3ddc84; border-width: 7px; box-shadow: 0 10px 0 var(--ink); }
 .title-side { position: absolute; left: 46px; top: 214px; display: flex; flex-direction: column; gap: 18px; align-items: stretch; width: 330px; }
 .ch-wide { height: 78px; padding: 0 22px; font-size: 32px; justify-content: flex-start; background: #6ec8ff; color: #fff; }

@@ -111,11 +111,4 @@
     <rect x="4" y="46" width="56" height="15" rx="7.5" fill="#2c2b47" stroke="#1e2342" stroke-width="3.5"/>
     <circle cx="16" cy="53.5" r="4" fill="#ff9f1c"/><circle cx="32" cy="53.5" r="4" fill="#ff9f1c"/><circle cx="48" cy="53.5" r="4" fill="#ff9f1c"/>
   </g>
-
-  <!-- Bold Arabic Title Ribbon -->
-  <g transform="translate(200,340)">
-    <rect x="-152" y="-36" width="304" height="68" rx="26" fill="#1e2342"/>
-    <rect x="-152" y="-42" width="304" height="68" rx="26" fill="#ffd23f" stroke="#1e2342" stroke-width="5"/>
-    <text x="0" y="9" text-anchor="middle" direction="rtl" font-family="'Fredoka','Baloo Bhaijaan 2','Segoe UI',sans-serif" font-weight="700" font-size="44" fill="#1e2342">قلعة الألعاب</text>
-  </g>
 </svg>

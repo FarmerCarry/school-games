@@ -387,8 +387,31 @@
 
     ctx.fillStyle = pattern; ctx.fillRect(vx0, vy0, hw * 2, hh * 2);
 
-    // outside the arena
+    // Subtle radial arena center aura + landmark rings on hex floor for spatial depth
     var AR = W.R, dc = Math.sqrt(cx * cx + cy * cy), diag = Math.sqrt(hw * hw + hh * hh);
+    if (dc - diag < 1400) {
+      var rg = ctx.createRadialGradient(0, 0, 80, 0, 0, 1250);
+      rg.addColorStop(0, 'rgba(130,90,255,0.18)');
+      rg.addColorStop(0.55, 'rgba(65,165,255,0.06)');
+      rg.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = rg;
+      ctx.fillRect(vx0, vy0, hw * 2, hh * 2);
+    }
+    var rings = [650, 1350, 2050, AR - 160];
+    ctx.save();
+    for (var ri = 0; ri < rings.length; ri++) {
+      var lr = rings[ri];
+      if (dc + diag < lr - 40 || dc - diag > lr + 40) continue;
+      ctx.beginPath(); ctx.arc(0, 0, lr, 0, 6.2832);
+      ctx.lineWidth = ri === 3 ? 6 : 3;
+      ctx.strokeStyle = ri === 3 ? 'rgba(255,90,150,0.22)' : 'rgba(130,115,255,0.16)';
+      if (ri < 3) ctx.setLineDash([24, 20]); else ctx.setLineDash([14, 16]);
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    ctx.restore();
+
+    // outside the arena
     if (dc + diag > AR) {
       ctx.beginPath(); ctx.rect(vx0, vy0, hw * 2, hh * 2); ctx.arc(0, 0, AR, 0, 6.2832, true);
       ctx.fillStyle = 'rgba(40,0,25,0.72)'; ctx.fill();
@@ -503,13 +526,15 @@
     ctx.setTransform(ui * dpr, 0, 0, ui * dpr, 0, 0);
     ctx.textBaseline = 'middle';
 
-    // --- leaderboard (top right, under the round buttons)
-    var lbW = 236, lbX = UW - lbW - 12, lbY = Math.max(64, 62 / ui), rowH = 21;
-    var ranked = W.ranked, rows = Math.min(10, ranked.length);
-    var P = W.player, prank = h.rank, extra = P.alive && prank > 10 ? 1 : 0;
-    ctx.fillStyle = 'rgba(12,8,36,0.55)';
-    rrect(ctx, lbX, lbY, lbW, 34 + (rows + extra) * rowH + 8, 14); ctx.fill();
-    text(ctx, 'المتصدرون', lbX + lbW / 2, lbY + 18, 18, '#ffd84d', 'center', 700);
+    // --- leaderboard (top right, compact Top 5 + player row under Pause/Mute)
+    var lbW = 236, lbX = UW - lbW - 12, lbY = Math.max(66, 66 / ui), rowH = 22;
+    var ranked = W.ranked, rows = Math.min(5, ranked.length);
+    var P = W.player, prank = h.rank, extra = P.alive && prank > 5 ? 1 : 0;
+    var lbH = 34 + (rows + extra) * rowH + (extra ? 12 : 8);
+    ctx.fillStyle = 'rgba(12,8,36,0.62)';
+    rrect(ctx, lbX, lbY, lbW, lbH, 14); ctx.fill();
+    ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(170,135,255,0.32)'; ctx.stroke();
+    text(ctx, 'المتصدرون', lbX + lbW / 2, lbY + 18, 17, '#ffd84d', 'center', 700);
     for (i = 0; i < rows; i++) {
       var s = ranked[i], y = lbY + 42 + i * rowH, me = s === P;
       if (me) { ctx.fillStyle = 'rgba(255,216,77,0.22)'; rrect(ctx, lbX + 4, y - rowH / 2, lbW - 8, rowH, 8); ctx.fill(); }
@@ -519,8 +544,9 @@
       text(ctx, '' + Math.floor(s.mass), lbX + 10, y, 14, col, 'left', 700, false);
     }
     if (extra) {
-      y = lbY + 42 + rows * rowH;
-      ctx.fillStyle = 'rgba(255,216,77,0.22)'; rrect(ctx, lbX + 4, y - rowH / 2, lbW - 8, rowH, 8); ctx.fill();
+      y = lbY + 46 + rows * rowH;
+      ctx.fillStyle = 'rgba(255,255,255,0.16)'; ctx.fillRect(lbX + 14, y - rowH / 2 - 4, lbW - 28, 1);
+      ctx.fillStyle = 'rgba(255,216,77,0.24)'; rrect(ctx, lbX + 4, y - rowH / 2, lbW - 8, rowH, 8); ctx.fill();
       text(ctx, '#' + prank, lbX + lbW - 10, y, 14, '#ffe36b', 'right', 700, false);
       text(ctx, P.name, lbX + lbW - 44, y, 15, '#ffe36b', 'right', 700, true);
       text(ctx, '' + Math.floor(P.mass), lbX + 10, y, 14, '#ffe36b', 'left', 700, false);
@@ -550,9 +576,21 @@
       ctx.beginPath(); ctx.arc(mcx + P.hx * k, mcy + P.hy * k, pp, 0, 6.2832); ctx.fill(); ctx.stroke();
     }
 
+    // --- boost energy / hint pill (bottom left above length card)
+    var bx = 16, by = UH - 118, pyB = by - 36;
+    var freeB = P.pw.turbo > 0, canB = freeB || P.mass > 12;
+    var bPct = freeB ? 1 : (P.mass <= 12 ? Math.max(0.12, (P.mass - 10) / 2) : Math.min(1, 0.25 + (P.mass - 12) / 55));
+    ctx.fillStyle = 'rgba(12,8,36,0.62)'; rrect(ctx, bx, pyB, 236, 30, 12); ctx.fill();
+    ctx.lineWidth = 1.5; ctx.strokeStyle = P.boosting ? '#9dff4a' : freeB ? '#3ad7ff' : 'rgba(170,135,255,0.32)'; ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.12)'; rrect(ctx, bx + 10, pyB + 21, 216, 4, 2); ctx.fill();
+    ctx.fillStyle = freeB ? '#3ad7ff' : (canB ? '#9dff4a' : '#ffd23f');
+    rrect(ctx, bx + 10, pyB + 21, Math.round(216 * bPct), 4, 2); ctx.fill();
+    var bLbl = freeB ? '⚡ تسريع مجاني!' : P.boosting ? '⚡ تسريع نشط!' : canB ? '⚡ انقر أو مسافة للتسريع' : '⚡ كُل لتشحن التسريع';
+    text(ctx, bLbl, bx + 118, pyB + 11, 13, freeB ? '#7dfcff' : canB ? '#e8ffcf' : '#ffe36b', 'center', 700);
+
     // --- length / rank / kills (bottom left)
-    var bx = 16, by = UH - 118;
-    ctx.fillStyle = 'rgba(12,8,36,0.55)'; rrect(ctx, bx, by, 236, 102, 16); ctx.fill();
+    ctx.fillStyle = 'rgba(12,8,36,0.62)'; rrect(ctx, bx, by, 236, 102, 16); ctx.fill();
+    ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(170,135,255,0.32)'; ctx.stroke();
     var lenPulse = 1 + h.lenPulse * 0.25;
     text(ctx, 'الطول', bx + 222, by + 26, 20, '#b9f7ff', 'right', 700);
     ctx.save(); ctx.translate(bx + 16, by + 34); ctx.scale(lenPulse, lenPulse);

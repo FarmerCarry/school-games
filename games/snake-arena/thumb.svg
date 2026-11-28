@@ -109,10 +109,4 @@
   <!-- sparkles -->
   <path d="M330 300 l4 10 10 4 -10 4 -4 10 -4 -10 -10 -4 10 -4z" fill="#fff" opacity="0.9"/>
   <path d="M80 190 l3 7 7 3 -7 3 -3 7 -3 -7 -7 -3 7 -3z" fill="#fff" opacity="0.8"/>
-
-  <!-- title -->
-  <g font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-weight="bold" text-anchor="middle" direction="rtl">
-    <text x="200" y="374" font-size="56" fill="#1d0b4a" stroke="#1d0b4a" stroke-width="16" stroke-linejoin="round">ساحة الثعابين</text>
-    <text x="200" y="368" font-size="56" fill="#ffd23f" stroke="#1d0b4a" stroke-width="8" stroke-linejoin="round" paint-order="stroke fill">ساحة الثعابين</text>
-  </g>
 </svg>

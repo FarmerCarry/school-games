@@ -77,9 +77,4 @@
     <path d="M0 10 V-30 a10 10 0 0 0 -20 0" fill="none" stroke="#fff" stroke-width="10" stroke-linecap="round"/>
     <path d="M0 10 V-30 a10 10 0 0 0 -20 0" fill="none" stroke="#e8354b" stroke-width="10" stroke-dasharray="6 7" stroke-linecap="round"/>
   </g>
-  <!-- logo -->
-  <g font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-weight="900" text-anchor="middle">
-    <text x="200" y="84" font-size="64" fill="#4a1d55" stroke="#4a1d55" stroke-width="14" stroke-linejoin="round">حرّاس الكعكة</text>
-    <text x="200" y="80" font-size="64" fill="#fff" stroke="#ff5a8a" stroke-width="3" paint-order="stroke" stroke-linejoin="round">حرّاس الكعكة</text>
-  </g>
 </svg>

@@ -45,7 +45,7 @@
   const keyFx = { wrong: {}, demo: {} };
   const coach = { hit: 0, input: 0, next: 4, said: false };
   const taught = {};
-  let happy = 0, frogLand = 0, pipBump = 0, multBump = 0;
+  let happy = 0, frogLand = 0, pipBump = 0, multBump = 0, mouseFade = 1;
   let rings = [], floats = [], deco = [], ripples = 0, trailT = 0;
   let anims = [], poolPulse = [0, 0, 0], wallWig = [0, 0, 0, 0], growStep = 0, bandWas = false, bumpT = -9, demoTurn = 0, grabCursor = false;
   const PRAISE = ['رائع!', 'ممتاز!', 'مذهل!', 'خارق!'];
@@ -74,6 +74,7 @@
   function toTitle() {
     world = null;
     Kit.hitstop.reset();
+    if (!deco.length) seedDeco();
     setScreen('title');
     setChip('titleStars');
     $('btnCloset').classList.toggle('ring', BB.total(save) > 0 && hasNewItem());
@@ -289,9 +290,9 @@
     if (minTier && tier < minTier) tier = minTier;
     const plan = BB.plan(w, l, tier);
     world = BB.create(plan, (Math.random() * 2147483647) | 0);
-    if (ptr.known) { world.bop.x = BB.clamp(ptr.x, 0, W); world.bop.y = BB.clamp(ptr.y, 0, H); }
+    if (ptr.known) { world.bop.x = BB.clamp(ptr.x, 54, W - 54); world.bop.y = BB.clamp(ptr.y, 58, H - 76); }
     cur = { w: w, l: l, minTier: minTier };
-    fastPops = 0; fastTracked = false; partyPbBeat = false; prevMult = 1;
+    fastPops = 0; fastTracked = false; partyPbBeat = false; prevMult = 1; mouseFade = 1;
     // Play stats: every level or party try is a round, e.g. w3L2 or w11P.
     Kit.stats.round('w' + (w + 1) + (l === 'P' ? 'P' : 'L' + (l + 1)));
     ending = null; result = null;
@@ -904,7 +905,7 @@
     for (const t of world.targets) {
       if (t.dead || (m === 'drag' && t.state !== 'idle')) continue;
       const v = m === 'jump' ? _ab(t.x - world.frog.x) : m === 'catch' ? -t.y : m === 'keys' ? t.id
-        : m === 'steer' ? Math.hypot(t.x - world.sub.x, t.y - world.sub.y) : Math.hypot(t.x - world.bop.x, t.y - world.bop.y);
+        : m === 'steer' ? Math.hypot(t.x - world.sub.x, t.y - world.sub.y) : Math.hypot(t.x - world.bop.x, t.y - world.bop.y) + (m === 'touch' && t.y > H - 64 ? 900 : 0);
       if (v < d) { d = v; best = t; }
     }
     return best;
@@ -952,6 +953,9 @@
       handleEvents();
       holdSounds();
       coachStep(dt);
+      if (world && (world.mode === 'touch' || world.mode === 'tap')) {
+        mouseFade = world.hits > 0 && flash.mouseHint <= 0.05 ? _mx(0, mouseFade - dt * 1.8) : _mn(1, mouseFade + dt * 3);
+      } else mouseFade = 1;
       for (const t of world.targets) if (t.wig) t.wig = _mx(0, t.wig - dt * 2);
       // A hand pointer over a turtle that can be picked up, and while carrying one.
       const grab = world.mode === 'drag' && !!(world.held || world.carry || world.targets.some(t => t.hot && !t.dead));
@@ -971,9 +975,14 @@
       if (ending.t <= 0) showResult();
     }
   }
+  function seedDeco() {
+    var pts = [[170, 245, 44, 0], [315, 425, 34, 2], [960, 230, 42, 3], [1110, 405, 36, 5], [235, 115, 28, 1]];
+    for (var i = 0; i < pts.length; i++) deco.push({ x: pts[i][0], y: pts[i][1], r: pts[i][2], color: pts[i][3], phase: i * 1.1, vy: 20 + (i % 3) * 8 });
+  }
   function decoStep(dt) {
-    while (deco.length < 7) deco.push({ x: 120 + Math.random() * 1040, y: H + 40 + Math.random() * 400, r: 22 + Math.random() * 26, color: (Math.random() * 6) | 0, phase: Math.random() * 6, vy: 24 + Math.random() * 30 });
-    const recent = time - ptr.movedAt < 1;
+    if (!deco.length) seedDeco();
+    while (deco.length < 7) deco.push({ x: 120 + Math.random() * 1040, y: H + 40 + Math.random() * 320, r: 22 + Math.random() * 26, color: (Math.random() * 6) | 0, phase: Math.random() * 6, vy: 24 + Math.random() * 30 });
+    const recent = ptr.travel > 0 && time - ptr.movedAt < 0.8;
     for (let i = deco.length - 1; i >= 0; i--) {
       const b = deco[i];
       b.y -= b.vy * dt; b.x += _cs(time * 1.2 + b.phase) * 12 * dt;
@@ -1193,7 +1202,7 @@
       });
     } else {
       const hot = mode === 'tap' && w.targets.some(t => t.hot && !t.dead);
-      A.mouseIcon(ctx, { move: flash.move, click: flash.click, hint: _mx(flash.mouseHint, hot ? 1 : mode === 'tap' ? 0.25 : 0), time: time, still: still });
+      A.mouseIcon(ctx, { move: flash.move, click: flash.click, hint: _mx(flash.mouseHint, hot ? 1 : mode === 'tap' ? 0.25 : 0), alpha: mouseFade, label: mode === 'tap' ? 'حرّك وانقر' : 'حرّك الفأرة', time: time, still: still });
     }
     drawHud(ctx, w, still);
   }
@@ -1201,7 +1210,7 @@
     const mode = w.mode;
     if (w.party) A.partyHud(ctx, { score: w.score, mult: w.mult, multBump: multBump, left: BB.left(w), total: w.plan.duration, best: save.best[cur.w], wave: w.wave, fever: w.fever, newBest: save.best[cur.w] > 0 && w.score > save.best[cur.w], time: time, still: still });
     else A.pips(ctx, mode, w.goal, w.segHits, time, still, pipBump);
-    if (w.party || w.feverGauge > 0 || w.fever > 0) A.feverGauge(ctx, { x: 96, y: 26, w: 184, h: 36, gauge: w.feverGauge, fever: w.fever, time: time, still: still });
+    if (w.party || w.feverGauge > 0 || w.fever > 0) A.feverGauge(ctx, { x: 92, y: 24, w: 196, h: 40, gauge: w.feverGauge, fever: w.fever, time: time, still: still });
     if (w.plan.segments.length > 1) A.parts(ctx, w.plan.segments.map(s => s.mode), w.seg, time);
     // A big picture of what comes next while a level part starts.
     const intro = w.seg > 0 || w.party && w.t > 1 ? 1.1 : 0.7;

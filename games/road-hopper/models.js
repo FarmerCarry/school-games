@@ -328,13 +328,10 @@
       trunk: 0xffffff, leaf1: 0xff5fa8, leaf2: 0x9b6bff, rock: 0x5fd3ff, log: 0x6b3a1f, logEnd: 0x8a5230 }
   ];
 
-  var X0 = -4.5, X1 = 4.5, HALF = 18;
-  // Lane ground: bright playable middle, darker outside the play area.
+  var HALF = 18;
+  // Seamless sunlit full-width ground (dense bordering trees naturally frame playable lanes).
   function sideBoxes(L, y0, h, color, z, d) {
-    L.push([0, y0, z || 0, X1 - X0, h, d || 1, color]);
-    var sw = HALF + X0, sc = shade(color, 0.72);
-    L.push([X0 - sw / 2, y0, z || 0, sw, h, d || 1, sc]);
-    L.push([X1 + sw / 2, y0, z || 0, sw, h, d || 1, sc]);
+    L.push([0, y0, z || 0, HALF * 2, h, d || 1, color]);
   }
   function laneGeo(th, type, variant) {
     var t = THEMES[th], L = [];
@@ -343,8 +340,7 @@
     } else if (type === 'road') {
       sideBoxes(L, -0.6, 0.58, t.road);
       if (variant) for (var x = -17; x <= 17; x += 2) {
-        var inside = x > X0 && x < X1;
-        L.push([x, -0.02, 0.5, 0.9, 0.03, 0.1, inside ? 0xffffff : 0xb8b8b8]);
+        L.push([x, -0.02, 0.5, 0.9, 0.03, 0.1, 0xffffff]);
       }
     } else if (type === 'river') {
       // Water top is y = -0.28; detail sits 0.01 above it. A few still ripples (two
@@ -356,7 +352,7 @@
         : [[-3.3, 0.1, 0.6], [0.4, -0.16, 0.9], [2.9, 0.08, 0.5], [-6.6, -0.08, 0.7], [9.1, 0.1, 0.8]];
       for (i = 0; i < rips.length; i++) {
         var r = rips[i];
-        L.push([r[0], -0.29, r[1], r[2], 0.02, 0.05, Math.abs(r[0]) < X1 ? rip : shade(rip, 0.72)]);
+        L.push([r[0], -0.29, r[1], r[2], 0.02, 0.05, rip]);
       }
       if (variant & 1) {
         sideBoxes(L, -0.29, 0.02, foam, -0.46, 0.08);

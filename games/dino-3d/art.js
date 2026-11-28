@@ -10,30 +10,30 @@
     var T = window.THREE;
     if (!T) throw new Error('three.js is unavailable');
 
-    var wgl = Kit.webgl.createRenderer(canvas, { srgb: true });
+    var wgl = Kit.webgl.createRenderer(canvas, { srgb: true, softRatio: 1, max: 1.75, antialias: true });
     var software = wgl.software, renderer = wgl.renderer;
     var pacer = Kit.webgl.pacer(renderer, { software: software, duty: 2 });
 
     var scene = new T.Scene();
-    var camera = new T.PerspectiveCamera(54, 16 / 9, 0.2, 165);
-    scene.fog = new T.Fog(0xffd99e, 34, 118);
+    var camera = new T.PerspectiveCamera(52, 16 / 9, 0.2, 210);
+    scene.fog = new T.Fog(0xffe0a8, 66, 195);
 
-    var hemi = new T.HemisphereLight(0xfff8e6, 0x7a6a58, 1.45);
-    var sun = new T.DirectionalLight(0xfff2d6, 1.95);
-    sun.position.set(12, 22, 16);
+    var hemi = new T.HemisphereLight(0xfff8e6, 0x9c7248, 1.5);
+    var sun = new T.DirectionalLight(0xfff2d6, 2.05);
+    sun.position.set(14, 26, 18);
     scene.add(hemi, sun);
 
     var PALETTES = [
       // 0: Golden Desert
-      { sky: 0x5cc9ff, fog: 0xffe0a8, hemiA: 0xfff5dc, hemiB: 0xd98e46, road: 0xf7cf7c, stripe: 0xffe8ad, curb: 0xe86c3a, ground: 0xeaa952, propA: 0x35bd5b, propB: 0xd97d38, sunCol: 0xffe86b },
+      { sky: 0x45bdff, hor: 0xffdea0, fog: 0xffe2ad, hemiA: 0xfff7e2, hemiB: 0xd98a42, road: 0xf7cf7c, stripe: 0xfff3cc, curb: 0xe86c3a, curbAlt: 0xfff1c9, ground: 0xe8a44c, propA: 0x30bd59, propB: 0x269e4a, mesa: 0xc85d30, mesaTop: 0xec924d, sunCol: 0xffe86b },
       // 1: Lush Jungle
-      { sky: 0x45c8ff, fog: 0xbaf2c8, hemiA: 0xf0fff2, hemiB: 0x3b8a42, road: 0xdcb472, stripe: 0xf2d8a2, curb: 0x3ec456, ground: 0x42b552, propA: 0x2da349, propB: 0x8a5730, sunCol: 0xfff49c },
+      { sky: 0x3ec4ff, hor: 0xbaf2c8, fog: 0xbaf2c8, hemiA: 0xf0fff2, hemiB: 0x3b8a42, road: 0xdcb472, stripe: 0xf2d8a2, curb: 0x3ec456, curbAlt: 0xf7f2c8, ground: 0x42b552, propA: 0x2da349, propB: 0x7c4e2a, mesa: 0x318f4b, mesaTop: 0x52c768, sunCol: 0xfff49c },
       // 2: Snowy Peaks
-      { sky: 0x62a8ff, fog: 0xdcf2ff, hemiA: 0xffffff, hemiB: 0x7ea7d9, road: 0xedf6ff, stripe: 0xffffff, curb: 0x4ec0ff, ground: 0xcbe8ff, propA: 0x2d8a68, propB: 0x91bce6, sunCol: 0xffffff },
+      { sky: 0x5ea6ff, hor: 0xe6f6ff, fog: 0xdcf2ff, hemiA: 0xffffff, hemiB: 0x7ea7d9, road: 0xedf6ff, stripe: 0xffffff, curb: 0x4ec0ff, curbAlt: 0xffffff, ground: 0xcbe8ff, propA: 0x2d8a68, propB: 0x7aa4cf, mesa: 0x8db3dc, mesaTop: 0xffffff, sunCol: 0xffffff },
       // 3: Volcano Valley
-      { sky: 0x5d2c68, fog: 0x9e3f45, hemiA: 0xffb380, hemiB: 0x421c38, road: 0x4e4259, stripe: 0xff7b38, curb: 0xff5226, ground: 0x36243d, propA: 0x3b2d47, propB: 0xff6b2b, sunCol: 0xff8c42 },
+      { sky: 0x592966, hor: 0xff7e47, fog: 0xa84349, hemiA: 0xffb380, hemiB: 0x421c38, road: 0x4e4259, stripe: 0xff7b38, curb: 0xff5226, curbAlt: 0xffc442, ground: 0x36243d, propA: 0x473554, propB: 0xff6b2b, mesa: 0x4a263e, mesaTop: 0x733245, sunCol: 0xff8c42 },
       // 4: Royal Nest
-      { sky: 0x8c8eff, fog: 0xffc7ea, hemiA: 0xfff5ff, hemiB: 0x8f6ac4, road: 0xfff2c7, stripe: 0xff9ad6, curb: 0xff62a8, ground: 0x74d48c, propA: 0xff7ec4, propB: 0x6ce3ff, sunCol: 0xfff08a }
+      { sky: 0x878aff, hor: 0xffc7ea, fog: 0xffc7ea, hemiA: 0xfff5ff, hemiB: 0x8f6ac4, road: 0xfff2c7, stripe: 0xff9ad6, curb: 0xff62a8, curbAlt: 0xfff4a3, ground: 0x74d48c, propA: 0xff7ec4, propB: 0x6ce3ff, mesa: 0xb98aff, mesaTop: 0xffb8e6, sunCol: 0xfff08a }
     ];
 
     // Shared lean geometries (allocated ONCE, reused everywhere!).
@@ -72,14 +72,74 @@
       return m;
     }
 
+    // Procedural crisp scrolling textures for road & desert dunes!
+    function makeTrackTexture(isRoad) {
+      var c = document.createElement('canvas');
+      c.width = 256; c.height = 256;
+      var g = c.getContext('2d');
+      g.fillStyle = '#ffffff';
+      g.fillRect(0, 0, 256, 256);
+      if (isRoad) {
+        // Subtle sunlit compacted sand road planks, center sheen & warm pebbles
+        var lg = g.createLinearGradient(0, 0, 256, 0);
+        lg.addColorStop(0, '#e6d8c0'); lg.addColorStop(0.12, '#fffcf2');
+        lg.addColorStop(0.5, '#ffffff'); lg.addColorStop(0.88, '#fffcf2'); lg.addColorStop(1, '#e6d8c0');
+        g.fillStyle = lg; g.fillRect(0, 0, 256, 256);
+        for (var y = 0; y < 256; y += 32) {
+          g.fillStyle = 'rgba(130, 82, 32, 0.08)';
+          g.fillRect(10, y, 236, 4);
+        }
+        for (var i = 0; i < 42; i++) {
+          var px = (i * 59 + 17) % 236 + 10, py = (i * 41 + 9) % 246 + 4;
+          g.fillStyle = i % 2 ? 'rgba(120, 74, 28, 0.11)' : 'rgba(255, 255, 255, 0.28)';
+          g.beginPath(); g.ellipse(px, py, 5 + (i % 4), 2.5, 0, 0, 6.283); g.fill();
+        }
+      } else {
+        // Sweeping wind-blown sand dunes & sunlit ripple bands
+        for (var r = 0; r < 16; r++) {
+          var ry = r * 16;
+          g.fillStyle = r % 2 ? 'rgba(140, 75, 22, 0.09)' : 'rgba(255, 245, 210, 0.14)';
+          g.beginPath(); g.moveTo(0, ry);
+          g.bezierCurveTo(64, ry - 7, 192, ry + 7, 256, ry);
+          g.lineTo(256, ry + 9); g.bezierCurveTo(192, ry + 16, 64, ry + 2, 0, ry + 9);
+          g.closePath(); g.fill();
+        }
+        for (var j = 0; j < 28; j++) {
+          g.fillStyle = 'rgba(120, 62, 18, 0.12)';
+          g.beginPath(); g.arc((j * 73 + 11) % 256, (j * 53 + 7) % 256, 2.5 + (j % 3), 0, 6.283); g.fill();
+        }
+      }
+      var tex = new T.CanvasTexture(c);
+      tex.wrapS = T.RepeatWrapping; tex.wrapT = T.RepeatWrapping;
+      tex.repeat.set(isRoad ? 1 : 9, isRoad ? 14 : 12);
+      tex.colorSpace = T.SRGBColorSpace || tex.colorSpace;
+      return tex;
+    }
+
+    var roadTex = makeTrackTexture(true);
+    var groundTex = makeTrackTexture(false);
+    // Smooth vertical fade texture for horizon glow (eliminates any flat sky seam!)
+    var horTex = (function () {
+      var c = document.createElement('canvas'); c.width = 4; c.height = 128;
+      var g = c.getContext('2d'), gr = g.createLinearGradient(0, 0, 0, 128);
+      gr.addColorStop(0, 'rgba(255,255,255,0)'); gr.addColorStop(0.45, 'rgba(255,255,255,0.42)'); gr.addColorStop(1, 'rgba(255,255,255,0.95)');
+      g.fillStyle = gr; g.fillRect(0, 0, 4, 128);
+      return new T.CanvasTexture(c);
+    })();
+
     // Dynamic world materials (colors update on biome switch without rebuilding meshes!).
-    var mRoad = new T.MeshLambertMaterial({ color: PALETTES[0].road });
+    var mRoad = new T.MeshLambertMaterial({ color: PALETTES[0].road, map: roadTex });
     var mStripe = new T.MeshBasicMaterial({ color: PALETTES[0].stripe });
     var mCurb = new T.MeshLambertMaterial({ color: PALETTES[0].curb });
-    var mGround = new T.MeshLambertMaterial({ color: PALETTES[0].ground });
+    var mCurbAlt = new T.MeshLambertMaterial({ color: PALETTES[0].curbAlt });
+    var mGround = new T.MeshLambertMaterial({ color: PALETTES[0].ground, map: groundTex });
     var mPropA = new T.MeshLambertMaterial({ color: PALETTES[0].propA });
     var mPropB = new T.MeshLambertMaterial({ color: PALETTES[0].propB });
-    var mSun = new T.MeshBasicMaterial({ color: PALETTES[0].sunCol });
+    var mMesa = new T.MeshLambertMaterial({ color: PALETTES[0].mesa });
+    var mMesaTop = new T.MeshLambertMaterial({ color: PALETTES[0].mesaTop });
+    var mHorizon = new T.MeshBasicMaterial({ color: PALETTES[0].hor, map: horTex, transparent: true, depthWrite: false, fog: false });
+    var mSun = new T.MeshBasicMaterial({ color: PALETTES[0].sunCol, fog: false });
+    var mSunHalo = new T.MeshBasicMaterial({ color: 0xfff5b8, transparent: true, opacity: 0.28, depthWrite: false, fog: false });
     var mDinoBody = new T.MeshLambertMaterial({ color: D.COLORS[0].hex });
     var mDinoBelly = new T.MeshLambertMaterial({ color: D.COLORS[0].belly });
     var mDinoCrest = new T.MeshLambertMaterial({ color: D.COLORS[0].crest });
@@ -95,46 +155,85 @@
     var ROAD_W = LANE_W * 3 + 1.2;
 
     // Endless scrolling visual floor anchored to dino Z!
-    var groundMesh = mk(G_PLANE, mGround, 0, -0.06, -42, 180, 175, 1, -Math.PI / 2, 0, 0);
-    var roadMesh = mk(G_PLANE, mRoad, 0, 0, -44, ROAD_W, 175, 1, -Math.PI / 2, 0, 0);
-    var curbL = mk(G_BOX, mCurb, -ROAD_W * 0.5 - 0.35, 0.22, -44, 0.7, 0.45, 175);
-    var curbR = mk(G_BOX, mCurb, ROAD_W * 0.5 + 0.35, 0.22, -44, 0.7, 0.45, 175);
+    var groundMesh = mk(G_PLANE, mGround, 0, -0.06, -48, 220, 195, 1, -Math.PI / 2, 0, 0);
+    var roadMesh = mk(G_PLANE, mRoad, 0, 0, -48, ROAD_W, 195, 1, -Math.PI / 2, 0, 0);
+    var curbL = mk(G_BOX, mCurb, -ROAD_W * 0.5 - 0.38, 0.20, -48, 0.76, 0.40, 195);
+    var curbR = mk(G_BOX, mCurb, ROAD_W * 0.5 + 0.38, 0.20, -48, 0.76, 0.40, 195);
     trackGroup.add(groundMesh, roadMesh, curbL, curbR);
 
-    // Crisp lane divider dashes (InstancedMesh, scrolling smoothly!).
+    // Crisp lane divider dashes + striped curb accent markers (InstancedMesh, scrolling smoothly!).
     var DASH_N = 48;
     var dashIM = new T.InstancedMesh(G_BOX, mStripe, DASH_N);
     dashIM.frustumCulled = false;
-    scene.add(dashIM);
+    var CURB_N = 48;
+    var curbMarkIM = new T.InstancedMesh(G_BOX, mCurbAlt, CURB_N);
+    curbMarkIM.frustumCulled = false;
+    scene.add(dashIM, curbMarkIM);
 
-    // Big cheerful sun + clouds on the horizon!
+    // Rich Desert Horizon Diorama: warm horizon haze band, glowing sun+halo, Monument Valley mesas, volcano & fluffy clouds!
     var skyGroup = new T.Group();
     scene.add(skyGroup);
-    var sunMesh = mk(G_SPH_HI, mSun, 24, 34, -108, 18, 18, 18);
-    skyGroup.add(sunMesh);
-    var mCloud = matGlow(0xffffff, 0.9);
+    var horBand = mk(G_PLANE, mHorizon, 0, 22, -138, 360, 52, 1);
+    skyGroup.add(horBand);
+    var sunMesh = mk(G_SPH_HI, mSun, 26, 36, -122, 17, 17, 17);
+    var sunHalo = mk(G_SPH_HI, mSunHalo, 26, 36, -124, 27, 27, 27);
+    skyGroup.add(sunMesh, sunHalo);
+
+    // Monument Valley Red-Rock Mesas & Buttes flanking the horizon!
+    var mesaDefs = [
+      { x: -62, z: -96,  w: 30, h: 17, d: 18 },
+      { x: -34, z: -102, w: 22, h: 12, d: 14 },
+      { x: -82, z: -82,  w: 24, h: 14, d: 16 },
+      { x:  42, z: -98,  w: 28, h: 16, d: 16 },
+      { x:  72, z: -86,  w: 26, h: 19, d: 18 },
+      { x:  18, z: -108, w: 18, h: 9,  d: 12 }
+    ];
+    for (var mi = 0; mi < mesaDefs.length; mi++) {
+      var md = mesaDefs[mi];
+      skyGroup.add(mk(G_CYL, mMesa, md.x, md.h * 0.45, md.z, md.w, md.h, md.d));
+      skyGroup.add(mk(G_CYL, mMesaTop, md.x, md.h * 0.96, md.z, md.w * 0.84, md.h * 0.18, md.d * 0.84));
+      skyGroup.add(mk(G_CYL, mMesa, md.x + (md.x < 0 ? 7 : -7), md.h * 0.28, md.z + 5, md.w * 0.52, md.h * 0.56, md.d * 0.52));
+    }
+
+    // Distant Volcano silhouette with glowing lava rim & floating smoke puffs!
+    var volcX = -14, volcZ = -112;
+    skyGroup.add(mk(G_CONE, matLit(0x5e2c3e), volcX, 13, volcZ, 30, 26, 30));
+    skyGroup.add(mk(G_CYL, matGlow(0xff6b2b), volcX, 24.4, volcZ, 5.4, 1.6, 5.4));
+    var smokeMat = matGlow(0xfff4e0, 0.55);
+    var smokePuffs = [];
+    for (var spk = 0; spk < 3; spk++) {
+      var spMesh = mk(G_SPH, smokeMat, volcX + spk * 2.2, 27 + spk * 3.6, volcZ, 4.5 + spk * 1.6, 3.2 + spk, 4.0);
+      skyGroup.add(spMesh);
+      smokePuffs.push(spMesh);
+    }
+
+    var mCloud = matGlow(0xffffff, 0.92);
     for (var ci = 0; ci < 7; ci++) {
       var cg = new T.Group();
-      var cx = -55 + ci * 18 + (ci % 2) * 5;
-      var cy = 19 + (ci % 3) * 4.5;
-      var cz = -82 - (ci % 3) * 14;
+      var cx = -62 + ci * 20 + (ci % 2) * 5;
+      var cy = 22 + (ci % 3) * 4.8;
+      var cz = -92 - (ci % 3) * 12;
       cg.position.set(cx, cy, cz);
-      cg.add(mk(G_SPH, mCloud, 0, 0, 0, 9, 4.2, 4.5));
-      cg.add(mk(G_SPH, mCloud, -3.5, -0.6, 0.4, 5.5, 3.2, 3.6));
-      cg.add(mk(G_SPH, mCloud, 3.8, -0.5, -0.2, 5.8, 3.0, 3.6));
+      cg.add(mk(G_SPH, mCloud, 0, 0, 0, 10, 4.4, 4.5));
+      cg.add(mk(G_SPH, mCloud, -4.0, -0.6, 0.4, 6.2, 3.4, 3.6));
+      cg.add(mk(G_SPH, mCloud, 4.2, -0.5, -0.2, 6.4, 3.2, 3.6));
       skyGroup.add(cg);
     }
 
-    // Pooled roadside trees/pillars/dunes (InstancedMesh = 2 draw calls for 48 props!).
+    // Pooled roadside Saguaro Cacti + Desert Boulders (InstancedMesh = crisp cartoon desert props!).
     var PROP_N = 40;
-    var propTopIM = new T.InstancedMesh(G_CONE, mPropA, PROP_N);
-    var propTrunkIM = new T.InstancedMesh(G_CYL, mPropB, PROP_N);
-    propTopIM.frustumCulled = false;
-    propTrunkIM.frustumCulled = false;
-    scene.add(propTopIM, propTrunkIM);
+    var propTrunkIM = new T.InstancedMesh(G_CYL, mPropA, PROP_N);
+    var propArmLIM = new T.InstancedMesh(G_CYL, mPropB, PROP_N);
+    var propArmRIM = new T.InstancedMesh(G_CYL, mPropB, PROP_N);
+    var propBloomIM = new T.InstancedMesh(G_SPH, matGlow(0xff6ba9), PROP_N);
+    var propRockIM = new T.InstancedMesh(G_ICO, mMesaTop, PROP_N);
+    propTrunkIM.frustumCulled = false; propArmLIM.frustumCulled = false;
+    propArmRIM.frustumCulled = false; propBloomIM.frustumCulled = false;
+    propRockIM.frustumCulled = false;
+    scene.add(propTrunkIM, propArmLIM, propArmRIM, propBloomIM, propRockIM);
 
     // Pooled soft ground shadows via Kit.webgl.blobShadowPool!
-    var shadows = Kit.webgl.blobShadowPool(scene, 64, { opacity: 0.36, yOffset: 0.03 });
+    var shadows = Kit.webgl.blobShadowPool(scene, 72, { opacity: 0.38, yOffset: 0.03 });
 
     /* ---------------------------------------------------------- Cute 3D Dino */
     var dinoRoot = new T.Group();
@@ -149,11 +248,13 @@
     headGroup.position.set(0, 1.56, -0.28);
     headGroup.add(mk(G_SPH_HI, mDinoBody, 0, 0.06, -0.1, 0.92, 0.82, 1.08));
     headGroup.add(mk(G_SPH, mDinoBody, 0, -0.02, -0.56, 0.68, 0.5, 0.64)); // snout
-    // Cute side eyes (visible in 3/4 turns & wardrobe spin!)
+    // Cute side eyes + rosy cheeks (visible in 3/4 turns & wardrobe spin!)
     headGroup.add(mk(G_SPH, mDark, -0.34, 0.16, -0.34, 0.2, 0.24, 0.18));
     headGroup.add(mk(G_SPH, mDark, 0.34, 0.16, -0.34, 0.2, 0.24, 0.18));
     headGroup.add(mk(G_SPH, mWhite, -0.37, 0.22, -0.4, 0.07, 0.08, 0.07));
     headGroup.add(mk(G_SPH, mWhite, 0.37, 0.22, -0.4, 0.07, 0.08, 0.07));
+    headGroup.add(mk(G_SPH, matGlow(0xff80ab), -0.38, -0.02, -0.46, 0.14, 0.1, 0.12));
+    headGroup.add(mk(G_SPH, matGlow(0xff80ab), 0.38, -0.02, -0.46, 0.14, 0.1, 0.12));
     // Dorsal orange spikes along back & head!
     for (var si = 0; si < 4; si++) {
       dinoPivot.add(mk(G_CONE, mDinoCrest, 0, 1.32 - si * 0.22, 0.28 + si * 0.24, 0.24, 0.34, 0.24, 0.6 + si * 0.12, 0, 0));
@@ -213,27 +314,33 @@
       }
     })();
 
-    // Golden Rampage Aura Sphere + Expanding Shockwave Ring!
+    // Golden Rampage Aura Sphere + Orbiting Sparks + Expanding Shockwave Ring!
     var rampageAura = mk(G_SPH, matGlow(0xffe44d, 0.32), 0, 1.0, 0, 2.35, 2.35, 2.55);
     rampageAura.visible = false;
+    var roarOrbits = new T.Group();
+    for (var rk = 0; rk < 6; rk++) {
+      var ra = (rk / 6) * Math.PI * 2;
+      roarOrbits.add(mk(G_OCT, matGlow(rk % 2 ? 0xfff066 : 0xff922b), Math.cos(ra) * 0.56, Math.sin(ra * 2) * 0.18, Math.sin(ra) * 0.56, 0.13, 0.13, 0.13));
+    }
+    rampageAura.add(roarOrbits);
     dinoRoot.add(rampageAura);
     var roarRing = mk(G_TORUS, matGlow(0xfff066, 0.85), 0, 1.0, -0.4, 1.6, 1.6, 1.6);
     roarRing.visible = false;
     dinoRoot.add(roarRing);
 
-    /* ----------------------------------------- Giant Rolling Magma Boulder */
+    /* ----------------------------------------- Compact Rolling Magma Boulder */
+    // Scaled cleanly (radius 1.42) with bright molten veins & smooth rock facets!
     var boulderGroup = new T.Group();
     scene.add(boulderGroup);
-    var boulderCore = mk(G_ICO, matLit(0x3a2636), 0, 0, 0, 5.2, 5.2, 5.2);
-    var boulderLava = mk(G_ICO, matGlow(0xff5a1f), 0, 0, 0, 4.95, 4.95, 4.95, 0.4, 0.6, 0.2);
-    var boulderGlow = mk(G_SPH, matGlow(0xffa62b, 0.22), 0, 0, 0, 6.2, 6.2, 6.2);
+    var boulderCore = mk(G_ICO, matLit(0x4a2a38), 0, 0, 0, 2.75, 2.75, 2.75);
+    var boulderLava = mk(G_ICO, matGlow(0xff6b24), 0, 0, 0, 2.82, 2.82, 2.82, 0.4, 0.6, 0.2);
+    var boulderGlow = mk(G_SPH, matGlow(0xffb833, 0.32), 0, 0, 0, 3.25, 3.25, 3.25);
     boulderGroup.add(boulderCore, boulderLava, boulderGlow);
-    // Chunky lava rocks protruding around the boulder so its spin reads clearly!
-    var mRockDark = matLit(0x281b26);
+    var mRockDark = matLit(0x36202e);
     for (var bi = 0; bi < 8; bi++) {
       var ba = (bi / 8) * Math.PI * 2;
-      var by = (bi % 2 === 0 ? 1 : -1) * 1.1;
-      boulderCore.add(mk(G_BOX, mRockDark, Math.cos(ba) * 0.46, by * 0.22, Math.sin(ba) * 0.46, 0.26, 0.26, 0.26, ba, bi, 0));
+      var by = (bi % 2 === 0 ? 1 : -1) * 0.85;
+      boulderCore.add(mk(G_ICO, mRockDark, Math.cos(ba) * 0.46, by * 0.22, Math.sin(ba) * 0.46, 0.22, 0.22, 0.22, ba, bi, 0));
     }
 
     /* ------------------------------------------- Finish Nest & Record Gate */
@@ -363,9 +470,13 @@
       mRoad.color.setHex(P.road);
       mStripe.color.setHex(P.stripe);
       mCurb.color.setHex(P.curb);
+      mCurbAlt.color.setHex(P.curbAlt);
       mGround.color.setHex(P.ground);
       mPropA.color.setHex(P.propA);
       mPropB.color.setHex(P.propB);
+      mMesa.color.setHex(P.mesa);
+      mMesaTop.color.setHex(P.mesaTop);
+      mHorizon.color.setHex(P.hor);
       mSun.color.setHex(P.sunCol);
     }
     applyWorldPalette(0);
@@ -449,6 +560,17 @@
       legR.rotation.x = p.ground ? -sw * 0.65 : 0.45;
       tailGroup.rotation.y = Math.sin(t * 7.5) * 0.28;
 
+      // Scroll road & sand dune textures smoothly with forward run!
+      roadTex.offset.y = (refD * 0.072) % 1;
+      groundTex.offset.y = (refD * 0.062) % 1;
+      for (var smi = 0; smi < smokePuffs.length; smi++) {
+        var spM = smokePuffs[smi];
+        var ph = (t * 0.35 + smi * 0.33) % 1;
+        spM.position.set(volcX + ph * 6.5, 25.5 + ph * 11, volcZ);
+        var scS = 3.2 + ph * 4.8;
+        spM.scale.set(scS, scS * 0.72, scS);
+      }
+
       // Invulnerability blink & Golden Rampage glow!
       var blinkOff = p.invuln > 0 && !roaring && Math.floor(t * 18) % 2 === 0;
       dinoPivot.visible = !blinkOff;
@@ -456,6 +578,7 @@
       if (roaring) {
         var rp = 1 + Math.sin(t * 22) * 0.12;
         rampageAura.scale.set(2.35 * rp, 2.35 * rp, 2.55 * rp);
+        roarOrbits.rotation.y = t * 5.2;
       }
       roarRing.visible = roarFxT > 0;
       if (roarFxT > 0) {
@@ -465,72 +588,106 @@
         roarRing.position.z = -u * 5.0;
       }
 
-      // Giant Rolling Magma Boulder behind the dino!
-      var showBoulder = mode === 'play' || mode === 'menu';
+      // Rolling Magma Boulder: hidden on Title to showcase sunny desert; in Play strictly clear of camera!
+      var showBoulder = mode === 'play';
       boulderGroup.visible = showBoulder;
       if (showBoulder) {
-        var bDist = w ? w.boulderDist : 0.72;
-        // Close behind at +3.1 when bDist=0, rumbling back at +8.8 when bDist=1.
-        var bz = 3.1 + bDist * 5.7;
+        var bDist = w ? w.boulderDist : 0.78;
+        // Close behind dino tail at +2.8 when bDist=0, tucked smoothly at +7.0 when safe (camera at Z=+11.4, Y=6.0!)
+        var bz = 2.8 + Math.min(bDist, 0.88) * 4.9;
         var bx = dinoLx * 0.55 + Math.sin(t * 14) * (1 - bDist) * 0.14;
-        var bHop = Math.abs(Math.sin((w ? w.boulderSpin : t * 5) * 1.4)) * 0.26;
-        boulderGroup.position.set(bx, 2.45 + bHop, bz);
+        var bHop = Math.abs(Math.sin((w ? w.boulderSpin : t * 5) * 1.4)) * 0.16;
+        boulderGroup.position.set(bx, 1.38 + bHop, bz);
         boulderCore.rotation.x = -(w ? w.boulderSpin : t * 6.5);
         boulderLava.rotation.x = boulderCore.rotation.x * 1.03;
         boulderLava.rotation.y = Math.sin(t * 3) * 0.2;
       }
 
-      // Scrolling lane dashes.
+      // Scrolling lane dashes & alternating curb blocks.
       var dashOff = refD % 6.0;
-      var di = 0;
+      var di = 0, ci2 = 0;
       for (var dRow = 0; dRow < 24; dRow++) {
         var zPos = 10 - dRow * 6 + dashOff;
         for (var dSide = 0; dSide < 2; dSide++) {
           V1.set(dSide === 0 ? -LANE_W * 0.5 : LANE_W * 0.5, 0.02, zPos);
           Q1.identity();
-          S1.set(0.18, 0.03, 2.4);
+          S1.set(0.20, 0.03, 2.5);
           M4.compose(V1, Q1, S1);
           dashIM.setMatrixAt(di++, M4);
+
+          V1.set((dSide === 0 ? -1 : 1) * (ROAD_W * 0.5 + 0.38), 0.42, zPos);
+          S1.set(0.82, 0.06, 2.8);
+          M4.compose(V1, Q1, S1);
+          curbMarkIM.setMatrixAt(ci2++, M4);
         }
       }
       Kit.webgl.shrinkCount(dashIM, di);
+      Kit.webgl.shrinkCount(curbMarkIM, ci2);
 
-      // Scrolling roadside scenery props (trees/cacti/crystals flanking the 3-lane track!).
+      // Scrolling roadside Saguaro Cacti & warm desert sandstone boulders!
       var propSpacing = 12;
       var baseIdx = Math.floor(refD / propSpacing);
-      var pi = 0;
+      var pi = 0, ri2 = 0;
       for (var pr = -1; pr < 16 && pi < PROP_N - 1; pr++) {
         var idx = baseIdx + pr;
         var worldZ = -(idx * propSpacing - refD);
         for (var side = -1; side <= 1; side += 2) {
           var hash = Math.abs(Math.sin(idx * 12.9898 + side * 78.233)) * 100;
-          var px = side * (ROAD_W * 0.5 + 3.2 + (hash % 5.5));
-          var hScale = 1.6 + (hash % 1.8);
-          V1.set(px, hScale * 0.55, worldZ);
+          var px = side * (ROAD_W * 0.5 + 3.0 + (hash % 6.0));
+          var hScale = 1.9 + (hash % 1.9);
+          // Saguaro cactus trunk + left/right arms + pink blossom
+          V1.set(px, hScale * 0.9, worldZ);
           Q1.identity();
-          S1.set(0.65, hScale * 1.1, 0.65);
+          S1.set(0.74, hScale * 1.8, 0.74);
           M4.compose(V1, Q1, S1);
           propTrunkIM.setMatrixAt(pi, M4);
 
-          V1.set(px, hScale * 1.45, worldZ);
-          S1.set(2.1, hScale * 1.5, 2.1);
+          V1.set(px - 0.62, hScale * 0.92, worldZ);
+          E1.set(0, 0, 0.48); Q1.setFromEuler(E1);
+          S1.set(0.42, hScale * 0.72, 0.42);
           M4.compose(V1, Q1, S1);
-          propTopIM.setMatrixAt(pi, M4);
+          propArmLIM.setMatrixAt(pi, M4);
+
+          V1.set(px + 0.62, hScale * 1.08, worldZ);
+          E1.set(0, 0, -0.48); Q1.setFromEuler(E1);
+          S1.set(0.42, hScale * 0.64, 0.42);
+          M4.compose(V1, Q1, S1);
+          propArmRIM.setMatrixAt(pi, M4);
+
+          V1.set(px, hScale * 1.86, worldZ);
+          Q1.identity();
+          S1.set(0.46, 0.36, 0.46);
+          M4.compose(V1, Q1, S1);
+          propBloomIM.setMatrixAt(pi, M4);
           pi++;
+
+          // Flanking warm desert sandstone rock outcroppings further out
+          if (ri2 < PROP_N) {
+            var rx = side * (ROAD_W * 0.5 + 8.5 + ((hash * 3.1) % 10));
+            var rSz = 1.8 + (hash % 2.4);
+            V1.set(rx, rSz * 0.32, worldZ - 4.5);
+            E1.set(0, hash, 0); Q1.setFromEuler(E1);
+            S1.set(rSz * 1.5, rSz * 0.9, rSz * 1.2);
+            M4.compose(V1, Q1, S1);
+            propRockIM.setMatrixAt(ri2++, M4);
+          }
         }
       }
       Kit.webgl.shrinkCount(propTrunkIM, pi);
-      Kit.webgl.shrinkCount(propTopIM, pi);
+      Kit.webgl.shrinkCount(propArmLIM, pi);
+      Kit.webgl.shrinkCount(propArmRIM, pi);
+      Kit.webgl.shrinkCount(propBloomIM, pi);
+      Kit.webgl.shrinkCount(propRockIM, ri2);
 
       // Shadows pool reset.
       if (shadows) {
         shadows.reset();
-        var shS = Math.max(0.55, 1.45 - dinoY * 0.16);
+        var shS = Math.max(0.55, 1.5 - dinoY * 0.16);
         shadows.add(dinoLx, 0, 0, shS, shS * 1.2, 0);
-        if (showBoulder) shadows.add(boulderGroup.position.x, 0, boulderGroup.position.z, 5.2, 5.2, 0);
+        if (showBoulder) shadows.add(boulderGroup.position.x, 0, boulderGroup.position.z, 2.9, 2.9, 0);
       }
 
-      // Render visible obstacles from pooled templates!
+      // Render visible obstacles (or lively attract-mode preview props on Title!).
       releaseAllObs();
       if (w) {
         for (var i = w.oi; i < w.obs.length; i++) {
@@ -568,12 +725,28 @@
           recordGate.visible = w.bestFar > 10 && recRel < 100 && recRel > -12;
           if (recordGate.visible) recordGate.position.set(0, 0, -recRel);
         }
+      } else if (mode === 'menu') {
+        // Joyful live attract-mode props streaming down the sunlit desert track!
+        var demoKinds = ['boost', 'crate', 'low', 'pad', 'bones'];
+        var dBase = Math.floor(refD / 16);
+        for (var dk = 1; dk <= 5; dk++) {
+          var dId = dBase + dk;
+          var dRel = dId * 16 - refD;
+          if (dRel < 5 || dRel > 78) continue;
+          var kind = demoKinds[Math.abs(dId) % demoKinds.length];
+          var dLane = ((dId % 3) - 1) * LANE_W;
+          var dm = borrowOb(kind);
+          dm.position.set(dLane, 0, -dRel);
+          if (shadows && kind !== 'boost') shadows.add(dLane, 0, -dRel, 1.3, 1.3, 0);
+        }
+        nestGroup.visible = false;
+        recordGate.visible = false;
       } else {
         nestGroup.visible = false;
         recordGate.visible = false;
       }
 
-      // Instanced collectibles (eggs, gold eggs, rainbow eggs, hearts!).
+      // Instanced collectibles (eggs, gold eggs, rainbow eggs, hearts — plus attract-mode eggs on Title!).
       var ei = 0;
       if (w) {
         for (var j = w.ii; j < w.items.length && ei < EGG_CAP; j++) {
@@ -595,6 +768,24 @@
           else C1.setHex(0xfff6db);
           eggIM.setColorAt(ei, C1);
           if (shadows) shadows.add(it.lx, 0, -rD, 0.75, 0.75, 0);
+          ei++;
+        }
+      } else if (mode === 'menu') {
+        var eBase = Math.floor(refD / 6);
+        for (var ek = 1; ek <= 12 && ei < EGG_CAP; ek++) {
+          var eId = eBase + ek;
+          var eRel = eId * 6 - refD;
+          if (eRel < 3 || eRel > 68) continue;
+          var eLx = Math.sin(Math.floor(eId / 3) * 1.7) > 0.3 ? LANE_W : (Math.sin(Math.floor(eId / 3) * 1.7) < -0.3 ? -LANE_W : 0);
+          V1.set(eLx, 0.9 + Math.sin(t * 5 + eId) * 0.15, -eRel);
+          E1.set(0, t * 2.8 + eId, 0); Q1.setFromEuler(E1);
+          S1.set(0.72, 1.0, 0.72);
+          M4.compose(V1, Q1, S1);
+          eggIM.setMatrixAt(ei, M4);
+          if (eId % 4 === 0) C1.setHex(0xffd633);
+          else C1.setHSL(((t * 0.5 + eId * 0.14) % 1), 0.88, 0.64);
+          eggIM.setColorAt(ei, C1);
+          if (shadows) shadows.add(eLx, 0, -eRel, 0.75, 0.75, 0);
           ei++;
         }
       }
@@ -626,10 +817,10 @@
       Kit.webgl.shrinkCount(partIM, piOut);
       if (piOut > 0 && partIM.instanceColor) Kit.webgl.uploadRange(partIM.instanceColor, piOut * 3);
 
-      // Behind-the-back 3-lane camera (or front-angle showcase in wardrobe/finish!).
+      // Behind-the-back 3-lane camera (elevated cleanly clear of the chasing boulder; unobstructed dino on Title!).
       var wantX = dinoLx * 0.44;
-      var wantY = mode === 'wardrobe' ? 2.1 : mode === 'finish' ? 2.8 : 4.5 + dinoY * 0.34;
-      var wantZ = mode === 'wardrobe' ? 4.8 : mode === 'finish' ? 5.6 : 9.4;
+      var wantY = mode === 'wardrobe' ? 2.1 : mode === 'finish' ? 2.8 : mode === 'menu' ? 5.1 : 6.0 + dinoY * 0.34;
+      var wantZ = mode === 'wardrobe' ? 4.8 : mode === 'finish' ? 5.6 : mode === 'menu' ? 9.6 : 11.4;
       if (cfg.snap) { camX = wantX; camY = wantY; }
       else {
         var cs = 1 - Math.exp(-dt * 12);
@@ -644,9 +835,12 @@
       } else if (mode === 'finish') {
         camera.position.set(camX + 2.4, wantY, wantZ);
         camera.lookAt(dinoLx, 1.2, 0);
+      } else if (mode === 'menu') {
+        camera.position.set(camX, camY, wantZ);
+        camera.lookAt(camX * 0.45, 0.55, -14);
       } else {
         camera.position.set(camX + sxOff, camY + syOff, wantZ);
-        camera.lookAt(camX * 0.55, 1.55 + dinoY * 0.2, -16);
+        camera.lookAt(camX * 0.52, 1.25 + dinoY * 0.2, -16);
       }
     }
 

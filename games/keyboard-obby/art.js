@@ -13,7 +13,7 @@
   var INK = '#1c2250';
   KO.ZONES = ['#4fc3ff', '#46e08e', '#ffcf3a', '#ff9a3d', '#ff9a3d', '#ffcf3a', '#46e08e', '#4fc3ff', '#c39bff'];
   KO.THEMES = [
-    { sky: ['#47b8ff', '#ffe1f0'], fog: '#ffd6ea', jelly: ['#ff3d8e', '#ff7cb8', '#ffd0e6'] },
+    { sky: ['#5cc2ff', '#ffe6d8'], fog: '#ffe6d8', jelly: ['#ff78ae', '#ffa9c7', '#ffe8dc'] },
     { sky: ['#3fb0ff', '#fff0c4'], fog: '#ffe7b5', jelly: ['#ff7a14', '#ffab3d', '#ffe0a0'] },
     { sky: ['#4cc2ff', '#e4ffd0'], fog: '#d8f8c6', jelly: ['#2fbf3c', '#78e65a', '#d6ffbf'] },
     { sky: ['#5a9cff', '#e2eeff'], fog: '#d4e6ff', jelly: ['#2268ff', '#4ea4ff', '#c4e2ff'] },
@@ -152,8 +152,8 @@
     jellyGeo.rotateX(-_PI / 2);
     jellyGeo.translate(0, 0, -12);
     var jellyFrag = isSoft ?
-      'uniform vec3 uA,uB,uC,uFog;varying float vH,vD;void main(){vec3 col=mix(uA,uB,clamp(vH*4.+.5,0.,1.));col=mix(col,uC,smoothstep(.05,.13,vH)*.5);gl_FragColor=vec4(mix(col,uFog,clamp((vD-16.)/34.,0.,1.)),1.);}' :
-      'uniform vec3 uA,uB,uC,uFog;uniform float uTime;varying float vH,vD;varying vec2 vP;void main(){vec3 col=mix(uA,uB,clamp(vH*4.+.5,0.,1.));float s=sin(vP.x*1.15+vP.y*.85+uTime*.45)*sin(vP.y*1.05-uTime*.25);col=mix(col,uC,smoothstep(.55,.92,s)*.55+smoothstep(.06,.12,vH)*.35);gl_FragColor=vec4(mix(col,uFog,clamp((vD-16.)/34.,0.,1.)),1.);}';
+      'uniform vec3 uA,uB,uC,uFog;varying float vH,vD;void main(){vec3 col=mix(uA,uB,clamp(vH*4.+.5,0.,1.));col=mix(col,uC,smoothstep(.05,.13,vH)*.5);gl_FragColor=vec4(mix(col,uFog,clamp((vD-11.)/26.,0.,1.)),1.);}' :
+      'uniform vec3 uA,uB,uC,uFog;uniform float uTime;varying float vH,vD;varying vec2 vP;void main(){vec3 col=mix(uA,uB,clamp(vH*4.+.5,0.,1.));float s=sin(vP.x*1.15+vP.y*.85+uTime*.45)*sin(vP.y*1.05-uTime*.25);col=mix(col,uC,smoothstep(.55,.92,s)*.55+smoothstep(.06,.12,vH)*.35);gl_FragColor=vec4(mix(col,uFog,clamp((vD-11.)/26.,0.,1.)),1.);}';
     var jelly = new T.Mesh(jellyGeo, new T.ShaderMaterial({
       uniforms: jellyU,
       vertexShader: 'uniform float uTime,uCalm;varying float vH,vD;varying vec2 vP;void main(){vec3 p=position;float h=sin(p.x*.55+uTime*1.2)*.07+sin(p.z*.7-uTime*.9)*.06+sin((p.x-p.z)*.3+uTime*.6)*.09;p.y+=h*uCalm;vH=h;vP=p.xz;vec4 mv=modelViewMatrix*vec4(p,1.);vD=-mv.z;gl_Position=projectionMatrix*mv;}',
@@ -175,18 +175,18 @@
       decorBuilt = true;
       var parts = [], rand = KO.rng(77);
       for (var i = 0; i < 9; i++) {
-        var a = -2.2 + i * 0.55 + rand() * 0.2, r = 30 + rand() * 10, cx = _sn(a) * r, cz = -_cs(a) * r * 0.8 - 6, cy = 6 + rand() * 6;
+        var a = -2.1 + i * 0.52 + rand() * 0.2, r = 26 + rand() * 7, cx = _sn(a) * r, cz = -_cs(a) * r * 0.72 - 5, cy = 0.5 + rand() * 1.4;
         var puffs = isSoft ? 3 : 5;
         for (var j = 0; j < puffs; j++) {
-          var s = 1.4 + rand() * 1.6, g = new T.IcosahedronGeometry(1, 0);
-          parts.push({ g: g, m: at(cx + (j - (puffs - 1) / 2) * 1.8 + rand(), cy + rand() * 0.8 - (_ab(j - 2) * 0.4), cz + rand(), 0, rand() * 3, 0, s), c: function (x, y) { return y < cy - 0.6 ? '#dfe6ff' : _W; } });
+          var s = 0.85 + rand() * 0.85, g = new T.SphereGeometry(1, 8, 6);
+          parts.push({ g: g, m: at(cx + (j - (puffs - 1) / 2) * 1.6 + rand(), cy + rand() * 0.7 - (_ab(j - 2) * 0.35), cz + rand(), 0, rand() * 3, 0, s), c: function (x, y) { return y < cy - 0.5 ? '#ffe6e0' : _W; } });
         }
       }
-      var clouds = new T.Mesh(merge(parts), new T.MeshLambertMaterial({ vertexColors: true, emissive: 0x9aa6d8, emissiveIntensity: 0.35 }));
+      var clouds = new T.Mesh(merge(parts), new T.MeshLambertMaterial({ vertexColors: true, emissive: 0xffd8cc, emissiveIntensity: 0.45 }));
       scene.add(clouds); view.clouds = clouds;
       var candy = [], pal = ['#ff5d9e', _G, _B, '#7ee05b', '#b48cff', '#ff9a3d'];
       for (i = 0; i < 12; i++) {
-        var side = i % 2 ? 1 : -1, x = side * (11 + rand() * 9), z = -14 + rand() * 18, h = 1.5 + rand() * 3.5, col = pal[i % pal.length];
+        var side = i % 2 ? 1 : -1, x = side * (11 + rand() * 8), z = (i % 3 ? -14 + rand() * 18 : -6 + rand() * 10), h = 0.8 + rand() * 1.3, col = pal[i % pal.length];
         if (i % 3 === 0) {
           candy.push({ g: new T.CylinderGeometry(0.12, 0.12, h + 2, 6), m: at(x, KO.JELLY_LOW + (h + 2) / 2 - 1, z), c: _W });
           candy.push({ g: new T.CylinderGeometry(1, 1, 0.35, 12), m: at(x, KO.JELLY_LOW + h + 1.6, z, _PI / 2, 0, 0), c: col });
@@ -727,8 +727,8 @@
         fx = KO.clamp(fx, -5.4, 5.4);
         // A long hop ahead: pull back so the hero and the next key both stay in view.
         var back = 1 + _mx(0, span - 4.5) * 0.09;
-        wantLook.set(fx, 0, fz + 0.35);
-        wantPos.set(fx * 0.85, 6.3 * back, fz + 0.35 + 6.15 * back);
+        wantLook.set(fx, -0.22, fz + 0.88);
+        wantPos.set(fx * 0.85, 6.75 * back, fz + 0.88 + 6.8 * back);
       } else if (o.mode === 'shop') {
         wantLook.set(hx + 1.55, hy + 0.5, hz); wantPos.set(hx + 1.45, hy + 1.45, hz + 3.3);
       } else if (o.mode === 'result') {

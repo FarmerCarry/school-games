@@ -63,39 +63,175 @@
       g.beginPath(); g.moveTo(760, 65); g.lineTo(950, 65); g.lineTo(1080, RK.FLOOR_Y); g.lineTo(850, RK.FLOOR_Y); g.closePath(); g.fill();
       g.restore();
 
-      // Sunny kitchen window frames
-      var wins = [290, 820];
+      // Sunny kitchen window frames with schoolyard view, scalloped cafe valances & windowsill props
+      var wins = [276, 834];
       for (var wi = 0; wi < wins.length; wi++) {
-        var wx = wins[wi];
-        g.fillStyle = '#bceeff';
-        g.strokeStyle = '#d99852';
-        g.lineWidth = 8;
-        roundRect(g, wx, 130, 170, 150, 18);
-        g.fill(); g.stroke();
-        // Fluffy cloud in window
-        g.fillStyle = 'rgba(255,255,255,0.85)';
+        var wx = wins[wi], wy = 130, ww = 170, wh = 148;
+        g.save();
+        roundRect(g, wx, wy, ww, wh, 18);
+        g.clip();
+        var wg = g.createLinearGradient(0, wy, 0, wy + wh);
+        wg.addColorStop(0, '#78d4ff');
+        wg.addColorStop(1, '#dcf7ff');
+        g.fillStyle = wg;
+        g.fillRect(wx, wy, ww, wh);
+        // Fluffy clouds
+        g.fillStyle = 'rgba(255,255,255,0.9)';
         g.beginPath();
-        g.arc(wx + 60, 198, 22, 0, Math.PI * 2);
-        g.arc(wx + 90, 190, 26, 0, Math.PI * 2);
-        g.arc(wx + 118, 200, 20, 0, Math.PI * 2);
+        g.arc(wx + 56, wy + 68, 20, 0, Math.PI * 2);
+        g.arc(wx + 86, wy + 60, 25, 0, Math.PI * 2);
+        g.arc(wx + 116, wy + 69, 19, 0, Math.PI * 2);
         g.fill();
+        // Distant sunlit schoolyard greenery
+        g.fillStyle = '#7ad66b';
+        g.beginPath();
+        g.arc(wx + 32, wy + wh + 6, 36, Math.PI, 0);
+        g.arc(wx + 90, wy + wh + 10, 44, Math.PI, 0);
+        g.arc(wx + 148, wy + wh + 4, 34, Math.PI, 0);
+        g.fill();
+        // Diagonal glass shine
+        g.fillStyle = 'rgba(255,255,255,0.28)';
+        g.beginPath(); g.moveTo(wx + 24, wy); g.lineTo(wx + 52, wy); g.lineTo(wx + 10, wy + wh); g.lineTo(wx - 14, wy + wh); g.closePath(); g.fill();
+        // Cute scalloped pastel mint cafe valance at top of window
+        for (var vc = 0; vc < 5; vc++) {
+          g.fillStyle = vc % 2 === 0 ? '#6ee0b8' : '#fff8ea';
+          g.beginPath();
+          g.moveTo(wx + vc * 34, wy);
+          g.lineTo(wx + (vc + 1) * 34, wy);
+          g.lineTo(wx + (vc + 1) * 34, wy + 22);
+          g.quadraticCurveTo(wx + (vc + 0.5) * 34, wy + 34, wx + vc * 34, wy + 22);
+          g.closePath(); g.fill();
+        }
+        g.restore();
+        // Window mullions & wooden frame
         g.strokeStyle = '#d99852';
         g.lineWidth = 6;
-        g.beginPath(); g.moveTo(wx + 85, 130); g.lineTo(wx + 85, 280); g.moveTo(wx, 205); g.lineTo(wx + 170, 205); g.stroke();
+        g.beginPath(); g.moveTo(wx + ww * 0.5, wy + 22); g.lineTo(wx + ww * 0.5, wy + wh); g.moveTo(wx, wy + 80); g.lineTo(wx + ww, wy + 80); g.stroke();
+        g.lineWidth = 8;
+        roundRect(g, wx, wy, ww, wh, 18); g.stroke();
+        // Wooden windowsill ledge
+        g.fillStyle = '#d68942';
+        g.strokeStyle = INK;
+        g.lineWidth = 3.5;
+        roundRect(g, wx - 12, wy + wh - 2, ww + 24, 14, 6); g.fill(); g.stroke();
+        // Cute windowsill props: potted herb on left, napkin holder on right!
+        if (wi === 0) {
+          g.fillStyle = '#3ddc84';
+          g.beginPath();
+          g.ellipse(wx + 22, wy + wh - 26, 9, 13, -0.4, 0, Math.PI * 2);
+          g.ellipse(wx + 34, wy + wh - 28, 9, 13, 0.35, 0, Math.PI * 2);
+          g.fill(); g.stroke();
+          g.fillStyle = '#d96b38';
+          roundRect(g, wx + 16, wy + wh - 20, 24, 19, 4); g.fill(); g.stroke();
+        } else {
+          // Napkin holder with fan of napkins
+          g.fillStyle = '#fff';
+          g.beginPath(); g.moveTo(wx + 124, wy + wh - 2); g.lineTo(wx + 132, wy + wh - 32); g.lineTo(wx + 150, wy + wh - 32); g.lineTo(wx + 156, wy + wh - 2); g.closePath(); g.fill(); g.stroke();
+          g.fillStyle = '#ff5964';
+          roundRect(g, wx + 122, wy + wh - 18, 36, 17, 6); g.fill(); g.stroke();
+        }
       }
+
+      // Left wall cafeteria Menu Chalkboard (clear of lunchbox goals & windows!)
+      g.save();
+      g.fillStyle = '#c97b36';
+      g.strokeStyle = INK;
+      g.lineWidth = 4;
+      roundRect(g, 62, 136, 152, 132, 14); g.fill(); g.stroke();
+      g.fillStyle = '#254a3b';
+      roundRect(g, 74, 148, 128, 108, 8); g.fill();
+      // Chalk tray & chalk piece
+      g.fillStyle = '#b06424';
+      roundRect(g, 82, 262, 112, 10, 4); g.fill(); g.stroke();
+      g.fillStyle = '#fff';
+      g.fillRect(102, 259, 18, 5);
+      // Cute chalk menu doodles (burger, donut, chalk lines)
+      g.strokeStyle = 'rgba(255,250,230,0.82)';
+      g.lineWidth = 3;
+      g.lineCap = 'round';
+      g.beginPath(); g.moveTo(92, 168); g.lineTo(184, 168); g.stroke();
+      g.fillStyle = '#ffd23f';
+      g.beginPath(); g.arc(104, 196, 10, Math.PI, 0); g.fill();
+      g.fillStyle = '#ff6eb8';
+      g.beginPath(); g.arc(104, 228, 10, 0, Math.PI * 2); g.fill();
+      g.fillStyle = '#254a3b';
+      g.beginPath(); g.arc(104, 228, 4, 0, Math.PI * 2); g.fill();
+      g.strokeStyle = 'rgba(255,250,230,0.62)';
+      g.beginPath();
+      g.moveTo(124, 194); g.lineTo(182, 194);
+      g.moveTo(124, 206); g.lineTo(166, 206);
+      g.moveTo(124, 226); g.lineTo(182, 226);
+      g.moveTo(124, 238); g.lineTo(158, 238);
+      g.stroke();
+      g.restore();
+
+      // Right wall Cafeteria Clock & Hanging Utensil Rack
+      g.save();
+      // Round school kitchen clock
+      g.fillStyle = '#ff5964';
+      g.strokeStyle = INK;
+      g.lineWidth = 4;
+      g.beginPath(); g.arc(1134, 168, 36, 0, Math.PI * 2); g.fill(); g.stroke();
+      g.fillStyle = '#fffaf0';
+      g.beginPath(); g.arc(1134, 168, 27, 0, Math.PI * 2); g.fill();
+      g.strokeStyle = INK; g.lineWidth = 3; g.lineCap = 'round';
+      g.beginPath(); g.moveTo(1134, 168); g.lineTo(1134, 150); g.moveTo(1134, 168); g.lineTo(1149, 162); g.stroke();
+      g.fillStyle = '#ff5964';
+      g.beginPath(); g.arc(1134, 168, 4, 0, Math.PI * 2); g.fill();
+      // Hanging wooden peg bar with frying pan & oven mitt
+      g.fillStyle = '#c97b36';
+      g.strokeStyle = INK; g.lineWidth = 3.5;
+      roundRect(g, 1068, 224, 134, 14, 6); g.fill(); g.stroke();
+      // Hanging copper pan
+      g.fillStyle = '#5a6275';
+      g.fillRect(1098, 236, 8, 26); g.strokeRect(1098, 236, 8, 26);
+      g.fillStyle = '#d97a38';
+      g.beginPath(); g.arc(1102, 278, 21, 0, Math.PI * 2); g.fill(); g.stroke();
+      g.fillStyle = '#f5a96b';
+      g.beginPath(); g.arc(1097, 273, 11, 0, Math.PI * 2); g.fill();
+      // Hanging sunny yellow oven mitt
+      g.fillStyle = '#ffd23f';
+      roundRect(g, 1152, 240, 28, 42, 13); g.fill(); g.stroke();
+      g.beginPath(); g.ellipse(1148, 266, 9, 7, -0.5, 0, Math.PI * 2); g.fill(); g.stroke();
+      g.fillStyle = '#ff5964';
+      g.fillRect(1152, 240, 28, 9); g.strokeRect(1152, 240, 28, 9);
+      g.restore();
     }
 
-    // Center school kitchen shelf with decorative spice jars
-    g.fillStyle = '#d68942';
+    // Center school kitchen shelf with wooden brackets & glossy labeled spice jars (cleanly below title tagline!)
+    g.fillStyle = '#b86d2a';
     g.strokeStyle = INK;
+    g.lineWidth = 3.5;
+    roundRect(g, 544, 272, 16, 18, 4); g.fill(); g.stroke();
+    roundRect(g, 720, 272, 16, 18, 4); g.fill(); g.stroke();
+    g.fillStyle = '#d68942';
     g.lineWidth = 4;
-    roundRect(g, 520, 240, 240, 18, 8); g.fill(); g.stroke();
+    roundRect(g, 520, 256, 240, 18, 8); g.fill(); g.stroke();
     var jars = [['#ff5964', 550], ['#ffd23f', 605], ['#3ddc84', 660], ['#45b7ff', 715]];
     for (var ji = 0; ji < jars.length; ji++) {
       g.fillStyle = jars[ji][0];
-      roundRect(g, jars[ji][1], 198, 30, 40, 8); g.fill(); g.stroke();
+      roundRect(g, jars[ji][1], 214, 30, 40, 8); g.fill(); g.stroke();
+      // Gloss highlight & crisp white label
+      g.fillStyle = 'rgba(255,255,255,0.45)';
+      roundRect(g, jars[ji][1] + 4, 219, 6, 26, 3); g.fill();
+      g.fillStyle = '#fff9eb';
+      roundRect(g, jars[ji][1] + 5, 230, 20, 12, 3); g.fill();
       g.fillStyle = '#fff3d6';
-      roundRect(g, jars[ji][1] + 4, 190, 22, 10, 4); g.fill(); g.stroke();
+      roundRect(g, jars[ji][1] + 4, 206, 22, 10, 4); g.fill(); g.stroke();
+    }
+
+    // Cheerful pastel ceramic tile backsplash trim just above counter
+    if (!moon) {
+      var bCols = ['#fff8eb', '#ffe0b5', '#d9f5e6', '#ffd9de'];
+      for (var bx = 0; bx < RK.W; bx += 32) {
+        g.fillStyle = bCols[((bx / 32) | 0) % bCols.length];
+        g.fillRect(bx, RK.FLOOR_Y - 30, 32, 26);
+        g.strokeStyle = 'rgba(130, 82, 38, 0.25)';
+        g.lineWidth = 2;
+        g.strokeRect(bx, RK.FLOOR_Y - 30, 32, 26);
+      }
+      g.fillStyle = '#d99852';
+      g.fillRect(0, RK.FLOOR_Y - 34, RK.W, 5);
     }
 
     // Festive red & cream striped canteen awning across top
@@ -114,35 +250,95 @@
       g.stroke();
     }
 
-    // Giant canteen counter base
+    // Richly illustrated honey-oak canteen counter base with wood grain, beveled cabinet doors, brass knobs & cafeteria props!
     var cGrad = g.createLinearGradient(0, RK.FLOOR_Y, 0, RK.H);
-    cGrad.addColorStop(0, '#f3b165');
-    cGrad.addColorStop(0.24, '#e08b3b');
-    cGrad.addColorStop(1, '#b56022');
+    cGrad.addColorStop(0, '#e89d50');
+    cGrad.addColorStop(0.28, '#cf7a2e');
+    cGrad.addColorStop(1, '#9c4e18');
     g.fillStyle = cGrad;
     g.fillRect(0, RK.FLOOR_Y, RK.W, RK.H - RK.FLOOR_Y);
 
-    // Glossy stainless griddle strip along the top of counter
+    // Subtle warm wood-grain streaks across counter
+    g.strokeStyle = 'rgba(255, 224, 170, 0.16)';
+    g.lineWidth = 3;
+    for (var gy = RK.FLOOR_Y + 24; gy < RK.H; gy += 18) {
+      g.beginPath(); g.moveTo(0, gy); g.bezierCurveTo(320, gy - 4, 960, gy + 5, RK.W, gy - 2); g.stroke();
+    }
+
+    // Glossy stainless griddle strip along the top of counter + underside shadow
+    g.fillStyle = 'rgba(59, 36, 22, 0.28)';
+    g.fillRect(0, RK.FLOOR_Y + 14, RK.W, 7);
     g.fillStyle = '#e7edf5';
     g.fillRect(0, RK.FLOOR_Y - 4, RK.W, 18);
     g.fillStyle = '#fff';
     g.fillRect(0, RK.FLOOR_Y - 2, RK.W, 5);
+    g.fillStyle = '#c5d2e3';
+    g.fillRect(0, RK.FLOOR_Y + 9, RK.W, 4);
     g.strokeStyle = INK;
     g.lineWidth = 4.5;
     g.beginPath(); g.moveTo(0, RK.FLOOR_Y - 4); g.lineTo(RK.W, RK.FLOOR_Y - 4); g.stroke();
     g.beginPath(); g.moveTo(0, RK.FLOOR_Y + 14); g.lineTo(RK.W, RK.FLOOR_Y + 14); g.stroke();
 
-    // Center court garnish line
-    g.fillStyle = 'rgba(255,255,255,0.45)';
-    g.fillRect(RK.W * 0.5 - 3, RK.FLOOR_Y + 16, 6, RK.H - RK.FLOOR_Y - 16);
-
-    // Counter cabinet paneling details
-    g.strokeStyle = 'rgba(90,42,14,0.28)';
-    g.lineWidth = 4;
-    for (var cx = 140; cx < RK.W - 140; cx += 200) {
-      roundRect(g, cx, RK.FLOOR_Y + 28, 170, 74, 12);
-      g.stroke();
+    // 5 Beveled wooden cabinet doors with shiny brass knobs & hinges
+    var cabXs = [142, 344, 546, 748, 950];
+    for (var ci = 0; ci < cabXs.length; ci++) {
+      var cx = cabXs[ci], cy = RK.FLOOR_Y + 26, cw = 186, ch = 84;
+      // Door base recess shadow & panel
+      g.fillStyle = '#b86220';
+      g.strokeStyle = '#5c2c0e';
+      g.lineWidth = 3.5;
+      roundRect(g, cx, cy, cw, ch, 12); g.fill(); g.stroke();
+      // Warm beveled inner face
+      g.fillStyle = '#d98537';
+      roundRect(g, cx + 10, cy + 9, cw - 20, ch - 18, 7); g.fill();
+      g.strokeStyle = 'rgba(255, 226, 175, 0.35)';
+      g.lineWidth = 2.5;
+      g.beginPath(); g.moveTo(cx + 14, cy + 10); g.lineTo(cx + cw - 14, cy + 10); g.stroke();
+      g.strokeStyle = 'rgba(72, 32, 10, 0.35)';
+      g.beginPath(); g.moveTo(cx + 14, cy + ch - 10); g.lineTo(cx + cw - 14, cy + ch - 10); g.stroke();
+      // Brass hinges on outer edge
+      var knobRight = ci % 2 === 0;
+      var hx = knobRight ? cx + 4 : cx + cw - 10;
+      g.fillStyle = '#ffd23f';
+      g.strokeStyle = '#5c2c0e'; g.lineWidth = 2;
+      g.fillRect(hx, cy + 16, 6, 14); g.strokeRect(hx, cy + 16, 6, 14);
+      g.fillRect(hx, cy + ch - 30, 6, 14); g.strokeRect(hx, cy + ch - 30, 6, 14);
+      // Shiny golden-brass round cabinet knob!
+      var kx = knobRight ? cx + cw - 24 : cx + 24;
+      var ky = cy + ch * 0.5;
+      g.fillStyle = 'rgba(59, 36, 22, 0.35)';
+      g.beginPath(); g.arc(kx + 2, ky + 3, 9, 0, Math.PI * 2); g.fill();
+      g.fillStyle = '#ffd23f';
+      g.strokeStyle = INK; g.lineWidth = 3;
+      g.beginPath(); g.arc(kx, ky, 9, 0, Math.PI * 2); g.fill(); g.stroke();
+      g.fillStyle = '#fff9d6';
+      g.beginPath(); g.arc(kx - 2.5, ky - 2.5, 3, 0, Math.PI * 2); g.fill();
     }
+
+    // Playful cafeteria side counter props (stacked lunch trays on left, tea-towel bar on right)
+    // Left counter tray cubby
+    g.fillStyle = '#6e3512';
+    g.strokeStyle = INK; g.lineWidth = 3.5;
+    roundRect(g, 22, RK.FLOOR_Y + 26, 98, 84, 12); g.fill(); g.stroke();
+    var trayCols = ['#45b7ff', '#ffd23f', '#ff5964', '#3ddc84'];
+    for (var ti = 0; ti < trayCols.length; ti++) {
+      g.fillStyle = trayCols[ti];
+      roundRect(g, 32, RK.FLOOR_Y + 42 + ti * 14, 78, 10, 4); g.fill(); g.stroke();
+    }
+    // Right counter towel rail with checkered cafeteria cloth
+    g.fillStyle = '#b86220';
+    roundRect(g, 1160, RK.FLOOR_Y + 26, 98, 84, 12); g.fill(); g.stroke();
+    g.fillStyle = '#dde7f2';
+    roundRect(g, 1170, RK.FLOOR_Y + 38, 78, 8, 4); g.fill(); g.stroke();
+    g.fillStyle = '#fff8ea';
+    roundRect(g, 1184, RK.FLOOR_Y + 42, 50, 54, 6); g.fill(); g.stroke();
+    g.fillStyle = '#ff5964';
+    g.fillRect(1186, RK.FLOOR_Y + 56, 46, 8);
+    g.fillRect(1186, RK.FLOOR_Y + 74, 46, 8);
+
+    // Subtle brushed-steel center court divider mark on countertop lip
+    g.fillStyle = '#7e8fa6';
+    g.fillRect(RK.W * 0.5 - 2, RK.FLOOR_Y - 1, 4, 12);
 
     return c;
   }

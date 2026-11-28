@@ -88,22 +88,37 @@
   }
 
   /* --------------------------------------------------------------- pads */
+  function doilyPath(c, r, bumps) {
+    c.beginPath();
+    for (let i = 0; i < bumps * 2; i++) {
+      const a = (i * Math.PI) / bumps, rad = i % 2 === 0 ? r : r - 3.6;
+      const px = Math.cos(a) * rad, py = Math.sin(a) * rad;
+      if (i === 0) c.moveTo(px, py); else c.lineTo(px, py);
+    }
+    c.closePath();
+  }
   function padSp(st) {
-    return keep('pad:' + (st || 'rest'), 84, 84, (c, w, h) => {
+    return keep('pad:' + (st || 'rest'), 88, 88, (c, w, h) => {
       c.translate(w / 2, h / 2);
-      circle(c, 0, 2, CG.PAD - 1); ink(c, st === 'ok' ? '#fff6c8' : '#fff7ea', 3);
-      c.strokeStyle = st === 'ok' ? '#3ddc84' : st === 'hover' ? '#ffcc00' : '#e2c79f'; c.lineWidth = 3.5; circle(c, 0, 2, CG.PAD - 8); c.stroke();
+      // Scalloped pastry doily base!
+      doilyPath(c, CG.PAD + 1, 14);
+      ink(c, st === 'ok' ? '#fff7c8' : '#fffaf2', 2.8);
+      circle(c, 0, 0, CG.PAD - 7);
+      c.fillStyle = st === 'ok' ? '#eaffea' : st === 'hover' ? '#fff0b3' : '#f7e7ce';
+      c.fill();
+      c.strokeStyle = st === 'ok' ? '#3ddc84' : st === 'hover' ? '#ffcc00' : '#deb887';
+      c.lineWidth = 2.6; c.setLineDash([5, 4]); circle(c, 0, 0, CG.PAD - 7); c.stroke(); c.setLineDash([]);
       if (st === 'hover' || st === 'ok') {
-        c.strokeStyle = st === 'ok' ? '#1f9a4a' : '#a06a00'; c.lineWidth = 5; c.lineCap = 'round';
-        c.beginPath(); c.moveTo(-9, 2); c.lineTo(9, 2); c.moveTo(0, -7); c.lineTo(0, 11); c.stroke();
+        c.strokeStyle = st === 'ok' ? '#16803d' : '#a06a00'; c.lineWidth = 4.6; c.lineCap = 'round';
+        c.beginPath(); c.moveTo(-8, 0); c.lineTo(8, 0); c.moveTo(0, -8); c.lineTo(0, 8); c.stroke();
       }
     });
   }
   A.pad = function (ctx, x, y, st, t) {
-    Kit.art.shadow(ctx, x - 34, y - 28, 68, 56, 0.4);
-    Kit.art.blit(ctx, padSp(st), x, y - 2);
+    Kit.art.shadow(ctx, x - 34, y - 28, 68, 56, 0.36);
+    Kit.art.blit(ctx, padSp(st), x, y - 1);
     if (st === 'ok' || st === 'hover') {
-      const p = t ? 0.4 + (Math.sin(t * 5) + 1) * 0.28 : 0.6;
+      const p = t ? 0.42 + (Math.sin(t * 5) + 1) * 0.28 : 0.65;
       ctx.strokeStyle = st === 'ok' ? 'rgba(61,220,132,' + p + ')' : 'rgba(255,204,0,' + p + ')';
       ctx.lineWidth = 4; circle(ctx, x, y, CG.PAD + 7); ctx.stroke();
     }
@@ -116,36 +131,70 @@
 
   /* ------------------------------------------------------------- towers */
   function twBody(type, lv) {
-    return keep('twb:' + type + lv, 112, 128, (c, w, h) => {
-      const grow = 1 + lv * 0.11;
-      c.save(); c.translate(w / 2, h / 2); c.scale(grow, grow);
-      if (lv >= 2) { circle(c, 0, 4, 29); ink(c, '#ffcc00', 3); }
-      else if (lv === 1) { circle(c, 0, 5, 26); ink(c, '#ffe38a', 2.6); }
-      circle(c, 0, 6, 22); ink(c, Kit.art.shade(CG.TOWERS[type].color, -0.12), 3);
+    return keep('twb:' + type + lv, 120, 128, (c, w, h) => {
+      const grow = 1 + lv * 0.1;
+      c.save(); c.translate(w / 2, h / 2 + 2); c.scale(grow, grow);
+      // Cute scalloped pastry doily coaster under every turret!
+      doilyPath(c, 28, 12); ink(c, lv >= 2 ? '#ffe066' : '#fff9f0', 2.8);
+      circle(c, 0, 2, 22); ink(c, Kit.art.shade(CG.TOWERS[type].color, -0.06), 2.8);
       if (type === 'pop') {
-        rrect(c, -14, -8, 28, 22, 5); ink(c, '#fffaf0', 2.4);
-        c.fillStyle = '#e8354b'; for (let i = 0; i < 3; i++) c.fillRect(-12 + i * 9, -8, 4.5, 22);
-        [[-8, -12], [1, -16], [9, -11], [-2, -8], [6, -7]].forEach(p => { circle(c, p[0], p[1], 6.2); ink(c, '#fffbe8', 2); });
+        // Chunky carnival popcorn-kettle turret with buttery dome & fluffy kernels!
+        c.beginPath(); c.moveTo(-16, -6); c.lineTo(16, -6); c.lineTo(13, 15); c.lineTo(-13, 15); c.closePath();
+        ink(c, '#fffaf0', 2.6);
+        c.fillStyle = '#f03e5a';
+        c.fillRect(-10, -5, 5, 19); c.fillRect(5, -5, 5, 19);
+        rrect(c, -18, -10, 36, 7, 3.5); ink(c, '#ffd23f', 2.4);
+        // Fluffy popcorn cloud top
+        [[-9, -14, 7], [0, -17, 8], [9, -14, 7], [-4, -10, 6.5], [5, -10, 6.5]].forEach(p => {
+          circle(c, p[0], p[1], p[2]); ink(c, '#fffbe0', 2.1);
+        });
+        c.fillStyle = '#ffd23f'; circle(c, -2, -16, 2.6); c.fill(); circle(c, 7, -13, 2.2); c.fill();
       } else if (type === 'bubble') {
-        rrect(c, -12, -16, 24, 30, 10); ink(c, '#bde9ff', 2.6);
-        c.fillStyle = '#6fd3ff'; rrect(c, -12, -2, 24, 16, 8); c.fill();
-        rrect(c, -7, -22, 14, 8, 3); ink(c, '#2a8fd6', 2);
+        // Plump pastel soap-bubble dispenser jar with foam rim & glossy sheen
+        rrect(c, -15, -13, 30, 28, 12); ink(c, '#b3ecff', 2.6);
+        c.fillStyle = '#48c6ff'; rrect(c, -13, 0, 26, 14, 9); c.fill();
+        c.fillStyle = 'rgba(255,255,255,0.72)'; circle(c, -6, -4, 4); c.fill(); circle(c, 4, 4, 3); c.fill();
+        rrect(c, -11, -19, 22, 8, 4); ink(c, '#ff7eb6', 2.4);
       } else {
-        c.beginPath(); c.moveTo(-14, -2); c.lineTo(14, -2); c.lineTo(10, 16); c.lineTo(-10, 16); c.closePath(); ink(c, '#c4844e', 2.4);
-        circle(c, -7, -6, 7.5); ink(c, '#ff8ec4', 2); circle(c, 7, -6, 7.5); ink(c, '#ff8ec4', 2);
-        circle(c, 0, -12, 8.5); ink(c, '#ffb3d6', 2); circle(c, 0, -20, 4.5); ink(c, '#e8354b', 1.8);
+        // Chunky bakery cupcake mortar with scalloped wrapper & swirled frosting
+        c.beginPath(); c.moveTo(-16, -2); c.lineTo(16, -2); c.lineTo(11, 16); c.lineTo(-11, 16); c.closePath();
+        ink(c, '#d99152', 2.6);
+        c.strokeStyle = '#9c5a26'; c.lineWidth = 2;
+        c.beginPath(); c.moveTo(-7, 0); c.lineTo(-5, 14); c.moveTo(0, 0); c.lineTo(0, 14); c.moveTo(7, 0); c.lineTo(5, 14); c.stroke();
+        circle(c, -9, -6, 8.5); ink(c, '#ff8ec4', 2.2);
+        circle(c, 9, -6, 8.5); ink(c, '#ff8ec4', 2.2);
+        circle(c, 0, -12, 9.5); ink(c, '#ffb8dc', 2.2);
+        circle(c, 0, -21, 5); ink(c, '#ff3b5c', 2);
+        c.fillStyle = '#fff'; circle(c, -1.5, -22.5, 1.6); c.fill();
       }
-      for (let i = 0; i <= lv; i++) { star(c, (i - lv / 2) * 13, 30, 6.2); ink(c, '#ffcc00', 1.6); }
+      for (let i = 0; i <= lv; i++) { star(c, (i - lv / 2) * 13, 27, 6); ink(c, '#ffcc00', 1.6); }
       c.restore();
     });
   }
   function twGun(type, lv) {
-    return keep('twg:' + type + lv, 78, 40, (c, w, h) => {
-      c.translate(w / 2, h / 2);
+    return keep('twg:' + type + lv, 86, 48, (c, w, h) => {
+      c.translate(w / 2 - 4, h / 2);
       const trim = lv >= 2 ? '#ffcc00' : null;
-      if (type === 'pop') { rrect(c, -2, -7, 32, 14, 5); ink(c, trim || '#d33d4f', 2.4); circle(c, 28, 0, 5); ink(c, '#2b1d3a', 2); }
-      else if (type === 'bubble') { c.strokeStyle = INK; c.lineWidth = 5; c.lineCap = 'round'; c.beginPath(); c.moveTo(0, 0); c.lineTo(22, 0); c.stroke(); circle(c, 28, 0, 8); c.strokeStyle = '#fff'; c.lineWidth = 3; c.stroke(); }
-      else { rrect(c, -2, -6, 28, 12, 5); ink(c, trim || '#8c5a36', 2.4); circle(c, 28, 0, 8); ink(c, '#ff7eb6', 2.2); }
+      if (type === 'pop') {
+        // Chunky brass-gold wide-bell popcorn popper snout (cute bakery turret, NOT a lipstick tube!)
+        c.beginPath(); c.moveTo(2, -7); c.lineTo(20, -11); c.lineTo(24, -13); c.lineTo(24, 13); c.lineTo(20, 11); c.lineTo(2, 7); c.closePath();
+        ink(c, trim || '#ffb72b', 2.6);
+        rrect(c, 21, -13, 7, 26, 3.5); ink(c, '#ff5978', 2.4);
+        c.fillStyle = 'rgba(255,255,255,0.65)'; c.fillRect(6, -5, 13, 3.5);
+      } else if (type === 'bubble') {
+        // Cute candy-striped bubble blower wand with shimmering soap hoop!
+        rrect(c, 0, -4, 18, 8, 4); ink(c, '#ff7eb6', 2.4);
+        circle(c, 26, 0, 10); c.fillStyle = 'rgba(130,228,255,0.55)'; c.fill();
+        c.strokeStyle = '#1b1640'; c.lineWidth = 4; c.stroke();
+        circle(c, 26, 0, 7.5); c.strokeStyle = '#ffffff'; c.lineWidth = 2.5; c.stroke();
+      } else {
+        // Whipped-cream piping bag cone with star frosting tip!
+        c.beginPath(); c.moveTo(0, -10); c.lineTo(24, -4); c.lineTo(24, 4); c.lineTo(0, 10); c.closePath();
+        ink(c, trim || '#fff5fa', 2.6);
+        c.fillStyle = '#ff7eb6'; c.fillRect(4, -5, 14, 3); c.fillRect(4, 2, 14, 3);
+        c.beginPath(); c.moveTo(22, -6); c.lineTo(31, 0); c.lineTo(22, 6); c.closePath();
+        ink(c, '#d8e2f0', 2.2);
+      }
     });
   }
   function puffSp() {
@@ -155,17 +204,17 @@
     });
   }
   A.tower = function (ctx, tw, x, y, t, scale) {
-    const lv = tw.lv | 0, sc = scale || 1.36, kick = tw.kick || 0, a = tw.angle || 0;
-    const bob = !t || Kit.motion.reduced() ? 0 : Math.sin(t * 2.5 + x * 0.013) * 2.2;
-    Kit.art.shadow(ctx, x - 34 * sc, y + bob - 22 * sc, 68 * sc, 56 * sc, 0.45);
+    const lv = tw.lv | 0, sc = scale || 1.24, kick = tw.kick || 0, a = tw.angle || 0;
+    const bob = !t || Kit.motion.reduced() ? 0 : Math.sin(t * 2.5 + x * 0.013) * 2;
+    Kit.art.shadow(ctx, x - 34 * sc, y + bob - 22 * sc, 68 * sc, 56 * sc, 0.42);
     Kit.art.blit(ctx, twBody(tw.type, lv), x, y + bob, { sx: sc * (1 + kick * 0.06), sy: sc * (1 - kick * 0.08) });
-    Kit.art.blit(ctx, twGun(tw.type, lv), x + Math.cos(a) * (4 - kick * 6) * sc, y + bob + Math.sin(a) * (4 - kick * 6) * sc, { rot: a, sx: sc, sy: sc });
-    if (kick > 0.08) Kit.art.blit(ctx, puffSp(), x + Math.cos(a) * 34 * sc, y + bob + Math.sin(a) * 34 * sc, { alpha: Math.min(1, kick), sx: 0.55 + kick * 0.7, sy: 0.55 + kick * 0.7 });
+    Kit.art.blit(ctx, twGun(tw.type, lv), x + Math.cos(a) * (6 - kick * 5) * sc, y + bob + Math.sin(a) * (6 - kick * 5) * sc, { rot: a, sx: sc, sy: sc });
+    if (kick > 0.08) Kit.art.blit(ctx, puffSp(), x + Math.cos(a) * 32 * sc, y + bob + Math.sin(a) * 32 * sc, { alpha: Math.min(1, kick), sx: 0.55 + kick * 0.7, sy: 0.55 + kick * 0.7 });
   };
   A.towerIcon = function (canvas, type) {
     const ctx = canvas.getContext('2d'), s = canvas.width / 64;
     ctx.setTransform(s, 0, 0, s, 0, 0); ctx.clearRect(0, 0, 64, 64);
-    A.tower(ctx, { type, lv: 0, angle: -0.5, kick: 0 }, 32, 38, 0, 0.46);
+    A.tower(ctx, { type, lv: 0, angle: -0.45, kick: 0 }, 29, 34, 0, 0.72);
   };
 
   /* -------------------------------------------------------------- blobs */

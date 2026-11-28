@@ -42,23 +42,36 @@ html[data-sg-motion="reduce"] .ring::after { opacity: 0.9; transform: none; }
 
 /* HUD */
 #btnPause { position: absolute; top: 14px; left: 14px; }
+.sg-mute {
+  top: 14px; right: 14px; width: 58px; height: 58px; background: #fff; color: var(--ink);
+  border: 4px solid var(--ink); box-shadow: 0 5px 0 var(--ink); font-size: 25px;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.sg-mute:hover { background: #fff3b8; }
 
 /* Title */
-.logo { position: absolute; top: 14px; left: 0; right: 0; margin: 0; text-align: center; line-height: 1.1; pointer-events: none; }
+.logo { position: absolute; top: 6px; left: 0; right: 0; margin: 0; text-align: center; line-height: 1.06; pointer-events: none; }
 .logo span {
   display: inline-block; font-weight: 700; vertical-align: middle;
   text-shadow: -5px -5px 0 var(--ink), 5px -5px 0 var(--ink), -5px 5px 0 var(--ink), 5px 5px 0 var(--ink),
-    0 -6px 0 var(--ink), 0 6px 0 var(--ink), -6px 0 0 var(--ink), 6px 0 0 var(--ink), 0 13px 0 var(--ink);
+    0 -6px 0 var(--ink), 0 6px 0 var(--ink), -6px 0 0 var(--ink), 6px 0 0 var(--ink), 0 11px 0 var(--ink);
 }
-.logo .l1 { font-size: 104px; color: #fff; }
-.logo .l2 { font-size: 118px; color: #ffe14f; margin-inline-start: 22px; animation: bk-bump 0.8s ease-in-out infinite; }
-@keyframes bk-bump { 0%, 100% { transform: scale(1) rotate(-4deg); } 50% { transform: scale(1.1, 0.92) rotate(4deg); } }
-.bk-play { position: absolute; left: 560px; top: 372px; width: 160px; height: 160px; background: #3ddc84; border-width: 7px; box-shadow: 0 10px 0 var(--ink); }
-.title-chips { position: absolute; top: 236px; right: 36px; display: flex; flex-direction: column; gap: 12px; align-items: flex-end; pointer-events: none; }
-.title-side { position: absolute; top: 236px; left: 36px; display: flex; flex-direction: column; gap: 18px; align-items: flex-start; }
-.bk-wide { height: 78px; padding: 0 28px 0 20px; font-size: 32px; background: #ffe14f; color: var(--ink); }
+.logo .l1 { font-size: 86px; color: #fff; }
+.logo .l2 { font-size: 98px; color: #ffe14f; margin-inline-start: 18px; animation: bk-bump 0.8s ease-in-out infinite; }
+@keyframes bk-bump { 0%, 100% { transform: scale(1) rotate(-3deg); } 50% { transform: scale(1.07, 0.94) rotate(3deg); } }
+.bk-play {
+  position: absolute; left: 515px; top: 126px; width: 250px; height: 80px; gap: 14px;
+  background: #3ddc84; border-width: 7px; box-shadow: 0 9px 0 var(--ink);
+}
+.bk-play svg { width: 42px; height: 42px; transform: none; }
+.bk-play .play-lbl { font-size: 42px; line-height: 1; color: #fff; text-shadow: 0 4px 0 var(--ink); }
+.bk-play.ring::after { inset: -13px; border-radius: 999px; }
+.title-chips { position: absolute; top: 18px; left: 22px; display: flex; flex-direction: row; gap: 10px; align-items: center; pointer-events: none; }
+.title-chips .chip { height: 52px; padding: 0 16px; font-size: 26px; }
+.title-side { position: absolute; top: 282px; left: 26px; display: flex; flex-direction: column; gap: 16px; align-items: flex-start; }
+.bk-wide { height: 70px; padding: 0 22px 0 18px; font-size: 28px; background: #ffe14f; color: var(--ink); }
 .bk-wide.pink { background: #ff9fd0; }
-.bk-wide svg { width: 50px; height: 50px; }
+.bk-wide svg { width: 42px; height: 42px; }
 .howto {
   position: absolute; left: 150px; right: 150px; bottom: 18px; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 30px;
   padding: 12px 20px; border-radius: 26px; background: rgba(42, 29, 78, 0.8); border: 4px solid #fff; color: #fff; font-size: 25px; pointer-events: none;

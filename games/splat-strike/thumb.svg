@@ -25,9 +25,10 @@
     </linearGradient>
   </defs>
   <rect width="400" height="400" fill="url(#bg)"/>
+  <g transform="translate(0 -16)">
   <!-- floor -->
-  <path d="M0 318 Q200 290 400 318 L400 400 L0 400 Z" fill="#7ccd5c"/>
-  <path d="M0 336 Q200 312 400 336 L400 400 L0 400 Z" fill="#6cc24a"/>
+  <path d="M0 318 Q200 290 400 318 L400 424 L0 424 Z" fill="#7ccd5c"/>
+  <path d="M0 336 Q200 312 400 336 L400 424 L0 424 Z" fill="#6cc24a"/>
   <!-- background paint splats -->
   <g fill="#ffd23f" opacity="0.95">
     <path d="M330 120c14-10 34-2 36 14 16 2 22 22 8 32 6 16-10 28-24 20-8 14-30 12-34-4-16 2-24-18-12-28-8-14 10-30 26-34z"/>
@@ -91,9 +92,5 @@
   <!-- mittens -->
   <circle cx="200" cy="292" r="17" fill="#ff5fa2" stroke="#1b1f4b" stroke-width="5"/>
   <circle cx="258" cy="280" r="16" fill="#ff5fa2" stroke="#1b1f4b" stroke-width="5"/>
-  <!-- title -->
-  <g font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-weight="bold" text-anchor="middle" direction="rtl" stroke="#1b1f4b" stroke-linejoin="round" paint-order="stroke" transform="rotate(-5 200 60)">
-    <text x="300" y="76" font-size="62" fill="#ff5fa2" stroke-width="16">ضربة</text>
-    <text x="126" y="84" font-size="62" fill="#ffd23f" stroke-width="16">الطلاء</text>
   </g>
 </svg>

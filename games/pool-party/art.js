@@ -332,13 +332,14 @@
       var yy = TY0 + P.TH * q / 4;
       diamond(g, TX0 - 35, yy); diamond(g, TX1 + 35, yy);
     });
-    // potted-ball tray
-    g.fillStyle = 'rgba(0,0,0,0.35)'; rr(g, 424, 668, 432, 40, 20); g.fill();
-    var tg = g.createLinearGradient(0, 668, 0, 706);
-    tg.addColorStop(0, '#3a2414'); tg.addColorStop(1, '#6a4020');
+  };
+  Art.drawTrayBox = function (g) {
+    g.fillStyle = 'rgba(0,0,0,0.38)'; rr(g, 424, 668, 432, 40, 20); g.fill();
+    var tg = g.createLinearGradient(0, 666, 0, 704);
+    tg.addColorStop(0, '#5a361b'); tg.addColorStop(1, '#3a200e');
     g.fillStyle = tg; rr(g, 426, 666, 428, 38, 19); g.fill();
     g.fillStyle = '#140c07'; rr(g, 434, 672, 412, 26, 13); g.fill();
-    g.strokeStyle = 'rgba(255,220,170,0.35)'; g.lineWidth = 1.5; rr(g, 426, 666, 428, 38, 19); g.stroke();
+    g.strokeStyle = 'rgba(255,220,170,0.4)'; g.lineWidth = 1.5; rr(g, 426, 666, 428, 38, 19); g.stroke();
   };
   function diamond(g, x, y) {
     g.beginPath(); g.moveTo(x, y - 5); g.lineTo(x + 3.5, y); g.lineTo(x, y + 5); g.lineTo(x - 3.5, y); g.closePath(); g.fill();

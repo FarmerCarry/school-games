@@ -44,14 +44,12 @@
         <button class="chip gift" id="tGift" type="button" hidden>🎁 هدية!</button>
       </div>
     </div>
-    <div class="t-missions box">
-      <div class="box-h">المهام <span class="box-sub">أكملها لتربح عملات</span></div>
-      <div id="tMissions"></div>
-    </div>
-    <div class="howto box">
-      <div><span dir="ltr"><span class="sg-key">↑</span><span class="sg-key">←</span><span class="sg-key">↓</span><span class="sg-key">→</span></span> أو <span dir="ltr"><span class="sg-key">W</span><span class="sg-key">A</span><span class="sg-key">S</span><span class="sg-key">D</span></span> قفز</div>
-      <div><span class="sg-key">P</span> إيقاف مؤقت &nbsp; <span class="sg-key">M</span> الصوت</div>
-      <div class="howto-tip">لا تتوقف طويلًا… النسر يراقبك!</div>
+    <div class="howto-bar">
+      <span dir="ltr"><span class="sg-key">↑</span><span class="sg-key">←</span><span class="sg-key">↓</span><span class="sg-key">→</span></span> قفز
+      <i class="sep"></i>
+      <span><span class="sg-key">P</span> إيقاف</span>
+      <i class="sep"></i>
+      <span><span class="sg-key">M</span> الصوت</span>
     </div>
     <div id="charpick" dir="ltr">
       <button id="cPrev" type="button" aria-label="السابق">◀</button>
@@ -65,6 +63,7 @@
     <div class="panel">
       <h2>استراحة</h2>
       <div class="p-score">النقاط: <b id="pScore">0</b></div>
+      <div id="pMissions" class="o-missions"></div>
       <div class="col">
         <button id="btnResume" class="sg-btn play mid" type="button">تابع اللعب</button>
         <button id="btnRestart" class="sg-btn secondary" type="button">ابدأ من جديد</button>

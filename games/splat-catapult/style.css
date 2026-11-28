@@ -135,6 +135,13 @@ body {
   padding: 1px 6px;
 }
 
+/* High-contrast mute pill over sunlit cartoon sky */
+.sg-mute {
+  background: rgba(21, 17, 50, 0.9) !important;
+  border: 3px solid #1b1640 !important;
+  box-shadow: 0 4px 0 #1b1640 !important;
+}
+
 /* HUD (top-left so top-right .sg-mute stays unobstructed) */
 #hud {
   position: absolute;
@@ -146,15 +153,10 @@ body {
   gap: 10px;
   pointer-events: none;
 }
-#hud #btnPause .mini-key {
-  position: absolute;
-  bottom: -6px;
-  left: -6px;
-}
 .hud-swap {
   background: linear-gradient(180deg, #ffe869, #ffae00);
   font-size: 18px;
-  padding: 9px 15px;
+  padding: 9px 16px;
   height: 54px;
 }
 
@@ -172,6 +174,12 @@ body {
   background: rgba(12, 11, 30, 0.68);
   backdrop-filter: blur(5px);
 }
+.screen.title-screen {
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 22px 24px 16px;
+  box-sizing: border-box;
+}
 
 .top-chips {
   position: absolute;
@@ -182,7 +190,7 @@ body {
   gap: 10px;
 }
 .chip {
-  background: rgba(21, 17, 50, 0.9);
+  background: rgba(21, 17, 50, 0.92);
   border: 3px solid #1b1640;
   border-radius: 999px;
   padding: 6px 16px;
@@ -208,16 +216,14 @@ body {
   border: 2.5px solid #1b1640;
 }
 
-/* Title Card */
-.hero-card {
-  width: 630px;
-  max-width: 94%;
-  background: linear-gradient(180deg, rgba(28, 22, 68, 0.93), rgba(16, 13, 42, 0.95));
-  border: 4px solid #1b1640;
-  border-radius: 30px;
-  padding: 22px 28px 20px;
+/* Floating Open-Sky Title Showcase (zero opaque modal hiding towers!) */
+.hero-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   text-align: center;
-  box-shadow: inset 0 4px 0 rgba(255, 255, 255, 0.16), 0 10px 0 #1b1640, 0 22px 44px rgba(0, 0, 0, 0.5);
+  gap: 8px;
+  margin-top: 2px;
 }
 .hero-badge {
   display: inline-block;
@@ -225,51 +231,58 @@ body {
   color: #ffffff;
   font-weight: 800;
   font-size: 16px;
-  padding: 4px 16px;
+  padding: 4px 18px;
   border-radius: 999px;
   border: 2.5px solid #1b1640;
-  box-shadow: 0 3px 0 #1b1640;
+  box-shadow: 0 4px 0 #1b1640;
 }
 .logo {
-  margin: 8px 0 4px;
-  font-size: 60px;
+  margin: 0;
+  font-size: 66px;
   font-weight: 900;
-  line-height: 1.06;
+  line-height: 1.04;
   color: #ffe033;
-  -webkit-text-stroke: 3px #1b1640;
+  -webkit-text-stroke: 4px #1b1640;
   paint-order: stroke fill;
-  text-shadow: 0 6px 0 #1b1640;
+  text-shadow: 0 7px 0 #1b1640, 0 12px 24px rgba(15, 25, 65, 0.32);
 }
 .hero-sub {
-  margin: 0 0 14px;
-  font-size: 19px;
-  color: #e6f2ff;
-  line-height: 1.35;
+  margin: 0 0 6px;
+  padding: 5px 20px;
+  border-radius: 999px;
+  background: rgba(21, 17, 50, 0.84);
+  border: 2.5px solid #1b1640;
+  font-size: 18px;
+  font-weight: 700;
+  color: #f4f9ff;
+  line-height: 1.3;
+  box-shadow: 0 4px 0 rgba(27, 22, 64, 0.55);
 }
 
 .diff-bar {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 2px solid rgba(255, 255, 255, 0.14);
+  background: rgba(21, 17, 50, 0.88);
+  border: 3px solid #1b1640;
   border-radius: 999px;
   padding: 4px 10px;
-  margin-bottom: 10px;
+  box-shadow: 0 4px 0 #1b1640;
 }
 .diff-lbl {
   font-size: 15px;
   font-weight: 700;
-  color: #cbd8ff;
+  color: #dbe6ff;
   margin-inline-end: 2px;
 }
 .diff-pill {
   font-size: 15px;
-  padding: 4px 13px;
+  padding: 4px 14px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.14);
   color: #ffffff;
   box-shadow: none;
+  border-width: 2px;
 }
 .diff-pill.active {
   background: #00e5ff;
@@ -283,19 +296,23 @@ body {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 12px;
-  margin-bottom: 12px;
+  gap: 11px;
+  margin-bottom: 2px;
 }
 .ctrl-strip {
-  margin-top: 6px;
-  padding-top: 10px;
-  border-top: 2px dashed rgba(255, 255, 255, 0.16);
-  display: flex;
+  padding: 6px 20px;
+  border-radius: 999px;
+  background: rgba(21, 17, 50, 0.9);
+  border: 3px solid #1b1640;
+  box-shadow: 0 4px 0 #1b1640;
+  display: inline-flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 16px;
+  align-items: center;
+  gap: 18px;
   font-size: 16px;
-  color: #d9e7ff;
+  font-weight: 700;
+  color: #eef5ff;
 }
 
 /* Modal Cards */

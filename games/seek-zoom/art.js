@@ -494,12 +494,39 @@
     ell(g, -10, -6, 70, 6); fill(g, 'rgba(160,200,240,0.45)');
   };
   F.tree = function (g, o) {
-    var c = ['#3fae49', '#56c35a', '#2f9a52', '#6cc24a'][o.c % 4];
-    rr(g, -12, -80, 24, 84, 6); fs(g, '#a0632e', 4);
-    g.beginPath(); g.arc(-38, -110, 44, PI * 0.6, PI * 1.6); g.arc(0, -160, 52, PI * 1.05, TAU * 0.95); g.arc(40, -112, 44, PI * 1.4, PI * 0.45);
-    g.quadraticCurveTo(0, -60, -38, -70); g.closePath(); fs(g, c, 4);
-    if (o.c % 3 === 0) { [[-30, -130], [20, -150], [30, -100], [-10, -100]].forEach(function (p) { circ(g, p[0], p[1], 7); fs(g, RED, 2.5); }); }
-    else { g.beginPath(); g.arc(-10, -150, 22, PI * 1.1, PI * 1.6); st(g, 6, shade(c, 0.3)); }
+    var c = ['#3fae49', '#56c35a', '#2f9a52', '#6cc24a', '#49b864'][o.c % 5];
+    var kind = o.c % 5;
+    if (kind === 2) {
+      // Layered storybook pine
+      rr(g, -10, -56, 20, 60, 5); fs(g, '#8e5528', 4);
+      var pc = ['#2f9a52', '#2b8a4e', '#3da65c'][(o.c >> 2) % 3];
+      poly(g, [-56, -48, 0, -134, 56, -48]); fs(g, pc, 4);
+      poly(g, [-46, -94, 0, -172, 46, -94]); fs(g, shade(pc, 0.1), 4);
+      poly(g, [-34, -138, 0, -204, 34, -138]); fs(g, shade(pc, 0.2), 4);
+      line(g, -12, -166, -2, -190, shade(pc, 0.42), 5);
+      return;
+    }
+    if (kind === 3) {
+      // Tall sunlit oval / blossom tree
+      rr(g, -10, -82, 20, 86, 5); fs(g, '#9a5d2a', 4);
+      ell(g, 0, -136, 46, 66); fs(g, c, 4);
+      g.beginPath(); g.arc(-14, -152, 20, PI * 1.05, PI * 1.65); st(g, 6, shade(c, 0.3));
+      if ((o.c >> 2) % 2) [[-18, -162], [18, -142], [-6, -112], [14, -172]].forEach(function (p) { circ(g, p[0], p[1], 6); fs(g, '#ff9ccc', 2); });
+      return;
+    }
+    var lift = -((o.c >> 2) % 3) * 7;
+    rr(g, -12, -80 - lift * 0.4, 24, 84 + lift * 0.4, 6); fs(g, '#a0632e', 4);
+    g.beginPath();
+    if (kind === 4) {
+      g.arc(-34, -112 - lift, 42, PI * 0.55, PI * 1.55); g.arc(-8, -154 - lift, 44, PI * 1.05, TAU * 0.92);
+      g.arc(36, -124 - lift, 40, PI * 1.35, PI * 0.45); g.quadraticCurveTo(0, -64 - lift, -34, -72 - lift);
+    } else {
+      g.arc(-38, -110 - lift, 44, PI * 0.6, PI * 1.6); g.arc(0, -160 - lift, 50, PI * 1.05, TAU * 0.95);
+      g.arc(40, -112 - lift, 44, PI * 1.4, PI * 0.45); g.quadraticCurveTo(0, -60 - lift, -38, -70 - lift);
+    }
+    g.closePath(); fs(g, c, 4);
+    if (o.c % 4 === 0) { [[-30, -130 - lift], [20, -150 - lift], [30, -100 - lift], [-10, -100 - lift]].forEach(function (p) { circ(g, p[0], p[1], 7); fs(g, RED, 2.5); }); }
+    else { g.beginPath(); g.arc(-10, -150 - lift, 22, PI * 1.1, PI * 1.6); st(g, 6, shade(c, 0.3)); }
   };
   F.bush = function (g, o) {
     var c = ['#4fbf4f', '#3fae49', '#6cc24a'][o.c % 3];
@@ -820,9 +847,9 @@
   }
   B.park = function (g, S, x0, y0, x1, y1) {
     if (y0 < 470) band(g, x0, x1, 0, 470, '#6fcfff', '#d8f4ff');
-    if (y0 < 230 && x1 > 2200) {
-      circ(g, 2380, 120, 66); fs(g, '#ffe066', 5);
-      for (var i = 0; i < 10; i++) { var a = i * TAU / 10; line(g, 2380 + Math.cos(a) * 82, 120 + Math.sin(a) * 82, 2380 + Math.cos(a) * 104, 120 + Math.sin(a) * 104, '#ffcf3a', 8); }
+    if (y0 < 250 && x1 > 1980 && x0 < 2340) {
+      circ(g, 2160, 130, 64); fs(g, '#ffe066', 5);
+      for (var i = 0; i < 10; i++) { var a = i * TAU / 10; line(g, 2160 + Math.cos(a) * 80, 130 + Math.sin(a) * 80, 2160 + Math.cos(a) * 102, 130 + Math.sin(a) * 102, '#ffcf3a', 8); }
     }
     if (y0 < 560 && y1 > 340) {
       g.beginPath(); g.moveTo(0, 470);
@@ -963,10 +990,11 @@
     var k = 1 + bump * 0.18;
     g.save(); g.translate(x + w / 2, y + h / 2); g.scale(k, k); g.translate(-w / 2, -h / 2);
     rr(g, 0, 0, w, h, 18); fs(g, done ? '#d9ffe6' : WH, 4);
-    A.icon(g, e.k, e.v, w / 2, 38, 25);
+    var ir = e.k === 'kite' ? 19.5 : e.k === 'balloon' ? 21 : 23, iy = e.k === 'kite' ? 32 : 35;
+    A.icon(g, e.k, e.v, w / 2, iy, ir);
     var label = SZ.label(e.k, e.v), size = A.fit(g, label, w - 12, 19, 15);
     if (size <= 15 && label !== SZ.noun(e.k)) { label = SZ.noun(e.k); size = A.fit(g, label, w - 12, 19, 13); }
-    A.text(g, label, w / 2, h - 18, size, INK, { stroke: false });
+    A.text(g, label, w / 2, h - 16, size, INK, { stroke: false });
     if (done) {
       circ(g, w - 12, 12, 17); fs(g, '#3ddc84', 4);
       g.beginPath(); g.moveTo(w - 21, 12); g.lineTo(w - 14, 19); g.lineTo(w - 3, 5); g.lineWidth = 5; g.strokeStyle = WH; g.lineCap = 'round'; g.lineJoin = 'round'; g.stroke();

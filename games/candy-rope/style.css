@@ -38,22 +38,23 @@ html[data-sg-motion="reduce"] .hb.glow { animation: none; box-shadow: 0 4px 0 rg
 
 /* ---------- title ---------- */
 .tleft { position: absolute; left: 70px; top: 50%; transform: translateY(-50%); width: 560px; display: flex; flex-direction: column; align-items: center; }
-.logo { margin: 0 0 18px; text-align: center; line-height: 0.82; transform: rotate(-4deg); display: flex; flex-direction: column; align-items: center; }
+.logo { margin: 0 0 14px; text-align: center; line-height: 1.22; gap: 16px; transform: rotate(-2deg); display: flex; flex-direction: column; align-items: center; }
 .logo span { display: flex; gap: 2px; }
-.logo .w2 { margin-left: 90px; }
+.logo .w2 { margin-left: 64px; }
 .logo b {
-  display: inline-block; font-weight: 700; font-size: 128px; color: var(--c);
-  -webkit-text-stroke: 13px #2b1238; paint-order: stroke fill;
-  text-shadow: 0 10px 0 #2b1238, 0 16px 22px rgba(0,0,0,0.3);
+  display: inline-block; font-weight: 700; font-size: 96px; color: var(--c);
+  -webkit-text-stroke: 11px #2b1238; paint-order: stroke fill;
+  text-shadow: 0 9px 0 #2b1238, 0 14px 20px rgba(0,0,0,0.3);
   animation: bob 1.8s ease-in-out infinite; animation-delay: calc(var(--d) * -0.15s);
 }
-@keyframes bob { 0%,100% { transform: translateY(0) rotate(-2deg); } 50% { transform: translateY(-10px) rotate(2deg); } }
+@keyframes bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
 #ui .sg-btn.big { font-size: 46px; padding: 12px 74px; box-shadow: 0 8px 0 #b37800, 0 14px 24px rgba(0,0,0,0.25); animation: pulse 1.2s ease-in-out infinite; }
 #ui .sg-btn.big:hover { animation: none; }
 @keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.06); } }
 .tleft .row { display: flex; gap: 8px; margin-top: 8px; }
 .newdot { position: absolute; top: -10px; right: -12px; background: #ff3b6b; color: #fff; font-style: normal; font-size: 13px; padding: 2px 7px; border-radius: 10px; box-shadow: 0 2px 0 rgba(0,0,0,0.3); animation: pulse 0.8s infinite; }
-.howto { margin-top: 16px; background: rgba(43, 18, 56, 0.72); border: 3px solid rgba(255,255,255,0.25); border-radius: 20px; padding: 10px 20px; font-size: 19px; display: flex; flex-direction: column; gap: 6px; }
+.howto { margin-top: 16px; background: rgba(43, 18, 56, 0.72); border: 3px solid rgba(255,255,255,0.28); border-radius: 999px; padding: 8px 20px; font-size: 18px; font-weight: 700; display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.howto .sg-key { font-size: 14px; padding: 1px 8px; }
 .progress { margin-top: 12px; font-size: 24px; font-weight: 700; text-shadow: 0 3px 0 rgba(43,18,56,0.7); }
 .progress .st { color: #ffd21f; }
 .ttry { position: absolute; left: 1060px; top: 150px; width: 190px; text-align: center; font-size: 20px; font-weight: 700; color: #5b3210; background: rgba(255,248,215,0.75); border-radius: 16px; padding: 6px 10px; transform: rotate(4deg); pointer-events: none !important; }

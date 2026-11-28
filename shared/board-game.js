@@ -10,6 +10,7 @@
   var mode = 'menu', state = rules.create(game), startingSeat = 1;
   var paused = false;
   var aiTimer = null, dropTimer = null, fallingCell = null, confetti = null, confettiTimer = null, unlanded = false;
+  var demoTimer = null, demoStep = 0;
   var cells = [], moveButtons = [], pendingBoardFocus = null;
   var levels = ['easy', 'medium', 'hard'], levelNames = { easy: 'سهل', medium: 'متوسط', hard: 'صعب' };
   var personas = {
@@ -30,36 +31,37 @@
     var eyes, mouth, extra = '';
     if (kind === 'hero' || kind === 'player2') {
       var gold = kind === 'hero';
-      var shell = gold ? '#ffc93c' : '#ff5970';
-      var rim = gold ? '#9a5b04' : '#8f1329';
-      var shine = gold ? '#fff3a8' : '#ffb8c3';
+      var shell = gold ? '#ffd43b' : '#ff5470';
+      var rim = '#241b42';
+      var shine = gold ? '#fff8cc' : '#ffc2ce';
       var accent = gold ? '#38bdf8' : '#fde047';
+      var cheek = gold ? '#fb923c88' : '#fda4afaa';
       if (mood === 'happy') {
-        eyes = '<path d="M12.5 22.5q2.5-3 5 0M22.5 22.5q2.5-3 5 0" fill="none" stroke="' + accent + '" stroke-width="2.4" stroke-linecap="round"/>';
-        mouth = '<path d="M15.5 27.2q4.5 4 9 0" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/>';
+        eyes = '<path d="M12.5 22.5q2.5-3.2 5 0M22.5 22.5q2.5-3.2 5 0" fill="none" stroke="' + accent + '" stroke-width="2.5" stroke-linecap="round"/>';
+        mouth = '<path d="M15.2 27q4.8 4.4 9.6 0" fill="none" stroke="#fff" stroke-width="2.3" stroke-linecap="round"/>';
       } else if (mood === 'shocked') {
-        eyes = '<circle cx="15" cy="22" r="3.1" fill="#fff"/><circle cx="15" cy="22" r="1.3" fill="#0b132b"/><circle cx="25" cy="22" r="3.1" fill="#fff"/><circle cx="25" cy="22" r="1.3" fill="#0b132b"/>';
-        mouth = '<circle cx="20" cy="28" r="2.2" fill="#ff6b81"/>';
+        eyes = '<circle cx="15" cy="22" r="3.2" fill="#fff"/><circle cx="15" cy="22" r="1.4" fill="#131c3d"/><circle cx="25" cy="22" r="3.2" fill="#fff"/><circle cx="25" cy="22" r="1.4" fill="#131c3d"/>';
+        mouth = '<circle cx="20" cy="28" r="2.3" fill="#ff6b81"/>';
       } else {
-        eyes = '<circle cx="15" cy="22" r="2.4" fill="' + accent + '"/><circle cx="14.2" cy="21.1" r=".9" fill="#fff"/><circle cx="25" cy="22" r="2.4" fill="' + accent + '"/><circle cx="24.2" cy="21.1" r=".9" fill="#fff"/>';
-        mouth = '<path d="M16.5 27.3q3.5 2.4 7 0" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"/>';
+        eyes = '<circle cx="15" cy="22" r="2.6" fill="' + accent + '"/><circle cx="14.1" cy="21" r="1" fill="#fff"/><circle cx="25" cy="22" r="2.6" fill="' + accent + '"/><circle cx="24.1" cy="21" r="1" fill="#fff"/>';
+        mouth = '<path d="M16.2 27.2q3.8 2.8 7.6 0" fill="none" stroke="#fff" stroke-width="2.1" stroke-linecap="round"/>';
       }
       var crest = gold
-        ? '<path d="M20 4.5l1.7 3.4 3.8.5-2.7 2.6.6 3.7L20 13l-3.4 1.7.6-3.7-2.7-2.6 3.8-.5Z" fill="#fff3a8" stroke="' + rim + '" stroke-width="1.3" stroke-linejoin="round"/>'
-        : '<path d="M21.5 4.2L17 11h3.2l-1.5 4.8L24 9.5h-3.1Z" fill="#fde047" stroke="' + rim + '" stroke-width="1.2" stroke-linejoin="round"/>';
-      return '<svg viewBox="0 0 40 40"><circle cx="20" cy="22" r="14.5" fill="' + shell + '" stroke="' + rim + '" stroke-width="2.4"/>' +
-        '<path d="M9.5 16.5q4-6 12-6.5" fill="none" stroke="' + shine + '" stroke-width="2.4" stroke-linecap="round"/>' +
-        '<rect x="9" y="17" width="22" height="14" rx="6.5" fill="#131c3d" stroke="' + rim + '" stroke-width="2"/>' +
+        ? '<path d="M20 3.8l1.8 3.6 4 .5-2.9 2.8.7 3.9L20 12.8l-3.6 1.8.7-3.9-2.9-2.8 4-.5Z" fill="#fff3a8" stroke="' + rim + '" stroke-width="1.5" stroke-linejoin="round"/>'
+        : '<path d="M21.8 3.6L16.8 11h3.4l-1.6 5.1L24.4 9.4h-3.3Z" fill="#fde047" stroke="' + rim + '" stroke-width="1.4" stroke-linejoin="round"/>';
+      return '<svg viewBox="0 0 40 40"><circle cx="20" cy="22.2" r="14.6" fill="' + shell + '" stroke="' + rim + '" stroke-width="2.5"/>' +
+        '<path d="M9.8 16q4-5.8 11.6-6.2" fill="none" stroke="' + shine + '" stroke-width="2.6" stroke-linecap="round"/>' +
+        '<rect x="8.8" y="16.8" width="22.4" height="14.4" rx="6.8" fill="#182046" stroke="' + rim + '" stroke-width="2.1"/>' +
+        '<circle cx="11.5" cy="26.5" r="1.7" fill="' + cheek + '"/><circle cx="28.5" cy="26.5" r="1.7" fill="' + cheek + '"/>' +
         eyes + mouth + crest + '</svg>';
     }
     if (kind === 'easy') {
-      // Sleepy Bot: mint robot with drooping nightcap antenna
       var ant = mood === 'shocked'
-        ? '<path d="M20 10V3.5" stroke="#0f766e" stroke-width="2.4" stroke-linecap="round"/><circle cx="20" cy="3.5" r="2.8" fill="#fde047" stroke="#0f766e" stroke-width="1.5"/>'
-        : '<path d="M20 10c0-5.5 8.5-5.5 9.5-1" fill="none" stroke="#0f766e" stroke-width="2.4" stroke-linecap="round"/><circle cx="29.8" cy="10" r="2.8" fill="#fde047" stroke="#0f766e" stroke-width="1.5"/>';
+        ? '<path d="M20 10V3.5" stroke="#241b42" stroke-width="2.5" stroke-linecap="round"/><circle cx="20" cy="3.5" r="2.9" fill="#fde047" stroke="#241b42" stroke-width="1.6"/>'
+        : '<path d="M20 10c0-5.5 8.5-5.5 9.5-1" fill="none" stroke="#241b42" stroke-width="2.5" stroke-linecap="round"/><circle cx="29.8" cy="10" r="2.9" fill="#fde047" stroke="#241b42" stroke-width="1.6"/>';
       if (mood === 'happy') {
-        eyes = '<path d="M12.5 22.5q2.5-3 5 0M22.5 22.5q2.5-3 5 0" fill="none" stroke="#5eead4" stroke-width="2.3" stroke-linecap="round"/>';
-        mouth = '<path d="M15.5 27.5q4.5 3.6 9 0" fill="none" stroke="#5eead4" stroke-width="2.1" stroke-linecap="round"/>';
+        eyes = '<path d="M12.5 22.5q2.5-3 5 0M22.5 22.5q2.5-3 5 0" fill="none" stroke="#5eead4" stroke-width="2.4" stroke-linecap="round"/>';
+        mouth = '<path d="M15.5 27.5q4.5 3.6 9 0" fill="none" stroke="#5eead4" stroke-width="2.2" stroke-linecap="round"/>';
       } else if (mood === 'shocked') {
         eyes = '<circle cx="15" cy="21.8" r="3.3" fill="#fff"/><circle cx="15" cy="21.8" r="1.3" fill="#0f172a"/><circle cx="25" cy="21.8" r="3.3" fill="#fff"/><circle cx="25" cy="21.8" r="1.3" fill="#0f172a"/>';
         mouth = '<rect x="17" y="26.5" width="6" height="3.8" rx="1.9" fill="#fb7185"/>';
@@ -69,16 +71,16 @@
       } else {
         eyes = '<circle cx="15" cy="22.5" r="2.3" fill="#5eead4"/><path d="M12 20.8h6" stroke="#132238" stroke-width="2.4"/><line x1="12.3" y1="21.2" x2="17.7" y2="21.8" stroke="#5eead4" stroke-width="1.8" stroke-linecap="round"/>' +
           '<circle cx="25" cy="22.5" r="2.3" fill="#5eead4"/><path d="M22 20.8h6" stroke="#132238" stroke-width="2.4"/><line x1="22.3" y1="21.8" x2="27.7" y2="21.2" stroke="#5eead4" stroke-width="1.8" stroke-linecap="round"/>';
-        mouth = '<path d="M16.5 28q1.8-1.4 3.5 0t3.5 0" fill="none" stroke="#99f6e4" stroke-width="1.9" stroke-linecap="round"/>';
+        mouth = '<path d="M16.5 28q1.8-1.4 3.5 0t3.5 0" fill="none" stroke="#99f6e4" stroke-width="2" stroke-linecap="round"/>';
       }
       return '<svg viewBox="0 0 40 40">' + ant +
-        '<rect x="4.5" y="19" width="3.5" height="7" rx="1.7" fill="#14b8a6" stroke="#0f766e" stroke-width="1.6"/>' +
-        '<rect x="32" y="19" width="3.5" height="7" rx="1.7" fill="#14b8a6" stroke="#0f766e" stroke-width="1.6"/>' +
-        '<rect x="7" y="10" width="26" height="24" rx="9" fill="#2dd4bf" stroke="#0f766e" stroke-width="2.4"/>' +
+        '<rect x="4.5" y="19" width="3.6" height="7.2" rx="1.8" fill="#14b8a6" stroke="#241b42" stroke-width="1.8"/>' +
+        '<rect x="31.9" y="19" width="3.6" height="7.2" rx="1.8" fill="#14b8a6" stroke="#241b42" stroke-width="1.8"/>' +
+        '<rect x="7" y="10" width="26" height="24.2" rx="9" fill="#2dd4bf" stroke="#241b42" stroke-width="2.5"/>' +
+        '<path d="M11 13h10" stroke="#99f6e4" stroke-width="2.2" stroke-linecap="round"/>' +
         '<rect x="10" y="15.5" width="20" height="15" rx="5.5" fill="#132238"/>' + eyes + mouth + '</svg>';
     }
     if (kind === 'medium') {
-      // Cheeky Bot: vibrant orange bot with lightning side-coils & mischievous visor
       if (mood === 'happy') {
         eyes = '<path d="M12.2 22.5l2.6-2.5 2.6 2.5M22.6 22.5l2.6-2.5 2.6 2.5" fill="none" stroke="#38bdf8" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>';
         mouth = '<path d="M14 26.8h12c-.5 3.5-11.5 3.5-12 0Z" fill="#fde047"/>';
@@ -93,12 +95,12 @@
         mouth = '<path d="M14.5 27.3l2.7 1.5 2.8-1.5 2.8 1.5 2.7-1.5" fill="none" stroke="#fde047" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>';
       }
       return '<svg viewBox="0 0 40 40">' +
-        '<path d="M20 4l-2.2 5h4.4Z" fill="#fde047" stroke="#9a3412" stroke-width="1.5" stroke-linejoin="round"/>' +
-        '<path d="M3.5 18l4 2.5-3 3.5M36.5 18l-4 2.5 3 3.5" fill="none" stroke="#fde047" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>' +
-        '<rect x="7" y="9.5" width="26" height="24.5" rx="7.5" fill="#fb923c" stroke="#9a3412" stroke-width="2.4"/>' +
+        '<path d="M20 3.8l-2.4 5.2h4.8Z" fill="#fde047" stroke="#241b42" stroke-width="1.6" stroke-linejoin="round"/>' +
+        '<path d="M3.5 18l4 2.5-3 3.5M36.5 18l-4 2.5 3 3.5" fill="none" stroke="#f59e0b" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>' +
+        '<rect x="7" y="9.5" width="26" height="24.5" rx="7.5" fill="#fb923c" stroke="#241b42" stroke-width="2.5"/>' +
+        '<path d="M11 12.5h10" stroke="#fed7aa" stroke-width="2.2" stroke-linecap="round"/>' +
         '<rect x="10" y="15.5" width="20" height="15.5" rx="5" fill="#1b1433"/>' + eyes + mouth + '</svg>';
     }
-    // Hard: Professor Mech — royal indigo mech with golden crown & glowing monocle
     var monocle = mood === 'shocked'
       ? '<circle cx="28" cy="18.5" r="4.6" fill="#fde04726" stroke="#facc15" stroke-width="2"/>'
       : '<circle cx="25" cy="21.5" r="4.7" fill="#fde04722" stroke="#facc15" stroke-width="2"/><line x1="29.5" y1="23" x2="31.5" y2="29" stroke="#facc15" stroke-width="1.5"/>';
@@ -115,9 +117,10 @@
       eyes = '<polygon points="12.3,20.2 17.8,21.3 12.8,23" fill="#facc15"/><circle cx="25" cy="21.5" r="2.2" fill="#facc15"/>';
       mouth = '<path d="M16 27.8q4.5 1.4 8.2-1" fill="none" stroke="#fde047" stroke-width="2" stroke-linecap="round"/>';
     }
-    extra = '<path d="M12.5 10.2L14 4.2l6 3.6 6-3.6 1.5 6Z" fill="#facc15" stroke="#854d0e" stroke-width="1.6" stroke-linejoin="round"/>';
+    extra = '<path d="M12.5 10.2L14 4l6 3.6L26 4l1.5 6.2Z" fill="#facc15" stroke="#241b42" stroke-width="1.7" stroke-linejoin="round"/>';
     return '<svg viewBox="0 0 40 40">' + extra +
-      '<rect x="7" y="9.8" width="26" height="24.5" rx="7.5" fill="#6366f1" stroke="#312e81" stroke-width="2.4"/>' +
+      '<rect x="7" y="9.8" width="26" height="24.5" rx="7.5" fill="#6366f1" stroke="#241b42" stroke-width="2.5"/>' +
+      '<path d="M11 12.8h10" stroke="#c7d2fe" stroke-width="2.2" stroke-linecap="round"/>' +
       '<rect x="10" y="15.5" width="20" height="15.5" rx="5" fill="#13112e"/>' + eyes + mouth + monocle + '</svg>';
   }
 
@@ -138,48 +141,102 @@
   }
 
   document.documentElement.classList.add(game);
-  app.innerHTML = '<header class="game-header"><div class="header-copy"><div class="title-row"><h1>' + title + '</h1>' +
+  app.innerHTML =
+    '<header class="game-header"><div class="title-row"><h1>' + title + '</h1>' +
       '<span id="twistBadge" class="twist-badge" hidden>' + (isConnect ? 'أقراص القوة ⚡' : 'المتلاشية ⚡') + '</span></div>' +
-      '<p id="headerSub">' + (isConnect ? 'اجمع 4 أقراص في صف واحد لتفوز!' : 'اجمع 3 علامات في صف واحد لتفوز!') + '</p></div>' +
-      '<button id="soundButton" class="sound-button" type="button">الصوت: يعمل</button></header>' +
-    '<div class="play-layout"><aside class="game-menu" aria-labelledby="modeTitle">' +
-      '<div><h2 id="modeTitle">كيف تريد أن تلعب؟</h2><p id="modeDescription" class="mode-description">اختر طريقة اللعب وابدأ فوراً.</p></div>' +
-      '<div id="variantBox" class="variant-box"><div id="variantChoices" class="variant-choices" role="group" aria-label="نمط اللعب">' +
-        '<button type="button" data-variant="classic" aria-pressed="true">كلاسيكي</button>' +
-        '<button type="button" data-variant="twist" aria-pressed="false">' + (isConnect ? 'أقراص القوة ⚡' : 'متلاشية ⚡') + '</button></div></div>' +
-      '<div id="levelBox" class="level-box"><div class="level-choices" role="group" aria-label="مستوى الكمبيوتر">' + levels.map(function (name) {
-        return '<button type="button" data-level="' + name + '">' + levelNames[name] + '</button>';
-      }).join('') + '</div>' +
-        '<div id="rivalCard" class="rival-card"><span id="rivalAvatar" class="rival-mini-avatar" aria-hidden="true"></span>' +
-          '<div class="rival-meta"><strong id="rivalName"></strong><span id="rivalDesc"></span></div></div>' +
-        '<p id="levelTally" class="level-tally">انتصاراتك: <span id="levelWins"></span></p></div>' +
-      (isConnect ? '<div id="powerBar" class="power-bar" role="group" aria-label="أقراص القوة" hidden>' +
-        '<button type="button" id="powerAnvil" class="power-btn anvil" data-power="anvil" aria-pressed="false">' +
-          '<span class="power-emo" aria-hidden="true">💥</span><span class="power-name">مطرقة</span><b id="anvilCount" class="power-count">1</b></button>' +
-        '<button type="button" id="powerZap" class="power-btn zap" data-power="zap" aria-pressed="false">' +
-          '<span class="power-emo" aria-hidden="true">⚡</span><span class="power-name">برق</span><b id="zapCount" class="power-count">1</b></button></div>' : '') +
-      '<div id="modeChoices" class="mode-choices">' +
-        (isConnect
-          ? '<button id="pcButton" class="button" type="button">العب ضد الكمبيوتر</button><button id="localButton" class="button secondary" type="button">لاعبان على نفس الجهاز</button>'
-          : '<button id="localButton" class="button" type="button">لاعبان على نفس الجهاز</button><button id="pcButton" class="button secondary" type="button">العب ضد الكمبيوتر</button>') +
-      '</div>' +
-      '<div class="player-guide"><p><span class="guide-token one" aria-hidden="true">' + (isConnect ? '★' : 'X') + '</span><span id="guide1">اللاعب الأول</span><span>' + (isConnect ? 'الأصفر' : 'إكس') + '</span></p>' +
-        '<p><span class="guide-token two" aria-hidden="true">' + (isConnect ? '⚡' : 'O') + '</span><span id="guide2">اللاعب الثاني</span><span>' + (isConnect ? 'الأحمر' : 'دائرة') + '</span></p></div>' +
-      '<p class="keyboard-hint">الأسهم للتنقل · Enter للعب<br>P للاستراحة · M للصوت</p></aside>' +
-      '<section class="board-area" aria-label="لوحة اللعب"><div class="round-bar">' +
-        '<div id="seat1" class="seat"><span id="seat1Avatar" class="seat-avatar" aria-hidden="true"></span><span class="seat-token" aria-hidden="true">' + (isConnect ? '★' : 'X') + '</span><span id="seat1Name">اللاعب الأول</span><b id="score1" class="score">0</b></div>' +
-        '<span class="versus">ضد</span><div id="seat2" class="seat"><span id="seat2Avatar" class="seat-avatar" aria-hidden="true"></span><span class="seat-token second" aria-hidden="true">' + (isConnect ? '⚡' : 'O') + '</span><span id="seat2Name">اللاعب الثاني</span><b id="score2" class="score">0</b></div></div>' +
-        '<div class="board-wrap"><div id="gameBoard" class="game-board ' + (isConnect ? 'connect-board' : 'tic-board') + '" role="group" aria-label="' + title + '"></div>' +
-          '<svg id="winBeam" class="win-beam" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true" hidden>' +
-            '<line id="winBeamGlow" class="beam-glow" x1="0" y1="0" x2="0" y2="0"/><line id="winBeamCore" class="beam-core" x1="0" y1="0" x2="0" y2="0"/></svg>' +
-          '<div id="pauseLayer" class="pause-layer" hidden><h2>استراحة قصيرة</h2><button id="resumeButton" class="button" type="button">متابعة اللعب</button></div></div>' +
-        '<p id="turnLine" class="turn-line" role="status" aria-live="polite"></p><p id="boardHint" class="board-hint"></p>' +
+      '<p id="headerSub">' + (isConnect ? 'اجمع 4 أقراص في صف واحد لتفوز!' : 'اجمع 3 علامات في صف واحد لتفوز!') + '</p></header>' +
+    '<span id="playTwistPill" class="twist-badge play-twist-pill" hidden>' + (isConnect ? 'أقراص القوة ⚡' : 'المتلاشية ⚡') + '</span>' +
+    '<div class="play-layout"><div class="arena-row">' +
+      '<div class="flank flank-one"><div id="seat1" class="seat">' +
+        '<span id="seat1Bubble" class="seat-bubble" aria-hidden="true">جاهز! ✨</span>' +
+        '<span id="seat1Avatar" class="seat-avatar" aria-hidden="true"></span>' +
+        '<div class="seat-name-row"><span class="seat-token" aria-hidden="true">' + (isConnect ? '★' : 'X') + '</span>' +
+          '<span id="seat1Name">اللاعب الأول</span></div>' +
+        '<b id="score1" class="score">0</b></div></div>' +
+      '<section class="board-col" aria-label="لوحة اللعب"><div class="board-wrap">' +
+        '<div id="gameBoard" class="game-board ' + (isConnect ? 'connect-board' : 'tic-board') + '" role="group" aria-label="' + title + '"></div>' +
+        '<svg id="winBeam" class="win-beam" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true" hidden>' +
+          '<line id="winBeamGlow" class="beam-glow" x1="0" y1="0" x2="0" y2="0"/><line id="winBeamCore" class="beam-core" x1="0" y1="0" x2="0" y2="0"/></svg>' +
+        '<div id="pauseLayer" class="pause-layer" hidden><h2>استراحة قصيرة</h2><button id="resumeButton" class="button" type="button">متابعة اللعب</button></div></div>' +
+        (isConnect ? '<div id="powerBar" class="power-bar" role="group" aria-label="أقراص القوة" hidden>' +
+          '<button type="button" id="powerAnvil" class="power-btn anvil" data-power="anvil" aria-pressed="false">' +
+            '<span class="power-emo" aria-hidden="true">💥</span><span class="power-name">مطرقة</span><b id="anvilCount" class="power-count">1</b></button>' +
+          '<button type="button" id="powerZap" class="power-btn zap" data-power="zap" aria-pressed="false">' +
+            '<span class="power-emo" aria-hidden="true">⚡</span><span class="power-name">برق</span><b id="zapCount" class="power-count">1</b></button></div>' : '') +
+      '</section>' +
+      '<div class="flank flank-two"><div id="seat2" class="seat">' +
+        '<span id="seat2Bubble" class="seat-bubble" aria-hidden="true">تحدّاني! 🤖</span>' +
+        '<span id="seat2Avatar" class="seat-avatar" aria-hidden="true"></span>' +
+        '<div class="seat-name-row"><span class="seat-token second" aria-hidden="true">' + (isConnect ? '⚡' : 'O') + '</span>' +
+          '<span id="seat2Name">اللاعب الثاني</span></div>' +
+        '<b id="score2" class="score">0</b></div>' +
+        '<div id="levelBox" class="level-box" hidden>' +
+          '<p id="modeDescription" class="mode-description">اختر مستوى الكمبيوتر:</p>' +
+          '<div class="level-choices" role="group" aria-label="مستوى الكمبيوتر">' + levels.map(function (name) {
+            return '<button type="button" data-level="' + name + '">' + levelNames[name] + '</button>';
+          }).join('') + '</div>' +
+          '<div id="rivalCard" class="rival-card"><span id="rivalAvatar" class="rival-mini-avatar" aria-hidden="true"></span>' +
+            '<div class="rival-meta"><strong id="rivalName"></strong><span id="rivalDesc"></span></div></div>' +
+          '<p id="levelTally" class="level-tally">انتصاراتك: <span id="levelWins"></span></p></div></div></div>' +
+      '<div class="bottom-dock">' +
+        '<div id="titleDock" class="title-dock">' +
+          '<div id="variantBox" class="variant-box"><div id="variantChoices" class="variant-choices" role="group" aria-label="نمط اللعب">' +
+            '<button type="button" data-variant="classic" aria-pressed="true">كلاسيكي</button>' +
+            '<button type="button" data-variant="twist" aria-pressed="false">' + (isConnect ? 'أقراص القوة ⚡' : 'متلاشية ⚡') + '</button></div></div>' +
+          '<div id="modeChoices" class="mode-choices">' +
+            '<button id="pcButton" class="button" type="button">▶ العب ضد الروبوت</button>' +
+            '<button id="localButton" class="button secondary" type="button">👥 لاعبان على نفس الجهاز</button></div></div>' +
+        '<div class="play-status"><p id="turnLine" class="turn-line" role="status" aria-live="polite"></p><p id="boardHint" class="board-hint"></p></div>' +
         '<div class="match-actions"><button id="rematchButton" class="button" type="button" hidden>العب مرة أخرى</button>' +
           '<button id="pauseButton" class="button secondary" type="button" hidden>استراحة</button>' +
-          '<button id="leaveMatch" class="button secondary" type="button" hidden>تغيير طريقة اللعب</button></div></section></div>';
+          '<button id="leaveMatch" class="button secondary" type="button" hidden>تغيير طريقة اللعب</button></div></div></div>';
 
   function el(id) { return document.getElementById(id); }
   function finished() { return !!(state.winner || state.draw); }
+
+  /* ---------- Silent Live Attract Demo on Title Screen (Zero-BGM safe) ---------- */
+  // Pre-seeded lively board + gentle looping demo moves while mode === 'menu'.
+  var DEMO_BASE = isConnect
+    ? [[38, 1], [37, 2], [39, 1], [31, 2], [30, 1], [40, 2], [24, 1], [32, 2]]
+    : [[0, 1], [4, 2], [8, 1], [2, 2]];
+  var DEMO_SEQ = isConnect
+    ? [[23, 1], [25, 2], [17, 1], [18, 2]]
+    : [[6, 1], [3, 2], [7, 1]];
+
+  function clearDemoMarks() {
+    for (var i = 0; i < cells.length; i++) {
+      cells[i].classList.remove('demo-one', 'demo-two', 'demo-drop');
+    }
+  }
+  function paintDemo(animateIdx) {
+    if (mode !== 'menu') return;
+    clearDemoMarks();
+    var items = DEMO_BASE.concat(DEMO_SEQ.slice(0, demoStep));
+    for (var i = 0; i < items.length; i++) {
+      var idx = items[i][0], who = items[i][1];
+      if (!cells[idx]) continue;
+      cells[idx].classList.add(who === 1 ? 'demo-one' : 'demo-two');
+      if (animateIdx === idx) cells[idx].classList.add('demo-drop');
+    }
+  }
+  function stopDemo() {
+    clearInterval(demoTimer); demoTimer = null;
+    clearDemoMarks();
+  }
+  function startDemo() {
+    stopDemo();
+    if (mode !== 'menu') return;
+    demoStep = 1;
+    paintDemo(-1);
+    if (Kit.motion.reduced() || document.hidden) return;
+    demoTimer = setInterval(function () {
+      if (mode !== 'menu' || document.hidden || Kit.motion.reduced()) return;
+      demoStep = (demoStep + 1) % (DEMO_SEQ.length + 1);
+      var last = demoStep > 0 ? DEMO_SEQ[demoStep - 1][0] : -1;
+      paintDemo(last);
+    }, 1300);
+  }
+
   // Saved progress against the computer: { level, wins: { easy, medium, hard } }.
   function loadProgress() {
     var saved = store.get('progress', null) || {}, wins = {};
@@ -353,6 +410,7 @@
     return seat === 1 ? 'اللاعب الأول' : 'اللاعب الثاني';
   }
   function seatDisplayName(seat) {
+    if (mode === 'menu') return seat === 1 ? 'أنت' : personas[level].name;
     if (mode === 'computer' && seat === 2) return personas[roundLevel].name;
     return playerLabel(seat);
   }
@@ -398,21 +456,30 @@
     beam.removeAttribute('hidden');
   }
   function renderAvatars() {
-    var seat2Kind = mode === 'computer' ? roundLevel : 'player2';
+    var seat2Kind = mode === 'menu' ? level : (mode === 'computer' ? roundLevel : 'player2');
     var mood1 = 'idle', mood2 = 'idle';
+    var b1 = 'جاهز! ✨', b2 = 'تحدّاني! 🤖';
     if (mode !== 'menu') {
       if (finished()) {
-        if (state.draw) { mood1 = 'shocked'; mood2 = 'shocked'; }
-        else if (state.winner === 1) { mood1 = 'happy'; mood2 = 'shocked'; }
-        else { mood1 = 'shocked'; mood2 = 'happy'; }
+        if (state.draw) { mood1 = 'shocked'; mood2 = 'shocked'; b1 = 'تعادل!'; b2 = 'تعادل!'; }
+        else if (state.winner === 1) { mood1 = 'happy'; mood2 = 'shocked'; b1 = 'فوز! 🏆'; b2 = 'أوه! 😮'; }
+        else { mood1 = 'shocked'; mood2 = 'happy'; b1 = 'قريب!'; b2 = 'فوز! 🏆'; }
       } else if (!paused) {
-        if (state.turn === 1) mood1 = 'active';
-        else mood2 = mode === 'computer' ? 'thinking' : 'active';
+        if (state.turn === 1) { mood1 = 'active'; b1 = 'دورك! ▶'; b2 = 'انتظار…'; }
+        else {
+          mood2 = mode === 'computer' ? 'thinking' : 'active';
+          b1 = 'انتظار…';
+          b2 = mode === 'computer' ? 'يفكّر…' : 'دورك! ▶';
+        }
+      } else {
+        b1 = 'استراحة'; b2 = 'استراحة';
       }
     }
     setAvatar('seat1Avatar', 'hero', mood1);
     setAvatar('seat2Avatar', seat2Kind, mood2);
     setAvatar('rivalAvatar', level, mode === 'computer' && level === roundLevel ? mood2 : 'idle');
+    el('seat1Bubble').textContent = b1;
+    el('seat2Bubble').textContent = b2;
     el('rivalName').textContent = personas[level].name;
     el('rivalDesc').textContent = personas[level].desc;
   }
@@ -424,6 +491,7 @@
     app.dataset.power = selectedPower || '';
     app.dataset.paused = String(paused);
     el('twistBadge').hidden = activeVariant !== 'twist';
+    el('playTwistPill').hidden = mode === 'menu' || activeVariant !== 'twist';
     el('headerSub').textContent = activeVariant === 'twist'
       ? (isConnect ? 'طور أقراص القوة ⚡ استعمل المطرقة والبرق واجمع 4 لتفوز!' : 'طور المتلاشية ⚡ 3 علامات لكل لاعب بلا تعادل!')
       : (isConnect ? 'اجمع 4 أقراص في صف واحد لتفوز!' : 'اجمع 3 علامات في صف واحد لتفوز!');
@@ -475,7 +543,6 @@
     [1, 2].forEach(function (seat) {
       el('seat' + seat).classList.toggle('active', mode !== 'menu' && state.turn === seat && !finished());
       el('seat' + seat + 'Name').textContent = seatDisplayName(seat);
-      el('guide' + seat).textContent = seatDisplayName(seat);
       el('score' + seat).textContent = String(score[seat]);
     });
     renderAvatars();
@@ -509,7 +576,6 @@
       button.classList.toggle('playing', level !== roundLevel && button.dataset.level === roundLevel);
     });
     el('levelWins').textContent = levels.map(function (name) { return levelNames[name] + '\u00a0' + progress.wins[name]; }).join(' · ');
-    el('modeTitle').textContent = mode === 'menu' ? 'كيف تريد أن تلعب؟' : mode === 'local' ? 'لاعبان على نفس الجهاز' : 'العب ضد الكمبيوتر';
     el('modeDescription').textContent = mode === 'menu' ? 'اختر طريقة اللعب وابدأ فوراً.' : mode === 'local' ? 'تبادلا الأدوار باستخدام نفس الفأرة.' : level !== roundLevel ? 'يبدأ «' + levelNames[level] + '» في الجولة التالية.' : 'اختر مستوى الكمبيوتر:';
     var turnText, hint = isConnect ? 'اضغط على أي عمود لإسقاط قرصك.' : 'اضغط على مربع فارغ لوضع علامتك.';
     if (activeVariant === 'twist' && mode !== 'menu' && !finished() && !paused) {
@@ -522,10 +588,8 @@
       }
     }
     if (mode === 'menu') {
-      turnText = 'اختر طريقة اللعب للبدء';
-      hint = activeVariant === 'twist'
-        ? (isConnect ? 'لكل لاعب قرص مطرقة 💥 وقرص برق ⚡ لقلب الموازين!' : 'تختفي أقدم علامة بعد الثالثة… مواجهة بلا تعادل!')
-        : (isConnect ? 'أفقياً، عمودياً أو قطرياً… أول 4 يفوز!' : 'أفقياً، عمودياً أو قطرياً… أول 3 يفوز!');
+      turnText = '';
+      hint = '';
     } else if (finished()) {
       turnText = state.draw ? 'تعادل! جولة أخرى؟' : mode === 'local' ? 'فاز ' + playerLabel(state.winner) + ' — ' + tokenLabel(state.winner) + '!' :
         state.winner !== 1 ? 'فاز الكمبيوتر… جرّب مرة أخرى!' : firstWin ? 'جديد! هزمت الكمبيوتر ال' + levelNames[roundLevel] + '!' : 'فزت! أحسنت اللعب!';
@@ -573,7 +637,7 @@
     }, 420);
   }
   function newRound() {
-    stopTimers(); pendingBoardFocus = null; roundVariant = variant; selectedPower = null;
+    stopTimers(); stopDemo(); pendingBoardFocus = null; roundVariant = variant; selectedPower = null;
     state = createState(roundVariant); state.turn = startingSeat;
     paused = false; firstWin = false; counted = false; roundLevel = level;
     renderBoard(); scheduleComputer(); focusBoard();
@@ -586,7 +650,7 @@
     if ((value !== 'classic' && value !== 'twist') || value === variant) return;
     variant = value;
     if (juice) juice.toggle(variant === 'twist');
-    if (mode === 'menu') { roundVariant = variant; selectedPower = null; state = createState(variant); renderBoard(); }
+    if (mode === 'menu') { roundVariant = variant; selectedPower = null; state = createState(variant); renderBoard(); paintDemo(-1); }
   }
   function togglePower(power) {
     if (!isConnect || roundVariant !== 'twist' || !canMove() || !state.powers) return;
@@ -608,7 +672,7 @@
     if (juice) juice.back();
     stopTimers(); pendingBoardFocus = null; mode = 'menu'; roundVariant = variant; selectedPower = null;
     state = createState(variant); startingSeat = 1; score = { 1: 0, 2: 0 };
-    paused = false; renderBoard(); el(isConnect ? 'pcButton' : 'localButton').focus();
+    paused = false; renderBoard(); startDemo(); el('pcButton').focus();
   }
   function pause(value, moveFocus) {
     if (mode === 'menu' || finished()) return;
@@ -645,17 +709,14 @@
     startingSeat = 3 - startingSeat;
     newRound();
   });
-  // Kit's mute button and preference updates, with the board's text label.
-  var soundPlaceholder = el('soundButton'), soundButton = Kit.muteButton({ key: false });
-  soundButton.id = 'soundButton'; soundButton.className = 'sound-button';
-  soundButton.removeAttribute('aria-label');
-  soundPlaceholder.parentNode.replaceChild(soundButton, soundPlaceholder);
-  function renderSound() {
-    soundButton.textContent = Kit.audio.muted ? 'الصوت: مغلق' : 'الصوت: يعمل';
-    soundButton.setAttribute('aria-pressed', String(!Kit.audio.muted));
-  }
-  Kit.audio.onMuteChange(renderSound);
-  Kit.motion.onChange(function (reduced) { if (reduced) clearConfetti(); });
+  // Crisp circular icon mute button powered by Kit.muteButton (zero text-only mute banner).
+  var soundButton = Kit.muteButton({ key: false });
+  soundButton.id = 'soundButton';
+  soundButton.className = 'sg-mute sound-button';
+  Kit.motion.onChange(function (reduced) {
+    if (reduced) { clearConfetti(); if (mode === 'menu') { clearInterval(demoTimer); demoTimer = null; paintDemo(-1); } }
+    else if (mode === 'menu') startDemo();
+  });
   window.addEventListener('resize', function () { if (finished() && !fallingCell) updateWinBeam(); });
   // A delayed disc or computer move must not steal focus from another control.
   document.addEventListener('focusin', function (event) {
@@ -684,19 +745,22 @@
     if (document.hidden) {
       if (mode !== 'menu' && !paused && !finished()) pause(true, false);
       stopTimers(true);
+      if (mode === 'menu') { clearInterval(demoTimer); demoTimer = null; }
+    } else if (mode === 'menu') {
+      startDemo();
     }
     renderBoard(); landLater();
   });
   window.addEventListener('pagehide', function () {
     if (mode !== 'menu' && !paused && !finished()) paused = true;
-    stopTimers(true); renderBoard();
+    stopTimers(true); clearInterval(demoTimer); demoTimer = null; renderBoard();
   });
   window.addEventListener('pageshow', function (event) {
     if (!event.persisted || document.hidden) return;
     // A restored page remains paused until the player explicitly resumes.
-    renderBoard(); scheduleComputer(); landLater();
+    renderBoard(); scheduleComputer(); landLater(); if (mode === 'menu') startDemo();
   });
-  makeBoard(); renderSound(); renderBoard();
+  makeBoard(); renderBoard(); startDemo();
   Kit.lifecycle({ pause: function () { pause(true, false); } });
   Kit.ready();
 }());

@@ -45,19 +45,23 @@ html, body { background: #46b9ff; }
 #hud #btnPause { position: absolute; top: 12px; left: 12px; width: 62px; height: 62px; }
 
 /* --------------------------------------------------------------- title */
-.logo { position: absolute; top: 8px; left: 0; right: 0; margin: 0; text-align: center; line-height: 1; pointer-events: none; }
+.logo { position: absolute; top: 24px; left: 0; right: 0; margin: 0; text-align: center; line-height: 1; pointer-events: none; }
 .logo span {
   display: block; font-weight: 700;
   text-shadow: -5px -5px 0 var(--ink), 5px -5px 0 var(--ink), -5px 5px 0 var(--ink), 5px 5px 0 var(--ink),
     0 -6px 0 var(--ink), 0 6px 0 var(--ink), -6px 0 0 var(--ink), 6px 0 0 var(--ink), 0 13px 0 var(--ink);
 }
-.logo .l1 { font-size: 100px; color: #ffffff; }
-.logo .l2 { font-size: 136px; color: #ffd23f; margin-top: -30px; }
-.langs { position: absolute; top: 312px; left: 0; right: 0; display: flex; justify-content: center; gap: 56px; }
-.lang { width: 300px; height: 150px; border-radius: 44px; border-width: 7px; box-shadow: 0 11px 0 var(--ink); flex-direction: column; gap: 0; }
-.lang .glyph { font-size: 64px; line-height: 1; text-shadow: 0 4px 0 rgba(28, 34, 80, 0.35); }
-.lang b { font-size: 36px; line-height: 1.2; }
+.logo .l1 { font-size: 88px; color: #ffffff; }
+.logo .l2 { font-size: 122px; color: #ffd23f; margin-top: -22px; }
+.langs { position: absolute; top: 306px; left: 0; right: 0; display: flex; justify-content: center; gap: 52px; }
+.lang { width: 312px; height: 156px; border-radius: 44px; border-width: 7px; box-shadow: 0 11px 0 var(--ink); flex-direction: column; gap: 10px; }
+.lang .glyph { font-size: 54px; line-height: 1.05; text-shadow: 0 4px 0 rgba(28, 34, 80, 0.35); }
+#btnAr .glyph { transform: translateY(-6px); }
+.lang .cta { display: inline-flex; align-items: center; gap: 8px; padding: 4px 18px; border-radius: 999px; background: rgba(28, 34, 80, 0.24); border: 3px solid rgba(255, 255, 255, 0.78); }
+.lang .play-ic { width: 22px; height: 22px; flex: none; fill: currentColor; }
+.lang b { font-size: 27px; line-height: 1.15; }
 #btnAr { background: #ff9f43; }
+#btnAr .cta { background: #3ddc84; border-color: var(--ink); box-shadow: 0 3px 0 var(--ink); }
 #btnEn { background: #4fa8ff; }
 .lang.ring::after { border-radius: 54px; }
 .side { position: absolute; top: 530px; left: 470px; width: 340px; height: 84px; background: #b48cff; font-size: 30px; }

@@ -24,7 +24,7 @@
   const plays = {};
   const ptr = { x: W / 2, y: H / 2, known: false };
   const drag = { on: false, id: -1, placeOnly: false, x0: 0, y0: 0, moved: false };
-  const menu = { cam: { x: 1280, y: 720, z: 0.62 }, lensZ: 2.4, lens: { x: 1000, y: 330 }, R: null };
+  const menu = { cam: { x: 1280, y: 720, z: 0.62 }, lensZ: 2.4, lens: { x: 965, y: 320 }, R: null };
   const view = Kit.fit(canvas, W, H, { maxDpr: 1, onResize: v => {
     ui.style.left = canvas.style.left; ui.style.top = canvas.style.top; ui.style.transform = 'scale(' + v.scale + ')';
     dirty = true; trayKey = '';
@@ -614,7 +614,16 @@
     if (calm()) return;
     const c = menu.cam;
     c.x = 1280 + Math.sin(time * 0.045) * 240; c.y = 720 + Math.sin(time * 0.07) * 130;
-    if (!ptr.known) { menu.lens.x = 1000 + Math.sin(time * 0.5) * 110; menu.lens.y = 330 + Math.sin(time * 0.8) * 50; }
+    if (!ptr.known) {
+      const duck = menu.R && menu.R.items.find(it => it.k === 'duck' && it.v === 'yellow');
+      if (duck) {
+        const sx = W / 2 + (duck.x - c.x) * c.z, sy = H / 2 + (duck.y - c.y) * c.z;
+        menu.lens.x = SZ.clamp(sx + Math.sin(time * 0.7) * 26, 760, 1080);
+        menu.lens.y = SZ.clamp(sy + Math.cos(time * 0.9) * 18, 220, 420);
+      } else {
+        menu.lens.x = 995 + Math.sin(time * 0.5) * 70; menu.lens.y = 340 + Math.sin(time * 0.8) * 32;
+      }
+    }
   }
   function update(dt) {
     time += dt;
@@ -772,7 +781,7 @@
     R.list.forEach((e, i) => {
       const cx = x + 30 + (n - 1 - i) * (cw + 14) + cw / 2;
       A.rr(ctx, cx - cw / 2, y + 112, cw, 160, 24); A.fs(ctx, '#ffffff', 4);
-      A.icon(ctx, e.k, e.v, cx, y + 172, 40);
+      A.icon(ctx, e.k, e.v, cx, e.k === 'kite' ? y + 162 : y + 170, e.k === 'kite' ? 31 : 38);
       const label = SZ.label(e.k, e.v), size = A.fit(ctx, label, cw - 14, 22, 15);
       A.text(ctx, size <= 15 ? SZ.noun(e.k) : label, cx, y + 244, size <= 15 ? A.fit(ctx, SZ.noun(e.k), cw - 14, 22, 13) : size, A.INK, { stroke: false });
       if (e.n > 1) { A.circ(ctx, cx - cw / 2 + 16, y + 128, 22); A.fs(ctx, '#ff5d9e', 4); A.text(ctx, String(e.n), cx - cw / 2 + 16, y + 130, 28, '#ffffff', { stroke: false }); }
@@ -805,7 +814,17 @@
   }
   function drawMenu(ctx) {
     const d = D();
-    if (!menu.R) menu.R = SZ.makeRound(0, 0, { size: 1, decoys: 2 });
+    if (!menu.R) {
+      menu.R = SZ.makeRound(0, 0, { size: 1, decoys: 2 });
+      // Frame decorative title sky items in the open left/right sky corridors clear of logo and top chips.
+      let li = 0, ri = 0;
+      menu.R.items.forEach(it => {
+        if (it.y < 420) {
+          if (it.x < 1280) { it.x = 670 + (li++ % 2) * 75; it.y = 220 + (li % 2) * 55; }
+          else { it.x = 1870 + (ri++ % 2) * 155; it.y = 200 + (ri % 2) * 65; }
+        }
+      });
+    }
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     drawScene(ctx, 0, menu.cam);
     drawMenuItems(ctx, menu.cam);
@@ -841,18 +860,11 @@
   /* ---------------------------------------------- the how-to pictures */
   function howTo() {
     const g1 = $('howWheel').getContext('2d'), g2 = $('howLens').getContext('2d'), g3 = $('howClick').getContext('2d');
-    [g1, g2, g3].forEach(g => g.clearRect(0, 0, 150, 110));
-    A.mouse(g1, 52, 74, 0.88, 0.4, '#ffd23f');
-    A.glass(g1, 108, 44, 0.92, 0);
-    g2.lineCap = 'round';
-    g2.beginPath(); g2.moveTo(98, 74); g2.lineTo(126, 98); g2.lineWidth = 14; g2.strokeStyle = A.INK; g2.stroke();
-    g2.beginPath(); g2.moveTo(98, 74); g2.lineTo(126, 98); g2.lineWidth = 8; g2.strokeStyle = '#c98a4a'; g2.stroke();
-    A.circ(g2, 72, 50, 35); A.fill(g2, '#d6f4ff');
-    A.icon(g2, 'duck', 'yellow', 72, 53, 24);
-    A.circ(g2, 72, 50, 35); A.st(g2, 8, A.INK); A.st(g2, 4.5, '#ffd23f');
-    g2.beginPath(); g2.arc(72, 50, 26, Math.PI * 1.1, Math.PI * 1.45); A.st(g2, 3.5, '#ffffff');
-    A.icon(g3, 'kite', 'red', 50, 50, 32);
-    A.hand(g3, 98, 82, 0.95, 1);
+    [g1, g2, g3].forEach(g => g.clearRect(0, 0, 44, 44));
+    A.mouse(g1, 22, 28, 0.37, 0.4, '#ffd23f');
+    A.glass(g2, 18, 18, 0.62, 0);
+    A.icon(g3, 'kite', 'red', 15, 19, 12);
+    A.hand(g3, 30, 31, 0.44, 1);
   }
 
   canvas.addEventListener('contextrestored', () => { resetTiles(); thumbsDrawn = false; trayKey = ''; howTo(); });

@@ -6,7 +6,7 @@
   CG.ROAD = 27;
   CG.PAD = 30;
   CG.HEARTS = 20;
-  CG.INTRO = 1.5;   // Wave 1 spawns automatically in 1.5s!
+  CG.INTRO = 0.8;   // Wave 1 spawns briskly in 0.8s so action starts immediately!
   CG.BREAK = 2.5;   // Snappy 2.5s breather between waves.
   CG.SELL = 0.7;
 
@@ -63,7 +63,7 @@
   // 12 punchy 45-65s stages across 3 worlds (all 3 chunky turret cards available!).
   const ALL3 = ['pop', 'bubble', 'cake'];
   CG.LEVELS = [
-    { w: 0, coins: 85, hp: 1, towers: ALL3, roads: [[[-1, 3], [5, 3], [5, 1], [10, 1], [10, 5], [14, 5]]],
+    { w: 0, coins: 105, hp: 1, towers: ALL3, roads: [[[-1, 3], [5, 3], [5, 1], [10, 1], [10, 5], [14, 5]]],
       waves: ['g9/0.55', 'g11/0.45 z4/0.4', 'g12/0.38 z8/0.35'] },
     { w: 0, coins: 105, hp: 1.05, towers: ALL3, roads: [[[-1, 1], [3, 1], [3, 5], [7, 5], [7, 2], [11, 2], [11, 4], [14, 4]]],
       waves: ['g10/0.5', 'z9/0.42 g6/0.45', 'g12/0.4 z10/0.35', 'z14/0.3 c3/1.1'] },

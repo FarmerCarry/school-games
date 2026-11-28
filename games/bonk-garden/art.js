@@ -65,20 +65,20 @@
     c.fillStyle = g; c.fillRect(0, 0, W, HORIZON + 20);
     if (i === 2) {
       for (var s = 0; s < 90; s++) { c.fillStyle = s % 7 ? '#ffffff' : '#ffe14f'; var r = 1 + hash(s, 3) * 2.4; c.fillRect(hash(s, 1) * W, hash(s, 2) * HORIZON, r, r); }
-      // the Earth and a ringed planet
-      blob(c, 1092, 92, 50, 50); fs(c, '#3f9bff', 4);
+      // the Earth and a ringed planet (clear of top-right timer/hearts HUD)
+      blob(c, 952, 86, 40, 40); fs(c, '#3f9bff', 4);
       c.fillStyle = '#5fd068';
-      blob(c, 1076, 76, 20, 14); c.fill(); blob(c, 1110, 110, 16, 11); c.fill(); blob(c, 1112, 70, 9, 6); c.fill();
-      blob(c, 1072, 74, 30, 8); c.fillStyle = 'rgba(255,255,255,0.55)'; c.fill();
-      blob(c, 190, 96, 34, 34); fs(c, '#ff9f5a', 4);
-      c.save(); c.translate(190, 96); c.rotate(-0.35); blob(c, 0, 0, 64, 14); c.lineWidth = 7; c.strokeStyle = '#ffd98a'; c.stroke(); c.restore();
+      blob(c, 938, 74, 16, 11); c.fill(); blob(c, 966, 100, 13, 9); c.fill(); blob(c, 968, 68, 8, 5); c.fill();
+      blob(c, 936, 72, 24, 6); c.fillStyle = 'rgba(255,255,255,0.55)'; c.fill();
+      blob(c, 344, 88, 30, 30); fs(c, '#ff9f5a', 4);
+      c.save(); c.translate(344, 88); c.rotate(-0.35); blob(c, 0, 0, 56, 12); c.lineWidth = 6; c.strokeStyle = '#ffd98a'; c.stroke(); c.restore();
       return;
     }
-    // sun and clouds
-    blob(c, 1120, 78, 56, 56); c.fillStyle = 'rgba(255,247,168,0.55)'; c.fill();
-    blob(c, 1120, 78, 40, 40); fs(c, '#fff27a', 4);
+    // sun positioned in open sky clear of both Title logo and Play timer/hearts HUD
+    blob(c, 954, 78, 46, 46); c.fillStyle = 'rgba(255,247,168,0.55)'; c.fill();
+    blob(c, 954, 78, 33, 33); fs(c, '#fff27a', 4);
     c.fillStyle = '#ffffff';
-    [[170, 76, 1], [520, 56, 0.8], [840, 96, 1.1]].forEach(function (k) {
+    [[180, 128, 0.9], [352, 68, 0.78], [1110, 126, 0.86]].forEach(function (k) {
       var x = k[0], y = k[1], s = k[2];
       c.beginPath(); c.ellipse(x, y, 62 * s, 22 * s, 0, 0, TAU); c.ellipse(x + 30 * s, y - 14 * s, 36 * s, 24 * s, 0, 0, TAU); c.ellipse(x - 28 * s, y - 8 * s, 30 * s, 20 * s, 0, 0, TAU);
       c.fill();

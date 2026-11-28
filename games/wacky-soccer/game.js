@@ -431,14 +431,14 @@
           stars(e.x, e.y, pw > 800 ? 10 : 6, ['#fff', '#ffd23f', '#ffe9a0'], 200 + pw * 0.2);
           shake.add(Math.min(9, pw / 120));
           if (e.extra) { e.extra.lastHow = 'kick'; e.extra.kickX = p.x; }
-          if (pw > 840 && !silent) { hitstop = 0.045; popup(pick(['بووم!', 'صاروخ!', 'قذيفة!', 'يا لها من ركلة!']), e.x, e.y - 60, '#ffd23f', 40); }
+          if (pw > 840 && !silent) { hitstop = 0.045; popup(pick(['بووم!', 'صاروخ!', 'قذيفة!', 'يا لها من ركلة!']), e.x, Math.min(e.y - 105, 275), '#ffd23f', 40); }
           if (p && humanSide(p.side) && !silent) { p.mood = 1; p.moodT = 0.4; }
           break;
         case 'header':
           if (!silent) S.header();
           stars(e.x, e.y, 6, ['#fff', '#8fe3ff']);
           if (e.extra) { e.extra.lastHow = 'header'; e.extra.kickX = p.x; }
-          if (pw > 380 && !silent) popup('رأسية!', e.x, e.y - 60, '#8fe3ff', 34);
+          if (pw > 380 && !silent) popup('رأسية!', e.x, Math.min(e.y - 105, 275), '#8fe3ff', 34);
           break;
         case 'touch':
           if (!silent) S.touch(pw);
@@ -669,13 +669,14 @@
     ART.rr(ctx, cx - lw / 2, y + 84, lw, 38, 19); ctx.fillStyle = mod.color; ctx.fill(); ctx.lineWidth = 3.5; ctx.strokeStyle = OUT; ctx.stroke();
     ART.modIcon(ctx, mod.icon, cx + lw / 2 - 24, y + 103, 30, T * 2);
     ART.text(ctx, label, cx - 14, y + 103, { size: 22, color: '#fff', stroke: OUT, sw: 5 });
-    // cup round
-    if (m.mode === 'cup' && cupRun) {
-      var rn = WS.CUP_ROUNDS[Math.min(3, m.cupRound || 0)];
-      ART.text(ctx, rn, 24, 34, { size: 24, align: 'left', color: '#fff', stroke: OUT, sw: 6 });
-    } else if (m.mode === 'cpu') {
-      var d = WS.DIFFS[m.diff || 0];
-      ART.text(ctx, 'الكمبيوتر: ' + d.name, 24, 34, { size: 22, align: 'left', color: d.color, stroke: OUT, sw: 6 });
+    // cup round / CPU difficulty pill
+    if ((m.mode === 'cup' && cupRun) || m.mode === 'cpu') {
+      var tagTxt = m.mode === 'cup' ? WS.CUP_ROUNDS[Math.min(3, m.cupRound || 0)] : 'الكمبيوتر: ' + WS.DIFFS[m.diff || 0].name;
+      var tagCol = m.mode === 'cup' ? '#ffd23f' : WS.DIFFS[m.diff || 0].color;
+      var tw = ART.measure(ctx, tagTxt, 20) + 32;
+      ART.rr(ctx, 16, y + 6, tw, 38, 19); ctx.fillStyle = 'rgba(29,26,46,0.86)'; ctx.fill();
+      ctx.lineWidth = 3.5; ctx.strokeStyle = OUT; ctx.stroke();
+      ART.text(ctx, tagTxt, 16 + tw / 2, y + 25, { size: 20, color: tagCol, stroke: OUT, sw: 4 });
     }
     // wind gauge
     if (world.P.wind) {

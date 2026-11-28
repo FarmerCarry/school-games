@@ -59,6 +59,7 @@
   var winDelay = 0;
   var pendingWin = null;
   var bannerTimer = 0;
+  var guideNudgeT = 0;
   var lastHudInk = -1;
   var lastHudStars = -1;
   var lastHudRolling = null;
@@ -149,9 +150,10 @@
     lastHudStars = -1;
     lastHudRolling = null;
     lastHudCrayon = -1;
+    guideNudgeT = 0;
     syncHud();
     setScreen('play');
-    showToast(lv.id + ' · ' + lv.name, 1.8);
+    showToast(lv.name, 1.8);
     say(lv.name);
   }
 
@@ -379,8 +381,10 @@
 
   function doLaunch() {
     if (screen !== 'play') return;
+    var noBridge = levelIdx === 0 && world.strokes.length === 0;
     if (MC.launch(world)) {
       J.whoosh(0.8);
+      if (noBridge) guideNudgeT = 1.6;
       if (levelIdx === 0 && world.strokes.length > 0 && !tutorialDone) {
         tutorialDone = true;
         Kit.stats.tutorial('done');
@@ -571,6 +575,7 @@
     Kit.keys.endFrame();
 
     if (drawFxCd > 0) drawFxCd = Math.max(0, drawFxCd - dt);
+    if (guideNudgeT > 0 && screen !== 'pause') guideNudgeT = Math.max(0, guideNudgeT - dt);
     if (bannerTimer > 0 && screen !== 'pause') {
       bannerTimer -= dt;
       if (bannerTimer <= 0) $('banner').hidden = true;
@@ -609,15 +614,27 @@
     var dt = lastRenderMs ? Math.min(0.05, (now - lastRenderMs) / 1000) : 1 / 60;
     lastRenderMs = now;
 
-    var showCoach = screen === 'play' && !world.rolling && !world.won && world.strokes.length === 0 && (levelIdx === 0 || world.crashes >= 2);
+    var showCoach = screen === 'play' && !world.won && world.strokes.length === 0 && !pointer.drawing &&
+      ((levelIdx === 0 && (!world.rolling || guideNudgeT > 0)) || (!world.rolling && world.crashes >= 2));
     if (showCoach) coachSeen = true;
+
+    var guideEl = $('drawGuide');
+    var showGuideLabel = showCoach && levelIdx === 0 && !world.crashed;
+    guideEl.hidden = !showGuideLabel;
+    if (showGuideLabel) {
+      var gp = view.project(11.0, 2.7, 0);
+      guideEl.style.left = Math.round(gp.x) + 'px';
+      guideEl.style.top = Math.round(gp.y) + 'px';
+      guideEl.classList.toggle('nudge', guideNudgeT > 0);
+    }
 
     view.update({
       mode: screen,
       dt: screen === 'pause' ? 0 : dt,
       world: world,
       pointer: pointer,
-      showCoach: showCoach
+      showCoach: showCoach,
+      guideNudge: guideNudgeT > 0
     });
     view.render();
     dirty = false;

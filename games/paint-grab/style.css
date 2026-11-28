@@ -11,50 +11,51 @@ button { font-family: var(--sg-font); }
 svg.st { width: 1em; height: 1em; vertical-align: -0.12em; }
 svg.st path { fill: #d7d2e6; stroke: var(--ink); stroke-width: 2.4; stroke-linejoin: round; }
 svg.st.on path { fill: #ffcf33; }
-@keyframes bob { 0%,100% { translate: 0 0; } 50% { translate: 0 -8px; } }
+@keyframes bob { 0%,100% { translate: 0 0; } 50% { translate: 0 -4px; } }
 @keyframes pulse { 0%,100% { scale: 1; } 50% { scale: 1.05; } }
 @keyframes popIn { 0% { scale: 0.3; opacity: 0; } 70% { scale: 1.12; opacity: 1; } 100% { scale: 1; } }
 @keyframes wig { 0%,100% { rotate: -3deg; } 50% { rotate: 3deg; } }
 
 /* ---------- title ---------- */
-#scr-title .dim { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(255,255,255,0.0) 0%, rgba(43,35,80,0.10) 55%, rgba(43,35,80,0.35) 100%); pointer-events: none; }
-.logo { position: absolute; left: 0; right: 0; top: 6px; text-align: center; font-weight: 700; line-height: 1; pointer-events: none; white-space: nowrap; }
-.logo span { display: inline-block; font-size: 110px; -webkit-text-stroke: 16px var(--ink); paint-order: stroke fill; text-shadow: 0 10px 0 var(--ink); animation: bob 1.8s ease-in-out infinite; }
-.logo .w1 { color: #ff6fae; rotate: 4deg; }
-.logo .w2 { color: #ffcf33; rotate: -3deg; margin-right: 16px; animation-delay: 0.3s; }
-.tag { position: absolute; left: 0; right: 0; top: 138px; text-align: center; font-size: 25px; font-weight: 700; color: #fff; -webkit-text-stroke: 6px var(--ink); paint-order: stroke fill; pointer-events: none; }
-#arenas { position: absolute; left: 60px; right: 60px; top: 200px; display: flex; justify-content: center; gap: 14px; }
-.arena { position: relative; width: 214px; height: 206px; border: 5px solid var(--ink); border-radius: 24px; background: var(--bg); color: var(--ink); cursor: pointer; padding: 6px 8px; box-shadow: 0 7px 0 var(--ink); transition: transform 0.1s; text-align: center; }
-.arena:hover { transform: translateY(-4px); }
-.arena.sel { transform: translateY(-8px) scale(1.05); box-shadow: 0 7px 0 var(--ink), 0 0 0 5px #fff, 0 0 0 10px var(--ink); z-index: 2; }
-.arena .anum { z-index: 3; position: absolute; top: -14px; right: -12px; width: 40px; height: 40px; border-radius: 50%; background: #fff; border: 4px solid var(--ink); font-size: 22px; font-weight: 700; line-height: 32px; }
-.arena canvas { display: block; width: 180px; height: 92px; margin: 4px auto 0; border-radius: 14px; border: 3px solid var(--ink); background: #fff; }
-.arena .aname { font-size: 23px; font-weight: 700; margin-top: 2px; white-space: nowrap; }
-.arena .astars { font-size: 28px; line-height: 1; }
-.arena .alock { position: absolute; inset: -1px; border-radius: 19px; background: #3a3068; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 17px; font-weight: 700; padding: 10px; line-height: 1.3; }
-.arena .alock svg { width: 46px; height: 46px; margin-bottom: 6px; }
-.arena.locked { cursor: default; }
-.arena.shake { animation: shk 0.35s; }
-@keyframes shk { 25% { translate: -8px 0; } 75% { translate: 8px 0; } }
-.trow { position: absolute; left: 0; right: 0; top: 432px; display: flex; justify-content: center; align-items: center; gap: 26px; }
-#bPlay { font-weight: 700; font-size: 64px; line-height: 1; padding: 10px 70px 20px; border: 6px solid var(--ink); border-radius: 40px; background: #3ddc84; color: #fff; -webkit-text-stroke: 9px var(--ink); paint-order: stroke fill; cursor: pointer; box-shadow: 0 9px 0 var(--ink); animation: pulse 1.2s ease-in-out infinite; }
-#bPlay small { display: block; font-size: 18px; -webkit-text-stroke: 0; color: var(--ink); opacity: 0.75; margin-top: 4px; }
+#scr-title .dim { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(255,255,255,0.0) 0%, rgba(43,35,80,0.03) 56%, rgba(43,35,80,0.28) 100%); pointer-events: none; }
+.logo { position: absolute; left: 0; right: 0; top: 24px; text-align: center; font-weight: 700; line-height: 1; pointer-events: none; white-space: nowrap; }
+.logo span { display: inline-block; font-size: 92px; -webkit-text-stroke: 14px var(--ink); paint-order: stroke fill; text-shadow: 0 8px 0 var(--ink); animation: bob 1.8s ease-in-out infinite; }
+.logo .w1 { color: #ff6fae; rotate: 3deg; }
+.logo .w2 { color: #ffcf33; rotate: -2deg; margin-right: 16px; animation-delay: 0.3s; }
+.tag { position: absolute; left: 0; right: 0; top: 132px; text-align: center; font-size: 23px; font-weight: 700; color: #fff; -webkit-text-stroke: 6px var(--ink); paint-order: stroke fill; pointer-events: none; }
+.trow { position: absolute; left: 0; right: 0; top: 382px; display: flex; justify-content: center; align-items: center; gap: 22px; }
+#bPlay { font-weight: 700; font-size: 58px; line-height: 1; padding: 10px 64px 16px; border: 6px solid var(--ink); border-radius: 38px; background: linear-gradient(180deg,#52eb97,#28c76f); color: #fff; -webkit-text-stroke: 9px var(--ink); paint-order: stroke fill; cursor: pointer; box-shadow: 0 8px 0 var(--ink); animation: pulse 1.2s ease-in-out infinite; }
+#bPlay small { display: block; font-size: 17px; -webkit-text-stroke: 0; color: var(--ink); opacity: 0.8; margin-top: 4px; }
 #bPlay:hover { filter: brightness(1.07); }
 #bPlay:active, #bSkins:active { translate: 0 5px; box-shadow: 0 3px 0 var(--ink); }
-#bSkins { position: relative; width: 190px; height: 118px; border: 5px solid var(--ink); border-radius: 26px; background: #ffcf33; color: var(--ink); font-size: 24px; font-weight: 700; cursor: pointer; box-shadow: 0 7px 0 var(--ink); padding: 0; }
-#bSkins canvas { width: 76px; height: 76px; display: block; margin: 2px auto -4px; }
+#bSkins { position: relative; width: 184px; height: 108px; border: 5px solid var(--ink); border-radius: 26px; background: linear-gradient(180deg,#ffe059,#ffbf1f); color: var(--ink); font-size: 22px; font-weight: 700; cursor: pointer; box-shadow: 0 7px 0 var(--ink); padding: 0; }
+#bSkins canvas { width: 68px; height: 68px; display: block; margin: 2px auto -4px; }
 #bSkins:hover { filter: brightness(1.06); }
 .badge { position: absolute; top: -12px; left: -12px; background: #ff5b6e; color: #fff; border: 3px solid var(--ink); border-radius: 14px; padding: 0 8px; font-size: 16px; font-weight: 700; animation: pulse 0.8s infinite; }
 .badge[hidden] { display: none; }
-#statBox { width: 190px; height: 118px; padding: 8px 10px; font-size: 17px; font-weight: 700; text-align: center; display: flex; flex-direction: column; justify-content: center; gap: 2px; }
-#statBox .big { font-size: 30px; color: #ff4f9a; line-height: 1.05; }
-#statBox .lbl { font-size: 14px; opacity: 0.7; }
-#statBox .row2 { display: flex; justify-content: center; gap: 14px; font-size: 18px; }
+#statBox { width: 184px; height: 108px; padding: 6px 10px; font-size: 16px; font-weight: 700; text-align: center; display: flex; flex-direction: column; justify-content: center; gap: 2px; }
+#statBox .big { font-size: 28px; color: #ff4f9a; line-height: 1.05; }
+#statBox .lbl { font-size: 14px; opacity: 0.72; }
+#statBox .row2 { display: flex; justify-content: center; gap: 14px; font-size: 17px; }
 #statBox .row2 span { display: inline-flex; align-items: center; gap: 4px; }
-#statBox .row2 svg.st { width: 20px; height: 20px; }
-#howto { position: absolute; left: 150px; right: 150px; top: 588px; padding: 10px 20px 12px; font-size: 18px; font-weight: 700; display: flex; flex-direction: column; gap: 6px; }
-#howto .r1 { display: flex; justify-content: center; gap: 26px; flex-wrap: wrap; }
-#howto .r2 { text-align: center; font-size: 17px; color: #6b4bb8; }
+#statBox .row2 svg.st { width: 19px; height: 19px; }
+#arenas { position: absolute; left: 60px; right: 60px; top: 516px; display: flex; justify-content: center; gap: 10px; }
+.arena { position: relative; width: 214px; height: 64px; border: 4px solid var(--ink); border-radius: 20px; background: var(--bg); color: var(--ink); cursor: pointer; padding: 4px 10px; box-shadow: 0 5px 0 var(--ink); transition: transform 0.1s; display: flex; align-items: center; gap: 8px; text-align: right; }
+.arena:hover { transform: translateY(-3px); }
+.arena.sel { transform: translateY(-5px) scale(1.04); box-shadow: 0 6px 0 var(--ink), 0 0 0 4px #fff, 0 0 0 8px var(--ink); z-index: 2; }
+.arena .anum { flex: none; width: 32px; height: 32px; border-radius: 50%; background: #fff; border: 3px solid var(--ink); font-size: 18px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+.arena .ainfo { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; line-height: 1.15; }
+.arena .aname { font-size: 17px; font-weight: 700; white-space: nowrap; }
+.arena .astars { font-size: 17px; line-height: 1; margin-top: 2px; }
+.arena.locked { background: rgba(255,255,255,0.86); border-color: rgba(43,35,80,0.52); color: rgba(43,35,80,0.78); box-shadow: 0 4px 0 rgba(43,35,80,0.35); cursor: default; }
+.arena.locked .anum { background: #f2edfc; border-color: rgba(43,35,80,0.45); }
+.arena .alk { font-size: 13px; font-weight: 700; color: #7a68a8; display: inline-flex; align-items: center; gap: 4px; margin-top: 2px; }
+.arena .alk svg { width: 15px; height: 15px; flex: none; }
+.arena.shake { animation: shk 0.35s; }
+@keyframes shk { 25% { translate: -8px 0; } 75% { translate: 8px 0; } }
+#howto { position: absolute; left: 150px; right: 150px; top: 598px; padding: 8px 20px 10px; font-size: 17px; font-weight: 700; display: flex; flex-direction: column; gap: 4px; }
+#howto .r1 { display: flex; justify-content: center; gap: 24px; flex-wrap: wrap; }
+#howto .r2 { text-align: center; font-size: 16px; color: #6b4bb8; }
 
 /* ---------- skins ---------- */
 #scr-skins { background: rgba(43,35,80,0.5); }
@@ -124,5 +125,6 @@ svg.st.on path { fill: #ffcf33; }
 
 /* save warning in the bottom-left corner, clear of the area bar, minimap and leaderboard */
 .sg-save-status { margin-inline: 0; inset-inline-start: auto; }
-.pg-btn { right: 62px; font-weight: 700; font-family: var(--sg-font); font-size: 17px; }
+.pg-btn { right: 62px; display: flex; align-items: center; justify-content: center; background: #fff; color: var(--ink); border: 3.5px solid var(--ink); box-shadow: 0 4px 0 rgba(43,35,80,0.48); }
+.pg-btn:hover { background: #fff4cc; }
 .pg-btn[hidden] { display: none; }

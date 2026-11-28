@@ -303,6 +303,36 @@
         for (var xx = 0; xx <= W; xx += 64) { var yy = ry + M.sin(xx * 0.02 + ph + r) * (2 + r); if (xx) ctx.lineTo(xx, yy); else ctx.moveTo(xx, yy); }
         ctx.stroke();
       }
+      // mini pastel candy islands & bobbing buoys along the left/right sea flanks
+      var islands = [[136, 438, 1, 0], [1144, 442, -1, 2]];
+      for (var ii = 0; ii < islands.length; ii++) {
+        var ix = islands[ii][0] + sx * 0.65, iy = islands[ii][1], sd = islands[ii][2], kc = th.keys[islands[ii][3] % th.keys.length];
+        var ib = v.calm ? 0 : M.sin(t * 1.6 + ii * 2.1) * 2.5;
+        ctx.strokeStyle = 'rgba(255,255,255,0.45)'; ctx.lineWidth = 3;
+        blob(ctx, ix, iy + 8 + ib, 64, 15); ctx.stroke();
+        ctx.fillStyle = th.pad; ctx.strokeStyle = INK; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.ellipse(ix, iy + 4 + ib, 52, 16, 0, M.PI, 0, false); ctx.quadraticCurveTo(ix, iy + 14 + ib, ix - 52, iy + 4 + ib); ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.strokeStyle = INK; ctx.lineWidth = 5; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(ix - sd * 10, iy - 6 + ib); ctx.quadraticCurveTo(ix - sd * 2, iy - 34 + ib, ix + sd * 12, iy - 52 + ib); ctx.stroke();
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 2.5; ctx.stroke();
+        ctx.lineWidth = 3; ctx.strokeStyle = INK;
+        blob(ctx, ix + sd * 12, iy - 56 + ib, 16, 16); ctx.fillStyle = kc; ctx.fill(); ctx.stroke();
+        blob(ctx, ix + sd * 12, iy - 56 + ib, 8, 8); ctx.strokeStyle = '#fff'; ctx.lineWidth = 2.5; ctx.stroke();
+        blob(ctx, ix - sd * 22, iy - 12 + ib, 10, 10); ctx.fillStyle = th.keys[(islands[ii][3] + 1) % th.keys.length]; ctx.fill(); ctx.strokeStyle = INK; ctx.lineWidth = 2.5; ctx.stroke();
+      }
+      var buoys = [[234, 540, 0.95, 1], [1046, 546, 0.95, 3], [84, 588, 1.1, 4], [1192, 514, 0.85, 0]];
+      for (var bi = 0; bi < buoys.length; bi++) {
+        var bx = buoys[bi][0] + sx * 0.9, by = buoys[bi][1], bs = buoys[bi][2], bc = th.keys[buoys[bi][3] % th.keys.length];
+        var bb = v.calm ? 0 : M.sin(t * 2.4 + bi * 1.7) * 4;
+        ctx.strokeStyle = 'rgba(255,255,255,0.42)'; ctx.lineWidth = 2.5;
+        blob(ctx, bx, by + 10 * bs + bb, 26 * bs, 8 * bs); ctx.stroke();
+        ctx.fillStyle = '#fff'; ctx.strokeStyle = INK; ctx.lineWidth = 2.5;
+        blob(ctx, bx, by + bb, 18 * bs, 11 * bs); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = bc;
+        ctx.beginPath(); ctx.ellipse(bx, by + bb, 18 * bs, 11 * bs, 0, -0.4, 0.55); ctx.lineTo(bx, by + bb); ctx.closePath(); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(bx, by + bb, 18 * bs, 11 * bs, 0, M.PI - 0.55, M.PI + 0.4); ctx.lineTo(bx, by + bb); ctx.closePath(); ctx.fill();
+        blob(ctx, bx, by + bb, 7 * bs, 4.5 * bs); ctx.fillStyle = th.sea[0]; ctx.fill(); ctx.stroke();
+      }
     }
     // A wide platform (the pads at the start of each stage) with its gate.
     function pad(z0, z1, label, th, t) {
@@ -328,6 +358,7 @@
       ctx.fillRect(gr.x - pw / 2, gt.y, pw, gr.y - gt.y); ctx.strokeRect(gr.x - pw / 2, gt.y, pw, gr.y - gt.y);
       var bh = gl.s * 0.75;
       rrect(ctx, gl.x - pw, gt.y - bh * 0.6, gr.x - gl.x + pw * 2, bh, bh * 0.3); ctx.fillStyle = th.keys[0]; ctx.fill(); ctx.stroke();
+      rrect(ctx, gl.x - pw * 0.4, gt.y - bh * 0.48, gr.x - gl.x + pw * 0.8, bh * 0.2, bh * 0.1); ctx.fillStyle = 'rgba(255,255,255,0.28)'; ctx.fill();
       if (bh > 12) {
         ctx.fillStyle = '#fff'; ctx.font = fontOf(bh * 0.62); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.direction = 'rtl';
         ctx.fillText(label, (gl.x + gr.x) / 2, gt.y - bh * 0.1);
@@ -450,7 +481,7 @@
         for (var j = 0; j < spec.obs.length; j++) if (spec.obs[j].row === row) obstacle(spec.obs[j], j, w, t);
         if (row === runnerRow && w.phase !== 'fly' && w.phase !== 'fall') { drawRunner(w, o, t); drawn = true; }
       }
-      if (cam.z < 0) pad(-ZP.PAD, 0, 'المرحلة ' + spec.n, th, t);
+      if (cam.z < 0) pad(-ZP.PAD, 0, 'انطلق!', th, t);
       if (!drawn && w.phase !== 'fall') drawRunner(w, o, t);
       if (w.phase === 'fall') drawSplash(w, o, t);
     };

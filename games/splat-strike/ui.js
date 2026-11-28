@@ -117,7 +117,7 @@
   /* ---- showcase (title / locker) */
   var showScene = new T.Scene(); lightsFor(showScene);
   var showCam = new T.PerspectiveCamera(28, 16 / 9, 0.1, 50);
-  showCam.position.set(0, 1.5, 8.6); showCam.lookAt(0, 0.62, 0);
+  showCam.position.set(0, 1.92, 8.7); showCam.lookAt(0, 1.06, 0);
   var showRoot = new T.Group(); showScene.add(showRoot);
   var footMat = new T.MeshLambertMaterial({ color: 0xffffff });
   function makeDoll(root) {
@@ -140,8 +140,13 @@
   G.geoPinned.push(vmGun, doll.body, doll.gun);
   (function () {
     var b = new SS.Builder();
-    b.cyl(0, -0.25, 0, 1.25, 0.25, 0xff3d8b, { seg: 28, top: 0xff7ab8 });
-    b.ring(0, 0.005, 0, 0.95, 1.1, 0xffffff, 28);
+    // Anchored tiered arcade turntable stage rooted cleanly to lower viewport edge
+    b.cyl(0, -1.65, 0, 0.94, 1.38, 0x13173a, { seg: 24, r2: 1.18 });
+    b.cyl(0, -0.27, 0, 1.12, 0.24, 0x283175, { seg: 28, top: 0x3b48a3 });
+    b.cyl(0, -0.04, 0, 1.17, 0.055, 0xffd23f, { seg: 28, top: 0xffe880 });
+    b.disc(0, 0.012, 0, 0.98, 0x334094, 28);
+    b.ring(0, 0.016, 0, 0.84, 0.96, 0x3fb8ff, 28);
+    b.disc(0, 0.02, 0, 0.44, 0x1d2354, 20);
     showRoot.add(new T.Mesh(b.geometry(), G.mats.map));
   })();
   function refreshDoll() { dressDoll(doll, { color: myColor(), hat: save.hat, skin: mySkin(), wpn: save.wpn }); }
@@ -325,6 +330,7 @@
     hudEl.hidden = true; $('pauseBtn').hidden = true;
     moveConfetti(G.scene);
     G.start({ demo: true, map: save.map, mode: 'ffa', diff: 1 });
+    $('matchPop').hidden = true; $('matchOptBtn').setAttribute('aria-expanded', 'false');
     show('title');
     refreshTitle(); refreshDoll();
   }
@@ -386,6 +392,8 @@
   function needXp(l) { return 100 + (l - 1) * 60; }
   function refreshTitle() {
     segOn($('modeSeg'), save.mode); segOn(mapSeg, save.map); segOn($('diffSeg'), save.diff);
+    var mp = SS.MAPS[save.map] || SS.MAPS[0];
+    $('matchSummary').textContent = mp.icon + ' ' + mp.name + ' · ' + (save.mode === 'team' ? '🤝 فرق 5 ضد 5' : '🎯 الكل ضد الكل') + ' · ' + ['🙂 سهل', '😎 عادي', '🔥 صعب'][save.diff];
     $('tCoins').textContent = Kit.fmt(save.coins);
     $('tLevel').textContent = save.level;
     $('tXp').style.width = Math.round(save.xp / needXp(save.level) * 100) + '%';
@@ -395,6 +403,12 @@
     if (save.bestStreak) r += '<div class="chip">أفضل سلسلة: <b>' + save.bestStreak + '</b></div>';
     $('records').innerHTML = r;
   }
+  $('matchOptBtn').addEventListener('click', function () {
+    sfx.click();
+    var p = $('matchPop');
+    p.hidden = !p.hidden;
+    this.setAttribute('aria-expanded', String(!p.hidden));
+  });
   $('modeSeg').addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; sfx.click(); save.mode = b.getAttribute('data-v'); refreshTitle(); persist(); });
   $('diffSeg').addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; sfx.click(); save.diff = +b.getAttribute('data-v'); refreshTitle(); persist(); });
   mapSeg.addEventListener('click', function (e) {
@@ -747,7 +761,7 @@
       // say once how a match is won, higher up so it clears the countdown digits (nobody can splat yet)
       var tm = G.mode === 'team';
       callout((tm ? 'أول فريق' : 'أول من') + ' يصل إلى ' + ltr(G.target) + ' لطخة يفوز!', tm ? 'أو الفريق الأعلى عند انتهاء الوقت' : 'أو ضمن أفضل 3 عند انتهاء الوقت', '#ffd23f', 3000, 'goal');
-      if (save.matches < 3) setTimeout(function () { if (UI.state === 'play') hint('حرّك الفأرة للتصويب • W A S D للحركة • انقر لتطلق • G بالون طلاء • R تعبئة', 6); }, 1200);
+      if (save.matches < 3) hint('WASD تحرّك · انقر أطلق · G بالون · R تعبئة', 3.4);
     },
     countdown: function (c) {
       if (G.demo) return;

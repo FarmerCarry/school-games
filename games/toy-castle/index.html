@@ -46,46 +46,54 @@
         <div class="tc-dock-meta">
           <div class="tc-energy-bar">
             <div id="enFill1" class="tc-energy-fill"></div>
-            <span class="tc-energy-label">⚡ <b id="enText1">35</b></span>
-          </div>
-          <div id="cannonPill1" class="tc-cannon-pill" title="مدفع الفلين">
-            <span class="tc-cannon-ico">🎯</span>
-            <span id="cannonState1" dir="rtl">جاهز!</span>
+            <span class="tc-energy-label">⚡ <b id="enText1">35</b> <small>/ 100</small></span>
           </div>
         </div>
-        <div id="cardsP1" class="tc-cards"></div>
+        <div class="tc-dock-row">
+          <div id="cardsP1" class="tc-cards"></div>
+          <button id="cannonPill1" class="tc-cannon-btn" type="button" title="أطلق مدفع الفلين (مسافة)">
+            <span class="tc-cannon-cd" id="cannonCd1"></span>
+            <span class="tc-cannon-ico" aria-hidden="true">🎯</span>
+            <span id="cannonState1" class="tc-cannon-lbl" dir="rtl">أطلق المدفع!</span>
+            <span class="tc-cannon-key">مسافة</span>
+          </button>
+        </div>
       </div>
 
       <div id="dockP2" class="tc-dock tc-dock-p2" hidden>
         <div class="tc-dock-meta">
-          <div id="cannonPill2" class="tc-cannon-pill" title="مدفع اللاعب 2">
-            <span class="tc-cannon-ico">🎯</span>
-            <span id="cannonState2" dir="rtl">جاهز!</span>
-          </div>
           <div class="tc-energy-bar tc-energy-p2">
             <div id="enFill2" class="tc-energy-fill"></div>
-            <span class="tc-energy-label">⚡ <b id="enText2">35</b></span>
+            <span class="tc-energy-label">⚡ <b id="enText2">35</b> <small>/ 100</small></span>
           </div>
         </div>
-        <div id="cardsP2" class="tc-cards"></div>
+        <div class="tc-dock-row">
+          <button id="cannonPill2" class="tc-cannon-btn tc-cannon-p2" type="button" title="أطلق مدفع اللاعب 2 (Enter)">
+            <span class="tc-cannon-cd" id="cannonCd2"></span>
+            <span class="tc-cannon-ico" aria-hidden="true">🎯</span>
+            <span id="cannonState2" class="tc-cannon-lbl" dir="rtl">أطلق المدفع!</span>
+            <span class="tc-cannon-key">Enter</span>
+          </button>
+          <div id="cardsP2" class="tc-cards"></div>
+        </div>
       </div>
     </div>
   </div>
 
   <!-- Minimal Title Overlay over Live 3D Tabletop Diorama -->
   <div id="scrTitle" class="tc-screen tc-title-screen">
-    <div class="tc-title-stats">
-      <span id="titleCoins" class="tc-stat-pill">🪙 <b>0</b></span>
-      <span id="titleStars" class="tc-stat-pill">⭐ <b>0/27</b></span>
-      <span id="titleBest" class="tc-stat-pill">🏆 <b>0</b></span>
+    <div class="tc-title-top">
+      <div class="tc-title-stats">
+        <span id="titleCoins" class="tc-stat-pill">🪙 <b>0</b></span>
+        <span id="titleStars" class="tc-stat-pill">⭐ <b>0/27</b></span>
+        <span id="titleBest" class="tc-stat-pill">🏆 <b>0</b></span>
+      </div>
+      <div class="tc-logo-wrap">
+        <h1 class="tc-logo">قلعة الألعاب</h1>
+      </div>
     </div>
 
     <div class="tc-hero">
-      <div class="tc-logo-wrap">
-        <span class="tc-logo-crown" aria-hidden="true">🏰</span>
-        <h1 class="tc-logo">قلعة الألعاب</h1>
-      </div>
-
       <button id="btnPlay" class="sg-btn tc-play-btn" type="button">▶ العب</button>
 
       <div class="tc-title-actions">

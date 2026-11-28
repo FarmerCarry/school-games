@@ -983,7 +983,7 @@
       txt('توربو السحب \u2066×' + run.mult + '\u2069 ⚡', W / 2, run.combo >= 2 ? 172 : 138, 24, '#6ff0ff', 'center', 'rgba(20,50,110,0.85)', 6);
     }
     // coins (top-left)
-    ctx.fillStyle = 'rgba(40,20,80,0.45)';
+    ctx.fillStyle = 'rgba(36,18,74,0.68)';
     roundRect(16, 14, 170, 50, 25); ctx.fill();
     coinIcon(44, 39, 15);
     ctx.save(); ctx.translate(70, 40);
@@ -993,11 +993,11 @@
     // zone progress
     if (G.car) {
       var zl = DK.ZONE_LEN, pr = G.car.progress, z = flr(pr / zl), f = (pr - z * zl) / zl;
-      ctx.fillStyle = 'rgba(40,20,80,0.45)';
-      roundRect(16, 72, 170, 38, 19); ctx.fill();
+      ctx.fillStyle = 'rgba(36,18,74,0.68)';
+      roundRect(16, 70, 170, 42, 21); ctx.fill();
       txt(DK.zoneName(z), 101, 84, 17, '#ffffff', 'center');
-      ctx.fillStyle = 'rgba(255,255,255,0.3)'; roundRect(30, 96, 142, 7, 4); ctx.fill();
-      ctx.fillStyle = DK.palOf(z + 1).curb; roundRect(30, 96, max(7, 142 * f), 7, 4); ctx.fill();
+      ctx.fillStyle = 'rgba(15,8,38,0.55)'; roundRect(28, 97, 146, 8, 4); ctx.fill();
+      ctx.fillStyle = '#ffd23f'; roundRect(28, 97, max(14, 146 * f), 8, 4); ctx.fill();
     }
   }
   function roundRect(x, y, w, h, r) {
@@ -1034,18 +1034,19 @@
     var want = DK.botHold(car, road, DK.LEAD + car.v * 0.2);
     var nxt = road.get(car.seg + 1);
     var holding = G.hold;
-    var X = DK.sx(car.x, car.y), Y = DK.sy(car.x, car.y, 2.2);
+    var X = DK.sx(car.x, car.y), Y = DK.sy(car.x, car.y, 0);
     var msg = null, now = false;
     if (want && !holding) { msg = 'اضغط مع الاستمرار!'; now = true; }
     else if (!want && holding) { msg = 'اترك الزر!'; now = true; }
     else if (nxt) msg = nxt.dir === 1 ? 'اضغط عند المنعطف' : 'اترك عند المنعطف';
     if (!msg) return;
+    var sg = road.get(car.seg), px = min(W - 148, X + 335), py = min(H - 46, Y + (sg && sg.dir ? 52 : -18));
     var pulse = now ? 1.08 + sin(G.time * 14) * 0.08 : 1;
-    ctx.save(); ctx.translate(X, Y - 20); ctx.scale(pulse, pulse);
-    ctx.fillStyle = now ? '#ff4d8d' : 'rgba(40,20,80,0.72)';
-    roundRect(-150, -30, 300, 60, 30); ctx.fill();
-    ctx.beginPath(); ctx.moveTo(-12, 28); ctx.lineTo(12, 28); ctx.lineTo(0, 44); ctx.closePath(); ctx.fill();
-    txt(msg, 0, 0, now ? 30 : 25, '#ffffff', 'center');
+    ctx.save(); ctx.translate(px, py); ctx.scale(pulse, pulse);
+    ctx.fillStyle = now ? '#ff4d8d' : 'rgba(36,18,74,0.82)';
+    roundRect(-136, -27, 272, 54, 27); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(-134, -8); ctx.lineTo(-134, 12); ctx.lineTo(-150, 4); ctx.closePath(); ctx.fill();
+    txt(msg, 0, 1, now ? 28 : 24, '#ffffff', 'center');
     ctx.restore();
   }
 

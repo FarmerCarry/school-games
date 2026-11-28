@@ -142,18 +142,21 @@
   // Rainbow Fever gauge pill beside the Pause button.
   A.feverGauge = function (ctx, o) {
     var x = o.x, y = o.y, w = o.w, h = o.h, hot = o.fever > 0, frac = _mx(0, _mn(1, o.gauge || 0));
-    rr(ctx, x, y, w, h, h / 2); fill(ctx, _ia(0.72)); ink(ctx, 4, hot ? '#ffe55c' : _W);
+    rr(ctx, x, y, w, h, h / 2); fill(ctx, _ia(0.76)); ink(ctx, 4, hot ? '#ffe55c' : _W);
+    var seg = (w - 10) / 6;
+    ctx.save(); rr(ctx, x + 5, y + 5, w - 10, h - 10, (h - 10) / 2); ctx.clip();
+    ctx.globalAlpha = 0.16;
+    for (var p = 0; p < 6; p++) { ctx.fillStyle = A.RAINBOW[p]; ctx.fillRect(x + 5 + p * seg, y + 4, seg + 1, h - 8); }
+    ctx.globalAlpha = 1;
     var fw = _mx(0, (w - 10) * frac);
     if (fw > 4) {
-      ctx.save(); rr(ctx, x + 5, y + 5, w - 10, h - 10, (h - 10) / 2); ctx.clip();
-      var seg = (w - 10) / 6;
       for (var i = 0; i < 6; i++) {
         var sx = x + 5 + i * seg;
         if (sx < x + 5 + fw) { ctx.fillStyle = A.RAINBOW[i]; ctx.fillRect(sx, y + 4, _mn(seg + 1, x + 5 + fw - sx), h - 8); }
       }
-      ctx.restore();
     }
-    outlined(ctx, hot ? 'حمّى! 🌈' : '✨', x + w / 2, y + h / 2 + 1, hot ? 21 : 20, hot ? '#fff7c2' : _W, hot);
+    ctx.restore();
+    outlined(ctx, hot ? 'حمّى! 🌈' : '✨ حماس', x + w / 2, y + h / 2 + 1, 20, hot ? '#fff7c2' : _W, true);
   };
 
   /* ------------------------------------------------------------- balloon */
@@ -516,26 +519,26 @@
     ctx.font = '700 17px Fredoka'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.direction = 'ltr'; ctx.fillStyle = '#5a6390';
     ctx.fillText(side === 'left' ? 'A' : 'D', cx + e * 40, k.y + 24 + d - 4);
   };
-  // st: { move 0..1, click 0..1, hint 0..1, time, still }
+  // st: { move 0..1, click 0..1, hint 0..1, alpha 0..1, label, time, still }
   A.mouseIcon = function (ctx, st) {
-    var k = BB.KEYS.mouse, x = k.x - k.w / 2 + (st.still ? 0 : _sn(st.time * 9) * 6 * st.move), y = k.y - k.h / 2;
-    ctx.beginPath(); ctx.moveTo(x + k.w / 2, y); ctx.bezierCurveTo(x + k.w / 2, y - 18, x + k.w / 2 + 24, y - 14, x + k.w / 2 + 18, y - 34); ink(ctx, 4);
-    if (st.move > 0.05 && !st.still) {
-      ctx.globalAlpha = st.move; ctx.beginPath();
-      for (var i = 0; i < 3; i++) { ctx.moveTo(x - 10, y + 30 + i * 18); ctx.lineTo(x - 26, y + 30 + i * 18); }
-      ink(ctx, 4); ctx.globalAlpha = 1;
-    }
-    circle(ctx, k.x, k.y, 70); ctx.fillStyle = _ia(0.28); ctx.fill();
-    rr(ctx, x, y, k.w, k.h, k.w / 2); fill(ctx, _W); ink(ctx, 5);
-    // The left button: it lights when the child clicks, and pulses when a click is wanted.
-    ctx.save(); rr(ctx, x, y, k.w, k.h, k.w / 2); ctx.clip();
+    var a = st.alpha == null ? 1 : st.alpha;
+    if (a <= 0.02) return;
+    var bx = 1134, by = 636, bw = 132, bh = 68, mw = 28, mh = 40;
+    var mx = bx + bw - 38 + (st.still ? 0 : _sn(st.time * 9) * 3 * st.move), my = by + 14;
+    ctx.save();
+    ctx.globalAlpha = a;
+    rr(ctx, bx, by, bw, bh, 22); fill(ctx, _ia(0.78));
+    ctx.lineWidth = 3; ctx.strokeStyle = _wa(0.8); ctx.stroke();
+    rr(ctx, mx, my, mw, mh, 14); fill(ctx, _W); ink(ctx, 3);
+    ctx.save(); rr(ctx, mx, my, mw, mh, 14); ctx.clip();
     var lit = _mx(st.click, st.held ? 1 : 0, st.hint * (st.still ? 0.6 : 0.35 + 0.35 * _sn(st.time * 7)));
-    if (lit > 0.02) { ctx.globalAlpha = _mn(1, lit); ctx.fillStyle = st.held ? '#ff9f1c' : _Y; ctx.fillRect(x, y, k.w / 2, k.h * 0.42); ctx.globalAlpha = 1; }
+    if (lit > 0.02) { ctx.globalAlpha = a * _mn(1, lit); ctx.fillStyle = st.held ? '#ff9f1c' : _Y; ctx.fillRect(mx, my, mw / 2, mh * 0.44); ctx.globalAlpha = a; }
     ctx.restore();
-    ctx.beginPath(); ctx.moveTo(x + k.w / 2, y + 2); ctx.lineTo(x + k.w / 2, y + k.h * 0.42); ctx.moveTo(x + 2, y + k.h * 0.42); ctx.lineTo(x + k.w - 2, y + k.h * 0.42); ink(ctx, 4);
-    rr(ctx, x + k.w / 2 - 6, y + 14, 12, 20, 6); fill(ctx, '#c8cfea'); ink(ctx, 3);
-    // Two dots beside the mouse for a double click: they light one after the other.
-    if (st.two) for (var j = 0; j < 2; j++) { var on = st.still ? st.two > 0.5 : (st.time * 2.2) % 1 > (j ? 0.3 : 0.12) && (st.time * 2.2) % 1 < 0.55; circle(ctx, x - 22, y + 18 + j * 26, 9); fill(ctx, on ? _Y : _wa(0.7)); ink(ctx, 3); }
+    ctx.beginPath(); ctx.moveTo(mx + mw / 2, my + 1); ctx.lineTo(mx + mw / 2, my + mh * 0.44); ctx.moveTo(mx + 1, my + mh * 0.44); ctx.lineTo(mx + mw - 1, my + mh * 0.44); ink(ctx, 2.5);
+    rr(ctx, mx + mw / 2 - 2.5, my + 6, 5, 8, 2.5); fill(ctx, '#c8cfea');
+    if (st.two) for (var j = 0; j < 2; j++) { var on = st.still ? st.two > 0.5 : (st.time * 2.2) % 1 > (j ? 0.3 : 0.12) && (st.time * 2.2) % 1 < 0.55; circle(ctx, mx - 10, my + 10 + j * 16, 4.5); fill(ctx, on ? _Y : _wa(0.7)); ink(ctx, 2); }
+    outlined(ctx, st.label || 'حرّك وانقر', bx + 44, by + bh / 2 + 1, 16, _W, true);
+    ctx.restore();
   };
 
   /* --------------------------------------------------------- HUD bits */

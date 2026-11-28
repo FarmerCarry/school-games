@@ -435,14 +435,20 @@
     var w = world, sp = w.spec;
     // speed
     var sc = 1 + bump * 0.12;
-    panel(470, 12, 340, 84);
-    ZP.bolt(ctx, 520, 54, 56);
-    ctx.save(); ctx.translate(680, 50); ctx.scale(sc, sc);
-    text(big(save.speed), 0, 0, 52, w.turbo > 0 ? '#4fd8ff' : '#ffe14f');
+    panel(470, 10, 340, 82);
+    ZP.bolt(ctx, 518, 51, 52);
+    ctx.save(); ctx.translate(672, 41); ctx.scale(sc, sc);
+    text(big(save.speed), 0, 0, 46, w.turbo > 0 ? '#4fd8ff' : '#ffe14f');
     ctx.restore();
-    text('سرعة', 680, 84, 18, '#fff', 'center', true);
+    text('سرعة', 672, 74, 17, '#f2ecff', 'center', true);
     var gain = ZP.stepGain(save) * (w.turbo > 0 ? 2 : 1);
-    pair('+' + big(gain), 'لكل خطوة' + (w.turbo > 0 ? ' (توربو ' + M.ceil(w.turbo) + ')' : ''), 640, 116, 22, w.turbo > 0 ? '#4fd8ff' : '#fff');
+    var gNum = '+' + big(gain), gWords = 'لكل خطوة' + (w.turbo > 0 ? ' (توربو ' + M.ceil(w.turbo) + ')' : '');
+    ctx.font = '700 19px Fredoka';
+    var cw = M.max(156, ctx.measureText(gNum).width + ctx.measureText(gWords).width + 40);
+    ZP.rrect(ctx, 640 - cw / 2, 99, cw, 31, 15.5);
+    ctx.fillStyle = 'rgba(42,29,78,0.86)'; ctx.fill();
+    ctx.lineWidth = 2.5; ctx.strokeStyle = w.turbo > 0 ? '#4fd8ff' : 'rgba(255,255,255,0.85)'; ctx.stroke();
+    pair(gNum, gWords, 640, 115, 19, w.turbo > 0 ? '#4fd8ff' : '#ffe98a');
     // trophies and stage
     panel(176, 18, 190, 58);
     ZP.trophy(ctx, 212, 47, 44);
@@ -452,15 +458,24 @@
     if (save.rebirths) text('★' + save.rebirths, 1000, 48, 24, '#ffe14f');
     // the need bar: how close the speed is to flying over the gap
     var need = sp.need, f = M.min(1, save.speed / need), ok = f >= 1;
-    var bx = 340, by = 652, bw = 600, bh = 46;
+    var bx = 340, by = 654, bw = 600, bh = 46;
     ZP.rrect(ctx, bx, by, bw, bh, bh / 2); ctx.fillStyle = 'rgba(42,29,78,0.85)'; ctx.fill();
     if (f > 0.02) { ZP.rrect(ctx, bx + 5, by + 5, M.max(bh - 10, (bw - 10) * f), bh - 10, (bh - 10) / 2); ctx.fillStyle = ok ? '#3ddc84' : '#ffe14f'; ctx.fill(); }
     ZP.rrect(ctx, bx, by, bw, bh, bh / 2); ctx.lineWidth = 4; ctx.strokeStyle = '#fff'; ctx.stroke();
     text(ok ? 'جاهز للقفز! اجرِ إلى المنحدر' : 'للقفز تحتاج ⚡ ' + big(need), bx + bw / 2, by + bh / 2 + 1, 24, '#fff', 'center', true);
-    // how far along the road
+    // how far along the road (high-contrast dark-rimmed track so it pops on bright pads)
     var prog = M.max(0, M.min(1, w.z / (sp.rows + ZP.RAMP)));
-    ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.fillRect(bx + 20, by - 14, bw - 40, 5);
-    ctx.fillStyle = '#fff'; ZP.rrect(ctx, bx + 20 + (bw - 40) * prog - 8, by - 20, 16, 16, 8); ctx.fill();
+    var tx = bx + 24, tw = bw - 48, ty = by - 22, th = 11;
+    ZP.rrect(ctx, tx, ty, tw, th, th / 2); ctx.fillStyle = '#2a1d4e'; ctx.fill();
+    ctx.lineWidth = 3; ctx.strokeStyle = '#fff'; ctx.stroke();
+    if (prog > 0.005) {
+      ZP.rrect(ctx, tx + 2, ty + 2, M.max(th - 4, (tw - 4) * prog), th - 4, (th - 4) / 2);
+      ctx.fillStyle = ok ? '#3ddc84' : '#4fd8ff'; ctx.fill();
+    }
+    var kx = tx + tw * prog, ky = ty + th / 2;
+    ctx.beginPath(); ctx.arc(kx, ky, 10, 0, M.PI * 2); ctx.fillStyle = '#2a1d4e'; ctx.fill();
+    ctx.beginPath(); ctx.arc(kx, ky, 8, 0, M.PI * 2); ctx.fillStyle = '#fff'; ctx.fill();
+    ctx.beginPath(); ctx.arc(kx, ky, 5, 0, M.PI * 2); ctx.fillStyle = '#ff5fa2'; ctx.fill();
     // floats
     for (var i = 0; i < floats.length; i++) {
       var p = floats[i];
@@ -468,12 +483,14 @@
       text(p.text, p.x, p.y, p.size, p.color, 'center', /[؀-ۿ]/.test(p.text));
     }
     ctx.globalAlpha = 1;
-    // the coach for a first-timer (and anyone standing still for a while)
+    // the coach for a first-timer (and anyone standing still for a while) — sleek below runner, never blocking the road
     if ((!save.coach && w.steps < 8) || (idle > 4 && w.phase === 'run')) {
-      var pulse = calm() ? 1 : 1 + M.sin(time * 6) * 0.05;
-      ctx.save(); ctx.translate(640, 300); ctx.scale(pulse, pulse);
-      panel(-340, -42, 680, 84, 'rgba(255,95,162,0.95)');
-      text('اضغط مطولًا  ↑  أو  مسافة  أو الفأرة لتجري!', 0, 2, 30, '#fff', 'center', true);
+      var pulse = calm() ? 1 : 1 + M.sin(time * 5.5) * 0.025;
+      ctx.save(); ctx.translate(640, 582); ctx.scale(pulse, pulse);
+      ZP.rrect(ctx, -284, -27, 568, 54, 27);
+      ctx.fillStyle = 'rgba(42,29,78,0.92)'; ctx.fill();
+      ctx.lineWidth = 4; ctx.strokeStyle = '#ffe14f'; ctx.stroke();
+      text('اضغط مطولًا  ↑  أو  مسافة  أو الفأرة لتجري!', 0, 1, 23, '#fff', 'center', true);
       ctx.restore();
     }
     // banner

@@ -8,7 +8,18 @@
 body { background: #07020f; }
 
 .md-overlay { background: rgba(7, 2, 16, 0.6); }
-#scr-title { background: radial-gradient(ellipse at center, rgba(20, 6, 40, 0.15) 0%, rgba(7, 2, 16, 0.72) 75%); }
+#scr-title { background: radial-gradient(ellipse at center, rgba(22, 8, 48, 0.08) 0%, rgba(7, 2, 18, 0.44) 82%); }
+
+.md-play-btns { position: fixed; top: 10px; right: 62px; z-index: 20; display: flex; gap: 8px; }
+.md-play-btns[hidden] { display: none; }
+.md-hud-btn {
+  width: 44px; height: 44px; border-radius: 50%; border: 2px solid rgba(255, 230, 0, 0.72);
+  background: rgba(24, 8, 48, 0.86); color: var(--md-yel);
+  display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0;
+  box-shadow: 0 0 14px rgba(180, 77, 255, 0.45); transition: transform 0.1s ease, background 0.15s ease;
+}
+.md-hud-btn:hover { background: rgba(62, 20, 114, 0.96); transform: scale(1.06); }
+.md-hud-btn:active { transform: scale(0.95); }
 
 .md-title-wrap {
   text-align: center;
@@ -22,25 +33,26 @@ body { background: #07020f; }
 
 .md-logo {
   margin: 0;
-  line-height: 0.95;
+  line-height: 1.08;
   display: flex;
   flex-direction: column;
   align-items: center;
+  gap: 6px;
   font-weight: 800;
   animation: md-bob 2.6s ease-in-out infinite;
 }
 .md-logo-top {
-  font-size: clamp(46px, 9.5vh, 96px);
+  font-size: clamp(44px, 9vh, 88px);
   color: var(--md-yel);
   text-shadow: 0 0 18px rgba(255, 230, 0, 0.75), 0 6px 0 #8a3b00, 0 10px 18px rgba(0, 0, 0, 0.6);
-  transform: rotate(-3deg);
+  transform: rotate(-2deg);
 }
 .md-logo-bot {
-  font-size: clamp(54px, 11.5vh, 118px);
+  font-size: clamp(52px, 11vh, 108px);
   color: #fff;
   text-shadow: 0 0 22px rgba(180, 77, 255, 0.95), 0 6px 0 #5a1596, 0 12px 20px rgba(0, 0, 0, 0.6);
-  transform: rotate(2deg);
-  margin-top: -4px;
+  transform: rotate(1.5deg);
+  margin-top: 4px;
 }
 .md-tag {
   margin: 4px 0 6px;

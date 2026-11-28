@@ -17,30 +17,45 @@
     <div class="logo"><span class="l1">مصارعة</span><span class="l2">السومو<i>!</i></span></div>
     <div class="tag">معارك بطون مضحكة فوق حلبات طائرة!</div>
 
-    <div id="howto" class="card side">
-      <h3>طريقة اللعب</h3>
-      <div class="krow"><b>لاعب 1</b><span class="sg-key">W</span> قفز <span class="sg-key">S</span> هجوم</div>
-      <div class="krow"><b>لاعب 2</b><span class="sg-key">&uarr;</span> قفز <span class="sg-key">&darr;</span> هجوم</div>
-      <div class="small">اضغط <b>هجوم</b> وأنت في الهواء لتسقط ببطنك!</div>
-      <div class="goal">أوقع خصمك في الماء. أول من يجمع 5 نقاط يفوز!</div>
-    </div>
-
-    <div id="prog" class="card side">
-      <h3>نجومك</h3>
-      <div class="big-star"><span dir="ltr">&#9733; <span id="tStars">0</span></span></div>
-      <div class="small" style="margin-top:6px">القبعات المفتوحة: <b id="tHats" dir="ltr">0</b></div>
+    <div id="prog" class="tstat">
+      <div class="tstat-row">
+        <span class="tstar" dir="ltr">&#9733; <b id="tStars">0</b></span>
+        <span class="tchip">🎩 <b id="tHats" dir="ltr">0</b></span>
+        <span class="tchip">🏅 <b id="tMedals" dir="ltr">0/24</b></span>
+      </div>
       <div class="bar"><div id="tBar"></div></div>
-      <div class="small" id="tNext"></div>
-      <div class="small" style="margin-top:4px">ميداليات الخصوم: <b id="tMedals" dir="ltr">0 / 24</b></div>
-      <div class="small" id="tRecord" style="margin-top:4px;color:#d61f5a;font-weight:700"></div>
+      <div class="tstat-sub" id="tNext"></div>
+      <div class="tstat-rec" id="tRecord"></div>
     </div>
 
     <div class="modes">
       <button class="mbtn y" id="b1p" type="button"><b>لاعب واحد</b><small>ضد الكمبيوتر</small></button>
       <button class="mbtn p" id="b2p" type="button"><b>لاعبان</b><small>على لوحة مفاتيح واحدة</small></button>
+      <button class="mbtn h" id="bHats" type="button"><b>🎩 القبعات</b><small id="bHatsSub" dir="ltr">2 / 17</small></button>
     </div>
-    <div class="enter-hint">اضغط <span class="sg-key">Enter</span> للعب &nbsp;&bull;&nbsp; اربح المباريات لتفتح قبعات جديدة!</div>
-    <canvas id="hatbar"></canvas>
+
+    <div id="howto" class="howto-bar">
+      <span><b>لاعب 1:</b> <span class="sg-key">W</span>/<span class="sg-key">مسافة</span> قفز · <span class="sg-key">S</span> هجوم</span>
+      <span class="sep">|</span>
+      <span><b>لاعب 2:</b> <span class="sg-key">&uarr;</span> قفز · <span class="sg-key">&darr;</span> هجوم</span>
+      <span class="sep">|</span>
+      <span><span class="sg-key">Enter</span> ابدأ</span>
+    </div>
+  </div>
+
+  <!-- HATS -->
+  <div id="scr-hats" class="scr" hidden>
+    <div class="card hatpanel">
+      <div class="hathead">
+        <h2>🎩 مجموعة القبعات</h2>
+        <div class="hatstat" id="hStat"></div>
+      </div>
+      <div class="hatgrid" id="hatGrid"></div>
+      <div class="hatfoot">
+        <span class="small">اختر أي قبعة مفتوحة ليرتديها مصارعك، واجمع النجوم لفتح المزيد!</span>
+        <button class="back" id="bHatsBack" type="button">&#9654; رجوع <small>(Esc)</small></button>
+      </div>
+    </div>
   </div>
 
   <!-- SELECT -->
@@ -106,7 +121,7 @@
   </div>
 </div>
 
-<button id="bPause" class="sg-mute sb-btn" type="button" aria-label="إيقاف مؤقت" title="إيقاف مؤقت (P)" hidden>II</button>
+<button id="bPause" class="sg-mute sb-btn" type="button" aria-label="إيقاف مؤقت" title="إيقاف مؤقت (P)" hidden><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1.5"/><rect x="14" y="5" width="4" height="14" rx="1.5"/></svg></button>
 
 <script src="../../shared/kit.js"></script>
 <script src="art.js"></script>

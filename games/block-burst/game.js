@@ -10,8 +10,8 @@
 
   /* ------------------------------------------------------------ layout */
   var C = 62, BX = 392, BY = 34;             // board grid origin + cell size
-  var TC = 36, TY = 628, TX = [410, 640, 870]; // tray (cell size shrinks for 5-tall pieces)
-  function tcOf(sh) { return Math.min(TC, 146 / sh.h); }
+  var TC = 36, TY = 628, TX = [450, 640, 830]; // tray (cell size shrinks for 5-wide/5-tall pieces)
+  function tcOf(sh) { return Math.min(TC, 146 / sh.h, 168 / sh.w); }
   var LPX = 40, LPW = 300, RPX = 940, RPW = 300;
   var BOMB_BTN = { x: 120, y: 612, r: 46 }, SHUF_BTN = { x: 260, y: 612, r: 46 };
 
@@ -447,7 +447,7 @@
   function slotAt(p) {
     for (var i = 0; i < 3; i++) {
       if (!grabbable(i)) continue;
-      if (Math.abs(p.x - TX[i]) < 108 && Math.abs(p.y - TY) < 80) return i;
+      if (Math.abs(p.x - TX[i]) < 95 && Math.abs(p.y - TY) < 80) return i;
     }
     return -1;
   }
@@ -891,7 +891,7 @@
       var s = slots[i];
       if (s.appear < 1) s.appear = Math.min(1, s.appear + dt / 0.35);
       if (s.ret) { s.ret.t += dt / 0.2; if (s.ret.t >= 1) s.ret = null; }
-      var hov = state === 'play' && !drag && run && run.tray[i] && Math.abs(lastPtr.x - TX[i]) < 108 && Math.abs(lastPtr.y - TY) < 80;
+      var hov = state === 'play' && !drag && run && run.tray[i] && Math.abs(lastPtr.x - TX[i]) < 95 && Math.abs(lastPtr.y - TY) < 80;
       s.hover += ((hov ? 1 : 0) - s.hover) * Math.min(1, dt * 14);
     }
     if (drag) {
@@ -1124,9 +1124,9 @@
     ctx.globalAlpha = 1;
   }
   function drawShelf() {
-    Art.rr(ctx, 318, 552, 644, 156, 30); ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.fill();
-    Art.rr(ctx, 318, 548, 644, 156, 30); ctx.fillStyle = 'rgba(27,15,58,0.55)'; ctx.fill();
-    ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.stroke();
+    Art.rr(ctx, 356, 552, 568, 156, 30); ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.fill();
+    Art.rr(ctx, 356, 548, 568, 156, 30); ctx.fillStyle = 'rgba(27,15,58,0.55)'; ctx.fill();
+    ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,255,255,0.14)'; ctx.stroke();
   }
   function drawTray() {
     for (var i = 0; i < 3; i++) {
@@ -1277,18 +1277,10 @@
     powerBtn(BOMB_BTN, run.bombs, 'bomb', 'قنبلة');
     powerBtn(SHUF_BTN, run.shuffles, 'shuffle', 'خلط');
     if (run.level) { drawGoals(); return; }
-    // classic: gift progress + stats
-    card(LPX, 96, LPW, 150);
-    txt('🎁 الهدية التالية', LPX + LPW / 2, 126, 24, '#ffffff', 'center');
-    var prev = run.nextGift - Rules.GIFT_EVERY, k = clamp((run.score - prev) / Rules.GIFT_EVERY, 0, 1);
-    var bx = LPX + 24, bw = LPW - 48;
-    Art.rr(ctx, bx, 152, bw, 26, 13); ctx.fillStyle = '#120a33'; ctx.fill();
-    if (k > 0.02) { Art.rr(ctx, bx + bw * (1 - k), 152, bw * k, 26, 13); ctx.fillStyle = '#ff8a4f'; ctx.fill(); }
-    ctx.lineWidth = 3; ctx.strokeStyle = '#1b0f3a'; Art.rr(ctx, bx, 152, bw, 26, 13); ctx.stroke();
-    txt('بعد ' + ptsTxt(Math.max(0, run.nextGift - run.score)), LPX + LPW / 2, 208, 22, '#cfc8ff', 'center');
-    card(LPX, 266, LPW, 110);
-    txt('الصفوف المفجّرة', LPX + LPW / 2, 296, 22, '#cfc8ff', 'center');
-    txt(String(run.linesTotal), LPX + LPW / 2, 342, 44, '#ffffff', 'center', { ltr: true, stroke: '#1b0f3a', sw: 8 });
+    // classic: cleared lines card (aligned with top-right Score card)
+    card(LPX, 96, LPW, 132);
+    txt('الصفوف المفجّرة', LPX + LPW / 2, 132, 23, '#cfc8ff', 'center');
+    txt(String(run.linesTotal), LPX + LPW / 2, 184, 52, '#ffffff', 'center', { ltr: true, stroke: '#1b0f3a', sw: 9 });
   }
   function drawGoals() {
     var lv = run.level, y = 96;
@@ -1368,18 +1360,19 @@
     var bw2 = ctx.measureText(bestStr).width; ctx.direction = 'ltr';
     txt(bestStr, cx - 16, 250, 22, '#ffd21f', 'center');
     drawCrown(cx - 16 + bw2 / 2 + 22, 248, 0.9);
-    // combo card
-    card(RPX, 300, RPW, 124, run.streak >= 2 ? 'rgba(90,20,110,0.85)' : null);
-    var cb = 1 + 0.25 * comboBump;
-    ctx.save(); ctx.translate(cx, 340); ctx.scale(cb, cb);
-    if (run.streak >= 1) txt('كومبو ' + run.streak, 0, 0, 38, run.streak >= 2 ? '#ff8fd8' : '#ffffff', 'center', { stroke: '#1b0f3a', sw: 8 });
-    else txt('كومبو', 0, 0, 34, 'rgba(255,255,255,0.45)', 'center');
-    ctx.restore();
-    var grace = Rules.STREAK_GRACE, left = run.streak ? grace - run.miss : 0;
-    for (var g = 0; g < grace; g++) {
-      var px = cx + (g - (grace - 1) / 2) * 34;
-      ctx.beginPath(); ctx.arc(px, 392, 11, 0, Math.PI * 2);
-      ctx.fillStyle = g < left ? '#ff5fc8' : '#120a33'; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = '#1b0f3a'; ctx.stroke();
+    // combo card: shown while streak is active so idle play stays clean
+    if (run.streak >= 1) {
+      card(RPX, 300, RPW, 124, run.streak >= 2 ? 'rgba(98,22,124,0.88)' : 'rgba(54,28,118,0.86)');
+      var cb = 1 + 0.25 * comboBump;
+      ctx.save(); ctx.translate(cx, 340); ctx.scale(cb, cb);
+      txt('كومبو ' + run.streak, 0, 0, 38, run.streak >= 2 ? '#ff8fd8' : '#ffd21f', 'center', { stroke: '#1b0f3a', sw: 8 });
+      ctx.restore();
+      var grace = Rules.STREAK_GRACE, left = grace - run.miss;
+      for (var g = 0; g < grace; g++) {
+        var px = cx + (g - (grace - 1) / 2) * 34;
+        ctx.beginPath(); ctx.arc(px, 392, 11, 0, Math.PI * 2);
+        ctx.fillStyle = g < left ? '#ff5fc8' : 'rgba(255,255,255,0.16)'; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = '#1b0f3a'; ctx.stroke();
+      }
     }
     drawNextSkin(cx);
   }
@@ -1399,10 +1392,14 @@
     ctx.drawImage(Art.block(n.i, 6, 0), px, py + bs, bs, bs); ctx.drawImage(Art.block(n.i, 3, 0), px + bs, py + bs, bs, bs);
     txt(Art.SKINS[n.i].name, cx, 602, 24, '#ffffff', 'center');
     var k = clamp(n.have / n.need, 0, 1), bx = RPX + 24, bw = RPW - 48;
-    Art.rr(ctx, bx, 622, bw, 26, 13); ctx.fillStyle = '#120a33'; ctx.fill();
-    if (k > 0.02) { Art.rr(ctx, bx + bw * (1 - k), 622, bw * k, 26, 13); ctx.fillStyle = '#ffd21f'; ctx.fill(); }
-    ctx.lineWidth = 3; ctx.strokeStyle = '#1b0f3a'; Art.rr(ctx, bx, 622, bw, 26, 13); ctx.stroke();
-    txt(Kit.fmt(Math.min(n.have, n.need)) + ' / ' + Kit.fmt(n.need), cx, 636, 17, '#ffffff', 'center', { ltr: true, stroke: '#1b0f3a', sw: 5 });
+    Art.rr(ctx, bx, 622, bw, 28, 14); ctx.fillStyle = '#18104a'; ctx.fill();
+    if (n.have > 0) {
+      var fw = Math.max(26, bw * k), gg = ctx.createLinearGradient(bx + bw - fw, 622, bx + bw, 650);
+      gg.addColorStop(0, '#fff27a'); gg.addColorStop(1, '#ffb81c');
+      Art.rr(ctx, bx + bw - fw, 622, fw, 28, 14); ctx.fillStyle = gg; ctx.fill();
+    }
+    ctx.lineWidth = 2.5; ctx.strokeStyle = 'rgba(255,210,31,0.55)'; Art.rr(ctx, bx, 622, bw, 28, 14); ctx.stroke();
+    txt(Kit.fmt(Math.min(n.have, n.need)) + ' / ' + Kit.fmt(n.need), cx, 637, 17, '#ffffff', 'center', { ltr: true, stroke: '#1b0f3a', sw: 5 });
     txt(n.label, cx, 680, 19, '#cfc8ff', 'center', { max: RPW - 24 });
   }
   function drawStar(x, y, r, on) {

@@ -97,10 +97,4 @@
   <circle cx="176" cy="372" r="5" fill="#1a4a00"/>
   <circle cx="224" cy="372" r="5" fill="#1a4a00"/>
   <path d="M188 382 a12 10 0 0 0 24 0 z" fill="#1a4a00"/>
-
-  <!-- logo -->
-  <g font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-weight="bold" text-anchor="middle" direction="rtl">
-    <text x="200" y="66" font-size="54" fill="#5a1596" stroke="#5a1596" stroke-width="14" stroke-linejoin="round">اندفاع المتاهة</text>
-    <text x="200" y="62" font-size="54" fill="#ffe600" stroke="#1a0830" stroke-width="4" stroke-linejoin="round" paint-order="stroke">اندفاع المتاهة</text>
-  </g>
 </svg>

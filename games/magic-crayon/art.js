@@ -208,9 +208,9 @@
       var wireMat = lambert(0x7c8aa6);
       for (var i = 0; i < 15; i++) {
         var ring = new T.Mesh(GEO.torus, wireMat);
-        ring.scale.set(0.32, 0.32, 0.32);
+        ring.scale.set(0.25, 0.27, 0.27);
         ring.rotation.y = Math.PI / 2;
-        ring.position.set(-11.2 + i * 1.6, HALF_H + 0.45, -2.55);
+        ring.position.set(-11.2 + i * 1.6, HALF_H + 0.82, -2.55);
         g.add(ring);
       }
       // Giant decorative yellow pencil leaning on right
@@ -577,8 +577,25 @@
       ship: { main: 0x38c9d6, top: 0x94f3fc, side: 0x219aa8 }
     };
 
-    var starMat = lambert(0xffd22b, { emissive: 0xd97b00, emissiveIntensity: 0.35 });
-    var starHaloMat = new T.MeshBasicMaterial({ color: 0xfff39e, transparent: true, opacity: 0.35, side: T.DoubleSide, depthWrite: false });
+    var starMat = lambert(0xffc414, { emissive: 0xe66800, emissiveIntensity: 0.45 });
+    var starOutlineMat = new T.MeshBasicMaterial({ color: 0x241c3b, side: T.BackSide });
+    var starGlowTex = (function () {
+      var c = document.createElement('canvas'); c.width = c.height = 64;
+      var cx = c.getContext('2d'), rg = cx.createRadialGradient(32, 32, 4, 32, 32, 31);
+      rg.addColorStop(0, 'rgba(255, 196, 36, 0.68)');
+      rg.addColorStop(0.55, 'rgba(255, 152, 20, 0.28)');
+      rg.addColorStop(1, 'rgba(255, 196, 36, 0)');
+      cx.fillStyle = rg; cx.fillRect(0, 0, 64, 64);
+      var tx = new T.CanvasTexture(c);
+      if (T.SRGBColorSpace) tx.colorSpace = T.SRGBColorSpace;
+      return tx;
+    })();
+    var starGlowMat = new T.MeshBasicMaterial({ map: starGlowTex, transparent: true, depthWrite: false });
+    var starHaloMat = new T.MeshBasicMaterial({ color: 0xffa614, transparent: true, opacity: 0.42, side: T.DoubleSide, depthWrite: false });
+    var deskShadowMat = new T.MeshBasicMaterial({ color: 0x241608, transparent: true, opacity: 0.26, depthWrite: false });
+    var deskMatGreen = lambert(0x52c4a8);
+    var deskBrassMat = lambert(0xffd046, { emissive: 0x6b4500, emissiveIntensity: 0.2 });
+    var deskDarkMat = lambert(0x1f4f8e);
     var crateMat = lambert(0xd99043);
     var crateTrimMat = lambert(0x9c5922);
     var hazardMat = lambert(0xff3b3b, { emissive: 0xa81600, emissiveIntensity: 0.38 });
@@ -687,25 +704,108 @@
         cap.position.set(toX(p.x + p.w / 2), toY(p.y + p.h - 0.08), 0);
         levelGroup.add(cap);
 
-        // Decorative book label, ruler ticks, or moon craters for toy-diorama craft
+        // Decorative desk craft (beveled mat, sculpted drawers + brass handles, desktop props & contact shadow)
         if (p.style === 'book' && p.h > 1.5) {
+          // Soft contact shadow grounding the desk on the wooden tabletop
+          if (p.y <= 0.1) {
+            var cShad = new T.Mesh(GEO.unitBox, deskShadowMat);
+            cShad.scale.set(p.w + 0.46, 0.08, 2.35);
+            cShad.position.set(toX(p.x + p.w / 2), toY(0.04), 0.06);
+            levelGroup.add(cShad);
+          }
+          // Beveled desk mat resting cleanly on the top surface
+          var matStrip = new T.Mesh(GEO.unitBox, deskMatGreen);
+          matStrip.scale.set(Math.max(1.2, p.w - 0.7), 0.06, 1.55);
+          matStrip.position.set(toX(p.x + p.w / 2), toY(p.y + p.h + 0.05), -0.05);
+          levelGroup.add(matStrip);
+          // Darker bottom kick-plate & side corner pilasters for 3D furniture depth
+          var kick = new T.Mesh(GEO.unitBox, deskDarkMat);
+          kick.scale.set(p.w - 0.06, 0.34, 1.94);
+          kick.position.set(toX(p.x + p.w / 2), toY(p.y + 0.17), 0);
+          levelGroup.add(kick);
+          for (var sd = -1; sd <= 1; sd += 2) {
+            var pil = new T.Mesh(GEO.unitBox, mSide);
+            pil.scale.set(0.28, p.h - 0.32, 1.96);
+            pil.position.set(toX(p.x + p.w / 2 + sd * (p.w / 2 - 0.16)), toY(p.y + (p.h - 0.18) / 2), 0.01);
+            levelGroup.add(pil);
+          }
           var spine = new T.Mesh(GEO.unitBox, mTop);
-          spine.scale.set(p.w - 0.5, 0.16, 1.94);
-          spine.position.set(toX(p.x + p.w / 2), toY(p.y + p.h - 0.72), 0);
+          spine.scale.set(p.w - 0.56, 0.14, 1.96);
+          spine.position.set(toX(p.x + p.w / 2), toY(p.y + p.h - 0.52), 0.01);
           levelGroup.add(spine);
           if (p.w >= 4.2 && p.h >= 3.0) {
-            var label = new T.Mesh(GEO.unitBox, mTop);
-            label.scale.set(Math.min(2.6, p.w * 0.42), 1.05, 0.06);
-            label.position.set(toX(p.x + p.w / 2), toY(p.y + p.h * 0.48), 0.96);
-            levelGroup.add(label);
-            var labelIn = new T.Mesh(GEO.unitBox, mSide);
-            labelIn.scale.set(Math.min(2.2, p.w * 0.34), 0.14, 0.08);
-            labelIn.position.set(toX(p.x + p.w / 2), toY(p.y + p.h * 0.54), 0.97);
-            levelGroup.add(labelIn);
-            var labelIn2 = labelIn.clone();
-            labelIn2.scale.x *= 0.7;
-            labelIn2.position.y -= 0.28;
-            levelGroup.add(labelIn2);
+            // Two stacked sculpted drawers with recessed rims & 3D brass bar handles
+            var dw = Math.min(3.8, p.w - 1.3), dh = (p.h - 1.55) * 0.44;
+            for (var dr = 0; dr < 2; dr++) {
+              var dy = p.y + 0.68 + dh * 0.5 + dr * (dh + 0.24);
+              var dRim = new T.Mesh(GEO.unitBox, deskDarkMat);
+              dRim.scale.set(dw + 0.14, dh + 0.12, 0.06);
+              dRim.position.set(toX(p.x + p.w / 2), toY(dy), 0.94);
+              var dFront = new T.Mesh(GEO.unitBox, mSide);
+              dFront.scale.set(dw, dh, 0.12);
+              dFront.position.set(toX(p.x + p.w / 2), toY(dy), 0.97);
+              var dTopHl = new T.Mesh(GEO.unitBox, mTop);
+              dTopHl.scale.set(dw - 0.08, 0.08, 0.14);
+              dTopHl.position.set(toX(p.x + p.w / 2), toY(dy + dh * 0.46), 0.98);
+              var hBar = new T.Mesh(GEO.unitBox, deskBrassMat);
+              hBar.scale.set(Math.min(1.15, dw * 0.34), 0.13, 0.14);
+              hBar.position.set(toX(p.x + p.w / 2), toY(dy + 0.04), 1.1);
+              var hPostL = new T.Mesh(GEO.unitBox, deskBrassMat);
+              hPostL.scale.set(0.11, 0.11, 0.14);
+              hPostL.position.set(toX(p.x + p.w / 2 - Math.min(0.45, dw * 0.13)), toY(dy + 0.04), 1.04);
+              var hPostR = hPostL.clone();
+              hPostR.position.x = toX(p.x + p.w / 2 + Math.min(0.45, dw * 0.13));
+              levelGroup.add(dRim, dFront, dTopHl, hBar, hPostL, hPostR);
+            }
+          }
+          // Cozy background desktop props on wide desks (placed behind z=-0.74, clear of start/goal/crates)
+          if (p.w >= 5.5 && p.h >= 3.2) {
+            var propSafe = function (wx) {
+              if (Math.abs(wx - lv.start[0]) < 1.35 || Math.abs(wx - lv.goal[0]) < 1.35) return false;
+              for (var ci2 = 0; ci2 < world.crates.length; ci2++) if (Math.abs(wx - world.crates[ci2].x) < 1.05) return false;
+              return wx > p.x + 0.65 && wx < p.x + p.w - 0.65;
+            };
+            var bx = p.x < 8 ? p.x + p.w - 1.35 : p.x + 1.25;
+            if (propSafe(bx)) {
+              var bStack = new T.Group();
+              bStack.position.set(toX(bx), toY(p.y + p.h + 0.08), -0.76);
+              var bSh = new T.Mesh(GEO.unitBox, deskShadowMat);
+              bSh.scale.set(1.55, 0.04, 0.95);
+              var b1 = new T.Mesh(GEO.unitBox, lambert(p.x < 8 ? 0xff6b8b : 0x9b6bff));
+              b1.scale.set(1.36, 0.26, 0.82); b1.position.y = 0.14;
+              var b1p = new T.Mesh(GEO.unitBox, matWhite);
+              b1p.scale.set(1.26, 0.18, 0.85); b1p.position.y = 0.14;
+              var b2 = new T.Mesh(GEO.unitBox, lambert(p.x < 8 ? 0x3ed68a : 0xffca3a));
+              b2.scale.set(1.12, 0.24, 0.72); b2.position.set(0.06, 0.39, 0.02); b2.rotation.y = 0.14;
+              var b2p = new T.Mesh(GEO.unitBox, matWhite);
+              b2p.scale.set(1.02, 0.16, 0.75); b2p.position.copy(b2.position); b2p.rotation.y = 0.14;
+              bStack.add(bSh, b1, b1p, b2, b2p);
+              levelGroup.add(bStack);
+            }
+            var ex = p.x < 8 ? p.x + 0.95 : p.x + p.w * 0.52;
+            if (propSafe(ex)) {
+              var cup = new T.Group();
+              cup.position.set(toX(ex), toY(p.y + p.h + 0.08), -0.78);
+              if (p.x >= 8) {
+                var cBody = new T.Mesh(GEO.cyl, lambert(0xff7ba3));
+                cBody.scale.set(0.32, 0.78, 0.32); cBody.position.y = 0.39;
+                var cRim = new T.Mesh(GEO.cyl, matWhite);
+                cRim.scale.set(0.35, 0.12, 0.35); cRim.position.y = 0.74;
+                var p1 = new T.Mesh(GEO.cyl, lambert(0xffd23f));
+                p1.scale.set(0.065, 1.15, 0.065); p1.position.set(-0.08, 0.82, 0); p1.rotation.z = 0.16;
+                var p2 = new T.Mesh(GEO.cyl, lambert(0x22b8ff));
+                p2.scale.set(0.065, 1.05, 0.065); p2.position.set(0.09, 0.78, 0.04); p2.rotation.z = -0.18;
+                cup.add(cBody, cRim, p1, p2);
+              } else {
+                var er1 = new T.Mesh(GEO.unitBox, lambert(0xff7aa2));
+                er1.scale.set(0.54, 0.24, 0.38); er1.position.set(-0.14, 0.12, 0);
+                var er2 = new T.Mesh(GEO.unitBox, lambert(0x45b6ff));
+                er2.scale.set(0.32, 0.24, 0.38); er2.position.set(0.28, 0.12, 0);
+                cup.add(er1, er2);
+                cup.rotation.y = 0.22;
+              }
+              levelGroup.add(cup);
+            }
           }
         } else if (p.style === 'ruler') {
           var nTicks = Math.min(10, Math.floor(p.w * 1.1));
@@ -790,16 +890,22 @@
         crateMeshes.push(cg);
       }
 
-      // Spinning 3D stars
+      // Spinning 3D stars with crisp dark cartoon outline + warm glow halo
       for (var si = 0; si < world.stars.length; si++) {
         var stObj = world.stars[si];
         var sg = new T.Group();
         sg.position.set(toX(stObj.x), toY(stObj.y), 0);
         var sm = new T.Mesh(GEO.star, starMat);
-        var halo = new T.Mesh(new T.RingGeometry(0.46, 0.6, 18), starHaloMat);
-        sg.add(sm, halo);
+        var outline = new T.Mesh(GEO.star, starOutlineMat);
+        outline.scale.set(1.2, 1.2, 1.34);
+        sm.add(outline);
+        var glow = new T.Mesh(new T.PlaneGeometry(1.75, 1.75), starGlowMat);
+        glow.position.z = -0.26;
+        var halo = new T.Mesh(new T.RingGeometry(0.5, 0.62, 18), starHaloMat);
+        halo.position.z = -0.18;
+        sg.add(glow, halo, sm);
         levelGroup.add(sg);
-        starMeshes.push({ group: sg, star: sm, halo: halo, baseY: sg.position.y, phase: si * 1.7 });
+        starMeshes.push({ group: sg, star: sm, halo: halo, glow: glow, baseY: sg.position.y, phase: si * 1.7 });
       }
 
       // Checkered flag
@@ -1009,11 +1115,12 @@
 
     /* ------------------------------------------ 3D ghost guide (teach-by-doing) */
     var coachGroup = new T.Group();
-    var coachMat = new T.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.58, depthWrite: false });
+    var coachMat = new T.MeshBasicMaterial({ color: 0x16a8ff, transparent: true, opacity: 0.85, depthWrite: false });
+    var coachRimMat = new T.MeshBasicMaterial({ color: 0x241c3b, transparent: true, opacity: 0.55, depthWrite: false });
     var coachDots = [];
     var coachPts = [];
     var coachCrayon = cursorCrayon.clone();
-    coachCrayon.scale.set(0.85, 0.85, 0.85);
+    coachCrayon.scale.set(0.88, 0.88, 0.88);
     scene.add(coachGroup);
 
     function buildCoachGuide(lv) {
@@ -1022,26 +1129,41 @@
       coachPts = [];
       var sol = lv.solution && lv.solution[0];
       if (!sol || !sol.pts || sol.pts.length < 2) { coachGroup.visible = false; return; }
-      // Sample smooth dotted guide points along the reference stroke
+      // Sample smooth arched chalk dashes along the reference stroke
       var raw = sol.pts;
+      var totalLen = 0;
+      for (var li = 1; li < raw.length; li++) totalLen += Math.hypot(raw[li][0] - raw[li - 1][0], raw[li][1] - raw[li - 1][1]);
+      var acc = 0;
       for (var i = 1; i < raw.length; i++) {
         var x0 = raw[i - 1][0], y0 = raw[i - 1][1], x1 = raw[i][0], y1 = raw[i][1];
         var d = Math.hypot(x1 - x0, y1 - y0);
-        var n = Math.max(2, Math.ceil(d / 0.55));
+        var n = Math.max(2, Math.ceil(d / 0.72));
         for (var k = 0; k < n; k++) {
           var f = k / n;
-          coachPts.push([x0 + (x1 - x0) * f, y0 + (y1 - y0) * f]);
+          var u = totalLen > 0 ? (acc + d * f) / totalLen : 0;
+          var arch = lv.id === '1-1' ? Math.sin(u * Math.PI) * 0.28 : 0;
+          coachPts.push([x0 + (x1 - x0) * f, y0 + (y1 - y0) * f + arch]);
         }
+        acc += d;
       }
       coachPts.push(raw[raw.length - 1]);
       var colHex = MC.CRAYONS[sol.type || 0].hex;
       coachMat.color.setHex(colHex);
-      for (var j = 0; j < coachPts.length; j++) {
-        var dot = new T.Mesh(GEO.sphere, coachMat);
-        dot.scale.set(0.14, 0.14, 0.14);
-        dot.position.set(toX(coachPts[j][0]), toY(coachPts[j][1]), 0.25);
-        coachGroup.add(dot);
-        coachDots.push(dot);
+      for (var j = 0; j < coachPts.length - 1; j++) {
+        var pA = coachPts[j], pB = coachPts[j + 1];
+        var mx = (pA[0] + pB[0]) * 0.5, my = (pA[1] + pB[1]) * 0.5;
+        var ang = Math.atan2(pB[1] - pA[1], pB[0] - pA[0]);
+        var dashGrp = new T.Group();
+        dashGrp.position.set(toX(mx), toY(my), 0.24);
+        dashGrp.rotation.z = ang;
+        var back = new T.Mesh(GEO.unitBox, coachRimMat);
+        back.scale.set(0.48, 0.24, 0.08);
+        back.position.z = -0.02;
+        var core = new T.Mesh(GEO.unitBox, coachMat);
+        core.scale.set(0.4, 0.15, 0.1);
+        dashGrp.add(back, core);
+        coachGroup.add(dashGrp);
+        coachDots.push(dashGrp);
       }
       coachGroup.add(coachCrayon);
       coachGroup.visible = false;
@@ -1319,10 +1441,10 @@
         cursorCrayon.visible = false;
       }
 
-      // Ghost guide coach
+      // Ghost guide coach (animated pulsing dashed chalk arc + moving crayon)
       coachGroup.visible = !!ctx.showCoach && coachPts.length >= 2;
       if (coachGroup.visible) {
-        var ct = (animT * 0.55) % 1.25;
+        var ct = (animT * 0.58) % 1.25;
         var frac = Math.min(1, ct);
         var idx = Math.min(coachPts.length - 1, Math.floor(frac * (coachPts.length - 1)));
         var nxt = Math.min(coachPts.length - 1, idx + 1);
@@ -1331,7 +1453,14 @@
         var gy = coachPts[idx][1] + (coachPts[nxt][1] - coachPts[idx][1]) * sub;
         coachCrayon.position.set(toX(gx), toY(gy), 0.35);
         var fade = ct > 1.0 ? Math.max(0, 1 - (ct - 1.0) * 4) : 1;
-        coachMat.opacity = 0.42 + Math.sin(animT * 4) * 0.16;
+        var nudgeBoost = ctx.guideNudge ? 1.22 : 1.0;
+        coachMat.opacity = ctx.guideNudge ? 0.95 : (0.68 + Math.sin(animT * 4.5) * 0.2);
+        coachRimMat.opacity = ctx.guideNudge ? 0.72 : 0.48;
+        for (var dj = 0; dj < coachDots.length; dj++) {
+          var wave = view.calm ? 1 : (0.88 + 0.26 * Math.sin(animT * 5.2 - dj * 0.55));
+          var scd = wave * nudgeBoost;
+          coachDots[dj].scale.set(scd, scd, 1);
+        }
         coachCrayon.visible = !view.calm && fade > 0.1;
       }
 

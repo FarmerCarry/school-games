@@ -303,8 +303,8 @@
       // Play stats: a real match is a round (never the attract demo).
       Kit.stats.round(kind === 'cpu' ? 'vs-' + G.opp.id : 'pvp');
       coach();
-      banner(kind === 'cpu' ? 'أنت تبدأ!' : 'اللاعب 1 يبدأ!', 'حطّم المثلث بضربة قوية!', '#ffe45c');
-      if (kind === 'cpu') { say('start'); G.say.t = -1.2; }
+      banner(kind === 'cpu' ? 'أنت تبدأ!' : 'اللاعب 1 يبدأ!', 'حطّم المثلث بضربة قوية!', '#ffe45c', 1.95);
+      if (kind === 'cpu') { say('start'); G.say.t = -2.05; }
     }
   }
 
@@ -1108,7 +1108,12 @@
       gap = R + 6 + G.power * 130 + (G.power === 0 ? Math.sin(time * 3) * 2 + 2 : 0);
     }
     var skin = G.players[G.turn].cpu ? (G.turn === 1 && G.kind === 'cpu' ? cpuCue() : 'classic') : save.cue;
+    ctx.save();
+    if (G.kind !== 'demo' && screen === 'game') {
+      ctx.beginPath(); ctx.rect(128, 0, W - 128, H); ctx.clip();
+    }
     Art.drawCue(ctx, cue.x, cue.y, G.aim, gap, skin, alpha);
+    ctx.restore();
     if (G.pullCue && G.phase === 'aim' && !G.players[G.turn].cpu) {
       var pc = G.pullCue, pk = pc.t / pc.dur;
       var fade = pk > 0.72 ? (1 - pk) / 0.28 : 1;
@@ -1128,6 +1133,8 @@
   function cpuCue() { return G.opp.id === 'hard' ? 'gold' : G.opp.id === 'medium' ? 'ocean' : 'candy'; }
 
   function drawTray() {
+    if (!G.tray.length) return;
+    Art.drawTrayBox(ctx);
     for (var i = 0; i < G.tray.length; i++) {
       var tb = G.tray[i];
       drawSprite(tb.n, tb.x, 685, R, 1, Math.min(30, R * K));
@@ -1162,27 +1169,38 @@
 
   function drawBanner() {
     var b = G.banner, k = b.t / b.dur;
-    var inK = Math.min(1, b.t / 0.25), outK = k > 0.8 ? (k - 0.8) / 0.2 : 0;
-    var s = (1 - Math.pow(1 - inK, 3)) * (1 - outK * 0.3);
+    var inK = Math.min(1, b.t / 0.22), outK = k > 0.85 ? (k - 0.85) / 0.15 : 0;
+    var s = (1 - Math.pow(1 - inK, 3)) * (1 - outK * 0.2);
     ctx.save();
     ctx.globalAlpha = 1 - outK;
-    ctx.translate(P.CX, P.CY - 20);
-    ctx.fillStyle = 'rgba(15,8,40,0.78)';
-    var bw = 820 * s, bh = b.sub ? 118 : 90;
-    ctx.beginPath(); ctx.moveTo(-bw / 2 - 20, -bh / 2); ctx.lineTo(bw / 2 + 20, -bh / 2); ctx.lineTo(bw / 2, bh / 2); ctx.lineTo(-bw / 2, bh / 2); ctx.closePath(); ctx.fill();
+    ctx.translate(P.CX, P.CY - 96);
     ctx.scale(s, s);
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    var fs = 56;
+    var fs = 42;
     ctx.font = '700 ' + fs + 'px ' + Art.font;
-    while (fs > 30 && ctx.measureText(b.text).width > 780) { fs -= 2; ctx.font = '700 ' + fs + 'px ' + Art.font; }
-    var ty = b.sub ? -14 : 0;
-    ctx.lineWidth = 8; ctx.strokeStyle = '#2a1060'; ctx.lineJoin = 'round';
+    while (fs > 26 && ctx.measureText(b.text).width > 540) { fs -= 2; ctx.font = '700 ' + fs + 'px ' + Art.font; }
+    var tw = ctx.measureText(b.text).width;
+    var sw = 0, ss = 21;
+    if (b.sub) {
+      ctx.font = '700 ' + ss + 'px ' + Art.font;
+      while (ss > 15 && ctx.measureText(b.sub).width > 540) { ss--; ctx.font = '700 ' + ss + 'px ' + Art.font; }
+      sw = ctx.measureText(b.sub).width;
+    }
+    var bw = Math.max(320, Math.min(600, Math.max(tw, sw) + 64)), bh = b.sub ? 96 : 68;
+    ctx.shadowColor = 'rgba(0,0,0,0.48)'; ctx.shadowBlur = 20; ctx.shadowOffsetY = 6;
+    ctx.fillStyle = '#171042';
+    Art.rr(ctx, -bw / 2, -bh / 2, bw, bh, 22); ctx.fill();
+    ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+    ctx.lineWidth = 4; ctx.strokeStyle = b.color;
+    Art.rr(ctx, -bw / 2, -bh / 2, bw, bh, 22); ctx.stroke();
+    var ty = b.sub ? -15 : 0;
+    ctx.font = '700 ' + fs + 'px ' + Art.font;
+    ctx.lineWidth = 6; ctx.strokeStyle = '#0d0728'; ctx.lineJoin = 'round';
     ctx.strokeText(b.text, 0, ty);
     ctx.fillStyle = b.color; ctx.fillText(b.text, 0, ty);
     if (b.sub) {
-      var ss = 24; ctx.font = '500 ' + ss + 'px ' + Art.font;
-      while (ss > 16 && ctx.measureText(b.sub).width > 780) { ss--; ctx.font = '500 ' + ss + 'px ' + Art.font; }
-      ctx.fillStyle = '#fff'; ctx.fillText(b.sub, 0, 36);
+      ctx.font = '700 ' + ss + 'px ' + Art.font;
+      ctx.fillStyle = '#f2f5ff'; ctx.fillText(b.sub, 0, 26);
     }
     ctx.restore();
   }
@@ -1211,65 +1229,65 @@
 
   function drawHUD() {
     if (G.kind === 'trick') drawTrickHUD();
-    else { drawCard(0, 170, 14, false); drawCard(1, 690, 14, true); drawVS(); drawSay(); }
+    else { drawCard(0, 170, 10, false); drawCard(1, 698, 10, true); drawVS(); drawSay(); }
     drawPowerBar();
     drawSpin();
     drawTips();
   }
 
   function drawCard(i, x, y, mirror) {
-    var w = 420, h = 104, active = G.turn === i && G.phase !== 'over';
+    var w = 412, h = 84, active = G.turn === i && G.phase !== 'over';
     var pl = G.players[i];
     ctx.save();
-    var bob = active ? Math.sin(time * 4) * 2 : 0;
+    var bob = active ? Math.sin(time * 4) * 1.5 : 0;
     ctx.translate(0, bob);
-    ctx.globalAlpha = active ? 1 : 0.72;
-    if (active) { ctx.shadowColor = i === 0 ? '#5fe0ff' : '#ff8cc6'; ctx.shadowBlur = 22; }
+    ctx.globalAlpha = active ? 1 : 0.74;
+    if (active) { ctx.shadowColor = i === 0 ? '#5fe0ff' : '#ff8cc6'; ctx.shadowBlur = 18; }
     ctx.fillStyle = active ? 'rgba(40,26,110,0.95)' : 'rgba(20,14,50,0.85)';
-    Art.rr(ctx, x, y, w, h, 22); ctx.fill();
+    Art.rr(ctx, x, y, w, h, 20); ctx.fill();
     ctx.shadowBlur = 0;
-    ctx.lineWidth = 4; ctx.strokeStyle = active ? (i === 0 ? '#5fe0ff' : '#ff8cc6') : 'rgba(255,255,255,0.15)';
-    Art.rr(ctx, x, y, w, h, 22); ctx.stroke();
-    var ax = mirror ? x + w - 54 : x + 54;
+    ctx.lineWidth = 3.5; ctx.strokeStyle = active ? (i === 0 ? '#5fe0ff' : '#ff8cc6') : 'rgba(255,255,255,0.16)';
+    Art.rr(ctx, x, y, w, h, 20); ctx.stroke();
+    var ax = mirror ? x + w - 44 : x + 44;
     var mood = G.phase === 'over' ? (G.winner === i ? '' : 'sad') : '';
-    ctx.drawImage(avatarImg(pl.avatar, mood), ax - 42, y + 10, 84, 84);
-    var tx = mirror ? x + w - 108 : x + 108;
+    ctx.drawImage(avatarImg(pl.avatar, mood), ax - 32, y + 10, 64, 64);
+    var tx = mirror ? x + w - 88 : x + 88;
     ctx.textAlign = mirror ? 'right' : 'left'; ctx.textBaseline = 'middle';
-    ctx.font = '700 26px ' + Art.font; ctx.fillStyle = '#fff';
-    ctx.fillText(pl.name, tx, y + 30);
+    ctx.font = '700 22px ' + Art.font; ctx.fillStyle = '#fff';
+    ctx.fillText(pl.name, tx, y + 22);
     // group chip
     var g = G.groups[i];
     var label = g === 'solid' ? 'السادة' : g === 'stripe' ? 'المخطّطة' : 'لم تُحدَّد بعد';
-    ctx.font = '700 15px ' + Art.font;
-    var tw = ctx.measureText(label).width + 18;
+    ctx.font = '700 13px ' + Art.font;
+    var tw = ctx.measureText(label).width + 16;
     var cx = mirror ? tx - tw : tx;
-    ctx.fillStyle = g ? (g === 'solid' ? '#ffd21f' : '#fff') : 'rgba(255,255,255,0.25)';
-    Art.rr(ctx, cx, y + 45, tw, 20, 10); ctx.fill();
+    ctx.fillStyle = g ? (g === 'solid' ? '#ffd21f' : '#fff') : 'rgba(255,255,255,0.22)';
+    Art.rr(ctx, cx, y + 35, tw, 18, 9); ctx.fill();
     ctx.fillStyle = g ? '#2a1a00' : '#fff'; ctx.textAlign = 'center';
-    ctx.fillText(label, cx + tw / 2, y + 55.5);
+    ctx.fillText(label, cx + tw / 2, y + 44.5);
     // balls row
     var solids = G.mini ? [1, 2, 3] : [1, 2, 3, 4, 5, 6, 7];
     var stripes = G.mini ? [9, 10, 11] : [9, 10, 11, 12, 13, 14, 15];
     var cnt = solids.length;
     var list = g === 'solid' ? solids : g === 'stripe' ? stripes : null;
     for (var k = 0; k <= cnt; k++) {
-      var bx = mirror ? tx - 12 - k * 30 : tx + 12 + k * 30, by = y + 84;
+      var bx = mirror ? tx - 10 - k * 27 : tx + 10 + k * 27, by = y + 68;
       if (k === cnt) {
         var onEight = list && Rules.remaining(G.st, g) === 0;
-        Art.drawMiniBall(ctx, bx, by, 11, 8, onEight ? 1 : 0.25);
-        if (onEight && active) { ctx.strokeStyle = '#ffe45c'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(bx, by, 14 + Math.sin(time * 8) * 1.5, 0, 6.283); ctx.stroke(); }
+        Art.drawMiniBall(ctx, bx, by, 9.5, 8, onEight ? 1 : 0.25);
+        if (onEight && active) { ctx.strokeStyle = '#ffe45c'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(bx, by, 12.5 + Math.sin(time * 8) * 1.5, 0, 6.283); ctx.stroke(); }
         continue;
       }
       if (!list) {
-        ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.beginPath(); ctx.arc(bx, by, 11, 0, 6.283); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.14)'; ctx.beginPath(); ctx.arc(bx, by, 9.5, 0, 6.283); ctx.fill();
         continue;
       }
       var n = list[k], bb = P.ball(G.st, n), down = !bb || !bb.on;
       if (down) {
         ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.arc(bx, by, 10, 0, 6.283); ctx.stroke();
-        ctx.fillStyle = '#3ddc84'; ctx.font = '700 14px ' + Art.font; ctx.fillText('✓', bx, by + 1);
-      } else Art.drawMiniBall(ctx, bx, by, 11, n, 1);
+        ctx.beginPath(); ctx.arc(bx, by, 8.5, 0, 6.283); ctx.stroke();
+        ctx.fillStyle = '#3ddc84'; ctx.font = '700 13px ' + Art.font; ctx.fillText('✓', bx, by + 1);
+      } else Art.drawMiniBall(ctx, bx, by, 9.5, n, 1);
     }
     ctx.restore();
   }
@@ -1280,14 +1298,15 @@
     var s = (0.6 + 0.4 * k) * (1 - out * 0.2);
     ctx.save();
     ctx.globalAlpha = 1 - out;
-    ctx.translate(1030, 126); ctx.scale(s, s);
-    ctx.font = '700 20px ' + Art.font;
-    var w = ctx.measureText(G.say.text).width + 30;
+    // Nestled cleanly below Rex's portrait card, completely clear of the top-right pocket & rail.
+    ctx.translate(1026, 98); ctx.scale(s, s);
+    ctx.font = '700 17px ' + Art.font;
+    var w = ctx.measureText(G.say.text).width + 26;
     ctx.fillStyle = '#fff';
-    Art.rr(ctx, -w + 30, 0, w, 40, 20); ctx.fill();
-    ctx.beginPath(); ctx.moveTo(4, 2); ctx.lineTo(14, -12); ctx.lineTo(22, 4); ctx.closePath(); ctx.fill();
+    Art.rr(ctx, -w + 22, 0, w, 30, 15); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(0, 2); ctx.lineTo(10, -8); ctx.lineTo(16, 3); ctx.closePath(); ctx.fill();
     ctx.fillStyle = '#2a1060'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(G.say.text, -w / 2 + 30, 21);
+    ctx.fillText(G.say.text, -w / 2 + 22, 15.5);
     ctx.restore();
   }
 
@@ -1297,104 +1316,126 @@
     else if (G.phase === 'aim') status = G.inHand ? 'الكرة بيدك' : (G.kind === 'cpu' ? 'دورك' : 'اضرب!');
     else if (G.phase === 'rolling' || G.phase === 'strike') status = '';
     ctx.save();
-    ctx.translate(640, 58);
+    ctx.translate(640, 46);
     ctx.fillStyle = '#ffe45c'; ctx.strokeStyle = '#2a1060'; ctx.lineWidth = 6; ctx.lineJoin = 'round';
-    ctx.font = '700 34px ' + Art.font; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.strokeText('ضد', 0, -12); ctx.fillText('ضد', 0, -12);
+    ctx.font = '700 30px ' + Art.font; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.strokeText('ضد', 0, -10); ctx.fillText('ضد', 0, -10);
     // turn arrow
     var dir = G.turn === 0 ? -1 : 1;
     if (G.phase !== 'over') {
       ctx.fillStyle = G.turn === 0 ? '#5fe0ff' : '#ff8cc6';
-      var ax = dir * (30 + Math.sin(time * 6) * 4);
-      ctx.beginPath(); ctx.moveTo(ax + dir * 14, 22); ctx.lineTo(ax, 12); ctx.lineTo(ax, 32); ctx.closePath(); ctx.fill();
+      var ax = dir * (28 + Math.sin(time * 6) * 4);
+      ctx.beginPath(); ctx.moveTo(ax + dir * 13, 18); ctx.lineTo(ax, 9); ctx.lineTo(ax, 27); ctx.closePath(); ctx.fill();
     }
-    if (status) { ctx.font = '700 15px ' + Art.font; ctx.fillStyle = '#fff'; ctx.fillText(status, 0, 50); }
+    if (status) { ctx.font = '700 14px ' + Art.font; ctx.fillStyle = '#fff'; ctx.fillText(status, 0, 42); }
     ctx.restore();
   }
 
   function drawTrickHUD() {
     // Arabic reads right-to-left: level title, name and hint sit on the right,
     // shots / tries / target balls on the left.
-    var x = 170, y = 14, w = 940, h = 104, RX = x + w - 24;
+    var x = 170, y = 10, w = 940, h = 84, RX = x + w - 22;
     ctx.save();
-    ctx.fillStyle = '#1e1450'; Art.rr(ctx, x, y, w, h, 22); ctx.fill();
-    ctx.strokeStyle = '#5fe0ff'; ctx.lineWidth = 4; Art.rr(ctx, x, y, w, h, 22); ctx.stroke();
+    ctx.fillStyle = '#1e1450'; Art.rr(ctx, x, y, w, h, 20); ctx.fill();
+    ctx.strokeStyle = '#5fe0ff'; ctx.lineWidth = 3.5; Art.rr(ctx, x, y, w, h, 20); ctx.stroke();
     ctx.textBaseline = 'middle'; ctx.textAlign = 'right';
-    ctx.fillStyle = '#5fe0ff'; ctx.font = '700 20px ' + Art.font;
-    ctx.fillText('التحدي ' + ltr((G.level + 1) + '/' + LV.length), RX, y + 24);
-    ctx.fillStyle = '#fff'; ctx.font = '700 32px ' + Art.font;
-    ctx.fillText(G.lv.name, RX, y + 56);
-    var hf = 18;
+    ctx.fillStyle = '#5fe0ff'; ctx.font = '700 17px ' + Art.font;
+    ctx.fillText('التحدي ' + ltr((G.level + 1) + '/' + LV.length), RX, y + 18);
+    ctx.fillStyle = '#fff'; ctx.font = '700 26px ' + Art.font;
+    ctx.fillText(G.lv.name, RX, y + 44);
+    var hf = 16;
     ctx.font = '500 ' + hf + 'px ' + Art.font;
     while (ctx.measureText(G.lv.hint).width > 560 && hf > 12) { hf--; ctx.font = '500 ' + hf + 'px ' + Art.font; }
     ctx.fillStyle = 'rgba(255,255,255,0.9)';
-    ctx.fillText(G.lv.hint, RX, y + 87);
+    ctx.fillText(G.lv.hint, RX, y + 69);
     // left side: shots and tries
     ctx.textAlign = 'left';
-    ctx.font = '700 15px ' + Art.font; ctx.fillStyle = '#ffe45c';
-    ctx.fillText('الضربات المتبقية', x + 24, y + 22);
+    ctx.font = '700 14px ' + Art.font; ctx.fillStyle = '#ffe45c';
+    ctx.fillText('الضربات المتبقية', x + 22, y + 18);
     var left = G.lv.shots - G.prog.shotsUsed;
     for (var i = 0; i < G.lv.shots; i++) {
-      var cx = x + 33 + i * 24;
+      var cx = x + 31 + i * 22;
       ctx.fillStyle = i < left ? '#fff' : 'rgba(255,255,255,0.18)';
-      ctx.beginPath(); ctx.arc(cx, y + 48, 8.5, 0, 6.283); ctx.fill();
+      ctx.beginPath(); ctx.arc(cx, y + 40, 7.5, 0, 6.283); ctx.fill();
     }
-    ctx.fillStyle = '#fff'; ctx.font = '700 16px ' + Art.font;
-    ctx.fillText('المحاولة ' + G.attempts, x + 24, y + 80);
+    ctx.fillStyle = '#fff'; ctx.font = '700 15px ' + Art.font;
+    ctx.fillText('المحاولة ' + G.attempts, x + 22, y + 66);
     var tw = ctx.measureText('المحاولة ' + G.attempts).width;
     var nst = G.attempts === 1 ? 3 : G.attempts <= 3 ? 2 : 1;
     ctx.fillStyle = '#ffd21f';
-    ctx.fillText('\u2605'.repeat(nst), x + 24 + tw + 10, y + 80);
+    ctx.fillText('\u2605'.repeat(nst), x + 22 + tw + 8, y + 66);
     ctx.fillStyle = 'rgba(255,255,255,0.25)';
-    ctx.fillText('\u2605'.repeat(3 - nst), x + 24 + tw + 10 + ctx.measureText('\u2605'.repeat(nst)).width, y + 80);
+    ctx.fillText('\u2605'.repeat(3 - nst), x + 22 + tw + 8 + ctx.measureText('\u2605'.repeat(nst)).width, y + 66);
     // target balls
     ctx.textAlign = 'center';
-    var nT = G.lv.targets.length, tL = x + 232;
+    var nT = G.lv.targets.length, tL = x + 228;
     for (var t = 0; t < nT; t++) {
       var n = G.lv.targets[t], b = P.ball(G.st, n);
-      var tx = tL + t * 30;
-      Art.drawMiniBall(ctx, tx, y + 50, 12, n, b && b.on ? 1 : 0.25);
-      if (b && !b.on) { ctx.fillStyle = '#3ddc84'; ctx.font = '700 18px ' + Art.font; ctx.fillText('\u2713', tx, y + 51); }
+      var tx = tL + t * 28;
+      Art.drawMiniBall(ctx, tx, y + 44, 11, n, b && b.on ? 1 : 0.25);
+      if (b && !b.on) { ctx.fillStyle = '#3ddc84'; ctx.font = '700 16px ' + Art.font; ctx.fillText('\u2713', tx, y + 45); }
     }
-    ctx.font = '700 15px ' + Art.font; ctx.fillStyle = '#ffe45c';
-    ctx.fillText(G.lv.eightLast ? 'أدخلها، والـ8 أخيرًا' : 'أدخل هذه', tL + (nT - 1) * 15, y + 22);
+    ctx.font = '700 14px ' + Art.font; ctx.fillStyle = '#ffe45c';
+    ctx.fillText(G.lv.eightLast ? 'أدخلها، والـ8 أخيرًا' : 'أدخل هذه', tL + (nT - 1) * 14, y + 18);
     if (G.lv.avoid) {
-      var ax = tL + (nT - 1) * 30 + 104;
-      Art.drawMiniBall(ctx, ax, y + 50, 12, G.lv.avoid[0], 1);
+      var ax = tL + (nT - 1) * 28 + 100;
+      Art.drawMiniBall(ctx, ax, y + 44, 11, G.lv.avoid[0], 1);
       ctx.strokeStyle = '#ff4d5a'; ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.moveTo(ax - 12, y + 38); ctx.lineTo(ax + 12, y + 62); ctx.stroke();
-      ctx.fillStyle = '#ff8a8a'; ctx.fillText('ليس هذه!', ax, y + 22);
+      ctx.beginPath(); ctx.moveTo(ax - 11, y + 33); ctx.lineTo(ax + 11, y + 55); ctx.stroke();
+      ctx.fillStyle = '#ff8a8a'; ctx.fillText('ليس هذه!', ax, y + 18);
     }
     ctx.restore();
   }
 
   function drawPowerBar() {
     var human = !G.players[G.turn].cpu;
+    var bx = BAR.x, by = BAR.y, bw = BAR.w, bh = BAR.h, mid = bx + bw / 2;
     ctx.save();
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.font = '700 18px ' + Art.font; ctx.fillStyle = '#fff';
-    ctx.fillText('القوة', BAR.x + BAR.w / 2, BAR.y - 26);
-    ctx.fillStyle = 'rgba(0,0,0,0.45)'; Art.rr(ctx, BAR.x - 6, BAR.y - 6, BAR.w + 12, BAR.h + 12, 18); ctx.fill();
-    ctx.fillStyle = '#1a1238'; Art.rr(ctx, BAR.x, BAR.y, BAR.w, BAR.h, 14); ctx.fill();
+    // Opaque arcade meter console enclosing the power gauge cleanly
+    ctx.fillStyle = '#1b1246';
+    Art.rr(ctx, bx - 18, by - 44, bw + 36, bh + 98, 22); ctx.fill();
+    ctx.strokeStyle = 'rgba(95,224,255,0.48)'; ctx.lineWidth = 2.5;
+    Art.rr(ctx, bx - 18, by - 44, bw + 36, bh + 98, 22); ctx.stroke();
+    ctx.font = '700 18px ' + Art.font; ctx.fillStyle = '#ffe45c';
+    ctx.fillText('القوة', mid, by - 22);
+    // High-contrast recessed metered track with subtle color scale
+    ctx.fillStyle = '#0e0828'; Art.rr(ctx, bx, by, bw, bh, 14); ctx.fill();
+    var scaleGr = ctx.createLinearGradient(0, by + bh, 0, by);
+    scaleGr.addColorStop(0, 'rgba(61,220,132,0.28)');
+    scaleGr.addColorStop(0.55, 'rgba(255,228,92,0.26)');
+    scaleGr.addColorStop(1, 'rgba(255,59,92,0.3)');
+    ctx.fillStyle = scaleGr; Art.rr(ctx, bx + 4, by + 4, bw - 8, bh - 8, 10); ctx.fill();
     var p = G.power;
     if (p > 0) {
-      var fh = BAR.h * p;
-      var gr = ctx.createLinearGradient(0, BAR.y + BAR.h, 0, BAR.y);
+      var fh = bh * p;
+      var gr = ctx.createLinearGradient(0, by + bh, 0, by);
       gr.addColorStop(0, '#3ddc84'); gr.addColorStop(0.55, '#ffe45c'); gr.addColorStop(1, '#ff3b5c');
       ctx.fillStyle = gr;
-      ctx.save(); Art.rr(ctx, BAR.x, BAR.y, BAR.w, BAR.h, 14); ctx.clip();
-      ctx.fillRect(BAR.x, BAR.y + BAR.h - fh, BAR.w, fh);
+      ctx.save(); Art.rr(ctx, bx + 3, by + 3, bw - 6, bh - 6, 11); ctx.clip();
+      ctx.fillRect(bx, by + bh - fh, bw, fh);
       ctx.restore();
       ctx.font = '700 20px ' + Art.font; ctx.fillStyle = '#fff';
-      ctx.fillText(Math.round(p * 100) + '%', BAR.x + BAR.w / 2, BAR.y + BAR.h + 26);
+      ctx.fillText(Math.round(p * 100) + '%', mid, by + bh + 26);
     } else if (human && G.phase === 'aim') {
-      ctx.font = '500 13px ' + Art.font; ctx.fillStyle = 'rgba(255,255,255,0.7)';
-      ctx.fillText('اسحب', BAR.x + BAR.w / 2, BAR.y + BAR.h + 22);
-      ctx.fillText('للأسفل', BAR.x + BAR.w / 2, BAR.y + BAR.h + 40);
+      ctx.font = '700 13px ' + Art.font; ctx.fillStyle = '#d7e2ff';
+      ctx.fillText('اسحب', mid, by + bh + 19);
+      ctx.fillText('للأسفل', mid, by + bh + 36);
     }
-    // ticks
-    ctx.strokeStyle = 'rgba(255,255,255,0.18)'; ctx.lineWidth = 2;
-    for (var i = 1; i < 10; i++) { var yy = BAR.y + BAR.h * i / 10; ctx.beginPath(); ctx.moveTo(BAR.x + 6, yy); ctx.lineTo(BAR.x + 14, yy); ctx.stroke(); }
+    // Bright crisp graduation ticks + track rim
+    for (var i = 1; i < 10; i++) {
+      var yy = by + bh * i / 10;
+      ctx.strokeStyle = i === 5 ? 'rgba(255,255,255,0.65)' : 'rgba(255,255,255,0.34)';
+      ctx.lineWidth = i === 5 ? 2.5 : 1.8;
+      ctx.beginPath(); ctx.moveTo(bx + 7, yy); ctx.lineTo(bx + (i === 5 ? 20 : 16), yy); ctx.stroke();
+    }
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 2;
+    Art.rr(ctx, bx, by, bw, bh, 14); ctx.stroke();
+    // Interactive slider thumb indicator
+    var ky = p > 0 ? by + bh - bh * p : by + 16;
+    ctx.fillStyle = '#fff';
+    Art.rr(ctx, bx - 4, clamp(ky - 5, by + 4, by + bh - 14), bw + 8, 10, 5); ctx.fill();
+    ctx.strokeStyle = '#1b1246'; ctx.lineWidth = 2; ctx.stroke();
     ctx.restore();
   }
 
@@ -1420,20 +1461,20 @@
   }
 
   function drawTips() {
-    if (G.phase !== 'aim' || G.players[G.turn].cpu) return;
+    if (G.phase !== 'aim' || G.players[G.turn].cpu || G.banner) return;
     var tip = '';
     if (G.kind === 'trick' && G.lv.tip && !G.drag) tip = G.lv.tip;
-    else if (G.isBreak && save.shots < 3 && !G.drag) tip = 'صوّب نحو الكرات، ثم انقر واسحب للخلف واترك!';
+    else if (G.isBreak && save.shots < 3 && !G.drag) tip = 'اسحب للخلف ثم اترك لتضرب!';
     else if (G.inHand && !G.drag) tip = G.kitchen ? 'يمكنك سحب الكرة البيضاء (يسار الخط)' : 'الكرة بيدك! اسحب البيضاء إلى أي مكان';
-    else if (save.shots < 4 && !G.drag) tip = 'انقر واسحب للخلف، ثم اترك لتضرب!';
+    else if (save.shots < 4 && !G.drag) tip = 'اسحب للخلف ثم اترك لتضرب!';
     else if (G.drag && G.drag.type === 'shot' && save.shots < 6) tip = 'اترك لتضرب (النقرة اليمنى تلغي)';
     if (!tip) return;
     ctx.save();
-    ctx.font = '700 20px ' + Art.font; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    var w = ctx.measureText(tip).width + 36;
-    ctx.globalAlpha = 0.85 + 0.15 * Math.sin(time * 4);
-    ctx.fillStyle = 'rgba(15,8,40,0.8)'; Art.rr(ctx, P.CX - w / 2, 136, w, 34, 17); ctx.fill();
-    ctx.fillStyle = '#fff'; ctx.fillText(tip, P.CX, 153);
+    ctx.font = '700 17px ' + Art.font; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    var w = ctx.measureText(tip).width + 32;
+    ctx.fillStyle = 'rgba(18,11,50,0.9)'; Art.rr(ctx, P.CX - w / 2, 98, w, 28, 14); ctx.fill();
+    ctx.strokeStyle = 'rgba(95,224,255,0.5)'; ctx.lineWidth = 1.8; Art.rr(ctx, P.CX - w / 2, 98, w, 28, 14); ctx.stroke();
+    ctx.fillStyle = '#fff'; ctx.fillText(tip, P.CX, 112.5);
     ctx.restore();
   }
 
@@ -1444,7 +1485,7 @@
     SCREENS.forEach(function (id) { $(id).hidden = id !== 'scr-' + name; });
     $('pauseBtn').hidden = name !== 'game';
     ptrArmed = false;
-    Kit.keys.endFrame();   // a key that switched screens must not also act on the new screen
+    Kit.keys.endFrame(); ptr.endFrame();   // a key or click that switched screens must not also act on the new screen
     canvas.style.cursor = name === 'game' ? 'crosshair' : 'default';
     if ((name === 'title' || name === 'levels' || name === 'shop') && (!G || G.kind !== 'demo')) newMatch('demo');
     if (name === 'title') refreshTitle();
@@ -1501,13 +1542,13 @@
   function toggleAim() { save.aim = save.aim === 'big' ? 'pro' : 'big'; persistKey('aim'); aimLabels(); frameDirty = true; }
 
   function startCpu() { newMatch('cpu', save.opp); show('game'); }
-  // The title opens with this button where 'القائمة' was (match over, pause): a double-click
-  // there must not also start a new match.
+  // The title opens with buttons where 'القائمة' was (match over, pause): a double-click
+  // there must not also trigger a title control under it.
   on('btnPlay', function (e) { if (e.detail > 1) return; startCpu(); });
-  on('btn2p', function () { newMatch('pvp'); show('game'); });
-  on('btnTrick', function () { show('levels'); });
-  on('btnShop', function () { show('shop'); });
-  on('btnAim', toggleAim);
+  on('btn2p', function (e) { if (e.detail > 1) return; newMatch('pvp'); show('game'); });
+  on('btnTrick', function (e) { if (e.detail > 1) return; show('levels'); });
+  on('btnShop', function (e) { if (e.detail > 1) return; show('shop'); });
+  on('btnAim', function (e) { if (e.detail > 1) return; toggleAim(); });
 
   // ---- levels
   var STAR_SVG = function (on) {

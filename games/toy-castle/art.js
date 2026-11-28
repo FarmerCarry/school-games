@@ -19,19 +19,19 @@
     scene.background = bgColor;
     scene.fog = new T.Fog(0x9ce3ff, 34, 86);
 
-    // Wide tabletop 3/4 view showing both toy castles and the full battle lane
-    var camera = new T.PerspectiveCamera(34, 16 / 9, 0.5, 160);
-    var camBase = new T.Vector3(0, 8.8, 28.5);
-    var camLook = new T.Vector3(0, 2.35, -0.4);
+    // Closer, richer 3/4 tabletop framing showcasing both castles & lush toy playmat
+    var camera = new T.PerspectiveCamera(39, 16 / 9, 0.5, 160);
+    var camBase = new T.Vector3(0, 5.75, 24.4);
+    var camLook = new T.Vector3(0, 2.2, -0.2);
     camera.position.copy(camBase);
     camera.lookAt(camLook);
 
-    // Bright sunny cartoon playroom lighting
-    var hemi = new T.HemisphereLight(0xfffbe8, 0x5c89b8, 1.5);
-    var sun = new T.DirectionalLight(0xfff6dd, 1.9);
-    sun.position.set(10, 22, 16);
-    var rim = new T.DirectionalLight(0xb8e6ff, 0.55);
-    rim.position.set(-14, 12, -10);
+    // Warm sunlit playroom key + cool sky bounce + crisp silhouette rim
+    var hemi = new T.HemisphereLight(0xedf8ff, 0x5c8b5e, 1.25);
+    var sun = new T.DirectionalLight(0xfff3d4, 1.85);
+    sun.position.set(12, 24, 18);
+    var rim = new T.DirectionalLight(0xc7ecff, 0.65);
+    rim.position.set(-14, 13, -12);
     scene.add(hemi, sun, rim);
 
     // Reusable scratch math objects (zero hot-loop GC)
@@ -47,15 +47,15 @@
     var HIT_PT = new T.Vector3();
     var NDC = new T.Vector2();
 
-    var MAT_LIT = new T.MeshLambertMaterial({ vertexColors: true });
+    var MAT_LIT = new T.MeshPhongMaterial({ vertexColors: true, shininess: 46, specular: 0x334155 });
     var MAT_GLOW = new T.MeshBasicMaterial({ vertexColors: true });
     var matCache = {};
     function mat(hex, basic) {
-      var key = (basic ? 'b_' : 'l_') + hex;
+      var key = (basic ? 'b_' : 'p_') + hex;
       if (!matCache[key]) {
         matCache[key] = basic
           ? new T.MeshBasicMaterial({ color: hex })
-          : new T.MeshLambertMaterial({ color: hex });
+          : new T.MeshPhongMaterial({ color: hex, shininess: 76, specular: 0x4f5f7a });
       }
       return matCache[key];
     }
@@ -160,57 +160,75 @@
     /* ---------------------------------------------------- 3 Playroom Worlds */
     function buildWorld0Carpet() {
       var b = [];
-      // Solid warm wooden tabletop base filling lower frame cleanly
-      b.push([0, -5.8, -1.0, 44, 5.4, 22, 0xc88947]);
-      b.push([0, -0.45, -1.0, 44, 0.46, 22.4, 0xedb876]);
-      // Cozy sage-green playroom rug field (top y = 0.04)
-      b.push([0, -0.06, -0.8, 32.4, 0.10, 14.2, 0x57c85f]);
-      // Vivid checkered playmat battle lane sitting cleanly ON TOP of the rug (top y = 0.10)!
+      // Warm wooden floor foundation cleanly tucked beneath the full-bleed playmat
+      b.push([0, -5.8, 1.0, 52, 5.4, 30, 0xbf8040]);
+      b.push([0, -0.45, 1.0, 52, 0.42, 30, 0xe8b574]);
+      // Lush sunlit toy playmat filling the entire lower foreground (zero dead beige slab!)
+      b.push([0, -0.06, 2.2, 42, 0.08, 22.0, 0x56ca5f]);
+      // Subtle mowed playmat grass stripes cleanly elevated by 0.015 (zero z-fighting hairlines)
+      for (var gs = -16; gs <= 16; gs += 4.0) {
+        b.push([gs, 0.02, 2.2, 1.95, 0.014, 21.6, 0x4cc056]);
+      }
+      // Subtle grounded shadow pads directly under both castles
+      b.push([E.LEFT_CASTLE_X, 0.045, 0.1, 4.5, 0.02, 5.1, 0x358c3e]);
+      b.push([E.RIGHT_CASTLE_X, 0.045, 0.1, 4.5, 0.02, 5.1, 0x358c3e]);
+      // Vivid checkered playmat battle lane sitting cleanly ON TOP of the rug (top y = 0.10)
       var tileW = 1.65;
       for (var i = -7; i <= 7; i++) {
-        var c1 = (i & 1) ? 0xfff4c2 : 0xffdc6b;
-        var c2 = (i & 1) ? 0xffdc6b : 0xfff4c2;
+        var c1 = (i & 1) ? 0xfff6cc : 0xffdd70;
+        var c2 = (i & 1) ? 0xffdd70 : 0xfff6cc;
         b.push([i * tileW, 0.03, -0.68, tileW - 0.04, 0.07, 1.32, c1]);
         b.push([i * tileW, 0.03, 0.68, tileW - 0.04, 0.07, 1.32, c2]);
       }
-      // Colorful stitched lane edge bumpers
-      b.push([0, 0.04, -1.55, 25.5, 0.16, 0.28, 0xff595e]);
-      b.push([0, 0.04, 1.55, 25.5, 0.16, 0.28, 0x38bdf8]);
+      // Colorful stitched lane edge bumpers + center battle stripe
+      b.push([0, 0.04, -1.55, 25.5, 0.18, 0.30, 0xff595e]);
+      b.push([0, 0.04, 1.55, 25.5, 0.18, 0.30, 0x38bdf8]);
+      b.push([0, 0.095, 0, 0.24, 0.03, 2.75, 0xffffff]);
       // White wooden picket fence along rear of lane
       for (var fx = -9.5; fx <= 9.5; fx += 1.9) {
-        b.push([fx, 0.04, -2.55, 0.22, 0.86, 0.16, 0xfff9ef]);
+        b.push([fx, 0.04, -2.65, 0.22, 0.86, 0.16, 0xfffaf0]);
       }
-      b.push([0, 0.56, -2.55, 20.0, 0.14, 0.12, 0xfff9ef]);
-      // Wide wooden playroom shelf moulding across the horizon (no vertical sky seams!)
-      b.push([0, -0.4, -8.8, 56, 1.15, 3.6, 0xc78946]);
-      b.push([0, 0.72, -8.8, 56, 0.22, 3.8, 0xedb876]);
-      // Stacked colorful wooden ABC blocks & pyramids
-      addStudBrick(b, -8.0, 0.05, -5.2, 2.2, 2.0, 2.2, 0xff595e, 2, 2);
-      addStudBrick(b, -6.0, 0.05, -5.8, 2.4, 3.2, 2.4, 0xffca3a, 2, 2);
-      b.push([-6.0, 3.40, -5.8, 1.8, 1.1, 1.8, 0x4cc9f0]);
-      b.push([-6.0, 4.50, -5.8, 1.0, 0.8, 1.0, 0x4cc9f0]);
-      addStudBrick(b, -1.6, 0.05, -6.4, 2.6, 2.2, 2.2, 0x8ac926, 2, 2);
-      addStudBrick(b, 1.4, 0.05, -6.0, 2.4, 3.4, 2.4, 0x4cc9f0, 2, 2);
-      addStudBrick(b, 4.4, 0.05, -5.6, 2.5, 2.4, 2.2, 0xff9f1c, 2, 2);
-      addStudBrick(b, 7.6, 0.05, -5.4, 2.4, 2.8, 2.4, 0xb565f7, 2, 2);
-      // Lollipop toy trees framing the playroom
-      addToyTree(b, -9.2, 0.04, -3.7, 0.95, 0x3ec44a);
-      addToyTree(b, -3.9, 0.04, -4.3, 1.12, 0x4ad657);
-      addToyTree(b, 3.2, 0.04, -4.2, 1.05, 0x3ec44a);
-      addToyTree(b, 9.1, 0.04, -3.7, 0.95, 0x4ad657);
-      // Foreground toy pebbles & miniature blocks
-      b.push([-6.8, 0.04, 3.1, 0.9, 0.55, 0.9, 0xffca3a]);
-      b.push([-5.7, 0.04, 3.4, 0.7, 0.42, 0.7, 0xff595e]);
-      b.push([6.2, 0.04, 3.2, 0.95, 0.58, 0.95, 0x4cc9f0]);
-      b.push([7.3, 0.04, 2.9, 0.65, 0.42, 0.65, 0x8ac926]);
+      b.push([0, 0.56, -2.65, 20.0, 0.14, 0.12, 0xfffaf0]);
+      // Playroom horizon wainscot shelf (pushed back for crisp depth separation)
+      b.push([0, -0.4, -10.8, 60, 1.25, 3.6, 0xd4a46a]);
+      b.push([0, 0.82, -10.8, 60, 0.22, 3.8, 0xf2cc99]);
+      // Soft pastel-tinted background Lego towers (pushed back to z = -7.6..-8.4 so foreground units pop!)
+      addStudBrick(b, -8.8, 0.05, -7.6, 2.3, 2.2, 2.2, 0xf5a3a9, 2, 2);
+      addStudBrick(b, -6.2, 0.05, -8.2, 2.5, 3.3, 2.4, 0xfce08b, 2, 2);
+      b.push([-6.2, 3.50, -8.2, 1.8, 1.05, 1.8, 0x9cdbf7]);
+      b.push([-6.2, 4.55, -8.2, 1.0, 0.75, 1.0, 0x9cdbf7]);
+      addStudBrick(b, -1.8, 0.05, -8.5, 2.7, 2.4, 2.2, 0xa8de8c, 2, 2);
+      addStudBrick(b, 1.6, 0.05, -8.1, 2.5, 3.4, 2.4, 0x9cdbf7, 2, 2);
+      addStudBrick(b, 4.9, 0.05, -7.8, 2.5, 2.5, 2.2, 0xffca85, 2, 2);
+      addStudBrick(b, 8.3, 0.05, -7.6, 2.4, 2.9, 2.4, 0xcfb0f7, 2, 2);
+      // Lollipop toy trees framing the playroom softly behind the fence
+      addToyTree(b, -9.6, 0.04, -4.8, 0.95, 0x52c962);
+      addToyTree(b, -4.1, 0.04, -5.5, 1.08, 0x62d672);
+      addToyTree(b, 3.4, 0.04, -5.4, 1.02, 0x52c962);
+      addToyTree(b, 9.5, 0.04, -4.8, 0.95, 0x62d672);
+      // Rich foreground toy diorama details on the sunlit lawn (blocks, flower studs, bushes)
+      addStudBrick(b, -10.4, 0.04, 3.9, 1.15, 0.65, 1.15, 0xffca3a, 2, 2);
+      addStudBrick(b, -9.1, 0.04, 4.4, 0.8, 0.48, 0.8, 0xff595e, 1, 1);
+      addStudBrick(b, 9.4, 0.04, 4.1, 1.15, 0.68, 1.15, 0x4cc9f0, 2, 2);
+      addStudBrick(b, 10.7, 0.04, 3.5, 0.78, 0.45, 0.78, 0xa855f7, 1, 1);
+      b.push([-6.5, 0.04, 3.0, 0.82, 0.48, 0.82, 0xffca3a]);
+      b.push([-5.5, 0.04, 3.3, 0.62, 0.36, 0.62, 0xff595e]);
+      b.push([5.8, 0.04, 3.1, 0.86, 0.5, 0.86, 0x4cc9f0]);
+      b.push([6.9, 0.04, 2.8, 0.58, 0.36, 0.58, 0x8ac926]);
+      // Playful miniature plastic flower studs scattered across foreground meadow
+      var fl = [[-12.2, 4.8, 0xffffff], [-7.8, 5.2, 0xffe066], [-4.2, 4.6, 0xff8fab], [4.4, 4.7, 0xffe066], [7.9, 5.1, 0xffffff], [12.0, 4.6, 0xff8fab]];
+      for (var fi = 0; fi < fl.length; fi++) {
+        b.push([fl[fi][0], 0.04, fl[fi][1], 0.34, 0.14, 0.34, fl[fi][2]]);
+        b.push([fl[fi][0], 0.18, fl[fi][1], 0.16, 0.08, 0.16, 0xffbe0b]);
+      }
       return buildMergedBoxes(b);
     }
 
     function buildWorld1Blocks() {
       var b = [];
-      // Shimmering turquoise plastic-brick river moat under bridge
-      b.push([0, -2.0, -1.0, 36, 1.4, 18, 0x1aa6d1]);
-      b.push([0, -0.6, -1.0, 36, 0.22, 17, 0x38d2f7]);
+      // Shimmering turquoise plastic-brick river moat filling full foreground & horizon
+      b.push([0, -2.0, 1.8, 50, 1.4, 28, 0x1aa6d1]);
+      b.push([0, -0.6, 1.8, 50, 0.22, 27, 0x38d2f7]);
       // Brick island shores on left and right for the castles
       addStudBrick(b, -12.6, -0.45, 0.0, 6.2, 0.55, 6.8, 0x52cc5c, 4, 4);
       addStudBrick(b, 12.6, -0.45, 0.0, 6.2, 0.55, 6.8, 0x52cc5c, 4, 4);
@@ -249,9 +267,9 @@
 
     function buildWorld2Space() {
       var b = [];
-      // School desk wood underneath a bright cyan-blue cutting mat
-      b.push([0, -2.2, -1.0, 36, 1.8, 18, 0x4c4488]);
-      b.push([0, -0.35, -0.8, 33, 0.35, 14.5, 0x2a669c]);
+      // School desk wood underneath a full-bleed bright cyan-blue cutting mat
+      b.push([0, -2.2, 1.8, 50, 1.8, 28, 0x4c4488]);
+      b.push([0, -0.35, 1.8, 46, 0.35, 25.0, 0x2a669c]);
       // Sleek grid runway battle lane
       b.push([0, -0.05, 0.0, 25.8, 0.06, 3.1, 0x224c8a]);
       for (var gx = -10; gx <= 10; gx += 2.0) {
@@ -296,7 +314,7 @@
     // Animated floating sky props (puffy clouds for Worlds 0/1, glowing stars + Saturn for World 2)
     var cloudGroup = new T.Group();
     var clouds = [];
-    var cloudPositions = [[-11, 8.6, -9.5, 1.1], [-4, 9.6, -10.5, 1.35], [4.5, 8.9, -9.8, 1.2], [11.5, 9.4, -10.2, 1.05]];
+    var cloudPositions = [[-12.2, 9.2, -10.0, 1.1], [-5.6, 10.6, -11.0, 1.25], [5.8, 10.4, -10.6, 1.15], [12.4, 9.5, -10.2, 1.05]];
     for (var ci = 0; ci < cloudPositions.length; ci++) {
       var cg = new T.Group();
       var cp = cloudPositions[ci];
@@ -335,10 +353,10 @@
       var bodyGroup = new T.Group();
       root.add(bodyGroup);
 
-      // Materials we can recolor live for P1 castle skins!
-      var mMain = new T.MeshLambertMaterial({ color: side === 0 ? 0x3b82f6 : 0xef4444 });
-      var mTrim = new T.MeshLambertMaterial({ color: side === 0 ? 0xffcc00 : 0xff9f1c });
-      var mRoof = new T.MeshLambertMaterial({ color: side === 0 ? 0x1d4ed8 : 0xb91c1c });
+      // Glossy toy-plastic materials we can recolor live for P1 castle skins!
+      var mMain = new T.MeshPhongMaterial({ color: side === 0 ? 0x3b82f6 : 0xef4444, shininess: 82, specular: 0x556688 });
+      var mTrim = new T.MeshPhongMaterial({ color: side === 0 ? 0xffcc00 : 0xff9f1c, shininess: 92, specular: 0x776644 });
+      var mRoof = new T.MeshPhongMaterial({ color: side === 0 ? 0x1d4ed8 : 0xb91c1c, shininess: 85, specular: 0x556688 });
       var mBase = mat(0xf1efe8);
       var mGate = mat(0x7a4924);
       var mDark = mat(0x2b2542);
@@ -371,6 +389,9 @@
         addPart(UNIT_BOX, mMain, 1.35, 4.4, 1.35, -dir * 0.45, 2.4, zPos);
         addPart(UNIT_BOX, mTrim, 1.5, 0.32, 1.5, -dir * 0.45, 4.5, zPos);
         addPart(UNIT_CONE, mRoof, 1.75, 1.65, 1.75, -dir * 0.45, 5.42, zPos);
+        // Cute warm arched turret window facing the camera
+        addPart(UNIT_BOX, mDark, 0.34, 0.56, 0.14, -dir * 0.45, 3.15, zPos + (zPos > 0 ? 0.66 : -0.66));
+        addPart(UNIT_BOX, mat(0xffe066, true), 0.22, 0.42, 0.16, -dir * 0.45, 3.15, zPos + (zPos > 0 ? 0.67 : -0.67));
         // Flagpole & waving pennant
         addPart(UNIT_CYL, mBase, 0.1, 1.1, 0.1, -dir * 0.45, 6.45, zPos);
         var flag = new T.Mesh(UNIT_BOX, mTrim);
@@ -515,8 +536,8 @@
       var body = new T.Group();
       g.add(body);
 
-      var mTeam = new T.MeshLambertMaterial({ color: 0x3b82f6 });
-      var mAccent = new T.MeshLambertMaterial({ color: 0xffcc00 });
+      var mTeam = new T.MeshPhongMaterial({ color: 0x3b82f6, shininess: 85, specular: 0x5c6f8c });
+      var mAccent = new T.MeshPhongMaterial({ color: 0xffcc00, shininess: 92, specular: 0x776644 });
       var mDark = mat(0x2c2b47);
       var mSkin = mat(0xffd6a5);
       var mWhite = mat(0xffffff);
@@ -718,13 +739,28 @@
       dartPool.push(dm);
     }
 
-    // Pulsing 3D Target Reticle Rings (P1 gold-cyan, P2 coral)
+    // High-contrast 3D Target Reticle Rings (vivid glowing ring cleanly in front of dark-ink rim)
     function makeReticle(hex) {
       var rg = new T.Group();
-      var ringGeo = new T.TorusGeometry(0.62, 0.08, 6, 18);
-      var rm = new T.Mesh(ringGeo, mat(hex, true));
-      rg.add(rm);
-      rg.add(mkSph(0.14, 0xffffff, 0, 0, 0, true));
+      var backGeo = new T.TorusGeometry(0.74, 0.15, 6, 22);
+      var backM = new T.Mesh(backGeo, mat(0x1e2342, true));
+      backM.position.z = -0.10;
+      rg.add(backM);
+      var ringGeo = new T.TorusGeometry(0.74, 0.095, 6, 22);
+      var frontM = new T.Mesh(ringGeo, mat(hex, true));
+      frontM.position.z = 0.06;
+      rg.add(frontM);
+      // 4 crisp dark-outlined crosshair ticks
+      rg.add(mkBox(0.36, 0.15, 0.05, 0x1e2342, 0.88, 0, -0.05, true));
+      rg.add(mkBox(0.36, 0.15, 0.05, 0x1e2342, -0.88, 0, -0.05, true));
+      rg.add(mkBox(0.15, 0.36, 0.05, 0x1e2342, 0, 0.88, -0.05, true));
+      rg.add(mkBox(0.15, 0.36, 0.05, 0x1e2342, 0, -0.88, -0.05, true));
+      rg.add(mkBox(0.28, 0.08, 0.05, hex, 0.88, 0, 0.07, true));
+      rg.add(mkBox(0.28, 0.08, 0.05, hex, -0.88, 0, 0.07, true));
+      rg.add(mkBox(0.08, 0.28, 0.05, hex, 0, 0.88, 0.07, true));
+      rg.add(mkBox(0.08, 0.28, 0.05, hex, 0, -0.88, 0.07, true));
+      rg.add(mkSph(0.22, 0x1e2342, 0, 0, -0.06, true));
+      rg.add(mkSph(0.15, 0xffffff, 0, 0, 0.08, true));
       rg.visible = false;
       scene.add(rg);
       return rg;
@@ -735,7 +771,7 @@
     var MAX_SHADOWS = 40;
     var shGeo = new T.CircleGeometry(0.55, 12);
     shGeo.rotateX(-Math.PI * 0.5);
-    var shMat = new T.MeshBasicMaterial({ color: 0x162238, transparent: true, opacity: 0.28, depthWrite: false });
+    var shMat = new T.MeshBasicMaterial({ color: 0x162238, transparent: true, opacity: 0.36, depthWrite: false });
     var shadows = new T.InstancedMesh(shGeo, shMat, MAX_SHADOWS);
     shadows.count = 0;
     shadows.frustumCulled = false;
@@ -859,8 +895,8 @@
         camera.position.set(-7.6 + sx, 6.2 + sy, 15.8);
         camera.lookAt(-11.4, 3.0, 0);
       } else {
-        var swayX = (!calm && mode === 'title') ? Math.sin(t * 0.45) * 1.15 : 0;
-        var swayY = (!calm && mode === 'title') ? Math.cos(t * 0.35) * 0.25 : 0;
+        var swayX = (!calm && mode === 'title') ? Math.sin(t * 0.45) * 0.52 : 0;
+        var swayY = (!calm && mode === 'title') ? Math.cos(t * 0.35) * 0.16 : 0;
         camera.position.set(camBase.x + swayX + sx, camBase.y + swayY + sy, camBase.z);
         camera.lookAt(camLook.x + swayX * 0.25, camLook.y, camLook.z);
       }
@@ -1033,10 +1069,10 @@
           var sideA = world.sides[ai];
           var readyA = sideA.cannonCd <= 0.05;
           var pts = E.sampleArc(ai, sideA.aimX, sideA.aimY, 10);
-          var dotHex = ai === 0 ? (readyA ? 0xffe066 : 0x9cc7ff) : (readyA ? 0xff758f : 0xffb3c1);
+          var dotHex = ai === 0 ? (readyA ? 0xfff3a1 : 0x9cc7ff) : (readyA ? 0xff758f : 0xffb3c1);
           for (var ap = 0; ap < pts.length && arcIdx < MAX_ARC; ap++) {
-            var ds = readyA ? (0.18 + (ap / pts.length) * 0.08) : 0.11;
-            setInst(arcInst, arcIdx, pts[ap].x, pts[ap].y, 0.2, ds, ds, ds);
+            var ds = readyA ? (0.22 + (ap / pts.length) * 0.10) : 0.13;
+            setInst(arcInst, arcIdx, pts[ap].x, pts[ap].y, 0.25, ds, ds, ds);
             arcInst.setColorAt(arcIdx, C.setHex(dotHex));
             arcIdx++;
           }

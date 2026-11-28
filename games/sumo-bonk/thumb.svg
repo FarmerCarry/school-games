@@ -124,10 +124,4 @@
     <path d="M345 200 l3 7 7 1 -5 5 1 7 -6 -4 -6 4 1 -7 -5 -5 7 -1 z"/>
     <path d="M160 150 l3 7 7 1 -5 5 1 7 -6 -4 -6 4 1 -7 -5 -5 7 -1 z"/>
   </g>
-
-  <!-- logo -->
-  <g font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-weight="bold" text-anchor="middle" direction="rtl" stroke="#2b1d3a" stroke-linejoin="round" paint-order="stroke fill">
-    <text x="200" y="66" font-size="62" fill="#ffffff" stroke-width="13" transform="rotate(-4 200 50)">مصارعة</text>
-    <text x="204" y="126" font-size="62" fill="#ffd23f" stroke-width="13" transform="rotate(3 200 110)">السومو<tspan fill="#ff5fae">!</tspan></text>
-  </g>
 </svg>

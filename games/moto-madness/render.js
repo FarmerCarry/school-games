@@ -16,35 +16,38 @@
   /* ---------------------------------------------------------------- themes */
   var THEMES = {
     grass: {
-      sky: ['#39a8ff', '#8fd3ff', '#d9f4ff'], far: '#9ccbe8', farTop: '#ffffff', mid: '#5fbf6a', mid2: '#4aa957',
-      fill: '#9a5e33', fill2: '#83502a', speck: '#b5784a', top: '#4cc437', top2: '#8be35a', edge: '#6b3f1f',
+      sky: ['#349eff', '#88d2ff', '#dff5ff'], far: '#9ccbe8', farTop: '#ffffff', mid: '#5fbf6a', mid2: '#4aa957',
+      fill: '#a66536', fill2: '#7e4823', fill3: '#593017', speck: '#c48452', top: '#47c234', top2: '#95eb60', edge: '#6b3f1f',
       dust: ['#c89b6a', '#b58555', '#d9b58c'], track: '#ff6a3d', track2: '#ffd23f', wood: '#c98a4b', wood2: '#99612f', pit: '#3b2414'
     },
     desert: {
       sky: ['#ff8a4c', '#ffb56b', '#ffe6a8'], far: '#e39063', farTop: '#f2a877', mid: '#f0b35f', mid2: '#e39b45',
-      fill: '#e8a54c', fill2: '#d48d37', speck: '#f5c070', top: '#ffd77a', top2: '#fff0b8', edge: '#b8742a',
+      fill: '#e8a54c', fill2: '#c97e2a', fill3: '#9a5819', speck: '#f7c87d', top: '#ffd77a', top2: '#fff0b8', edge: '#b8742a',
       dust: ['#f3c783', '#e8b066', '#ffe0a8'], track: '#2fb6ff', track2: '#ffffff', wood: '#b9773f', wood2: '#8a5226', pit: '#6b3b17'
     },
     winter: {
       sky: ['#6fbfff', '#a8dcff', '#eef9ff'], far: '#c6dcf2', farTop: '#ffffff', mid: '#4f8ea3', mid2: '#3b7589',
-      fill: '#9db7d9', fill2: '#8aa6cc', speck: '#b9cde8', top: '#ffffff', top2: '#e3f3ff', edge: '#7890b5',
+      fill: '#9db7d9', fill2: '#7d9ac2', fill3: '#5b769e', speck: '#c2d6f0', top: '#ffffff', top2: '#e3f3ff', edge: '#7890b5',
       dust: ['#ffffff', '#e6f4ff', '#cfe6ff'], track: '#ff4f8b', track2: '#ffffff', wood: '#b07a4a', wood2: '#80522c', pit: '#3c4f73'
     },
     factory: {
       sky: ['#140b2e', '#2c1657', '#4b2378'], far: '#2a1b4f', farTop: '#3a2766', mid: '#3a2a6e', mid2: '#2f2160',
-      fill: '#4a4f6e', fill2: '#3c405c', speck: '#5d6386', top: '#ffcf2e', top2: '#2b2b33', edge: '#23253a',
+      fill: '#4a4f6e', fill2: '#373b56', fill3: '#25283d', speck: '#646b91', top: '#ffcf2e', top2: '#2b2b33', edge: '#23253a',
       dust: ['#ffd84d', '#ffae2e', '#ffffff'], track: '#29e6ff', track2: '#ff4fd8', wood: '#8d95b3', wood2: '#5d6385', pit: '#120c22'
     }
   };
   MMR.THEMES = THEMES;
   var T = THEMES.grass, themeId = 'grass';
-  var layers = { far: null, mid: null, pattern: null, sprites: [], gen: 0, earthGrad: null, earthKey: '' }, layersFor = null; // the theme they were painted for
+  var layers = { far: null, mid: null, sprites: [], gen: 0, earthGrad: null, earthKey: '' }, layersFor = null;
 
   // Every cached canvas is painted once, so a GPU reset that blanks one repaints them all on the next frame.
   function dropLayers() { layersFor = null; }
   MMR.dropLayers = dropLayers;
   function mkCanvas(w, h) { var c = document.createElement('canvas'); c.width = w; c.height = h; c.addEventListener('contextrestored', dropLayers); return c; }
-  function circle(g, x, y, r) { g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill(); }
+  function circle(g, x, y, r, c) { if (c) g.fillStyle = c; g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill(); }
+  function poly(g, a, c) { g.beginPath(); for (var i = 0; i < a.length; i += 2) g[i ? 'lineTo' : 'moveTo'](a[i], a[i + 1]); g.closePath(); if (c) g.fillStyle = c; g.fill(); }
+  function ln(g, a, c, w) { if (c) g.strokeStyle = c; if (w) g.lineWidth = w; g.beginPath(); for (var i = 0; i < a.length; i += 2) g[i ? 'lineTo' : 'moveTo'](a[i], a[i + 1]); g.stroke(); }
+  function rf(g, x, y, w, h, r, c) { if (c) g.fillStyle = c; rrect(g, x, y, w, h, r); g.fill(); }
   function rrect(g, x, y, w, h, r) {
     g.beginPath(); g.moveTo(x + r, y); g.lineTo(x + w - r, y); g.quadraticCurveTo(x + w, y, x + w, y + r);
     g.lineTo(x + w, y + h - r); g.quadraticCurveTo(x + w, y + h, x + w - r, y + h); g.lineTo(x + r, y + h);
@@ -139,22 +142,6 @@
       else if (id === 'desert' && R2() < 0.5) { g.fillRect(x - 4, y - 44, 8, 44); g.fillRect(x - 16, y - 30, 6, 16); g.fillRect(x + 10, y - 36, 6, 18); }
     }
     return c;
-  }
-  function genPattern(ctx) {
-    var c = mkCanvas(160, 160), g = c.getContext('2d'), R = MM.rng(5), i;
-    g.fillStyle = T.fill; g.fillRect(0, 0, 160, 160);
-    if (themeId === 'factory') {
-      g.fillStyle = T.fill2; g.fillRect(0, 0, 160, 3); g.fillRect(0, 80, 160, 3); g.fillRect(0, 0, 3, 80); g.fillRect(80, 80, 3, 80);
-      g.fillStyle = T.speck;
-      [[10, 10], [70, 10], [10, 70], [70, 70], [90, 90], [150, 90], [90, 150], [150, 150]].forEach(function (p) { circle(g, p[0], p[1], 3); });
-    } else {
-      for (i = 0; i < 26; i++) {
-        g.fillStyle = R() < 0.5 ? T.fill2 : T.speck;
-        var x = R() * 160, y = R() * 160, r = 3 + R() * 7;
-        g.beginPath(); g.ellipse(x, y, r * 1.4, r, R(), 0, TAU); g.fill();
-      }
-    }
-    return ctx.createPattern(c, 'repeat');
   }
 
   /* --------------------------------------------------------------- sprites */
@@ -266,7 +253,6 @@
     layers.earthKey = '';
     layers.far = genFar(themeId);
     layers.mid = genMid(themeId);
-    layers.pattern = genPattern(ctx);
     layers.sprites = genSprites(themeId);
     layers.skyGrad = null;
     layers.stars = [];
@@ -307,9 +293,11 @@
     }
     // clouds
     if (themeId !== 'factory') {
-      ctx.fillStyle = themeId === 'desert' ? '#fff1dd' : '#ffffff';
       for (i = 0; i < layers.clouds.length; i++) {
         var c = layers.clouds[i], cx = ((c[0] - cam.x * 0.05 - t * 8 * c[2]) % 2400 + 2400) % 2400 - 300, cy = c[1] - (cam.y * 0.03), k = c[2];
+        ctx.fillStyle = themeId === 'desert' ? 'rgba(235,190,150,0.55)' : 'rgba(165,208,242,0.5)';
+        circle(ctx, cx, cy + 7 * k, 32 * k); circle(ctx, cx + 40 * k, cy - 6 * k, 40 * k); circle(ctx, cx + 84 * k, cy + 7 * k, 30 * k);
+        ctx.fillStyle = themeId === 'desert' ? '#fff1dd' : '#ffffff';
         circle(ctx, cx, cy, 34 * k); circle(ctx, cx + 40 * k, cy - 14 * k, 42 * k); circle(ctx, cx + 84 * k, cy, 32 * k);
         ctx.fillRect(cx, cy, 84 * k, 30 * k);
       }
@@ -352,22 +340,50 @@
   }
   function drawTerrain(ctx, L, x0, x1, ym, yb, t) {
     var ch = L.chain, r = chainRange(ch, x0, x1), i, p, q;
-    // ground fill (direct polygon fill — no full-viewport ctx.clip() stencil overhead)
-    ctx.beginPath();
-    ctx.moveTo(ch[r[0]].x, yb);
-    for (i = r[0]; i <= r[1]; i++) ctx.lineTo(ch[i].x, ch[i].y);
-    ctx.lineTo(ch[r[1]].x, yb);
-    ctx.closePath();
-    ctx.fillStyle = layers.pattern; ctx.fill();
-    // subtle earth depth shading directly on the same polygon path with a quantized cached gradient
-    var qm = M.round(ym / 32) * 32, qb = M.round(yb / 32) * 32;
-    var ek = qm + '|' + qb;
+    function fillStratum(off, amp, freq, col) {
+      ctx.beginPath(); ctx.moveTo(ch[r[0]].x, yb);
+      for (i = r[0]; i <= r[1]; i++) ctx.lineTo(ch[i].x, ch[i].y + off + (amp ? sin(ch[i].x * freq) * amp : 0));
+      ctx.lineTo(ch[r[1]].x, yb); ctx.closePath(); ctx.fillStyle = col; ctx.fill();
+    }
+    // layered geological strata (replaces repeating tile grid with organic world-space depth)
+    fillStratum(0, 0, 0, T.fill);
+    fillStratum(44, 11, 0.008, T.fill2);
+    fillStratum(136, 16, 0.0055, T.fill3);
+    var qm = M.round(ym / 32) * 32, qb = M.round(yb / 32) * 32, ek = qm + '|' + qb;
     if (!layers.earthGrad || layers.earthKey !== ek) {
       var gr = ctx.createLinearGradient(0, qm, 0, max(qm + 1, qb));
-      gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(1, 'rgba(0,0,0,0.25)');
+      gr.addColorStop(0, 'rgba(255,230,190,0.06)'); gr.addColorStop(1, 'rgba(0,0,0,0.34)');
       layers.earthGrad = gr; layers.earthKey = ek;
     }
-    ctx.fillStyle = layers.earthGrad; ctx.fill();
+    fillStratum(0, 0, 0, layers.earthGrad);
+    // deterministic non-repeating pebbles/boulders (or factory girders) anchored in world coordinates
+    var ci = r[0], gx0 = flr(x0 / 88) * 88;
+    for (var gx = gx0; gx <= x1; gx += 88) {
+      while (ci < r[1] && ch[ci + 1].x < gx) ci++;
+      p = ch[ci]; q = ch[min(r[1], ci + 1)];
+      if (!p || !q || q.x <= p.x || abs(q.x - p.x) < abs(q.y - p.y) * 0.5 || q.k === 's') continue;
+      var gy = p.y + (q.y - p.y) * ((gx - p.x) / (q.x - p.x));
+      var h = ((gx * 2654435761) ^ 0x9e3779b9) >>> 0;
+      if (themeId === 'factory') {
+        if ((gx / 88 & 1) === 0) {
+          ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.fillRect(gx - 6, gy + 16, 12, yb - gy);
+          ctx.fillStyle = T.speck; circle(ctx, gx, gy + 38, 3); circle(ctx, gx, gy + 116, 3); circle(ctx, gx, gy + 194, 3);
+        }
+      } else {
+        for (var j = 0; j < 3; j++) {
+          h = ((h * 1664525 + 1013904223) >>> 0);
+          var ox = gx + ((h & 255) / 255 - 0.5) * 76, oy = gy + 24 + j * 66 + ((h >> 8 & 255) / 255) * 48;
+          if (oy > yb - 6) continue;
+          var rx = 5 + ((h >> 16 & 15) / 15) * 11, ry = rx * (0.48 + ((h >> 20 & 7) / 7) * 0.25), rot = ((h >> 24 & 31) / 31 - 0.5) * 0.7;
+          ctx.fillStyle = j === 0 ? T.speck : 'rgba(0,0,0,0.18)';
+          ctx.beginPath(); ctx.ellipse(ox, oy + 2, rx, ry, rot, 0, TAU); ctx.fill();
+          if (j < 2) { ctx.fillStyle = 'rgba(255,245,220,0.14)'; ctx.beginPath(); ctx.ellipse(ox - rx * 0.18, oy - ry * 0.18, rx * 0.65, ry * 0.45, rot, 0, TAU); ctx.fill(); }
+        }
+        if (themeId === 'grass' && (h & 3) === 0) {
+          ctx.fillStyle = T.top; ctx.beginPath(); ctx.moveTo(gx - 5, gy - 4); ctx.lineTo(gx - 2, gy - 14); ctx.lineTo(gx + 1, gy - 4); ctx.lineTo(gx + 5, gy - 12); ctx.lineTo(gx + 8, gy - 4); ctx.fill();
+        }
+      }
+    }
     ctx.lineJoin = 'round'; ctx.lineCap = 'round';
     // surface strips (skip steep walls)
     var run = false;
@@ -648,13 +664,14 @@
     }
   }
   function drawSign(ctx, s) {
-    ctx.font = 'bold 22px Fredoka, sans-serif'; ctx.direction = 'rtl';
+    ctx.font = 'bold 21px Fredoka, sans-serif'; ctx.direction = 'rtl';
     var w = max(160, ctx.measureText(s.text).width + 36), x = s.x + 60, y = s.y;
-    ctx.fillStyle = '#6b4b2a'; ctx.fillRect(x - 5, y - 80, 10, 80);
-    ctx.fillStyle = 'rgba(0,0,0,0.25)'; rrect(ctx, x - w / 2 + 4, y - 132, w, 54, 12); ctx.fill();
-    ctx.fillStyle = '#fff4d6'; rrect(ctx, x - w / 2, y - 136, w, 54, 12); ctx.fill();
+    ctx.fillStyle = '#5a3a1e'; ctx.fillRect(x - 5, y - 144, 10, 144);
+    ctx.fillStyle = '#8b5e34'; ctx.fillRect(x - 3, y - 144, 4, 144);
+    ctx.fillStyle = 'rgba(0,0,0,0.26)'; rrect(ctx, x - w / 2 + 4, y - 194, w, 52, 13); ctx.fill();
+    ctx.fillStyle = '#fff7df'; rrect(ctx, x - w / 2, y - 198, w, 52, 13); ctx.fill();
     ctx.strokeStyle = '#ff7a2f'; ctx.lineWidth = 4; ctx.stroke();
-    ctx.fillStyle = '#2b1d10'; ctx.textAlign = 'center'; ctx.fillText(s.text, x, y - 101);
+    ctx.fillStyle = '#24170c'; ctx.textAlign = 'center'; ctx.fillText(s.text, x, y - 165);
   }
 
   /* ------------------------------------------------------------- the bike */
@@ -676,81 +693,39 @@
   function toLocal(px, py, x, y, ca, sa) { var dx = px - x, dy = py - y; return [dx * ca + dy * sa, -dx * sa + dy * ca]; }
 
   MMR.drawBike = function (ctx, P, skin, t) {
-    var ca = cos(P.a), sa = sin(P.a);
-    var rw = P.wheels[0], fw = P.wheels[1];
-    drawWheel(ctx, rw.x, rw.y, rw.rot, skin);
-    drawWheel(ctx, fw.x, fw.y, fw.rot, skin);
+    var ca = cos(P.a), sa = sin(P.a), rw = P.wheels[0], fw = P.wheels[1];
+    drawWheel(ctx, rw.x, rw.y, rw.rot, skin); drawWheel(ctx, fw.x, fw.y, fw.rot, skin);
     var rl = toLocal(rw.x, rw.y, P.x, P.y, ca, sa), fl = toLocal(fw.x, fw.y, P.x, P.y, ca, sa);
     ctx.save(); ctx.translate(P.x, P.y); ctx.rotate(P.a);
     if (skin.rainbow) skin.body = 'hsl(' + ((t * 120) % 360) + ',95%,55%)';
-    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    // swing arm
-    ctx.strokeStyle = '#2b2d3a'; ctx.lineWidth = 8;
-    ctx.beginPath(); ctx.moveTo(-4, 12); ctx.lineTo(rl[0], rl[1]); ctx.stroke();
-    // fork
-    ctx.strokeStyle = '#c9cfdf'; ctx.lineWidth = 7;
-    ctx.beginPath(); ctx.moveTo(30, -26); ctx.lineTo(fl[0], fl[1]); ctx.stroke();
-    ctx.strokeStyle = skin.dark; ctx.lineWidth = 9;
-    ctx.beginPath(); ctx.moveTo(30, -26); ctx.lineTo(30 + (fl[0] - 30) * 0.45, -26 + (fl[1] + 26) * 0.45); ctx.stroke();
-    // exhaust
-    ctx.strokeStyle = '#aeb6c8'; ctx.lineWidth = 7;
-    ctx.beginPath(); ctx.moveTo(4, 16); ctx.quadraticCurveTo(-26, 16, -52, -2); ctx.stroke();
-    ctx.fillStyle = '#2b2d3a'; circle(ctx, -54, -3, 4);
-    // engine
-    ctx.fillStyle = '#3b3f4f'; rrect(ctx, -16, -4, 34, 26, 7); ctx.fill();
+    ctx.lineCap = ctx.lineJoin = 'round';
+    ln(ctx, [-4, 12, rl[0], rl[1]], '#2b2d3a', 8);
+    ln(ctx, [30, -26, fl[0], fl[1]], '#c9cfdf', 7);
+    ln(ctx, [30, -26, 30 + (fl[0] - 30) * 0.45, -26 + (fl[1] + 26) * 0.45], skin.dark, 9);
+    ctx.strokeStyle = '#aeb6c8'; ctx.lineWidth = 7; ctx.beginPath(); ctx.moveTo(4, 16); ctx.quadraticCurveTo(-26, 16, -52, -2); ctx.stroke();
+    circle(ctx, -54, -3, 4, '#2b2d3a');
+    rf(ctx, -16, -4, 34, 26, 7, '#3b3f4f');
     ctx.fillStyle = '#6a7086'; ctx.fillRect(-10, 2, 22, 3); ctx.fillRect(-10, 9, 22, 3);
-    // frame
-    ctx.strokeStyle = skin.dark; ctx.lineWidth = 6;
-    ctx.beginPath(); ctx.moveTo(30, -24); ctx.lineTo(2, 4); ctx.lineTo(-24, -10); ctx.stroke();
-    // rear fender / tail
-    ctx.fillStyle = skin.body;
-    ctx.beginPath(); ctx.moveTo(-12, -16); ctx.lineTo(-70, -24); ctx.lineTo(-66, -14); ctx.lineTo(-30, -2); ctx.lineTo(-8, -4); ctx.closePath(); ctx.fill();
-    // side number plate
-    ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.ellipse(-30, -8, 11, 7, -0.15, 0, TAU); ctx.fill();
+    ln(ctx, [30, -24, 2, 4, -24, -10], skin.dark, 6);
+    poly(ctx, [-12, -16, -70, -24, -66, -14, -30, -2, -8, -4], skin.body);
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.ellipse(-30, -8, 11, 7, -0.15, 0, TAU); ctx.fill();
     ctx.fillStyle = skin.dark; ctx.font = 'bold 10px sans-serif'; ctx.textAlign = 'center'; ctx.fillText(skin.num || '7', -30, -4.5);
-    var rider = !P.noRider;
-    var L = P.lean || 0, c = P.crouch || 0;
-    var hip = [-14 + L * 5, -24 + c * 5];
-    var foot = [2, 12], knee = [14 + L * 3, -6 + c * 4];
-    var sh = [hip[0] + 6 + L * 17, hip[1] - 26 + abs(L) * 5 + c * 4];
-    var hand = [25, -38];
-    var head = [sh[0] + 6 + L * 5, sh[1] - 16];
+    var rider = !P.noRider, L = P.lean || 0, c = P.crouch || 0, hip = [-14 + L * 5, -24 + c * 5], foot = [2, 12], knee = [14 + L * 3, -6 + c * 4];
+    var sh = [hip[0] + 6 + L * 17, hip[1] - 26 + abs(L) * 5 + c * 4], hand = [25, -38], head = [sh[0] + 6 + L * 5, sh[1] - 16];
+    if (rider) ln(ctx, [hip[0] - 2, hip[1], knee[0] - 4, knee[1] + 1, foot[0] - 4, foot[1]], skin.suitDark, 11);
+    ln(ctx, [-40, -20, -2, -17], '#1f2029', 9);
+    poly(ctx, [-6, -20, 18, -28, 32, -22, 28, -8, 0, -6], skin.body);
+    poly(ctx, [0, -16, 20, -23, 24, -19, 4, -12], skin.accent);
+    ctx.fillStyle = skin.body; ctx.beginPath(); ctx.moveTo(30, -6); ctx.quadraticCurveTo(50, -14, 70, -4); ctx.lineTo(66, 0); ctx.quadraticCurveTo(50, -8, 34, -1); ctx.closePath(); ctx.fill();
+    rf(ctx, 30, -36, 12, 18, 4, skin.accent);
+    ln(ctx, [30, -28, 26, -40], '#2b2d3a', 4);
     if (rider) {
-      // back leg
-      ctx.strokeStyle = skin.suitDark; ctx.lineWidth = 11;
-      ctx.beginPath(); ctx.moveTo(hip[0] - 2, hip[1]); ctx.lineTo(knee[0] - 4, knee[1] + 1); ctx.lineTo(foot[0] - 4, foot[1]); ctx.stroke();
-    }
-    // seat
-    ctx.strokeStyle = '#1f2029'; ctx.lineWidth = 9;
-    ctx.beginPath(); ctx.moveTo(-40, -20); ctx.lineTo(-2, -17); ctx.stroke();
-    // tank
-    ctx.fillStyle = skin.body;
-    ctx.beginPath(); ctx.moveTo(-6, -20); ctx.lineTo(18, -28); ctx.lineTo(32, -22); ctx.lineTo(28, -8); ctx.lineTo(0, -6); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = skin.accent; ctx.beginPath(); ctx.moveTo(0, -16); ctx.lineTo(20, -23); ctx.lineTo(24, -19); ctx.lineTo(4, -12); ctx.closePath(); ctx.fill();
-    // front fender + number plate
-    ctx.fillStyle = skin.body;
-    ctx.beginPath(); ctx.moveTo(30, -6); ctx.quadraticCurveTo(50, -14, 70, -4); ctx.lineTo(66, 0); ctx.quadraticCurveTo(50, -8, 34, -1); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = skin.accent; rrect(ctx, 30, -36, 12, 18, 4); ctx.fill();
-    // handlebar
-    ctx.strokeStyle = '#2b2d3a'; ctx.lineWidth = 4;
-    ctx.beginPath(); ctx.moveTo(30, -28); ctx.lineTo(26, -40); ctx.stroke();
-    if (rider) {
-      ctx.strokeStyle = '#1f2029'; ctx.lineWidth = 6;
-      // boot
-      ctx.beginPath(); ctx.moveTo(foot[0], foot[1]); ctx.lineTo(foot[0] + 10, foot[1] + 1); ctx.stroke();
-      // front leg
-      ctx.strokeStyle = skin.suit; ctx.lineWidth = 12;
-      ctx.beginPath(); ctx.moveTo(hip[0], hip[1]); ctx.lineTo(knee[0], knee[1]); ctx.lineTo(foot[0], foot[1] - 2); ctx.stroke();
-      // torso
-      ctx.lineWidth = 16;
-      ctx.beginPath(); ctx.moveTo(hip[0], hip[1]); ctx.lineTo(sh[0], sh[1]); ctx.stroke();
-      ctx.strokeStyle = skin.suitAccent; ctx.lineWidth = 5;
-      ctx.beginPath(); ctx.moveTo(hip[0] + 1, hip[1] - 4); ctx.lineTo(sh[0] + 1, sh[1] + 3); ctx.stroke();
-      // arm
-      var elbow = [(sh[0] + hand[0]) / 2 + 2, (sh[1] + hand[1]) / 2 + 9 - L * 3];
-      ctx.strokeStyle = skin.suit; ctx.lineWidth = 9;
-      ctx.beginPath(); ctx.moveTo(sh[0], sh[1]); ctx.lineTo(elbow[0], elbow[1]); ctx.lineTo(hand[0], hand[1]); ctx.stroke();
-      ctx.fillStyle = '#1f2029'; circle(ctx, hand[0], hand[1], 5);
+      ln(ctx, [foot[0], foot[1], foot[0] + 10, foot[1] + 1], '#1f2029', 6);
+      ln(ctx, [hip[0], hip[1], knee[0], knee[1], foot[0], foot[1] - 2], skin.suit, 12);
+      ln(ctx, [hip[0], hip[1], sh[0], sh[1]], skin.suit, 16);
+      ln(ctx, [hip[0] + 1, hip[1] - 4, sh[0] + 1, sh[1] + 3], skin.suitAccent, 5);
+      ln(ctx, [sh[0], sh[1], (sh[0] + hand[0]) / 2 + 2, (sh[1] + hand[1]) / 2 + 9 - L * 3, hand[0], hand[1]], skin.suit, 9);
+      circle(ctx, hand[0], hand[1], 5, '#1f2029');
       drawHelmet(ctx, head[0], head[1], 0, skin);
     }
     ctx.restore();
@@ -758,37 +733,24 @@
   };
   function drawHelmet(ctx, x, y, a, skin) {
     ctx.save(); ctx.translate(x, y); ctx.rotate(a);
-    ctx.fillStyle = skin.helmet; circle(ctx, 0, 0, 14);
+    circle(ctx, 0, 0, 14, skin.helmet);
     ctx.fillStyle = skin.helmet2; ctx.beginPath(); ctx.moveTo(-14, -2); ctx.quadraticCurveTo(0, -18, 14, -4); ctx.lineTo(10, -8); ctx.quadraticCurveTo(0, -14, -12, -6); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#1f2a44'; rrect(ctx, 2, -5, 13, 10, 4); ctx.fill();
-    ctx.fillStyle = 'rgba(160,230,255,0.9)'; rrect(ctx, 5, -3, 8, 4, 2); ctx.fill();
-    ctx.fillStyle = skin.helmet2; ctx.beginPath(); ctx.moveTo(8, -12); ctx.lineTo(22, -10); ctx.lineTo(12, -6); ctx.closePath(); ctx.fill();
+    rf(ctx, 2, -5, 13, 10, 4, '#1f2a44'); rf(ctx, 5, -3, 8, 4, 2, 'rgba(160,230,255,0.9)');
+    poly(ctx, [8, -12, 22, -10, 12, -6], skin.helmet2);
     ctx.restore();
   }
   function drawRagdoll(ctx, r, skin, t) {
-    ctx.save(); ctx.translate(r.x, r.y); ctx.rotate(r.a);
-    ctx.lineCap = 'round';
+    ctx.save(); ctx.translate(r.x, r.y); ctx.rotate(r.a); ctx.lineCap = 'round';
     var f = sin(r.t * 22) * 0.6;
-    ctx.strokeStyle = skin.suit; ctx.lineWidth = 12;
-    // legs
-    ctx.beginPath(); ctx.moveTo(0, 14); ctx.lineTo(-12 + f * 8, 30); ctx.lineTo(-6 + f * 12, 44); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(0, 14); ctx.lineTo(12 - f * 8, 30); ctx.lineTo(16 - f * 10, 42); ctx.stroke();
-    // body
-    ctx.lineWidth = 16; ctx.beginPath(); ctx.moveTo(0, 16); ctx.lineTo(0, -10); ctx.stroke();
-    // arms flailing
-    ctx.lineWidth = 9;
-    ctx.beginPath(); ctx.moveTo(0, -8); ctx.lineTo(-16, -18 + f * 16); ctx.lineTo(-24, -30 + f * 20); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(0, -8); ctx.lineTo(16, -18 - f * 16); ctx.lineTo(26, -28 - f * 18); ctx.stroke();
+    ln(ctx, [0, 14, -12 + f * 8, 30, -6 + f * 12, 44], skin.suit, 12);
+    ln(ctx, [0, 14, 12 - f * 8, 30, 16 - f * 10, 42], skin.suit, 12);
+    ln(ctx, [0, 16, 0, -10], skin.suit, 16);
+    ln(ctx, [0, -8, -16, -18 + f * 16, -24, -30 + f * 20], skin.suit, 9);
+    ln(ctx, [0, -8, 16, -18 - f * 16, 26, -28 - f * 18], skin.suit, 9);
     ctx.restore();
     var hx = r.x + sin(r.a) * 24, hy = r.y - cos(r.a) * 24;
     drawHelmet(ctx, hx, hy, r.a, skin);
-    // dizzy stars once landed
-    if (r.t > 0.35) {
-      for (var i = 0; i < 3; i++) {
-        var a = t * 5 + i * TAU / 3;
-        star(ctx, hx + cos(a) * 24, hy - 22 + sin(a) * 8, 7, '#ffd23f');
-      }
-    }
+    if (r.t > 0.35) for (var i = 0; i < 3; i++) { var a = t * 5 + i * TAU / 3; star(ctx, hx + cos(a) * 24, hy - 22 + sin(a) * 8, 7, '#ffd23f'); }
   }
   function star(ctx, x, y, r, col) {
     ctx.fillStyle = col; ctx.beginPath();

@@ -137,16 +137,24 @@
     function buildRibbon(tr, th, w) {
       var q = new Quads(), STEP = 2, s0 = -40, s1 = tr.len + 70;
       var strips = [[-5.0, -4.3, 'curb'], [-4.3, -2.2, 't'], [-2.2, -2.1, 'l'], [-2.1, -0.05, 't'], [-0.05, 0.05, 'l'], [0.05, 2.1, 't'], [2.1, 2.2, 'l'], [2.2, 4.3, 't'], [4.3, 5.0, 'curb']];
-      var tA = new T.Color(th.track), tB = new T.Color(th.track).multiplyScalar(0.93), tAh = tA.getHex(), tBh = tB.getHex();
+      var tA = new T.Color(th.track), tB = new T.Color(th.track).multiplyScalar(0.89), tAh = tA.getHex(), tBh = tB.getHex();
+      var gA = new T.Color(th.ground).multiplyScalar(1.04).getHex(), gB = th.ground2;
       for (var s = s0, idx = 0; s < s1; s += STEP, idx++) {
+        var band = M.floor(idx / 3) % 2;
         for (var k = 0; k < strips.length; k++) {
           var st = strips[k], y = st[2] === 'l' ? 0.035 : st[2] === 'curb' ? 0.045 : 0.03;
-          var col = st[2] === 'curb' ? (idx % 2 ? th.curbA : th.curbB) : st[2] === 'l' ? th.line : (M.floor(idx / 2) % 2 ? tAh : tBh);
+          var col = st[2] === 'curb' ? (idx % 2 ? th.curbA : th.curbB) : st[2] === 'l' ? th.line : (band ? tAh : tBh);
           q.quad(tf(tr, s, st[0], y), tf(tr, s, st[1], y), tf(tr, s + STEP, st[1], y), tf(tr, s + STEP, st[0], y), col);
         }
-        // Low verge under the curbs.
-        q.quad(tf(tr, s, -6.2, 0.01), tf(tr, s, -5.0, 0.01), tf(tr, s + STEP, -5.0, 0.01), tf(tr, s + STEP, -6.2, 0.01), th.ground2);
-        q.quad(tf(tr, s, 5.0, 0.01), tf(tr, s, 6.2, 0.01), tf(tr, s + STEP, 6.2, 0.01), tf(tr, s + STEP, 5.0, 0.01), th.ground2);
+        // Crisp distance tick stripes across the track every 16m.
+        if (s > 0 && idx % 8 === 0) {
+          q.quad(tf(tr, s, -4.3, 0.036), tf(tr, s, 4.3, 0.036), tf(tr, s + 0.35, 4.3, 0.036), tf(tr, s + 0.35, -4.3, 0.036), th.line);
+        }
+        // Layered mowed-turf bands flanking the curbs.
+        var vg = w === 2 ? th.ground2 : (band ? gA : gB);
+        var vw = w === 2 ? 6.4 : 22;
+        q.quad(tf(tr, s, -vw, 0.01), tf(tr, s, -5.0, 0.01), tf(tr, s + STEP, -5.0, 0.01), tf(tr, s + STEP, -vw, 0.01), vg);
+        q.quad(tf(tr, s, 5.0, 0.01), tf(tr, s, vw, 0.01), tf(tr, s + STEP, vw, 0.01), tf(tr, s + STEP, 5.0, 0.01), vg);
       }
       // Start line and a chequered finish.
       q.quad(tf(tr, -0.3, -4.3, 0.04), tf(tr, -0.3, 4.3, 0.04), tf(tr, 0.3, 4.3, 0.04), tf(tr, 0.3, -4.3, 0.04), 0xffffff);
@@ -333,16 +341,24 @@
         var h2 = tf(tr, 22, -20, 0); list.push(part(BOX, 0x7fe0ff, h2[0], 1.8, h2[2], 0, -th, 0, [4, 3.6, 4]), part(new T.CylinderGeometry(0, 3.6, 2, 4, 1), 0xffffff, h2[0], 4.6, h2[2], 0, -th + M.PI / 4, 0, [1, 1, 1]));
         var lh = tf(tr, 0, 26, 0); list.push(part(CYL, { face: function (x, y) { return M.floor((y + 0.5) * 6) % 2 ? 0xffffff : 0xff4d4d; } }, lh[0], 6, lh[2], 0, 0, 0, [1.4, 12, 1.4]), part(CYL, 0xffe14d, lh[0], 12.6, lh[2], 0, 0, 0, [1.1, 1.2, 1.1]), part(CONE, 0xff4d4d, lh[0], 13.8, lh[2], 0, 0, 0, [1.4, 1.4, 1.4]));
       }
-      // Bleachers with fans at the start (right side).
+      // Bleachers with front/back stadium rails at the start (right side).
       for (var t = 0; t < 3; t++) {
         var b = tf(tr, 6, 9 + t * 1.2, 0);
         list.push(part(BOX, t % 2 ? 0x2b59c3 : 0x3a6fd8, b[0], 0.4 + t * 0.5, b[2], 0, -th, 0, [1.2, 0.8 + t, 18]));
       }
+      var rb = tf(tr, 6, 8.38, 0);
+      list.push(part(BOX, 0xffffff, rb[0], 0.88, rb[2], 0, -th, 0, [0.1, 0.1, 18]), part(BOX, 0xffd23f, rb[0], 0.44, rb[2], 0, -th, 0, [0.08, 0.78, 18]));
     }
-    // Fans: instanced bobbing blobs on the bleachers and at the finish.
-    var fanGeo = merge([part(SPH_LO, 0xffffff, 0, 0.35, 0, 0, 0, 0, [0.3, 0.38, 0.3]), part(SPH_LO, 0xffd9b0, 0, 0.85, 0, 0, 0, 0, 0.22), part(SPH_LO, 0x111111, -0.07, 0.88, -0.19, 0, 0, 0, 0.04), part(SPH_LO, 0x111111, 0.07, 0.88, -0.19, 0, 0, 0, 0.04),
-      limb([0.25, 0.5, 0], [0.4, 1.0, 0], 0.06, 0xffffff), limb([-0.25, 0.5, 0], [-0.4, 1.0, 0], 0.06, 0xffffff)]);
-    var FANC = [0xff4d4d, 0xffd23f, 0x4cd964, 0x2ea8ff, 0xff6fb5, 0xff9f1c, 0x9b59ff, 0xffffff];
+    // Fans: split jersey body (per-instance team color) + cheerful face/hair/headband head so no spectator looks like a white pin!
+    var fanBodyGeo = merge([part(CYL, 0xffffff, 0, 0.36, 0, 0, 0, 0, [0.24, 0.56, 0.22]), part(SPH_LO, 0xf3f4f6, 0, 0.62, 0, 0, 0, 0, [0.25, 0.12, 0.23]),
+      limb([0.24, 0.52, 0], [0.42, 0.96, -0.06], 0.065, 0xffffff), limb([-0.24, 0.52, 0], [-0.42, 0.96, -0.06], 0.065, 0xffffff),
+      part(new T.TorusGeometry(0.22, 0.04, 6, 12), 0xffffff, 0, 0.96, 0, M.PI / 2, 0, 0)]);
+    var fanHeadGeo = merge([part(SPH_LO, 0xffd4a8, 0, 0.86, 0, 0, 0, 0, 0.23), part(HEMI, 0x4b2e24, 0, 0.91, 0.02, -0.2, 0, 0, [0.24, 0.22, 0.24]),
+      part(SPH_LO, 0x1b1b2a, -0.075, 0.88, -0.2, 0, 0, 0, 0.036), part(SPH_LO, 0x1b1b2a, 0.075, 0.88, -0.2, 0, 0, 0, 0.036),
+      part(SPH_LO, 0xff8fa3, -0.14, 0.82, -0.16, 0, 0, 0, 0.035), part(SPH_LO, 0xff8fa3, 0.14, 0.82, -0.16, 0, 0, 0, 0.035),
+      part(SPH_LO, 0xb8324c, 0, 0.77, -0.2, 0, 0, 0, [0.055, 0.035, 0.03]),
+      part(SPH_LO, 0xffd4a8, 0.43, 0.99, -0.07, 0, 0, 0, 0.07), part(SPH_LO, 0xffd4a8, -0.43, 0.99, -0.07, 0, 0, 0, 0.07)]);
+    var FANC = [0xff4d4d, 0xffd23f, 0x4cd964, 0x2ea8ff, 0xff6fb5, 0xff9f1c, 0x9b59ff, 0x2dd4bf];
 
     function clearWorld() {
       if (!world) return;
@@ -424,17 +440,20 @@
       var fanSpots = [];
       for (i = 0; i < 24; i++) fanSpots.push([6 - 8 + (i % 8) * 2.1, 9 + M.floor(i / 8) * 1.2, 0.8 + M.floor(i / 8) * 1.0]);
       for (i = 0; i < 16; i++) fanSpots.push([tr.len - 14 + (i % 8) * 2.4, (i < 8 ? -1 : 1) * 7.6, 0]);
-      var fans = new T.InstancedMesh(fanGeo, new T.MeshLambertMaterial({ vertexColors: true }), fanSpots.length);
-      fans.userData.keep = true;
-      fanSpots.forEach(function (f, k) { C.setHex(FANC[k % FANC.length]); fans.setColorAt(k, C); });
-      world.fans = fans; world.fanSpots = fanSpots.map(function (f, k) { var P = tf(tr, f[0], f[1], f[2]); return { p: P, th: headingAt(tr, f[0]), side: f[1] > 0 ? 1 : -1, ph: k * 1.7 }; });
-      group.add(fans);
+      var fans = new T.InstancedMesh(fanBodyGeo, new T.MeshLambertMaterial({ vertexColors: true }), fanSpots.length);
+      var fanHeads = new T.InstancedMesh(fanHeadGeo, LIT, fanSpots.length);
+      fans.userData.keep = true; fanHeads.userData.keep = true;
+      fanSpots.forEach(function (f, k) { C.setHex(FANC[(k + M.floor(k / 8) * 3) % FANC.length]); fans.setColorAt(k, C); });
+      if (fans.instanceColor) fans.instanceColor.needsUpdate = true;
+      world.fans = fans; world.fanHeads = fanHeads;
+      world.fanSpots = fanSpots.map(function (f, k) { var P = tf(tr, f[0], f[1], f[2]); return { p: P, th: headingAt(tr, f[0]), side: f[1] > 0 ? 1 : -1, ph: k * 1.7 }; });
+      group.add(fans, fanHeads);
       // Moving obstacles.
       if (balls.length) { world.balls = new T.InstancedMesh(getBallGeo(w), LIT, balls.length); world.balls.userData.keep = true; world.ballItems = balls; group.add(world.balls); }
       if (critters.length) { world.critters = new T.InstancedMesh(getCritterGeo(w), LIT, critters.length); world.critters.userData.keep = true; world.critterItems = critters; group.add(world.critters); }
       if (sprinklers.length) { world.water = new T.InstancedMesh(waterGeo, waterMat, sprinklers.length); world.water.userData.keep = true; world.sprItems = sprinklers; group.add(world.water); }
       [world.balls, world.critters, world.water].forEach(function (m) { if (m) m.frustumCulled = false; });
-      fans.frustumCulled = false;
+      fans.frustumCulled = false; fanHeads.frustumCulled = false;
       // Golden eggs + coin arcs.
       world.gold = new T.InstancedMesh(goldEggGeo, goldMat, M.max(1, tr.gold.length));
       world.gold.userData.keep = true; world.gold.frustumCulled = false;
@@ -543,9 +562,11 @@
       r.legL = new T.Mesh(undefined, LIT); r.legL.position.set(-0.15, 0.58, 0); body.add(r.legL);
       r.legR = new T.Mesh(undefined, LIT); r.legR.position.set(0.15, 0.58, 0); body.add(r.legR);
       r.arm = new T.Mesh(undefined, LIT); r.arm.position.set(-0.4, 1.12, 0); body.add(r.arm);
-      r.spoonG = new T.Group(); r.spoonG.position.set(0.2, 1.04, -0.3); r.spoonG.rotation.y = -0.5; body.add(r.spoonG);
+      r.spoonG = new T.Group(); r.spoonG.position.set(0.28, 1.15, -0.32); r.spoonG.rotation.y = -0.45; body.add(r.spoonG);
       r.spoon = new T.Mesh(undefined, LIT); r.spoonG.add(r.spoon);
       r.eggM = new T.Mesh(undefined, LIT); r.eggM.position.set(0, 0.06 + EGG_R * 0.9, -0.72); r.spoonG.add(r.eggM);
+      r.ring = new T.Mesh(new T.RingGeometry(0.46, 0.62, 24).rotateX(-M.PI / 2), new T.MeshBasicMaterial({ color: 0xffd23f, transparent: true, opacity: 0.82, depthWrite: false }));
+      r.ring.position.y = 0.055; r.ring.visible = false; root.add(r.ring);
       r.fly = new T.Mesh(undefined, LIT); r.fly.visible = false; scene.add(r.fly);
       r.flyV = new T.Vector3(); r.flyT = -1;
       scene.add(root);
@@ -649,11 +670,11 @@
       var tr = world.track, th = headingAt(tr, r.s), fx = M.sin(th), fz = -M.cos(th);
       var boostBack = r.boost > 0 ? 0.55 : 0;
       var introK = (intro != null && intro > 0) ? intro : 0;
-      var back = 4.9 + boostBack + introK * 3.2, up = 2.65 + introK * 2.0;
-      tf(tr, r.s, r.x * 0.6, 0, tmp);
+      var back = 5.15 + boostBack + introK * 3.0, up = 3.35 + introK * 1.9;
+      tf(tr, r.s, r.x * 0.68, 0, tmp);
       wantP.set(tmp[0] - fx * back, up + r.y * 0.4, tmp[2] - fz * back);
-      tf(tr, r.s + 6, r.x * 0.7, 0, tmp);
-      wantL.set(tmp[0], 1.05 + r.y * 0.3, tmp[2]);
+      tf(tr, r.s + 6.5, r.x * 0.72, 0, tmp);
+      wantL.set(tmp[0], 1.15 + r.y * 0.3, tmp[2]);
       if (introK > 0) snapCam = true;
       var kk = snapCam ? 1 : 1 - M.exp(-dt * 8);
       camPos[k].lerp(wantP, kk); camLook[k].lerp(wantL, kk);
@@ -746,8 +767,10 @@
         var j = M.abs(M.sin(t * (4 + cheer * 4) + f.ph)) * 0.35 * cheer;
         MT.compose(V.set(f.p[0], f.p[1] + j, f.p[2]), Q.setFromEuler(E.set(0, -f.th + (f.side > 0 ? -M.PI / 2 : M.PI / 2), 0)), S.set(1, 1, 1));
         world.fans.setMatrixAt(k, MT);
+        world.fanHeads.setMatrixAt(k, MT);
       });
       world.fans.instanceMatrix.needsUpdate = true;
+      world.fanHeads.instanceMatrix.needsUpdate = true;
       if (world.sea) world.sea.position.y = -0.25 + M.sin(t * 0.8) * 0.06;
       // Splats fade by shrinking after a while.
       splats.forEach(function (sp) {
@@ -809,7 +832,9 @@
       // Spoon tilts with the lean; the egg rolls with e.
       rig.spoonG.rotation.z = -lean * 0.3 + (celebrate ? 0 : M.sin(t * 7 + r.i) * 0.02 * sw);
       rig.spoonG.rotation.x = celebrate ? -0.6 : 0;
-      rig.spoonG.position.y = 1.04 + (celebrate ? 0.35 : 0);
+      rig.spoonG.position.y = 1.15 + (celebrate ? 0.32 : 0);
+      rig.ring.visible = mode === 'play' && !!r.human;
+      if (rig.ring.visible) rig.ring.position.y = 0.055 - r.y;
       var e = (mode === 'skins' || (mode === 'title' && !race.demo)) ? M.sin(t * 2.1 + r.i) * 0.25 : r.e;
       rig.pop = M.min(1, rig.pop + dt * 3);
       var popS = rig.pop < 1 ? 1 + M.sin(rig.pop * M.PI) * 0.5 : 1;

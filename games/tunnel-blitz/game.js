@@ -272,9 +272,8 @@
   }
   function addBlock(d, a0, a1, o) {
     if (obs.length > 280) return;
-    // cLite: a whitened face colour so walls stand out from the same-hued tunnel
     obs.push({ d: d, len: o.len || 0.6, a0: a0, a1: a1, rIn: o.rIn == null ? 0.2 : o.rIn, spin: o.spin || 0,
-      N: o.N, c: o.c, cLite: mix(o.c, WHITE, 0.25), row: gen.row, broken: 0, minGap: 9, done: false });
+      N: o.N, c: o.c, cLite: mix(o.c, WHITE, 0.14), row: gen.row, broken: 0, minGap: 9, done: false });
     obs[obs.length - 1].spin /= WS;
   }
   // A ring of blocks with the given gaps cut out. gaps: [[a0,a1], ...]
@@ -312,9 +311,14 @@
     }
     return nd;
   }
+  var HAZ = [
+    [[255, 58, 96], [255, 152, 28]], [[235, 255, 48], [25, 238, 255]], [[255, 48, 125], [255, 130, 26]],
+    [[24, 235, 255], [185, 95, 255]], [[255, 198, 28], [255, 64, 96]], [[30, 238, 255], [60, 255, 175]],
+    [[255, 52, 92], [255, 168, 32]]
+  ];
   function colOf(P, alt) {
-    if (P.Z.rainbow) return hsv(gen.row * 47, 0.8, 1).slice();
-    return alt ? P.Z.alt : P.Z.col;
+    if (P.Z.rainbow) return hsv(gen.row * 47 + 180, 0.9, 1).slice();
+    return HAZ[(P.k - 1) % 8][alt ? 1 : 0];
   }
   function gapOrb(d, a, chance) { if (ran() < chance) addOrb(d - 0.7, a); }
 
@@ -578,7 +582,7 @@
         FC[0] = 255; FC[1] = 250; FC[2] = 255; return 0.16;
       case 'galaxy':
         hsv(265 + 55 * sin(j * 0.9 + k * 0.33 + time * 0.6), 0.75, 1, FC); return 0.09 + odd * 0.03;
-      default: return odd ? 0.13 : 0.22;
+      default: return (odd ? 0.17 : 0.35) + ((k & 3) === 0 ? 0.12 : 0);
     }
   }
   function drawTunnel(g, style, time, beat, fixedZone, boost) {
@@ -631,16 +635,27 @@
       }
       // edge lines
       var bright = (k & 7) === 0;
-      var la = fo * (style === 'stripes' || style === 'zebra' || style === 'candy' ? 0.3 : 0.55);
+      var la = fo * (style === 'stripes' || style === 'zebra' || style === 'candy' ? 0.32 : 0.68);
       g.strokeStyle = rgba(col, la);
-      g.lineWidth = clamp(3 / zA, 0.6, 2.2);
+      g.lineWidth = clamp(3.4 / zA, 0.7, 2.5);
       g.beginPath();
       for (j = 0; j < N; j++) { g.moveTo(VAX[j], VAY[j]); g.lineTo(VBX[j], VBY[j]); }
       g.stroke();
+      if (style === 'grid' && (k & 3) === 0 && zA < 26) {
+        g.strokeStyle = rgba(mix(col, WHITE, 0.45), fo * 0.48);
+        g.lineWidth = clamp(2.6 / zA, 0.7, 2.2);
+        g.beginPath();
+        for (j = 0; j < N; j++) {
+          j2 = (j + 1) % N;
+          g.moveTo((VAX[j] + VAX[j2]) * 0.5, (VAY[j] + VAY[j2]) * 0.5);
+          g.lineTo((VBX[j] + VBX[j2]) * 0.5, (VBY[j] + VBY[j2]) * 0.5);
+        }
+        g.stroke();
+      }
       if (ringVisible && (style !== 'stripes' || (k & 3) === 0)) {
         var pulse = style === 'pulse' ? beat * 1.6 : beat * 0.5;
-        g.strokeStyle = rgba(bright ? mix(col, WHITE, 0.5) : col, min(1, fo * ((bright ? 0.95 : 0.35) + pulse * 0.4)));
-        g.lineWidth = clamp((bright ? 7 : 3) / zA, 0.6, bright ? 6 : 3) * (1 + pulse * 0.6);
+        g.strokeStyle = rgba(bright ? mix(col, WHITE, 0.6) : col, min(1, fo * ((bright ? 1 : 0.44) + pulse * 0.4)));
+        g.lineWidth = clamp((bright ? 7.5 : 3.2) / zA, 0.7, bright ? 6.5 : 3.2) * (1 + pulse * 0.6);
         g.beginPath();
         g.moveTo(VAX[0], VAY[0]);
         for (j = 1; j < N; j++) g.lineTo(VAX[j], VAY[j]);
@@ -685,15 +700,16 @@
       for (i = n - 1; i >= 0; i--) { a = arcs[i]; proj(a, polyR(a, N) * o.rIn, zN); g.lineTo(px, py); }
     } else { proj(0, 0, zN); g.lineTo(px, py); }
     g.closePath();
-    g.fillStyle = rgba(o.cLite, 0.6 * fa);
+    g.fillStyle = rgba(o.cLite, 0.88 * fa);
     g.fill();
+    g.strokeStyle = rgba([c[0] * 0.25, c[1] * 0.25, c[2] * 0.25], 0.85 * fa); g.lineWidth = lw * 1.6; g.stroke();
     blend(g, 1);
-    g.strokeStyle = rgba(c, 0.35 * fa); g.lineWidth = lw * 2.6; g.stroke();
-    g.strokeStyle = rgba(mix(c, WHITE, 0.55), 0.95 * fa); g.lineWidth = lw; g.stroke();
+    g.strokeStyle = rgba(c, 0.48 * fa); g.lineWidth = lw * 2.5; g.stroke();
+    g.strokeStyle = rgba(mix(c, WHITE, 0.78), 0.98 * fa); g.lineWidth = lw * 1.1; g.stroke();
     // inner trim line for depth
     g.beginPath();
-    for (i = 0; i < n; i++) { a = arcs[i]; pr = polyR(a, N) * (0.86 + o.rIn * 0.05); proj(a, pr, zN); if (i) g.lineTo(px, py); else g.moveTo(px, py); }
-    g.strokeStyle = rgba(c, 0.5 * fa); g.lineWidth = lw * 0.6; g.stroke();
+    for (i = 0; i < n; i++) { a = arcs[i]; pr = polyR(a, N) * (0.84 + o.rIn * 0.06); proj(a, pr, zN); if (i) g.lineTo(px, py); else g.moveTo(px, py); }
+    g.strokeStyle = rgba(mix(c, WHITE, 0.45), 0.72 * fa); g.lineWidth = lw * 0.65; g.stroke();
     blend(g, 0);
   }
 
@@ -932,22 +948,26 @@
     // camera
     cam.D = G.D; cam.rot = G.rot;
     var bd = G.D / WS;
-    cam.bx = (sin(bd * 0.011) * 0.8 + sin(bd * 0.0063 + 1.3) * 0.5) * 260;
-    cam.by = (sin(bd * 0.0085 + 2.1) * 0.7 + sin(bd * 0.0051) * 0.4) * 150;
+    cam.bx = (sin(bd * 0.011) * 0.8 + sin(bd * 0.0063 + 1.3) * 0.5) * 28;
+    cam.by = (sin(bd * 0.0085 + 2.1) * 0.7 + sin(bd * 0.0051) * 0.4) * 18;
     cam.f = F * (1 - (reduced ? 0 : 0.1 * G.fovKick));
     var bg = Z.bg;
     g.fillStyle = rgb(bg[0], bg[1], bg[2]);
     g.fillRect(0, 0, W, H);
     g.save();
     if (G.shake > 0.1 && !reduced) g.translate((ran() - 0.5) * G.shake * 2, (ran() - 0.5) * G.shake * 2);
+    // luminous vortex behind the tunnel so walls naturally frame the portal opening
+    proj(0, 0, FAR);
+    var gx = px, gy = py, col = zoneCol(Z, 0, G.t);
+    function glow(r, a0, a1, c1) {
+      var gr = g.createRadialGradient(gx, gy, 0, gx, gy, r);
+      gr.addColorStop(0, rgba(WHITE, a0)); gr.addColorStop(0.32, rgba(c1, a1)); gr.addColorStop(1, rgba(col, 0));
+      g.fillStyle = gr; g.fillRect(gx - r, gy - r, r * 2, r * 2);
+    }
+    glow(105, 0.92, 0.75 + G.beat * 0.15, mix(col, WHITE, 0.6));
     drawTunnel(g, save.tunnel, G.t, G.beat, 0);
-    // light at the end of the tunnel
-    var gx = CX + cam.bx * 0.85, gy = CY + cam.by * 0.85;
-    var col = zoneCol(Z, 0, G.t);
-    var gr = g.createRadialGradient(gx, gy, 0, gx, gy, 140);
-    gr.addColorStop(0, rgba(mix(col, WHITE, 0.5), 0.55 + G.beat * 0.2)); gr.addColorStop(1, rgba(col, 0));
     blend(g, 1);
-    g.fillStyle = gr; g.fillRect(gx - 140, gy - 140, 280, 280);
+    glow(54, 0.55 + G.beat * 0.15, 0.24, col);
     // speed streaks
     g.lineCap = 'round';
     var sl = clamp(G.v * 0.1, 0.5, 2.5);
@@ -1044,7 +1064,7 @@
     PS.length = 0; pops.length = 0;
     save.runs++; persist();
     Kit.stats.round('endless');
-    showBanner('انطلق!', ZT[1].name, rgba(ZT[1].col, 1), 1.4);
+    showBanner('انطلق!', 'استعد للسرعة!', rgba(ZT[1].col, 1), 0.95);
     Sfx.go();
     $('pauseBtn').hidden = false;
     checkMissions();
@@ -1477,19 +1497,20 @@
       more.textContent = mn === 1 ? 'ومهمة أخرى!' : mn === 2 ? 'ومهمتان أخريان!' : 'و' + TB.count(mn, ['', '', 'مهمات', 'مهمة']) + ' أخرى!';
       om.appendChild(more);
     }
-    var c = cheapestLocked(), u = $('oUnlock');
-    if (c) {
-      u.hidden = false;
-      var ready = save.orbs >= c.price;
-      u.className = 'unlock' + (ready ? ' ready' : '');
-      $('oUnlockText').innerHTML = ready ? 'يمكنك الآن فتح <b>' + c.name + '</b> من المتجر!'
-        : 'باقٍ لك <b>' + Kit.fmt(c.price - save.orbs) + '</b> <i class="orb"></i> لتفتح <b>' + c.name + '</b>!';
-      $('oUnlockFill').style.width = '0%';
-      setTimeout(function () { $('oUnlockFill').style.width = min(100, save.orbs / c.price * 100).toFixed(1) + '%'; }, 60);
-    } else u.hidden = true;
+    showUnlock(true);
     if (G.wasBest && G.prevBest > 0) { Sfx.newBest(); confetti(60); }
     else if (G.wasBest) confetti(40);
     refreshBadges();
+  }
+  function showUnlock(anim) {
+    var c = cheapestLocked(), u = $('oUnlock');
+    if (!c) { u.hidden = true; return; }
+    var ready = save.orbs >= c.price, pct = min(100, save.orbs / c.price * 100).toFixed(1) + '%';
+    u.hidden = false; u.className = 'unlock' + (ready ? ' ready' : '');
+    $('oUnlockText').innerHTML = ready ? 'يمكنك الآن فتح <b>' + c.name + '</b> من المتجر!'
+      : 'باقٍ لك <b>' + Kit.fmt(c.price - save.orbs) + '</b> <i class="orb"></i> لتفتح <b>' + c.name + '</b>!';
+    if (anim) { $('oUnlockFill').style.width = '0%'; setTimeout(function () { $('oUnlockFill').style.width = pct; }, 60); }
+    else $('oUnlockFill').style.width = pct;
   }
 
   function pauseGame() {
@@ -1531,18 +1552,7 @@
     refreshBadges();
     Sfx.click();
   }
-  function showOver2() { // return to the game-over panel after the hangar, keeping it static
-    $('over').hidden = false;
-    var c = cheapestLocked(), u = $('oUnlock');
-    if (c) {
-      var ready = save.orbs >= c.price;
-      u.hidden = false;
-      u.className = 'unlock' + (ready ? ' ready' : '');
-      $('oUnlockText').innerHTML = ready ? 'يمكنك الآن فتح <b>' + c.name + '</b> من المتجر!'
-        : 'باقٍ لك <b>' + Kit.fmt(c.price - save.orbs) + '</b> <i class="orb"></i> لتفتح <b>' + c.name + '</b>!';
-      $('oUnlockFill').style.width = min(100, save.orbs / c.price * 100).toFixed(1) + '%';
-    } else u.hidden = true;
-  }
+  function showOver2() { $('over').hidden = false; showUnlock(false); }
   function renderHangar() {
     $('hOrbs').textContent = Kit.fmt(save.orbs);
     var items = hangarTab === 'ships' ? TB.SHIPS : TB.TUNNELS;

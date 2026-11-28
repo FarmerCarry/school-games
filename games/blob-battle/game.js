@@ -865,7 +865,7 @@
     n = 0;
     for (i = 0; i < floaters.length; i++) { var f = floaters[i]; f.t += dt; if (f.t < f.life) floaters[n++] = f; }
     floaters.length = n;
-    if (toasts.length) { toasts[0].t += dt; if (toasts[0].t > 1.7) toasts.shift(); }
+    if (toasts.length) { toasts[0].t += dt; if (toasts[0].t > (toasts[0].hint ? 1.45 : 1.7)) toasts.shift(); }
     n = 0;
     for (i = 0; i < confetti.length; i++) {
       var q = confetti[i]; q.t += dt; q.vy += 300 * dt; q.x += q.vx * dt; q.y += q.vy * dt; q.a += q.va * dt;
@@ -927,7 +927,6 @@
     comboN = 0; timeScale = 1; confetti.length = 0; round.danger = 0;
     kbOn = 0; kbA = 0; lmx = ptr.x; lmy = ptr.y;
     state = 'play'; show(null);
-    toast(AR.name, AR.theme.border); toasts[toasts.length - 1].hint = true;
     toast('كُل الحبوب لتكبر!', '#ffffff'); toasts[toasts.length - 1].hint = true;
     Kit.keys.reset();
     sfx.split();
@@ -1033,7 +1032,7 @@
       b.style.setProperty('--ac', a.theme.border);
       var best = stats['best' + (i + 1)];
       var sub = un ? (best > 0 ? 'أفضل حجم: ' + Kit.fmt(best) : 'جديدة! جرّبها') : '🔒 اكبَر حتى ' + a.need.m + ' في ' + ARENAS[a.need.a].name;
-      b.innerHTML = '<span class="adot">' + (un ? (i + 1) : '🔒') + '</span><span class="atx"><b>' + a.name +
+      b.innerHTML = '<span class="adot">' + a.icon + '</span><span class="atx"><b>' + a.name +
         ' <span class="diff">' + a.diff + '</span></b><small>' + sub + '</small></span>';
       b.addEventListener('click', function (e) {
         if (e.detail > 0) b.blur();
@@ -1124,8 +1123,8 @@
     } else if (state === 'play') {
       if (K.pressed('KeyP') || K.pressed('Escape')) pauseGame();
       else {
-        if (K.pressed('Space') && player.alive) { if (splitOwner(player, player.tx, player.ty)) { sfx.split(); shake.add(2); } }
-        if ((K.down('KeyE') || K.down('ShiftLeft') || K.down('ShiftRight')) && player.alive && T >= ejectT) { ejectT = T + 0.1; if (ejectOwner(player, player.tx, player.ty)) sfx.eject(); }
+        if (K.pressed('Space') && player.alive) { if (splitOwner(player, player.tx, player.ty)) { if (round) round.hintDone = 1; sfx.split(); shake.add(2); } }
+        if ((K.down('KeyE') || K.down('ShiftLeft') || K.down('ShiftRight')) && player.alive && T >= ejectT) { ejectT = T + 0.1; if (ejectOwner(player, player.tx, player.ty)) { if (round) round.hintDone = 1; sfx.eject(); } }
       }
     } else if (state === 'pause') {
       if (K.pressed('KeyP') || K.pressed('Escape')) resumeGame();
@@ -1436,18 +1435,23 @@
     }
     g.globalAlpha = 1;
     if (state === 'play' || state === 'pause' || state === 'dying') drawHUD(g);
-    // toasts
+    // toasts (intro hint docks cleanly near lower-center; event toasts below compact top badge)
     if (toasts.length && state !== 'title' && state !== 'skins') {
-      var t0 = toasts[0], tp = t0.t, sc2 = tp < 0.2 ? 0.5 + tp / 0.2 * 0.6 : tp < 0.3 ? 1.1 - (tp - 0.2) : 1;
-      g.globalAlpha = Math.min(1, (1.7 - tp) * 3);
-      var ty = state === 'over' ? 40 : 180;
-      text(g, t0.s, W / 2, ty, 46 * sc2, t0.col, 'center', 10);
+      var t0 = toasts[0], tp = t0.t, dur = t0.hint ? 1.45 : 1.7;
+      var sc2 = tp < 0.18 ? 0.65 + tp / 0.18 * 0.4 : tp < 0.28 ? 1.05 - (tp - 0.18) * 0.5 : 1;
+      g.globalAlpha = Math.min(1, (dur - tp) * 3.2);
+      var ty = state === 'over' ? 40 : (t0.hint ? H - 84 : 96);
+      var fsz = Math.round((t0.hint ? 24 : 32) * sc2);
+      g.font = '700 ' + fsz + 'px ' + FONT;
+      var tw = g.measureText(t0.s).width, pw = tw + (t0.skin ? 108 : 44), ph = fsz + 18;
+      g.fillStyle = 'rgba(22,28,58,0.88)'; rrect(g, W / 2 - pw / 2, ty - ph / 2, pw, ph, ph / 2); g.fill();
+      g.strokeStyle = 'rgba(255,255,255,0.24)'; g.lineWidth = 2; g.stroke();
+      text(g, t0.s, W / 2 - (t0.skin ? 26 : 0), ty, fsz, t0.col, 'center', 0);
       if (t0.skin) {
-        // show the freshly unlocked skin right next to the text (at its start, since Arabic reads right-to-left)
-        var tw = g.measureText(t0.s).width, ir = 30 * sc2;
+        var ir = 21 * sc2;
         fake.t = realT; fake.phase = 3; fake.wob = 0.04; fake.sa = 0; fake.sq = 0; fake.rot = realT; fake.lx = 0; fake.ly = 0.2;
         fake.blink = 0; fake.mouth = 0.4 + Math.sin(realT * 8) * 0.4; fake.skin = t0.skin; fake.pts = 32;
-        BB.drawBlob(g, W / 2 + tw / 2 + ir + 14, ty, ir, fake);
+        BB.drawBlob(g, W / 2 + tw / 2 + 4, ty, ir, fake);
       }
       g.globalAlpha = 1;
     }
@@ -1486,41 +1490,45 @@
       vg.addColorStop(0, 'rgba(255,40,60,0)'); vg.addColorStop(1, 'rgba(255,40,60,' + (0.45 * da).toFixed(3) + ')');
       g.fillStyle = vg; g.fillRect(0, 0, W, H);
     }
-    // ---- leaderboard (top-left)
-    var n = Math.min(10, lb.length), lx = 14, ly = 14, lw = 232, rowH = 25;
-    var inTop = player && player.alive && player.rank <= 10;
-    var lh = 46 + n * rowH + (inTop || !player || !player.alive ? 0 : rowH + 6) + 6;
-    g.fillStyle = 'rgba(25,30,62,0.55)'; rrect(g, lx, ly, lw, lh, 16); g.fill();
-    text(g, 'المتصدّرون', lx + lw / 2, ly + 22, 22, '#ffd23f', 'center', 0);
+    // ---- compact Top-5 leaderboard (top-left)
+    var n = Math.min(5, lb.length), lx = 14, ly = 14, lw = 212, rowH = 24;
+    var inTop = player && player.alive && player.rank <= 5;
+    var lh = 42 + n * rowH + (inTop || !player || !player.alive ? 0 : rowH + 6) + 6;
+    g.fillStyle = 'rgba(22,28,58,0.88)'; rrect(g, lx, ly, lw, lh, 16); g.fill();
+    g.strokeStyle = 'rgba(255,255,255,0.20)'; g.lineWidth = 2; g.stroke();
+    text(g, 'المتصدّرون', lx + lw / 2, ly + 20, 19, '#ffd23f', 'center', 0);
     for (var i = 0; i < n; i++) {
-      var o = lb[i], y = ly + 48 + i * rowH + rowH / 2 - 4, me = o === player;
-      if (me) { g.fillStyle = 'rgba(255,210,63,0.25)'; rrect(g, lx + 6, y - rowH / 2 + 1, lw - 12, rowH - 2, 8); g.fill(); }
+      var o = lb[i], y = ly + 42 + i * rowH + rowH / 2 - 2, me = o === player;
+      if (me) { g.fillStyle = 'rgba(255,210,63,0.26)'; rrect(g, lx + 6, y - rowH / 2 + 1, lw - 12, rowH - 2, 8); g.fill(); }
       rowText(g, i + 1, o.name, lx, lw, y, me, o.skin.color);
     }
     if (!inTop && player && player.alive) {
-      var y2 = ly + 48 + n * rowH + 6 + rowH / 2 - 4;
-      g.fillStyle = 'rgba(255,210,63,0.25)'; rrect(g, lx + 6, y2 - rowH / 2 + 1, lw - 12, rowH - 2, 8); g.fill();
+      var y2 = ly + 42 + n * rowH + 6 + rowH / 2 - 2;
+      g.fillStyle = 'rgba(255,255,255,0.14)'; g.fillRect(lx + 14, ly + 42 + n * rowH + 1, lw - 28, 1);
+      g.fillStyle = 'rgba(255,210,63,0.26)'; rrect(g, lx + 6, y2 - rowH / 2 + 1, lw - 12, rowH - 2, 8); g.fill();
       rowText(g, player.rank, player.name, lx, lw, y2, true, player.skin.color);
     }
 
     if (!player) return;
-    // ---- mass (top centre)
+    // ---- sleek single-row top-center badge (mass + rank + integrated skin progress edge)
     var mass = Math.floor(player.alive ? player.mass : 0);
-    g.fillStyle = 'rgba(25,30,62,0.55)'; rrect(g, W / 2 - 150, 10, 300, 60, 22); g.fill();
-    text(g, 'الحجم ' + mass, W / 2, 41, 36, '#ffffff', 'center', 0);
-    // rank chip
-    if (player.alive) text(g, 'المركز ' + player.rank + ' من ' + lb.length, W / 2, 86, 20, '#ffffff', 'center', 5);
-    // next skin progress
+    var pw = 296, px = W / 2 - pw / 2;
+    g.fillStyle = 'rgba(22,28,58,0.90)'; rrect(g, px, 12, pw, 50, 22); g.fill();
+    g.strokeStyle = 'rgba(255,255,255,0.22)'; g.lineWidth = 2; g.stroke();
+    text(g, 'الحجم ' + mass, px + pw - 20, 34, 25, '#ffffff', 'right', 0);
+    if (player.alive) {
+      g.fillStyle = 'rgba(255,255,255,0.24)'; g.fillRect(px + 114, 21, 2, 24);
+      text(g, '#' + player.rank + '/' + lb.length, px + 58, 34, 21, '#ffd23f', 'center', 0);
+    }
     var ns = nextMassSkin();
     if (ns) {
-      var bw = 230, bx = W / 2 - bw / 2, byy = 104, pr = clamp(mass / ns.unlock.v, 0, 1);
-      g.fillStyle = 'rgba(25,30,62,0.5)'; rrect(g, bx, byy, bw, 14, 7); g.fill();
-      g.fillStyle = '#ff8fd0'; rrect(g, bx + 2, byy + 2, Math.max(10, (bw - 4) * pr), 10, 5); g.fill();
-      text(g, 'الشكل التالي: ' + ns.name + ' عند ' + ns.unlock.v, W / 2, byy + 30, 16, '#ffffff', 'center', 4);
+      var bw = pw - 36, bx = px + 18, pr = clamp(mass / ns.unlock.v, 0, 1);
+      g.fillStyle = 'rgba(255,255,255,0.16)'; rrect(g, bx, 53, bw, 4, 2); g.fill();
+      g.fillStyle = '#ff8fd0'; rrect(g, bx, 53, Math.max(8, bw * pr), 4, 2); g.fill();
     }
     // ---- minimap (bottom-right)
     var ms = 150, mx = W - ms - 14, my = H - ms - 14, k = ms / WS;
-    g.fillStyle = 'rgba(25,30,62,0.45)'; rrect(g, mx - 4, my - 4, ms + 8, ms + 8, 12); g.fill();
+    g.fillStyle = 'rgba(22,28,58,0.75)'; rrect(g, mx - 4, my - 4, ms + 8, ms + 8, 12); g.fill();
     g.fillStyle = AR.theme.bg; g.fillRect(mx, my, ms, ms); // opaque, so world pellets never show through as fake dots
     g.strokeStyle = 'rgba(40,50,90,0.2)'; g.lineWidth = 1; g.beginPath();
     for (i = 1; i < 5; i++) { g.moveTo(mx + i * ms / 5, my); g.lineTo(mx + i * ms / 5, my + ms); g.moveTo(mx, my + i * ms / 5); g.lineTo(mx + ms, my + i * ms / 5); }
@@ -1541,30 +1549,23 @@
         g.fillStyle = player.skin.color; g.fill(); g.lineWidth = 2; g.strokeStyle = '#fff'; g.stroke();
       }
     }
-    // ---- controls hint (bottom-left)
-    hintRow(g, 14, H - 80, 'فأرة / WASD', 'تحرّك');
-    hintRow(g, 14, H - 50, 'مسافة', 'انقسم');
-    hintRow(g, 14, H - 20, 'E', 'اقذف');
+    // ---- compact single-line controls strip (bottom-left, auto-fades after 5s or first action)
+    var ha = round && !round.hintDone ? clamp(1 - (T - round.t0 - 4.5) / 1.2, 0, 1) : 0;
+    if (ha > 0.02) {
+      g.save(); g.globalAlpha = ha * 0.88;
+      var hw = 342, hx = 14, hy = H - 42;
+      g.fillStyle = 'rgba(22,28,58,0.84)'; rrect(g, hx, hy, hw, 28, 14); g.fill();
+      g.strokeStyle = 'rgba(255,255,255,0.22)'; g.lineWidth = 1.5; g.stroke();
+      text(g, 'تحرّك: الفأرة/WASD · انقسم: مسافة · اقذف: E', hx + hw / 2, hy + 14, 14, '#ffffff', 'center', 0);
+      g.restore();
+    }
   }
   function rowText(g, num, name, lx, lw, y, me, col) {
-    var right = lx + lw - 14;
-    text(g, String(num), right, y, 18, me ? '#ffd23f' : '#c9d0ff', 'right', 0);
-    g.fillStyle = col; g.beginPath(); g.arc(right - 34, y, 7, 0, TAU); g.fill();
-    g.lineWidth = 2; g.strokeStyle = 'rgba(255,255,255,0.8)'; g.stroke();
-    text(g, name, right - 48, y, 18, me ? '#ffd23f' : '#ffffff', 'right', 0);
-  }
-  function hintRow(g, x, y, key, label) {
-    g.font = '700 16px ' + FONT;
-    g.direction = 'rtl';
-    var lw = g.measureText(label).width;
-    var kw = Math.max(32, g.measureText(key).width + 18);
-    g.globalAlpha = 0.85;
-    text(g, label, x, y, 17, '#ffffff', 'left', 5);
-    g.globalAlpha = 1;
-    var kx = x + lw + 10;
-    g.fillStyle = '#9aa3c7'; rrect(g, kx, y - 11, kw, 25, 7); g.fill();
-    g.fillStyle = '#ffffff'; rrect(g, kx, y - 13, kw, 24, 7); g.fill();
-    text(g, key, kx + kw / 2, y - 1, 15, '#1d2340', 'center', 0);
+    var right = lx + lw - 12;
+    text(g, String(num), right, y, 16, me ? '#ffd23f' : '#c9d0ff', 'right', 0);
+    g.fillStyle = col; g.beginPath(); g.arc(right - 30, y, 6.5, 0, TAU); g.fill();
+    g.lineWidth = 1.8; g.strokeStyle = 'rgba(255,255,255,0.8)'; g.stroke();
+    text(g, name, right - 43, y, 16, me ? '#ffd23f' : '#ffffff', 'right', 0);
   }
 
   function drawPreview() {

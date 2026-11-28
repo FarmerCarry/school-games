@@ -20,23 +20,14 @@
     </div>
     <div class="tag">زرّ واحد فقط... وفوضى بلا حدود!</div>
 
-    <div class="card side" id="howto">
-      <h3>طريقة اللعب</h3>
-      <div class="krow"><span dir="ltr"><span class="sg-key">W</span></span><span>اللاعب 1: قفز وركل</span></div>
-      <div class="krow"><span dir="ltr"><span class="sg-key">↑</span></span><span>اللاعب 2: قفز وركل</span></div>
-      <div class="krow"><span dir="ltr"><span class="sg-key">مسافة</span></span><span>أو <b>انقر</b> (لاعب واحد)</span></div>
-      <div class="small">اقفز في الوقت المناسب لتركل الكرة نحو مرمى الخصم!</div>
-      <div class="goal">بعد كل هدف... مفاجأة مجنونة جديدة!</div>
-    </div>
-
-    <div class="card side" id="prog">
-      <h3>إنجازاتك</h3>
-      <div class="coins-big"><span class="coin"></span><span id="tCoins">0</span></div>
-      <canvas id="tCups" width="220" height="70"></canvas>
-      <div class="small">الانتصارات: <b id="tWins">0</b> &nbsp;•&nbsp; الأهداف: <b id="tGoals">0</b></div>
-      <div class="small">الأوسمة: <b id="tAch" dir="ltr">0 / 0</b></div>
+    <div class="tstat" id="prog">
+      <div class="tstat-top">
+        <div class="coins-sm"><span class="coin sm"></span><b id="tCoins">0</b></div>
+        <canvas id="tCups" width="220" height="70"></canvas>
+      </div>
+      <div class="tstat-meta">فوز <b id="tWins">0</b> • أهداف <b id="tGoals">0</b> • أوسمة <b id="tAch" dir="ltr">0 / 0</b></div>
       <div class="bar"><div id="tBar"></div></div>
-      <div class="small hot" id="tNext"></div>
+      <div class="tstat-next" id="tNext"></div>
     </div>
 
     <div class="modes">
@@ -48,7 +39,15 @@
       <button class="mbtn2 shop" id="bShop" type="button">🛒 المتجر</button>
       <button class="mbtn2 ach" id="bAchv" type="button">⭐ الأوسمة</button>
     </div>
-    <div class="enter-hint">اضغط <span class="sg-key">Enter</span> للعب بسرعة!</div>
+    <div class="howto-bar" id="howto">
+      <span><span class="sg-key">W</span> لاعب 1</span>
+      <span class="sep">•</span>
+      <span><span class="sg-key">↑</span> لاعب 2</span>
+      <span class="sep">•</span>
+      <span><span class="sg-key">مسافة</span> أو انقر (1P)</span>
+      <span class="sep">•</span>
+      <span><span class="sg-key">Enter</span> ابدأ</span>
+    </div>
   </div>
 
   <!-- ============ SELECT ============ -->
@@ -153,7 +152,7 @@
   <div id="toasts"></div>
 </div>
 
-<button id="bPause" class="sg-mute sb-btn" type="button" aria-label="استراحة" title="استراحة (P)" hidden>II</button>
+<button id="bPause" class="sg-mute sb-btn" type="button" aria-label="استراحة" title="استراحة (P)" hidden><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1.5"/><rect x="14" y="5" width="4" height="14" rx="1.5"/></svg></button>
 
 <script src="../../shared/kit.js"></script>
 <script src="data.js"></script>

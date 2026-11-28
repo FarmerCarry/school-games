@@ -122,11 +122,11 @@
   // critter stands above it. Keys: the keyboard keys laid out like the holes.
   var KEYROWS = [['Q', 'W', 'E', 'R'], ['A', 'S', 'D', 'F'], ['Z', 'X', 'C', 'V']];
   BG.layout = function (cols) {
-    var four = cols === 4, xs = four ? [298, 528, 752, 982] : [420, 640, 860], ys = [338, 474, 614];
-    var rxs = four ? [75, 81, 87] : [86, 94, 102], out = [];
+    var four = cols === 4, xs = four ? [298, 528, 752, 982] : [420, 640, 860], ys = [322, 472, 632];
+    var rxs = four ? [72, 78, 84] : [80, 88, 96], out = [];
     for (var r = 0; r < 3; r++) for (var c = 0; c < xs.length; c++) {
       var rx = rxs[r];
-      out.push({ x: xs[c], y: ys[r], rx: rx, ry: M.round(rx * 0.36), h: M.round(rx * 1.45), row: r, col: c, key: KEYROWS[r][c], code: 'Key' + KEYROWS[r][c] });
+      out.push({ x: xs[c], y: ys[r], rx: rx, ry: M.round(rx * 0.36), h: M.round(rx * 1.32), row: r, col: c, key: KEYROWS[r][c], code: 'Key' + KEYROWS[r][c] });
     }
     return out;
   };

@@ -49,8 +49,4 @@
 </g>
 <!-- +% popup -->
 <text x="300" y="232" text-anchor="middle" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-weight="bold" font-size="40" fill="#ff4f9a" stroke="#2b2350" stroke-width="9" paint-order="stroke" stroke-linejoin="round" direction="ltr">+8%</text>
-<!-- logo -->
-<rect x="42" y="18" width="316" height="78" rx="30" fill="#2b2350"/>
-<rect x="42" y="12" width="316" height="78" rx="30" fill="#fff"/>
-<text x="200" y="68" text-anchor="middle" direction="rtl" font-family="'Segoe UI', Tahoma, Arial, sans-serif" font-weight="bold" font-size="50" fill="#ff4f9a" stroke="#2b2350" stroke-width="3" paint-order="stroke">لوّن الأرض</text>
 </svg>

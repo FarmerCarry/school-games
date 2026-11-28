@@ -37,7 +37,7 @@
       ['ContextMenu', 1.25, '', '', '', '', 'menu'], ['ControlRight', 1.25, '', '', '', '', 'Ctrl']]
   ];
   // Where the on-screen keyboard sits (logical pixels): 15 units of 50 px in every row.
-  TT.KB = { x: 265, y: 458, unit: 50, gap: 4 };
+  TT.KB = { x: 265, y: 444, unit: 50, gap: 4 };
   TT.KEYS = {};
   var BY_CHAR = { ar: {}, en: {} };
   TT.ROWS.forEach(function (row, r) {

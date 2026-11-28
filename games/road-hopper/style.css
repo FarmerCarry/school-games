@@ -31,12 +31,15 @@ html, body { background: #9fe3ff; }
   box-shadow: inset 0 0 0 0.1em #d98a00, 0 0.06em 0 rgba(0,0,0,0.25); }
 
 /* -------------------------------- HUD */
-.hud-score { position: absolute; left: 0.9em; top: 0.35em; text-align: left; direction: ltr; }
-#hScore { font-size: 4.2em; font-weight: 700; line-height: 1; color: #fff; text-shadow: var(--outline), 0 0.08em 0 var(--navy); }
-.hud-best { direction: rtl; font-size: 1.15em; font-weight: 700; color: #fff; text-shadow: var(--outline); margin-top: 0.1em; }
+.hud-score { position: absolute; left: 0.75em; top: 0.55em; text-align: center; direction: ltr;
+  background: rgba(18, 22, 60, 0.74); border: 0.12em solid rgba(255,255,255,0.22); border-radius: 1.1em;
+  padding: 0.18em 0.9em 0.3em; box-shadow: 0 0.2em 0.7em rgba(0,0,0,0.28); min-width: 4.8em; }
+#hScore { font-size: 3.1em; font-weight: 700; line-height: 1.05; color: #fff; text-shadow: var(--outline), 0 0.07em 0 var(--navy); }
+.hud-best { direction: rtl; font-size: 0.96em; font-weight: 700; color: #eef2ff; text-shadow: 0 0.08em 0 rgba(0,0,0,0.5); margin-top: 0.05em; }
 .hud-best b { color: var(--yellow); }
-.hud-coins { position: absolute; right: 118px; top: 0.55em; font-size: 1.9em; font-weight: 700; color: #fff; text-shadow: var(--outline);
-  display: flex; align-items: center; gap: 0.25em; direction: ltr; }
+.hud-coins { position: absolute; right: 118px; top: 10px; height: 44px; padding: 0 14px; font-size: 1.55em; font-weight: 700; color: #fff;
+  background: rgba(18, 22, 60, 0.74); border: 2px solid rgba(255,210,63,0.45); border-radius: 999px; box-shadow: 0 4px 12px rgba(0,0,0,0.26);
+  text-shadow: 0 2px 0 rgba(0,0,0,0.45); display: flex; align-items: center; gap: 0.28em; direction: ltr; }
 .hud-coins.bump { animation: bump 0.25s; }
 .hud-btn { position: absolute; right: 62px; top: 10px; width: 44px; height: 44px; font-size: 16px; border-radius: 50%; pointer-events: auto; cursor: pointer;
   border: 0.12em solid rgba(255,255,255,0.3); background: rgba(0,0,0,0.35); display: flex; align-items: center; justify-content: center; gap: 0.28em; }
@@ -66,41 +69,38 @@ html[data-sg-motion="reduce"] #banner.show { animation: none; opacity: 1; }
 .b-main { font-size: 4.4em; font-weight: 700; color: var(--yellow); text-shadow: var(--outline), 0 0.08em 0 var(--navy); line-height: 1.15; }
 
 /* -------------------------------- title */
-#title { background: linear-gradient(270deg, rgba(20, 26, 80, 0.5) 0%, rgba(20, 26, 80, 0.2) 36%, rgba(20, 26, 80, 0) 52%); }
-.t-main { position: absolute; right: 3em; top: 3.4em; width: 30em; text-align: center; }
-.logo { display: flex; flex-direction: column; align-items: center; line-height: 1; transform: rotate(3deg); margin: 0 0 0.25em; animation: logoFloat 3s ease-in-out infinite; }
+#title { background: radial-gradient(ellipse at 74% 42%, rgba(20, 26, 80, 0.24) 0%, rgba(20, 26, 80, 0) 52%); }
+.t-main { position: absolute; right: 2.8em; top: 2.6em; width: 30em; text-align: center; }
+.logo { display: flex; flex-direction: column; align-items: center; line-height: 1.06; transform: rotate(2deg); margin: 0 0 0.35em; animation: logoFloat 3s ease-in-out infinite; }
 .logo span { font-weight: 700; text-shadow: var(--outline), 0 0.1em 0 var(--navy), 0 0.18em 0.1em rgba(0,0,0,0.25); white-space: nowrap; }
-.logo .l1 { font-size: 6.6em; color: var(--yellow); }
-.logo .l2 { font-size: 7.4em; color: #7dff6a; margin-top: -0.28em; }
-.tagline { display: inline-block; position: relative; font-size: 1.3em; font-weight: 700; margin: 0.25em 0 0.7em; color: #fff; text-shadow: 0 0.08em 0 rgba(0,0,0,0.4);
-  background: rgba(15, 18, 55, 0.6); padding: 0.1em 0.9em 0.2em; border-radius: 1em; }
+.logo .l1 { font-size: 6.2em; color: var(--yellow); }
+.logo .l2 { font-size: 7.0em; color: #7dff6a; margin-top: -0.1em; }
+.tagline { display: inline-block; position: relative; font-size: 1.25em; font-weight: 700; margin: 0.45em 0 0.75em; color: #fff; text-shadow: 0 0.08em 0 rgba(0,0,0,0.45);
+  background: rgba(18, 22, 60, 0.72); border: 0.1em solid rgba(255,255,255,0.2); padding: 0.14em 1em 0.22em; border-radius: 999px; }
 .playrow { display: flex; justify-content: center; }
-#ui .sg-btn.play#btnPlay { font-size: 2.9em; padding: 0.12em 1.5em; animation: pulse 1.1s ease-in-out infinite; }
+#ui .sg-btn.play#btnPlay { font-size: 2.85em; padding: 0.12em 1.55em; animation: pulse 1.1s ease-in-out infinite; }
 #ui .sg-btn.play#btnPlay:hover { animation: none; transform: scale(1.07); }
-.orpress { font-size: 1.05em; color: #fff; margin: 0.35em 0 0.7em; text-shadow: 0 0.1em 0 rgba(0,0,0,0.45); }
-.t-row { display: flex; justify-content: center; gap: 0.3em; flex-wrap: nowrap; }
-.t-row .sg-btn { font-size: 1.3em; }
+.orpress { font-size: 1.02em; font-weight: 700; color: #fff; margin: 0.35em 0 0.7em; text-shadow: 0 0.1em 0.25em rgba(15,18,55,0.85), 0 0.08em 0 rgba(0,0,0,0.6); }
+.t-row { display: flex; justify-content: center; gap: 0.35em; flex-wrap: nowrap; }
+.t-row .sg-btn { font-size: 1.28em; }
 .cnt { font-size: 0.8em; background: var(--navy2); color: #fff; border-radius: 1em; padding: 0 0.45em; margin-right: 0.2em; }
 .badge { position: absolute; top: -0.35em; left: -0.2em; background: var(--yellow); color: var(--navy); font-size: 0.8em; width: 1.4em; height: 1.4em;
   line-height: 1.4em; border-radius: 50%; box-shadow: 0 0.1em 0 rgba(0,0,0,0.3); animation: pulse 0.8s infinite; }
 .chips { display: flex; justify-content: center; gap: 0.6em; margin-top: 0.8em; }
-.chip { background: rgba(15, 18, 55, 0.62); border: 0.12em solid rgba(255,255,255,0.18); border-radius: 0.9em; padding: 0.25em 0.8em; font-size: 1.15em;
+.chip { background: rgba(18, 22, 60, 0.72); border: 0.12em solid rgba(255,255,255,0.22); border-radius: 999px; padding: 0.22em 0.9em; font-size: 1.12em;
   display: flex; align-items: center; gap: 0.4em; color: #fff; font-weight: 700; font-family: var(--sg-font); }
-.chip b { font-size: 1.25em; color: var(--yellow); }
+.chip b { font-size: 1.22em; color: var(--yellow); }
 .chip.gift { cursor: pointer; background: linear-gradient(#ffe36b, #ffb31a); color: #5a3300; animation: pulse 0.9s infinite; }
-.box { background: rgba(15, 18, 55, 0.66); border-radius: 1em; padding: 0.6em 1em; color: #fff; }
-.box-h { font-weight: 700; font-size: 1.25em; color: var(--yellow); margin-bottom: 0.2em; }
-.box-sub { font-size: 0.7em; color: #fff; opacity: 0.8; margin-right: 0.4em; }
-.t-missions { position: absolute; left: 1.6em; top: 1.2em; width: 23em; }
-.howto { position: absolute; left: 1.6em; bottom: 1.2em; font-size: 1.02em; display: flex; flex-direction: column; gap: 0.35em; }
-.howto-tip { color: #ffd6a0; font-weight: 700; }
-#charpick { position: absolute; display: flex; align-items: center; gap: 0.5em; transform: translate(-50%, 0); pointer-events: auto; }
-#charpick button { font-size: 1.4em; width: 2em; height: 2em; border-radius: 50%; border: none; background: #fff; color: var(--navy); cursor: pointer;
+.howto-bar { position: absolute; left: 50%; bottom: 0.85em; transform: translateX(-50%); display: flex; align-items: center; gap: 0.85em; white-space: nowrap;
+  background: rgba(18, 22, 60, 0.74); border: 0.12em solid rgba(255,255,255,0.2); border-radius: 999px; padding: 0.3em 1.2em; color: #fff; font-size: 1.02em; font-weight: 700; }
+.howto-bar .sep { display: inline-block; width: 0.12em; height: 1.1em; background: rgba(255,255,255,0.28); }
+#charpick { position: absolute; display: flex; align-items: center; gap: 0.45em; transform: translate(-50%, 0); pointer-events: auto; }
+#charpick button { font-size: 1.35em; width: 1.95em; height: 1.95em; border-radius: 50%; border: none; background: #fff; color: var(--navy); cursor: pointer;
   box-shadow: 0 0.15em 0 rgba(0,0,0,0.3); line-height: 1; padding: 0; }
 #charpick button:hover { transform: scale(1.1); }
-.cp-name { background: rgba(15, 18, 55, 0.72); color: #fff; border-radius: 1em; padding: 0.2em 0.9em 0.3em; text-align: center; min-width: 9em; }
-#cpName { display: block; font-size: 1.45em; font-weight: 700; }
-.cp-name small { font-size: 0.8em; opacity: 0.85; white-space: nowrap; }
+.cp-name { background: rgba(18, 22, 60, 0.76); border: 0.12em solid rgba(255,255,255,0.22); color: #fff; border-radius: 999px; padding: 0.18em 1em 0.26em; text-align: center; min-width: 8.5em; }
+#cpName { display: block; font-size: 1.38em; font-weight: 700; line-height: 1.15; }
+.cp-name small { font-size: 0.78em; opacity: 0.88; white-space: nowrap; }
 
 /* missions rows */
 .mis { display: flex; align-items: center; gap: 0.55em; background: rgba(255,255,255,0.08); border-radius: 0.7em; padding: 0.35em 0.6em; margin: 0.3em 0; text-align: right; }

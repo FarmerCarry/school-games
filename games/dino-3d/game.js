@@ -312,7 +312,6 @@
     }
 
     Kit.stats.round(world.id);
-    showBanner(D.WORLDS[world.worldIndex].name);
     say(cur.endless ? 'بدأت رحلة الجري بلا نهاية' : 'بدأت المرحلة ' + world.id);
   }
 

@@ -149,7 +149,6 @@
     $('tMult').textContent = 'x' + multBase();
     var left = save.missions.filter(function (m) { return !m.done; }).length;
     $('tMissions').textContent = left ? 'باقي ' + left : 'تمّت!';
-    $('tMissionPeek').innerHTML = save.missions.map(function (m) { return missionRow(m, true); }).join('');
   }
   var POW_ORDER = ['magnet', 'sneakers', 'doubler', 'board'];
   var powEls = {}, ICONS = {}, portraits = null;
@@ -783,9 +782,17 @@
   runner.setOutfit(outfitById(save.outfit));
   runner.setBoard(boardById(save.board));
   var shadowTex = new T.CanvasTexture(RR.shadowCanvas());
-  var shadow = new T.Mesh(new T.PlaneGeometry(1, 1), new T.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false }));
+  var shadowMat = new T.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false });
+  var shadow = new T.Mesh(new T.PlaneGeometry(1, 1), shadowMat);
   shadow.rotation.x = -Math.PI / 2;
   scene.add(shadow);
+  var coinShGeo = new T.PlaneGeometry(0.95, 0.95);
+  coinShGeo.rotateX(-Math.PI / 2);
+  var coinShMesh = new T.InstancedMesh(coinShGeo, shadowMat, MAX_COINS);
+  coinShMesh.frustumCulled = false;
+  coinShMesh.count = 1;
+  coinShMesh.instanceMatrix.setUsage(T.DynamicDrawUsage);
+  scene.add(coinShMesh);
   var bot = RR.createBot();
   scene.add(bot.root);
   var botState = { x: 0, y: 2, z: 6, show: 0 };
@@ -1267,14 +1274,23 @@
       var co = coins[ci2], z = pDr - co.d;
       if (z < -220 || z > 12) continue;
       if (movers && hiddenByTrain(co, movers)) continue;
-      dummy.position.set(co.x, co.y + Math.sin(S.t * 4 + co.ph) * 0.08, z);
+      var cy = co.y + Math.sin(S.t * 4 + co.ph) * 0.08;
+      dummy.position.set(co.x, cy, z);
       dummy.rotation.set(0, spin + co.ph, 0);
       var sc = co.mag ? 0.8 : 1;
       dummy.scale.set(sc, sc, sc);
       dummy.updateMatrix();
-      coinMesh.setMatrixAt(n++, dummy.matrix);
+      coinMesh.setMatrixAt(n, dummy.matrix);
+      var cgy = co.y > 2.6 ? TOP + 0.035 : 0.165;
+      var css = clamp(0.92 - Math.max(0, cy - cgy) * 0.1, 0.35, 0.92) * sc;
+      dummy.position.set(co.x, cgy, z);
+      dummy.rotation.set(0, 0, 0);
+      dummy.scale.set(css, 1, css * 1.15);
+      dummy.updateMatrix();
+      coinShMesh.setMatrixAt(n++, dummy.matrix);
     }
     Kit.webgl.shrinkCount(coinMesh, n);
+    Kit.webgl.shrinkCount(coinShMesh, n);
     // pickups
     for (var p = 0; p < pickups.length; p++) {
       var pk = pickups[p];
@@ -1337,9 +1353,9 @@
     // shadow
     var gy = S.groundY;
     var hgt = Math.max(0, yr - gy);
-    var ss = clamp(1.1 - hgt * 0.12, 0.45, 1.1);
-    shadow.position.set(xr, gy + 0.04, 0.05);
-    shadow.scale.set(ss, ss * 1.25, 1);
+    var ss = clamp(1.52 - hgt * 0.15, 0.56, 1.52);
+    shadow.position.set(xr, gy + (gy < 0.5 ? 0.175 : 0.04), 0.05);
+    shadow.scale.set(ss, ss * 1.32, 1);
     // crash stars
     var showStars = S.mode === 'crash' || S.mode === 'over';
     for (var s2 = 0; s2 < stars.length; s2++) {

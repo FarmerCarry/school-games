@@ -26,27 +26,25 @@
 
 <div id="ui">
   <div id="hud" hidden>
-    <button type="button" id="btnPause" class="sc-btn sc-round" aria-label="استراحة" title="استراحة">
+    <button type="button" id="btnPause" class="sc-btn sc-round" aria-label="استراحة" title="استراحة (P)">
       <svg aria-hidden="true"><use href="#i-pause"/></svg>
-      <span class="sg-key mini-key" dir="ltr" aria-hidden="true">P</span>
     </button>
-    <button type="button" id="btnSwap" class="sc-btn hud-swap" aria-label="تبديل القذيفة" title="تبديل القذيفة">
+    <button type="button" id="btnSwap" class="sc-btn hud-swap" aria-label="تبديل القذيفة" title="تبديل القذيفة (C)">
       <svg aria-hidden="true"><use href="#i-swap"/></svg>
       <span>تبديل</span>
-      <span class="sg-key mini-key" dir="ltr" aria-hidden="true">C</span>
     </button>
   </div>
 
-  <section id="scrTitle" class="screen" aria-label="مقلاع الألوان">
+  <section id="scrTitle" class="screen title-screen" aria-label="مقلاع الألوان">
     <div class="top-chips">
       <div class="chip" id="titleStars" aria-label="النجوم"><svg aria-hidden="true"><use href="#i-star"/></svg><b dir="ltr">0/48</b></div>
       <div class="chip" id="titleCoins" aria-label="العملات"><i class="coin"></i><b dir="ltr">0</b></div>
     </div>
 
-    <div class="hero-card">
+    <div class="hero-stage">
       <span class="hero-badge">مدفع الألوان وتدمير الأبراج!</span>
       <h1 class="logo">مقلاع الألوان</h1>
-      <p class="hero-sub">اهدم حصون الغوبلن الرمادي وفجّر براميل الطلاء في تفاعلات متسلسلة!</p>
+      <p class="hero-sub">اهدم حصون الغوبلن وفجّر براميل الطلاء في تفاعلات متسلسلة!</p>
 
       <div class="title-actions">
         <button type="button" id="btnPlay" class="sc-btn btn-main ring" aria-label="ابدأ اللعب">
@@ -76,11 +74,11 @@
         <button type="button" class="sc-btn diff-pill" data-diff="mid" id="diffMid">متوسط</button>
         <button type="button" class="sc-btn diff-pill" data-diff="hero" id="diffHero">بطل</button>
       </div>
+    </div>
 
-      <div class="ctrl-strip" aria-label="طريقة التحكم">
-        <span>اسحب في أي مكان أو صوّب <span class="sg-key" dir="ltr">↑ ↓ ← →</span></span>
-        <span>إطلاق وقوة جوية خارقة <span class="sg-key" dir="ltr">Space</span></span>
-      </div>
+    <div class="ctrl-strip" aria-label="طريقة التحكم">
+      <span>اسحب في أي مكان أو صوّب <span class="sg-key" dir="ltr">↑ ↓ ← →</span></span>
+      <span>إطلاق وقوة جوية خارقة <span class="sg-key">مسافة</span></span>
     </div>
   </section>
 

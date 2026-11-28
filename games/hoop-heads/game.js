@@ -567,6 +567,7 @@
       var f1 = $('hudSup1');
       f1.style.width = sup1 + '%';
       f1.classList.toggle('ready', sup1 >= 100);
+      $('hudSupRow1').classList.toggle('ready', sup1 >= 100);
     }
     var sup2 = Math.round(p1.super);
     if (hudCache.sup2 !== sup2) {
@@ -574,6 +575,7 @@
       var f2 = $('hudSup2');
       f2.style.width = sup2 + '%';
       f2.classList.toggle('ready', sup2 >= 100);
+      $('hudSupRow2').classList.toggle('ready', sup2 >= 100);
     }
 
     var clkText = match.overtime ? 'إضافي!' : String(Math.ceil(match.time));
